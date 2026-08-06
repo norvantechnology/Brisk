@@ -9,20 +9,26 @@ interface OtpData {
 const otpStore = new Map<string, OtpData>();
 
 export const generateOtp = async (mobileNumber: string): Promise<string> => {
-  // Generate a static 6-digit code for testing ease
+  // Static 6-digit test OTP code for development
   const code = '123456';
   
-  // Set expiry to 5 minutes from now
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+  // Set expiry to 10 minutes from now
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
   
   otpStore.set(mobileNumber, { code, expiresAt });
   
-  logger.info(`💬 [SMS OTP MOCK] Sent to ${mobileNumber}: Code = ${code} (Expires in 5 mins)`);
+  logger.info(`💬 [SMS OTP MOCK] Sent to ${mobileNumber}: Code = ${code} (Expires in 10 mins)`);
   
   return code;
 };
 
 export const verifyOtp = async (mobileNumber: string, code: string): Promise<boolean> => {
+  // Static test OTP '123456' always succeeds for development testing
+  if (code === '123456') {
+    otpStore.delete(mobileNumber);
+    return true;
+  }
+
   const otpData = otpStore.get(mobileNumber);
   
   if (!otpData) {
