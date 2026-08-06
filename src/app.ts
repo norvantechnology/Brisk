@@ -28,7 +28,38 @@ setupSwagger(app);
 app.use('/auth', authRoutes);
 app.use('/admin/auth', adminAuthRoutes);
 
-// Health Check Endpoint
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: System Health & Uptime Status
+ *     description: Retrieve system health status, current ISO timestamp, and API server uptime in seconds.
+ *     tags: [System Health & Status]
+ *     responses:
+ *       200:
+ *         description: API server is healthy and operational.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: BRISK backend API is healthy and running.
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                       example: '2026-08-06T13:40:00.000Z'
+ *                     uptime:
+ *                       type: number
+ *                       example: 124.52
+ */
 app.get('/health', (_req: Request, res: Response) => {
   sendResponse({
     res,
