@@ -348,6 +348,27 @@ router.get('/customer-payments/transactions', validate(paymentTransactionFilterS
 
 /**
  * @swagger
+ * /admin/customer-payments/transactions/{id}:
+ *   get:
+ *     summary: Get single Customer Payment Transaction detail modal view by ID
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Payment transaction details retrieved with Job & Booking information, customer/trader links, amount breakdown, individual billing address, and invoice reference matching Modal Screenshot 3.
+ *       404:
+ *         description: Payment transaction not found.
+ */
+router.get('/customer-payments/transactions/:id', customerAdminController.getTransaction);
+
+/**
+ * @swagger
  * /admin/customer-payments/invoices:
  *   get:
  *     summary: List Billing & Invoices (Paginated, Search & Status Filters)
@@ -373,6 +394,27 @@ router.get('/customer-payments/transactions', validate(paymentTransactionFilterS
  *         description: Customer billing invoices retrieved matching Screenshot 3 format.
  */
 router.get('/customer-payments/invoices', validate(invoiceFilterSchema), customerAdminController.listBillingInvoices);
+
+/**
+ * @swagger
+ * /admin/customer-payments/invoices/{id}:
+ *   get:
+ *     summary: Get single Tax Invoice detail view by ID
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Full Tax Invoice details retrieved with company header, VAT registration #, customer details, verified trader partner info, service items, tax breakdown, convenience fee, promo discount, and digital verification QR reference matching Modal Screenshot 2.
+ *       404:
+ *         description: Invoice record not found.
+ */
+router.get('/customer-payments/invoices/:id', customerAdminController.getInvoice);
 
 /**
  * @swagger

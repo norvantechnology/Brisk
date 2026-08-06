@@ -243,6 +243,24 @@ export const listPaymentTransactions = async (
   }
 };
 
+export const getTransaction = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const transaction = await customerAdminService.getTransactionById(req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Payment transaction detail retrieved successfully.',
+      data: { transaction },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const listBillingInvoices = async (
   req: AuthenticatedAdminRequest,
   res: Response,
@@ -255,6 +273,24 @@ export const listBillingInvoices = async (
       statusCode: 200,
       message: 'Billing invoices retrieved successfully.',
       data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getInvoice = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const invoice = await customerAdminService.getInvoiceById(req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Tax invoice detail retrieved successfully.',
+      data: { invoice },
     });
   } catch (error) {
     next(error);

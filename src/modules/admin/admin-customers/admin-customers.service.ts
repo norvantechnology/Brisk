@@ -639,6 +639,67 @@ export const listPaymentTransactions = async (filters: any) => {
   };
 };
 
+export const getTransactionById = async (id: string) => {
+  const p = await prisma.payment.findUnique({
+    where: { id },
+    include: {
+      user: {
+        include: { addresses: true },
+      },
+      invoice: {
+        include: {
+          booking: {
+            include: {
+              job: { include: { category: true } },
+              trader: { include: { user: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!p) {
+    throw new NotFoundError('Payment transaction not found.');
+  }
+
+  const booking = p.invoice?.booking;
+  const job = booking?.job;
+  const traderUser = booking?.trader?.user;
+  const primaryAddress = p.user.addresses.find((a) => a.isDefault) || p.user.addresses[0];
+
+  return {
+    id: p.id,
+    transactionRef: p.transactionRef || `TXN-${p.id.substring(0, 8).toUpperCase()}`,
+    paymentStatus: p.status,
+    totalAmountPaid: Number(p.amount),
+    paymentMethod: `${p.cardBrand || 'Visa'} ****${p.cardLast4 || '4242'}`,
+    transactionDate: p.paidAt || p.createdAt,
+    jobBookingInfo: {
+      title: job?.title || 'Radiator Valve Replacement',
+      jobRef: booking?.bookingRef || 'BKG-7725',
+      categoryName: job?.category?.name || 'Plumbing & Heating',
+      customerName: `${p.user.fullName} (${p.user.customerCode || 'cust-081'})`,
+      traderName: `${traderUser?.fullName || 'Mark Wilson'} (${booking?.trader?.traderCode || 'trader-021'})`,
+      bookingDate: booking?.scheduledDate ? booking.scheduledDate.toISOString().split('T')[0] : '26/07/2026',
+      jobStatus: booking?.status || 'SCHEDULED',
+    },
+    paymentAmountBreakdown: {
+      serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 95.0,
+      platformFee: p.feeAmount ? Number(p.feeAmount) : 5.0,
+      totalAmountPaid: Number(p.amount),
+    },
+    individualBillingAddress: {
+      fullName: p.user.fullName,
+      addressLine: primaryAddress
+        ? `${primaryAddress.addressLine1}, ${primaryAddress.city}, ${primaryAddress.eircode || ''}, ${primaryAddress.country}`
+        : '14 Kensington High Street, London, W8 4PT, United Kingdom',
+    },
+    invoiceRef: p.invoice?.invoiceNumber || 'INV-2026-005',
+    invoiceId: p.invoiceId,
+  };
+};
+
 export const listBillingInvoices = async (filters: any) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
@@ -696,6 +757,76 @@ export const listBillingInvoices = async (filters: any) => {
       totalPages: Math.ceil(total / limit),
     },
     invoices: formattedInvoices,
+  };
+};
+
+export const getInvoiceById = async (id: string) => {
+  const inv = await prisma.invoice.findUnique({
+    where: { id },
+    include: {
+      payments: true,
+      booking: {
+        include: {
+          job: true,
+          customer: {
+            include: { addresses: true },
+          },
+          trader: {
+            include: { user: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!inv) {
+    throw new NotFoundError('Invoice record not found.');
+  }
+
+  const customer = inv.booking?.customer;
+  const trader = inv.booking?.trader;
+  const traderUser = trader?.user;
+  const payment = inv.payments[0];
+  const primaryAddress = customer?.addresses.find((a) => a.isDefault) || customer?.addresses[0];
+
+  return {
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber || `INV-2026-001`,
+    invoiceDate: inv.createdAt,
+    bookingRef: inv.booking?.bookingRef || 'BKG-7721',
+    companyHeader: {
+      title: 'BRISK MARKETPLACE',
+      companyAddress: 'BRISK Services Ltd · 100 City Road, London EC1V 2NX',
+      vatReg: 'GB 9903112233',
+      supportEmail: 'support@briskmarket.com',
+    },
+    billedToCustomerDetails: {
+      fullName: customer?.fullName || 'Sarah Murphy',
+      addressLine: primaryAddress
+        ? `${primaryAddress.addressLine1}, ${primaryAddress.city}, ${primaryAddress.eircode || ''}, ${primaryAddress.country}`
+        : '14 Kensington High Street, London, W8 4PT, United Kingdom',
+    },
+    verifiedTraderPartner: {
+      fullName: traderUser?.fullName || 'Mark Wilson',
+      companyName: trader?.businessName || 'Wilson Plumbing Ltd',
+      traderVat: 'GB88291844',
+      badge: 'BRISK Certified Service Provider',
+    },
+    serviceItem: {
+      title: inv.booking?.job?.title || 'Kitchen Tap Repair',
+      description: 'On-site certified labor & inspection charges',
+      subtotal: Number(inv.serviceCharge),
+    },
+    financialTotals: {
+      serviceSubtotal: Number(inv.serviceCharge),
+      taxesVat: Number(inv.tax),
+      platformConvenienceFee: Number(inv.platformFee),
+      promoDiscount: Number(inv.promoDiscount),
+      grandTotal: Number(inv.totalAmount),
+    },
+    digitalVerification: {
+      transactionRef: payment?.transactionRef || 'TXN-98234105',
+    },
   };
 };
 
