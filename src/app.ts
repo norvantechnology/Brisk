@@ -35,7 +35,7 @@ app.use('/admin', adminCategoryRoutes);
  * /health:
  *   get:
  *     summary: Check API server health status, ISO timestamp, and uptime in seconds
- *     tags: [System Health & Status]
+ *     tags: ['[System] Health & Diagnostics']
  *     responses:
  *       200:
  *         description: API server is healthy and operational.

@@ -10,7 +10,7 @@ const router = Router();
  * /auth/register:
  *   post:
  *     summary: Register Customer or Trader account & send 6-digit SMS OTP verification code
- *     tags: [Customer & Trader Auth]
+ *     tags: ['[Customer & Trader] Authentication']
  *     requestBody:
  *       required: true
  *       content:
@@ -56,7 +56,7 @@ router.post('/register', validate(registerSchema), authController.register);
  * /auth/verify-otp:
  *   post:
  *     summary: Verify 6-digit SMS OTP code to activate Customer/Trader mobile number
- *     tags: [Customer & Trader Auth]
+ *     tags: ['[Customer & Trader] Authentication']
  *     requestBody:
  *       required: true
  *       content:
@@ -88,7 +88,7 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
  * /auth/login:
  *   post:
  *     summary: Authenticate Customer or Trader via Email & Password to retrieve JWT Tokens
- *     tags: [Customer & Trader Auth]
+ *     tags: ['[Customer & Trader] Authentication']
  *     requestBody:
  *       required: true
  *       content:
@@ -119,7 +119,7 @@ router.post('/login', validate(loginSchema), authController.login);
  * /auth/refresh:
  *   post:
  *     summary: Issue new User Access Token using valid Refresh Token
- *     tags: [Customer & Trader Auth]
+ *     tags: ['[Customer & Trader] Authentication']
  *     requestBody:
  *       required: true
  *       content:
