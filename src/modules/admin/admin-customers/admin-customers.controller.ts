@@ -202,3 +202,118 @@ export const updateDeletionRequest = async (
     next(error);
   }
 };
+
+// ==========================================
+// PAYMENT & BILLING MANAGEMENT CONTROLLERS
+// ==========================================
+
+export const getCustomerPaymentHeaderStats = async (
+  _req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const stats = await customerAdminService.getCustomerPaymentHeaderStats();
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer payment header stats retrieved successfully.',
+      data: stats,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listPaymentTransactions = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await customerAdminService.listPaymentTransactions(req.query);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Payment transactions retrieved successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listBillingInvoices = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await customerAdminService.listBillingInvoices(req.query);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Billing invoices retrieved successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listRefundsQueue = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await customerAdminService.listRefundsQueue(req.query);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Refunds management queue retrieved successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const processRefund = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const refund = await customerAdminService.processRefund(adminId, adminLabel, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Refund processed successfully.',
+      data: { refund },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getLoyaltyRewardsSummary = async (
+  _req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const summary = await customerAdminService.getLoyaltyRewardsSummary();
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Loyalty & rewards summary retrieved successfully.',
+      data: summary,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

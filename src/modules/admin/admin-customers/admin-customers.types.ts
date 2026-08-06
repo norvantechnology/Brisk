@@ -1,4 +1,4 @@
-import { UserStatus, DeletionRequestStatus } from '@prisma/client';
+import { UserStatus, DeletionRequestStatus, PaymentStatus, InvoiceStatus, RefundStatus } from '@prisma/client';
 
 export interface CustomerQueryFilters {
   page?: number;
@@ -15,6 +15,29 @@ export interface DeletionRequestQueryFilters {
   status?: DeletionRequestStatus;
   reason?: string;
   sort?: 'newest' | 'oldest';
+}
+
+export interface PaymentTransactionQueryFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: PaymentStatus;
+  method?: string;
+  sort?: 'newest' | 'oldest';
+}
+
+export interface InvoiceQueryFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: InvoiceStatus;
+}
+
+export interface RefundQueryFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: RefundStatus;
 }
 
 export interface CreateCustomerInput {
@@ -51,5 +74,10 @@ export interface UpdateCustomerInput {
 
 export interface UpdateDeletionRequestInput {
   status: DeletionRequestStatus;
+  notes?: string;
+}
+
+export interface ProcessRefundInput {
+  status: RefundStatus;
   notes?: string;
 }

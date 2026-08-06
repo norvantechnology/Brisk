@@ -130,6 +130,13 @@ enum DeletionRequestStatus {
   COMPLETED
 }
 
+enum RefundStatus {
+  PENDING
+  APPROVED
+  COMPLETED
+  REJECTED
+}
+
 enum ActorType {
   SYSTEM
   ADMIN
@@ -173,6 +180,7 @@ model User {
   jobs                   Job[]
   bookings               Booking[]
   payments               Payment[]
+  refunds                Refund[]
   loyaltyAccount         LoyaltyAccount?
   savedTraders           SavedTrader[]
   ratingsGiven           RatingReview[]             @relation("CustomerReviews")
@@ -201,6 +209,7 @@ model AdminUser {
   // Relationships
   createdOffers           Offer[]                  @relation("CreatedByAdmin")
   processedPayouts        Payout[]                 @relation("ProcessedByAdmin")
+  processedRefunds        Refund[]                 @relation("RefundProcessedByAdmin")
   reviewedDeletionRequest AccountDeletionRequest[] @relation("ReviewedByAdmin")
 
   @@map("admin_users")
@@ -211,13 +220,17 @@ model Trader {
   userId             String             @unique @map("user_id") @db.Uuid
   traderType         TraderType         @default(SOLO) @map("trader_type")
   businessName       String?            @map("business_name")
-  bio                String?
-  yearsExperience    Int?               @map("years_experience")
+  bio                String?            @db.Text
+  profilePhotoUrl    String?            @map("profile_photo_url")
+  coverImageUrl      String?            @map("cover_image_url")
+  yearsExperience    Int?               @default(0) @map("years_experience")
   jobsDoneCount      Int                @default(0) @map("jobs_done_count")
   avgRating          Decimal            @default(0.0) @db.Decimal(3, 2) @map("avg_rating")
   topRated           Boolean            @default(false) @map("top_rated")
-  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
   traderCode         String?            @unique @map("trader_code")
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  status             String             @default("active") // active | inactive | suspended
+  stripeAccountId    String?            @map("stripe_account_id")
   serviceRadius      String?            @map("service_radius")
   bankAccountRef     String?            @map("bank_account_ref")
   categoryId         String?            @map("category_id") @db.Uuid
@@ -229,54 +242,54 @@ model Trader {
   category        Category?            @relation(fields: [categoryId], references: [id])
   quotes          Quote[]
   bookings        Booking[]
-  ratingsReceived RatingReview[]       @relation("TraderReviews")
+  payouts         Payout[]
   offers          Offer[]              @relation("TraderOffers")
   briskOffers     BriskOffer[]
+  ratingsReceived RatingReview[]       @relation("TraderReviews")
   savedBy         SavedTrader[]
-  payouts         Payout[]
   registrations   TraderRegistration[]
 
   @@map("traders")
 }
 
 // ==========================================
-// PROPERTY & UTILITIES
+// ADDRESSES & PROPERTIES
 // ==========================================
 
 model Address {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  label       String
-  addressType String   @default("custom") @map("address_type")
-  line1       String
-  houseNumber String   @map("house_number")
-  city        String
-  county      String
-  eircode     String
-  isPrimary   Boolean  @default(false) @map("is_primary")
-  lat         Decimal  @db.Decimal(9, 6)
-  lng         Decimal  @db.Decimal(9, 6)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  label        String?  // e.g. Home, Work
+  addressLine1 String   @map("address_line_1")
+  addressLine2 String?  @map("address_line_2")
+  city         String
+  county       String?
+  eircode      String?
+  country      String   @default("Ireland")
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  properties Property[]
-  jobs       Job[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("addresses")
 }
 
 model Property {
-  id        String   @id @default(uuid()) @db.Uuid
-  addressId String   @map("address_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  utnNumber String?  @map("utn_number")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  propertyName String   @map("property_name")
+  addressLine1 String   @map("address_line_1")
+  addressLine2 String?  @map("address_line_2")
+  city         String
+  county       String?
+  eircode      String?
+  country      String   @default("Ireland")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  address       Address        @relation(fields: [addressId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   meters        Meter[]
   subscriptions Subscription[]
@@ -285,15 +298,13 @@ model Property {
 }
 
 model Meter {
-  id               String   @id @default(uuid()) @db.Uuid
-  propertyId       String   @map("property_id") @db.Uuid
-  meterType        String   @map("meter_type") // electricity | gas
-  referenceNumber  String   @map("reference_number") // MPRN / GPRN
-  lastReadingValue Decimal? @map("last_reading_value") @db.Decimal(12, 2)
-  lastReadingUnit  String?  @map("last_reading_unit") // kWh | m3
-  lastReadingDate  DateTime? @map("last_reading_date")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  propertyId    String   @map("property_id") @db.Uuid
+  meterType     String   // electricity | gas
+  mprnGprn      String   @map("mprn_gprn")
+  serialNumber  String?  @map("serial_number")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relationships
   property Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -305,27 +316,27 @@ model Meter {
 model MeterReading {
   id           String   @id @default(uuid()) @db.Uuid
   meterId      String   @map("meter_id") @db.Uuid
-  submittedById String  @map("submitted_by_id") @db.Uuid
-  readingValue Decimal  @map("reading_value") @db.Decimal(12, 2)
-  submittedAt  DateTime @default(now()) @map("submitted_at")
+  userId       String   @map("user_id") @db.Uuid
+  readingValue Decimal  @map("reading_value") @db.Decimal(10, 2)
+  readingDate  DateTime @default(now()) @map("reading_date")
+  photoUrl     String?  @map("photo_url")
   status       String   @default("pending") // pending | accepted | rejected
   createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  meter       Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
-  submittedBy User  @relation(fields: [submittedById], references: [id], onDelete: Cascade)
+  meter Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("meter_readings")
 }
 
 model UtilityProvider {
   id           String   @id @default(uuid()) @db.Uuid
-  serviceType  String   @map("service_type") // bins | electricity | gas | home_insurance
-  providerName String   @map("provider_name")
+  name         String
+  serviceType  String   @map("service_type") // bins | electricity | gas | insurance
   logoUrl      String?  @map("logo_url")
+  contactPhone String?  @map("contact_phone")
   createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relationships
   subscriptions Subscription[]
@@ -334,18 +345,18 @@ model UtilityProvider {
 }
 
 model Subscription {
-  id          String   @id @default(uuid()) @db.Uuid
-  propertyId  String   @map("property_id") @db.Uuid
-  providerId  String   @map("provider_id") @db.Uuid
-  serviceType String   @map("service_type")
-  status      String   @default("active") // active | pending_closure | closed
-  linkedAt    DateTime @default(now()) @map("linked_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  propertyId        String   @map("property_id") @db.Uuid
+  utilityProviderId String   @map("utility_provider_id") @db.Uuid
+  serviceType       String   @map("service_type")
+  accountNumber     String?  @map("account_number")
+  status            String   @default("active") // active | cancelled
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  property Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  provider UtilityProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  property        Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  utilityProvider UtilityProvider @relation(fields: [utilityProviderId], references: [id], onDelete: Cascade)
 
   @@map("subscriptions")
 }
@@ -364,15 +375,15 @@ model Category {
   brandThemeColor String?  @map("brand_theme_color")
   bannerImageUrl  String?  @map("banner_image_url")
   displayOrder    Int      @default(0) @map("display_order")
-  status          String   @default("active")
+  status          String   @default("active") // active | inactive
   featured        Boolean  @default(false)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relationships
   subcategories Subcategory[]
-  jobs          Job[]
   traders       Trader[]
+  jobs          Job[]
   offers        OfferCategory[]
 
   @@map("categories")
@@ -386,7 +397,7 @@ model Subcategory {
   code        String?
   urlSlug     String   @map("url_slug")
   featured    Boolean  @default(false)
-  status      String   @default("active")
+  status      String   @default("active") // active | inactive
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -403,28 +414,28 @@ model Subcategory {
 // ==========================================
 
 model Job {
-  id                   String    @id @default(uuid()) @db.Uuid
-  customerId           String    @map("customer_id") @db.Uuid
-  categoryId           String    @map("category_id") @db.Uuid
-  subcategoryId        String    @map("subcategory_id") @db.Uuid
-  title                String
-  description          String    @db.Text
-  addressId            String    @map("address_id") @db.Uuid
-  preferredDate        DateTime  @map("preferred_date")
-  preferredTimeSlot    String    @map("preferred_time_slot")
-  duration             String?
-  status               JobStatus @default(DRAFT)
-  appliedTraderOfferId String?   @map("applied_trader_offer_id") @db.Uuid
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(uuid()) @db.Uuid
+  jobRef        String?   @unique @map("job_ref")
+  customerId    String    @map("customer_id") @db.Uuid
+  categoryId    String    @map("category_id") @db.Uuid
+  subcategoryId String?   @map("subcategory_id") @db.Uuid
+  offerId       String?   @map("offer_id") @db.Uuid
+  title         String
+  description   String    @db.Text
+  addressLine   String?   @map("address_line")
+  city          String?
+  postcode      String?
+  status        JobStatus @default(DRAFT)
+  scheduledDate DateTime? @map("scheduled_date")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relationships
-  customer     User        @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  category     Category    @relation(fields: [categoryId], references: [id])
-  subcategory  Subcategory @relation(fields: [subcategoryId], references: [id])
-  address      Address     @relation(fields: [addressId], references: [id])
-  appliedOffer Offer?      @relation(fields: [appliedTraderOfferId], references: [id])
-  images       JobImage[]
+  customer     User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  category     Category      @relation(fields: [categoryId], references: [id])
+  subcategory  Subcategory?  @relation(fields: [subcategoryId], references: [id])
+  offer        Offer?        @relation(fields: [offerId], references: [id])
+  photos       JobPhoto[]
   quotes       Quote[]
   booking      Booking?
   chatMessages ChatMessage[]
@@ -432,34 +443,32 @@ model Job {
   @@map("jobs")
 }
 
-model JobImage {
+model JobPhoto {
   id        String   @id @default(uuid()) @db.Uuid
   jobId     String   @map("job_id") @db.Uuid
-  s3Key     String   @map("s3_key")
-  url       String?
+  photoUrl  String   @map("photo_url")
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relationships
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-  @@map("job_images")
+  @@map("job_photos")
 }
 
 model Quote {
-  id                       String      @id @default(uuid()) @db.Uuid
-  jobId                    String      @map("job_id") @db.Uuid
-  traderId                 String      @map("trader_id") @db.Uuid
-  price                    Decimal     @db.Decimal(10, 2)
-  estimatedCompletionTime String?     @map("estimated_completion_time")
-  notes                    String?     @db.Text
-  status                   QuoteStatus @default(PENDING)
-  createdAt                DateTime    @default(now()) @map("created_at")
-  updatedAt                DateTime    @updatedAt @map("updated_at")
+  id            String      @id @default(uuid()) @db.Uuid
+  jobId         String      @map("job_id") @db.Uuid
+  traderId      String      @map("trader_id") @db.Uuid
+  quotedAmount  Decimal     @map("quoted_amount") @db.Decimal(10, 2)
+  notes         String?     @db.Text
+  estimatedDays Int?        @map("estimated_days")
+  status        QuoteStatus @default(PENDING)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
 
   // Relationships
-  job     Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  trader  Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
-  booking Booking?
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
 
   @@map("quotes")
 }
@@ -469,22 +478,20 @@ model Quote {
 // ==========================================
 
 model Booking {
-  id          String        @id @default(uuid()) @db.Uuid
-  jobId       String        @unique @map("job_id") @db.Uuid
-  quoteId     String        @unique @map("quote_id") @db.Uuid
-  traderId    String        @map("trader_id") @db.Uuid
-  customerId  String        @map("customer_id") @db.Uuid
-  status      BookingStatus @default(SCHEDULED)
-  scheduledAt DateTime      @map("scheduled_at")
-  completedAt DateTime?     @map("completed_at")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id            String        @id @default(uuid()) @db.Uuid
+  bookingRef    String?       @unique @map("booking_ref")
+  jobId         String        @unique @map("job_id") @db.Uuid
+  traderId      String        @map("trader_id") @db.Uuid
+  customerId    String        @map("customer_id") @db.Uuid
+  scheduledDate DateTime      @map("scheduled_date")
+  status        BookingStatus @default(SCHEDULED)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
   // Relationships
   job          Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  quote        Quote         @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  trader       Trader        @relation(fields: [traderId], references: [id], onDelete: Cascade)
-  customer     User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  trader       Trader        @relation(fields: [traderId], references: [id])
+  customer     User          @relation(fields: [customerId], references: [id])
   invoice      Invoice?
   ratingReview RatingReview?
   chatMessages ChatMessage[]
@@ -494,6 +501,7 @@ model Booking {
 
 model Invoice {
   id                  String        @id @default(uuid()) @db.Uuid
+  invoiceNumber       String?       @unique @map("invoice_number")
   bookingId           String        @unique @map("booking_id") @db.Uuid
   serviceCharge       Decimal       @map("service_charge") @db.Decimal(10, 2)
   traderOfferDiscount Decimal       @default(0.0) @map("trader_offer_discount") @db.Decimal(10, 2)
@@ -514,6 +522,7 @@ model Invoice {
 
 model Payment {
   id                    String        @id @default(uuid()) @db.Uuid
+  transactionRef        String?       @unique @map("transaction_ref")
   invoiceId             String        @map("invoice_id") @db.Uuid
   userId                String        @map("user_id") @db.Uuid
   stripePaymentIntentId String?       @map("stripe_payment_intent_id")
@@ -521,6 +530,11 @@ model Payment {
   billingType           BillingType   @default(INDIVIDUAL) @map("billing_type")
   companyName           String?       @map("company_name")
   tinNumber             String?       @map("tin_number")
+  serviceCharge         Decimal?      @map("service_charge") @db.Decimal(10, 2)
+  feeAmount             Decimal?      @default(0.0) @map("fee_amount") @db.Decimal(10, 2)
+  discountAmount        Decimal?      @default(0.0) @map("discount_amount") @db.Decimal(10, 2)
+  cardLast4             String?       @map("card_last4")
+  cardBrand             String?       @map("card_brand")
   amount                Decimal       @db.Decimal(10, 2)
   status                PaymentStatus @default(PENDING)
   paidAt                DateTime?     @map("paid_at")
@@ -528,10 +542,34 @@ model Payment {
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
   // Relationships
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refunds Refund[]
 
   @@map("payments")
+}
+
+model Refund {
+  id             String       @id @default(uuid()) @db.Uuid
+  refundRef      String       @unique @map("refund_ref")
+  transactionRef String?      @map("transaction_ref")
+  paymentId      String?      @map("payment_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  originalAmount Decimal      @map("original_amount") @db.Decimal(10, 2)
+  refundAmount   Decimal      @map("refund_amount") @db.Decimal(10, 2)
+  reason         String       @db.Text
+  status         RefundStatus @default(PENDING)
+  processedById  String?      @map("processed_by_id") @db.Uuid
+  processedAt    DateTime?    @map("processed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Relationships
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment     Payment?   @relation(fields: [paymentId], references: [id])
+  processedBy AdminUser? @relation("RefundProcessedByAdmin", fields: [processedById], references: [id])
+
+  @@map("refunds")
 }
 
 model Payout {
@@ -551,6 +589,8 @@ model Payout {
 
   @@map("payouts")
 }
+
+
 
 // ==========================================
 // OFFERS & PROMO CODES

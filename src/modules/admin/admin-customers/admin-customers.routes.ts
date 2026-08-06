@@ -8,6 +8,10 @@ import {
   customerFilterSchema,
   deletionRequestFilterSchema,
   updateDeletionRequestSchema,
+  paymentTransactionFilterSchema,
+  invoiceFilterSchema,
+  refundFilterSchema,
+  processRefundSchema,
 } from './admin-customers.validation';
 
 const router = Router();
@@ -289,5 +293,164 @@ router.get('/customers/deletion-requests/:id', customerAdminController.getDeleti
  *         description: Deletion request not found.
  */
 router.patch('/customers/deletion-requests/:id', validate(updateDeletionRequestSchema), customerAdminController.updateDeletionRequest);
+
+// ==========================================
+// CUSTOMER PAYMENT & BILLING MANAGEMENT ROUTES (Screenshots 1, 2, 3, 4, 5)
+// ==========================================
+
+/**
+ * @swagger
+ * /admin/customer-payments/stats:
+ *   get:
+ *     summary: Retrieve Payment & Billing Header KPI Stat Cards
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Header stat cards retrieved (Available Cash, Default Method, Pending Payments, Pending Refunds, Last Payment Date).
+ */
+router.get('/customer-payments/stats', customerAdminController.getCustomerPaymentHeaderStats);
+
+/**
+ * @swagger
+ * /admin/customer-payments/transactions:
+ *   get:
+ *     summary: List Payment Transactions (Paginated, Search, Status & Method Filters)
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search by transaction reference (TXN-#######), customer, job, or trader.
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [PENDING, COMPLETED, FAILED, REFUNDED] }
+ *       - in: query
+ *         name: method
+ *         schema: { type: string }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [newest, oldest], default: newest }
+ *     responses:
+ *       200:
+ *         description: Customer payment transactions retrieved matching Screenshots 1 & 2 format.
+ */
+router.get('/customer-payments/transactions', validate(paymentTransactionFilterSchema), customerAdminController.listPaymentTransactions);
+
+/**
+ * @swagger
+ * /admin/customer-payments/invoices:
+ *   get:
+ *     summary: List Billing & Invoices (Paginated, Search & Status Filters)
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search by invoice number (INV-####-###), customer, job, or trader.
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [UNPAID, PAID, REFUNDED] }
+ *     responses:
+ *       200:
+ *         description: Customer billing invoices retrieved matching Screenshot 3 format.
+ */
+router.get('/customer-payments/invoices', validate(invoiceFilterSchema), customerAdminController.listBillingInvoices);
+
+/**
+ * @swagger
+ * /admin/customer-payments/refunds:
+ *   get:
+ *     summary: List Refunds Management Queue (Paginated, Search & Status Filters)
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search by refund reference (REF-####), TXN ID, customer, or job.
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [PENDING, APPROVED, COMPLETED, REJECTED] }
+ *     responses:
+ *       200:
+ *         description: Refunds queue list retrieved matching Screenshot 4 format.
+ */
+router.get('/customer-payments/refunds', validate(refundFilterSchema), customerAdminController.listRefundsQueue);
+
+/**
+ * @swagger
+ * /admin/customer-payments/refunds/{id}/process:
+ *   patch:
+ *     summary: Process Customer Payment Refund (Approve & Execute Refund)
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [PENDING, APPROVED, COMPLETED, REJECTED]
+ *                 example: COMPLETED
+ *               notes:
+ *                 type: string
+ *                 example: Processed customer refund return to original payment method.
+ *     responses:
+ *       200:
+ *         description: Refund status updated successfully and audit log logged.
+ *       404:
+ *         description: Refund record not found.
+ */
+router.patch('/customer-payments/refunds/:id/process', validate(processRefundSchema), customerAdminController.processRefund);
+
+/**
+ * @swagger
+ * /admin/customer-payments/loyalty:
+ *   get:
+ *     summary: Retrieve Customer Loyalty & Rewards Summary and Activity Feed
+ *     tags: ['[Admin] Customers Management & GDPR']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Loyalty points summary (Available Points, Lifetime Earned, Points Redeemed) and recent activity feed matching Screenshot 5 format.
+ */
+router.get('/customer-payments/loyalty', customerAdminController.getLoyaltyRewardsSummary);
 
 export default router;

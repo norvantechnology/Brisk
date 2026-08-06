@@ -4,6 +4,7 @@ import { seedAdmin } from './admin.seed';
 import { seedDemoUsers } from './demo-users.seed';
 import { seedCategories } from './categories.seed';
 import { seedCustomers } from './customers.seed';
+import { seedPayments } from './payments.seed';
 
 const prisma = new PrismaClient();
 
@@ -13,6 +14,7 @@ async function main() {
   await seedDemoUsers(prisma);
   await seedCategories(prisma);
   await seedCustomers(prisma);
+  await seedPayments(prisma);
   logger.info('✅ Database seeding completed successfully.');
 }
 

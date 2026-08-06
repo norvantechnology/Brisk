@@ -1387,7 +1387,14 @@ sequenceDiagram
   - `GET /admin/customers/deletion-requests`: Paginated list with request reference (`DEL-#####`), customer info, reason, status (`PENDING`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`, `COMPLETED`), reviewed by label, and requested date.
   - `GET /admin/customers/deletion-requests/:id`: Request detail view with customer identity, request details (selected reason + additional comments), customer activity context (total jobs, bookings, offers used, saved addresses), and audit timeline.
   - `PATCH /admin/customers/deletion-requests/:id`: Update status (`UNDER_REVIEW`, `APPROVED`, `REJECTED`, `COMPLETED`). Automatically executes GDPR PII anonymization (`Deleted Customer`, `deleted-cus-###@anonymized.brisk.internal`, `+00 0000000000`) on `COMPLETED` status per §13.4.2.
-- **Customers & Deletion Seeder**: Seeded sample customer profiles (`Sarah Murphy`, `David Miller`, `Emma Watson`, `Robert Langdon`, `Deleted Customer`, `Betty Wright`, etc.) and corresponding deletion requests (`DEL-00021`, `DEL-00022`, `DEL-00023`, `DEL-00019`, `DEL-00015`).
+- **Customer Payment & Billing Management Endpoints** *(Matches Payment & Billing Management Screenshots 1 - 5)*:
+  - `GET /admin/customer-payments/stats`: Top header KPI stat cards (`availableCash`: €685.00, `defaultMethod`: Visa (4242), `pendingPaymentsCount`: 2, `pendingRefundsAmount`: €0.00, `lastPaymentDate`: 22 Jul).
+  - `GET /admin/customer-payments/transactions`: Paginated list of customer job transactions (`TXN-98234109`, customer `Sarah Murphy`, job `Radiator Valve Replace...`, trader `Mark Wilson`, service charge €95, fee/offer, total paid €100, payment method `Visa ****4242`, status `Pending`).
+  - `GET /admin/customer-payments/invoices`: Paginated billing invoices (`INV-2026-001`, customer `Sarah Murphy`, job `Kitchen Tap Repair`, trader `Mark Wilson`, invoice date `2026-07-22`, amount €120, status `Paid`).
+  - `GET /admin/customer-payments/refunds`: Refunds management queue (`REF-8812`, TXN `TXN-98234108`, customer `Robert Vance`, job `Roof Leak Repair...`, original €365, refund amount €365, reason, status `Refund Completed` / `Refund Approved`).
+  - `PATCH /admin/customer-payments/refunds/:id/process`: Action endpoint to process & execute customer refunds (`APPROVED` -> `COMPLETED`) with audit trail.
+  - `GET /admin/customer-payments/loyalty`: Customer loyalty & rewards summary (`availableLoyaltyPoints`: 1050 pts, `totalLifetimeEarned`: 1250 pts, `pointsRedeemed`: 200 pts, recent points activity feed).
+- **Payment & Loyalty Seeder**: Seeded sample payment transactions (`TXN-98234109`, `TXN-98234107`, `TXN-98234106`), invoice `INV-2026-001`, refund requests (`REF-8812`, `REF-8813`), and loyalty points balance matching live Figma screenshots.
 
 #### 6. Swagger Categorization & Documentation
 - Organized Swagger UI into structured group tags:

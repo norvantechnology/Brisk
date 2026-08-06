@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UserStatus, DeletionRequestStatus } from '@prisma/client';
+import { UserStatus, DeletionRequestStatus, PaymentStatus, InvoiceStatus, RefundStatus } from '@prisma/client';
 
 export const createCustomerSchema = z.object({
   body: z.object({
@@ -67,6 +67,45 @@ export const updateDeletionRequestSchema = z.object({
   }),
   body: z.object({
     status: z.nativeEnum(DeletionRequestStatus),
+    notes: z.string().optional(),
+  }),
+});
+
+export const paymentTransactionFilterSchema = z.object({
+  query: z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    search: z.string().optional(),
+    status: z.nativeEnum(PaymentStatus).optional(),
+    method: z.string().optional(),
+    sort: z.enum(['newest', 'oldest']).optional(),
+  }),
+});
+
+export const invoiceFilterSchema = z.object({
+  query: z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    search: z.string().optional(),
+    status: z.nativeEnum(InvoiceStatus).optional(),
+  }),
+});
+
+export const refundFilterSchema = z.object({
+  query: z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    search: z.string().optional(),
+    status: z.nativeEnum(RefundStatus).optional(),
+  }),
+});
+
+export const processRefundSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid Refund ID format.'),
+  }),
+  body: z.object({
+    status: z.nativeEnum(RefundStatus),
     notes: z.string().optional(),
   }),
 });
