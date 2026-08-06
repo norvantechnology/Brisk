@@ -36,6 +36,10 @@ const options: swaggerJSDoc.Options = {
         description: 'Admin Portal login, session token refresh, admin profile, password management, and logout.',
       },
       {
+        name: 'Category & Sub-Category Master',
+        description: 'Category Master & Sub-Category Master CRUD management, display ordering, filters, and icon/color settings.',
+      },
+      {
         name: 'Customer & Trader Auth',
         description: 'Mobile registration, OTP SMS verification, login, and session refresh for Customers and Traders.',
       },

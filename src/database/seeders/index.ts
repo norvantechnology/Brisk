@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { seedAdmin } from './admin.seed';
 import { seedDemoUsers } from './demo-users.seed';
+import { seedCategories } from './categories.seed';
 
 const prisma = new PrismaClient();
 
@@ -9,6 +10,7 @@ async function main() {
   logger.info('🌱 Starting database seeding...');
   await seedAdmin(prisma);
   await seedDemoUsers(prisma);
+  await seedCategories(prisma);
   logger.info('✅ Database seeding completed successfully.');
 }
 

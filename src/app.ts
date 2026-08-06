@@ -6,6 +6,7 @@ import { sendResponse } from './utils/apiResponse';
 import { setupSwagger } from './config/swagger';
 import authRoutes from './modules/auth/auth.routes';
 import adminAuthRoutes from './modules/admin/admin-auth/admin-auth.routes';
+import adminCategoryRoutes from './modules/admin/admin-categories/admin-categories.routes';
 
 const app = express();
 
@@ -27,6 +28,7 @@ setupSwagger(app);
 // Mount API Routes
 app.use('/auth', authRoutes);
 app.use('/admin/auth', adminAuthRoutes);
+app.use('/admin', adminCategoryRoutes);
 
 /**
  * @swagger
