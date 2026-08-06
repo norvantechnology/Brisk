@@ -1331,3 +1331,53 @@ sequenceDiagram
 - Every mutation that touches money or points wraps in a DB transaction.
 - Webhooks (Stripe) are the only source of truth for payment state — client callbacks only drive UI, never DB writes.
 - Route naming: REST, plural nouns (`/jobs`, `/quotes`, `/loyalty/offers`), nested only one level deep (`/jobs/:id/quotes`, not `/jobs/:id/quotes/:id/accept` — accept is its own resource-ish action `/quotes/:id/accept`).
+
+---
+
+## 15. Live Implementation Ledger & Status (v4)
+
+> **Build Execution Status:** Live deployment active on Render Cloud (`https://brisk-aclm.onrender.com`) connected to Render PostgreSQL Database (`brisk_db_5f0z`). Code repository synchronized on GitHub (`https://github.com/norvantechnology/Brisk.git`).
+
+### Completed Phases & Delivered API Modules
+
+#### 1. Phase 0 — Monolith Foundation & Schema
+- **Database Schema**: Comprehensive Prisma schema (`src/database/schema.prisma`) featuring 32 domain models and 18 enums synced to PostgreSQL cloud database.
+- **Infrastructure & Utilities**: Express.js server, Helmet security headers, CORS middleware, Winston logger (`src/utils/logger.ts`), standard API response helper (`src/utils/apiResponse.ts`), and centralized error handling middleware.
+- **Dynamic OpenAPI / Swagger UI**: Mounted at `/api-docs` with dynamic server selection (Local + Render Cloud).
+
+#### 2. Phase 1 — Customer & Trader Mobile Auth (`src/modules/auth/`)
+- `POST /auth/register`: Mobile user account registration with Zod validation.
+- `POST /auth/verify-otp`: Mobile number OTP verification (Static test OTP `123456` enabled for testing).
+- `POST /auth/login`: Customer & Trader authentication with mobile verification enforcement and JWT access/refresh token generation.
+- `POST /auth/refresh`: Session refresh returning new JWT access token.
+
+#### 3. Phase 9A — Admin Authentication & Audit Logging (`src/modules/admin/admin-auth/`)
+- `POST /admin/auth/login`: Admin & Super Admin authentication with audit log recording.
+- `POST /admin/auth/refresh`: Admin session token refresh.
+- `GET /admin/auth/me`: Profile retrieval for active admin session.
+- `PATCH /admin/auth/password`: Secure admin password update with old password verification.
+- `POST /admin/auth/logout`: Invalidate admin session.
+- **Super Admin Seeder**: Seeded `admin@brisk.com` / `Password1!` into database.
+
+#### 4. Phase 9B — Admin Category & Sub-Category Master (`src/modules/admin/admin-categories/`)
+- **Master Category Endpoints**:
+  - `GET /admin/categories`: Paginated list of Master Categories with search (`search`), status filter (`status`), featured filter (`featured`), display ordering, and calculated `subCategoriesCount`, `tradersCount`, and `jobsCount`.
+  - `POST /admin/categories`: Create Master Category with unique category code and URL slug.
+  - `GET /admin/categories/:id`: Get Master Category detail with sub-categories list.
+  - `PATCH /admin/categories/:id`: Update Master Category details.
+  - `DELETE /admin/categories/:id`: Delete Master Category (with dependency safety checks).
+- **Sub-Category Master Endpoints** *(Matches Admin Panel Screenshot 4)*:
+  - `GET /admin/sub-categories`: Paginated list of Sub-Categories with row numbers (`#`), subcategory name & slug, parent category linkage, `code`, `serviceType`, derived `tradersCount` & `jobsCount`, `featured`, `status`, and `actions`.
+  - `POST /admin/sub-categories`: Create Sub-Category under parent Category.
+  - `GET /admin/sub-categories/:id`: Get Sub-Category detail.
+  - `PATCH /admin/sub-categories/:id`: Update Sub-Category details.
+  - `DELETE /admin/sub-categories/:id`: Delete Sub-Category (with job dependency safety checks).
+- **Category Seeder**: Seeded 10 master categories and sub-categories (Plumbing, Electrical, Carpentry, Painting, Cleaning, Interior Design, HVAC, Security, Solar, Roofing) matching live admin UI data.
+
+#### 5. Swagger Categorization & Documentation
+- Organized Swagger UI into structured group tags:
+  - `🔐 [Admin] Authentication`
+  - `📂 [Admin] Category & Sub-Category Master`
+  - `📱 [Customer & Trader] Authentication`
+  - `🛠️ [System] Health & Diagnostics`
+- Removed cluttered top description block and added concise summaries beside every API route URL for fast navigation.
