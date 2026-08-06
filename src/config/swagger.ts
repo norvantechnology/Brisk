@@ -3,6 +3,24 @@ import swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
 import { env } from './env';
 
+const servers: { url: string; description: string }[] = [
+  {
+    url: '/',
+    description: 'Current Environment (Dynamic)',
+  },
+  {
+    url: `http://localhost:${env.PORT}`,
+    description: 'Local development server',
+  },
+];
+
+if (process.env.RENDER_EXTERNAL_URL) {
+  servers.unshift({
+    url: process.env.RENDER_EXTERNAL_URL,
+    description: 'Render Cloud Production Server',
+  });
+}
+
 const options: swaggerJSDoc.Options = {
   definition: {
     openapi: '3.0.0',
@@ -11,12 +29,7 @@ const options: swaggerJSDoc.Options = {
       version: '1.0.0',
       description: 'API specifications for the BRISK modular monolith backend.',
     },
-    servers: [
-      {
-        url: `http://localhost:${env.PORT}`,
-        description: 'Local development server',
-      },
-    ],
+    servers,
     components: {
       securitySchemes: {
         bearerAuth: {
