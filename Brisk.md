@@ -1399,10 +1399,13 @@ sequenceDiagram
 - **Payment & Loyalty Seeder**: Seeded sample payment transactions (`TXN-98234109`, `TXN-98234107`, `TXN-98234106`), invoice `INV-2026-001`, refund requests (`REF-8812`, `REF-8813`), and loyalty points balance matching live Figma screenshots.
 
 #### 6. Swagger Categorization & Documentation
-- Organized Swagger UI into structured group tags:
-  - `🔐 [Admin] Authentication`
-  - `📂 [Admin] Category & Sub-Category Master`
-  - `👥 [Admin] Customers Management & GDPR`
-  - `📱 [Customer & Trader] Authentication`
-  - `🛠️ [System] Health & Diagnostics`
-- Removed cluttered top description block and added concise summaries beside every API route URL for fast navigation.
+- Organized Swagger UI into clean, distinct sub-module tags for frontend developer clarity:
+  - `🔐 [Admin Auth] Authentication & Profile`: Admin Portal login, session token refresh, admin profile, password updates, and session logout.
+  - `📂 [Admin Category] Master Categories`: Master Category CRUD, category code/slug checks, display order, theme color, icon name, and stats.
+  - `🏷️ [Admin Category] Master Sub-Categories`: Master Sub-Category CRUD, parent category association, service types, and safety checks.
+  - `👥 [Admin Customer] 1. All Customers Directory`: Customer directory table, search, filters (status, country), customer profile creation (10 form fields), profile detail view, update, and deletion.
+  - `🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests`: GDPR account deletion request queue, stats, request detail inspection, approval modal, and automated in-place PII anonymization.
+  - `💳 [Admin Customer] 3. Payment & Billing Management`: Customer transactions table, tax invoice details & PDF data, refunds management queue & action processing, and customer loyalty rewards feed.
+  - `📱 [App Auth] Customer & Trader Mobile Auth`: Mobile user registration, OTP SMS verification, login, and session refresh.
+  - `🛠️ [System] Health & Diagnostics`: API health check, uptime metrics, and database connection status verification.
+- Removed cluttered top description blocks and added clear, concise summaries beside every API route URL for fast navigation.

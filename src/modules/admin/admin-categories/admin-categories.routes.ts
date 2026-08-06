@@ -25,7 +25,7 @@ router.use(adminAuthMiddleware);
  * /admin/categories:
  *   get:
  *     summary: List Master Categories (Paginated, Search, Status & Featured Filters)
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['📂 [Admin Category] Master Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -62,7 +62,7 @@ router.get('/categories', validate(categoryFilterSchema), categoryAdminControlle
  * /admin/categories:
  *   post:
  *     summary: Create new Master Category
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['📂 [Admin Category] Master Categories']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -101,7 +101,7 @@ router.post('/categories', validate(createCategorySchema), categoryAdminControll
  * /admin/categories/{id}:
  *   get:
  *     summary: Get Master Category detail by ID
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['📂 [Admin Category] Master Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -122,7 +122,7 @@ router.get('/categories/:id', categoryAdminController.getCategory);
  * /admin/categories/{id}:
  *   patch:
  *     summary: Update Master Category detail
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['📂 [Admin Category] Master Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -159,7 +159,7 @@ router.patch('/categories/:id', validate(updateCategorySchema), categoryAdminCon
  * /admin/categories/{id}:
  *   delete:
  *     summary: Delete Master Category
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['📂 [Admin Category] Master Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -186,7 +186,7 @@ router.delete('/categories/:id', categoryAdminController.deleteCategory);
  * /admin/sub-categories:
  *   get:
  *     summary: List Sub-Categories (Paginated, Search, Parent Category & Status Filters)
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['🏷️ [Admin Category] Master Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -220,8 +220,8 @@ router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminCo
  * @swagger
  * /admin/sub-categories:
  *   post:
- *     summary: Create new Sub-Category under parent Category
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     summary: Create new Sub-Category
+ *     tags: ['🏷️ [Admin Category] Master Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -236,17 +236,15 @@ router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminCo
  *               - urlSlug
  *             properties:
  *               categoryId: { type: string, format: uuid }
- *               name: { type: string, example: 'Pipe Fitting & Installation' }
- *               serviceType: { type: string, example: 'Installation' }
- *               code: { type: string, example: 'PLUMB-PIPE' }
- *               urlSlug: { type: string, example: 'pipe-fitting-installation' }
+ *               name: { type: string, example: 'Leak Repair & Pipework' }
+ *               serviceType: { type: string, example: 'Repair' }
+ *               code: { type: string, example: 'PLUMB-LEAK' }
+ *               urlSlug: { type: string, example: 'leak-repair-pipework' }
  *               featured: { type: boolean, example: true }
  *               status: { type: string, enum: [active, inactive], example: 'active' }
  *     responses:
  *       201:
  *         description: Sub-Category created successfully.
- *       404:
- *         description: Parent Category not found.
  */
 router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminController.createSubcategory);
 
@@ -255,7 +253,7 @@ router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminC
  * /admin/sub-categories/{id}:
  *   get:
  *     summary: Get Sub-Category detail by ID
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['🏷️ [Admin Category] Master Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -265,9 +263,9 @@ router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminC
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Sub-category detail retrieved.
+ *         description: Sub-Category detail retrieved successfully.
  *       404:
- *         description: Sub-category not found.
+ *         description: Sub-Category not found.
  */
 router.get('/sub-categories/:id', categoryAdminController.getSubcategory);
 
@@ -276,7 +274,7 @@ router.get('/sub-categories/:id', categoryAdminController.getSubcategory);
  * /admin/sub-categories/{id}:
  *   patch:
  *     summary: Update Sub-Category detail
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['🏷️ [Admin Category] Master Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -291,7 +289,6 @@ router.get('/sub-categories/:id', categoryAdminController.getSubcategory);
  *           schema:
  *             type: object
  *             properties:
- *               categoryId: { type: string, format: uuid }
  *               name: { type: string }
  *               serviceType: { type: string }
  *               code: { type: string }
@@ -300,18 +297,18 @@ router.get('/sub-categories/:id', categoryAdminController.getSubcategory);
  *               status: { type: string, enum: [active, inactive] }
  *     responses:
  *       200:
- *         description: Sub-Category updated.
+ *         description: Sub-Category updated successfully.
  *       404:
  *         description: Sub-Category not found.
  */
-router.patch('/sub-categories/{id}', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
+router.patch('/sub-categories/:id', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
 
 /**
  * @swagger
  * /admin/sub-categories/{id}:
  *   delete:
  *     summary: Delete Sub-Category
- *     tags: ['[Admin] Category & Sub-Category Master']
+ *     tags: ['🏷️ [Admin Category] Master Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -321,9 +318,9 @@ router.patch('/sub-categories/{id}', validate(updateSubcategorySchema), category
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Sub-Category deleted.
+ *         description: Sub-Category deleted successfully.
  *       400:
- *         description: Cannot delete sub-category with active jobs.
+ *         description: Cannot delete sub-category linked to existing active jobs.
  *       404:
  *         description: Sub-Category not found.
  */

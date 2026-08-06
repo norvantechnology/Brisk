@@ -27,29 +27,41 @@ const options: swaggerJSDoc.Options = {
     info: {
       title: 'BRISK Platform API Documentation',
       version: '1.0.0',
-      description: 'API specifications for the BRISK modular monolith backend.',
+      description: 'Modular Monolith Backend API Specification for Admin Portal & Mobile Applications.',
     },
     servers,
     tags: [
       {
-        name: '[Admin] Authentication',
-        description: '🔐 Admin Portal login, session token refresh, admin profile, password management, and logout.',
+        name: '🔐 [Admin Auth] Authentication & Profile',
+        description: 'Admin Portal login, JWT token refresh, current admin profile, password updates, and session logout.',
       },
       {
-        name: '[Admin] Category & Sub-Category Master',
-        description: '📂 Category Master & Sub-Category Master CRUD management, display ordering, filters, and icon/color settings.',
+        name: '📂 [Admin Category] Master Categories',
+        description: 'Master Category CRUD management, category code/slug checks, display order, theme color, icon name, and stats.',
       },
       {
-        name: '[Admin] Customers Management & GDPR',
-        description: '👥 Customers Directory, Profile creation/management, KPI stats, and GDPR Account Deletion Requests workflow.',
+        name: '🏷️ [Admin Category] Master Sub-Categories',
+        description: 'Master Sub-Category CRUD management, parent category association, service types, and job dependency safety checks.',
       },
       {
-        name: '[Customer & Trader] Authentication',
-        description: '📱 Mobile registration, OTP SMS verification, login, and session refresh for Customers and Traders.',
+        name: '👥 [Admin Customer] 1. All Customers Directory',
+        description: 'Customer directory table, search, filters (status, country), customer profile creation (10 form fields), profile detail view, update, and deletion.',
       },
       {
-        name: '[System] Health & Diagnostics',
-        description: '🛠️ API health checks, server uptime, and status verification endpoints.',
+        name: '🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests',
+        description: 'GDPR account deletion request queue, stats, request detail inspection, approval modal, and automated in-place PII anonymization.',
+      },
+      {
+        name: '💳 [Admin Customer] 3. Payment & Billing Management',
+        description: 'Customer transactions table, tax invoice details & PDF data, refunds management queue & action processing, and customer loyalty rewards feed.',
+      },
+      {
+        name: '📱 [App Auth] Customer & Trader Mobile Auth',
+        description: 'Mobile user registration, OTP SMS verification, login, and session refresh for Customer and Trader mobile apps.',
+      },
+      {
+        name: '🛠️ [System] Health & Diagnostics',
+        description: 'API health check, uptime metrics, and database connection status verification.',
       },
     ],
     components: {
@@ -58,7 +70,7 @@ const options: swaggerJSDoc.Options = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter JWT access token.',
+          description: 'Enter Admin/User JWT access token.',
         },
       },
     },
