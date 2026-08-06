@@ -9,8 +9,7 @@ const router = Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Register Customer or Trader
- *     description: Register a new account as a Customer or Trader. Generates and sends a 6-digit SMS verification OTP to the user's mobile number.
+ *     summary: Register Customer or Trader account & send 6-digit SMS OTP verification code
  *     tags: [Customer & Trader Auth]
  *     requestBody:
  *       required: true
@@ -28,56 +27,27 @@ const router = Router();
  *               fullName:
  *                 type: string
  *                 example: Jane Doe
- *                 description: User's full display name.
  *               email:
  *                 type: string
  *                 format: email
  *                 example: jane@example.com
- *                 description: User's unique email address.
  *               mobileNumber:
  *                 type: string
  *                 example: "+353871234567"
- *                 description: Unique mobile phone number with country code.
  *               password:
  *                 type: string
  *                 example: Password1!
- *                 description: Account password (min 8 chars, 1 uppercase, 1 number/special char).
  *               role:
  *                 type: string
  *                 enum: [CUSTOMER, TRADER]
  *                 example: CUSTOMER
- *                 description: Account role (CUSTOMER or TRADER).
  *     responses:
  *       201:
  *         description: User registered successfully. OTP code sent.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Registration successful. Verification code has been sent to your mobile number.
- *                 data:
- *                   type: object
- *                   properties:
- *                     userId:
- *                       type: string
- *                       format: uuid
- *                       example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
  *       400:
- *         description: Validation error or invalid input.
- *         content:
- *           application/json:
- *             $ref: '#/components/schemas/ErrorResponse'
+ *         description: Validation error or invalid input parameters.
  *       409:
- *         description: Email or mobile number is already registered.
- *         content:
- *           application/json:
- *             $ref: '#/components/schemas/ErrorResponse'
+ *         description: Email or mobile number already exists.
  */
 router.post('/register', validate(registerSchema), authController.register);
 
@@ -85,8 +55,7 @@ router.post('/register', validate(registerSchema), authController.register);
  * @swagger
  * /auth/verify-otp:
  *   post:
- *     summary: Verify Mobile Phone OTP
- *     description: Verify the 6-digit SMS OTP code sent during registration to activate the mobile number.
+ *     summary: Verify 6-digit SMS OTP code to activate Customer/Trader mobile number
  *     tags: [Customer & Trader Auth]
  *     requestBody:
  *       required: true
@@ -101,35 +70,16 @@ router.post('/register', validate(registerSchema), authController.register);
  *               mobileNumber:
  *                 type: string
  *                 example: "+353871234567"
- *                 description: Mobile number used during registration.
  *               code:
  *                 type: string
  *                 example: "123456"
- *                 description: 6-digit OTP verification code.
  *     responses:
  *       200:
- *         description: Mobile number verified successfully.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Mobile number verified successfully. Your account is now active.
+ *         description: Mobile number verified successfully. Account activated.
  *       400:
  *         description: Invalid or expired OTP code.
- *         content:
- *           application/json:
- *             $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: User not found.
- *         content:
- *           application/json:
- *             $ref: '#/components/schemas/ErrorResponse'
+ *         description: User with this mobile number does not exist.
  */
 router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
 
@@ -137,8 +87,7 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Customer / Trader Login
- *     description: Authenticate user using email and password. Returns JWT access and refresh tokens. Requires verified mobile number.
+ *     summary: Authenticate Customer or Trader via Email & Password to retrieve JWT Tokens
  *     tags: [Customer & Trader Auth]
  *     requestBody:
  *       required: true
@@ -154,43 +103,14 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
  *                 type: string
  *                 format: email
  *                 example: jane@example.com
- *                 description: Registered account email.
  *               password:
  *                 type: string
  *                 example: Password1!
- *                 description: Account password.
  *     responses:
  *       200:
  *         description: Logged in successfully. Returns JWT tokens.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Logged in successfully.
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       type: object
- *                       properties:
- *                         id: { type: string, format: uuid, example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' }
- *                         fullName: { type: string, example: 'Jane Doe' }
- *                         email: { type: string, example: 'jane@example.com' }
- *                         mobileNumber: { type: string, example: '+353871234567' }
- *                         role: { type: string, enum: ['CUSTOMER', 'TRADER'], example: 'CUSTOMER' }
- *                     accessToken: { type: string, example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
- *                     refreshToken: { type: string, example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
  *       401:
  *         description: Invalid email/password, or mobile number unverified.
- *         content:
- *           application/json:
- *             $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/login', validate(loginSchema), authController.login);
 
@@ -198,8 +118,7 @@ router.post('/login', validate(loginSchema), authController.login);
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Refresh User Session Token
- *     description: Issue a new user access token using a valid refresh token.
+ *     summary: Issue new User Access Token using valid Refresh Token
  *     tags: [Customer & Trader Auth]
  *     requestBody:
  *       required: true
@@ -213,30 +132,11 @@ router.post('/login', validate(loginSchema), authController.login);
  *               refreshToken:
  *                 type: string
  *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *                 description: Valid user refresh token.
  *     responses:
  *       200:
  *         description: Session token refreshed successfully.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Session token refreshed successfully.
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken: { type: string, example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
  *       401:
  *         description: Invalid or expired refresh token.
- *         content:
- *           application/json:
- *             $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/refresh', validate(refreshSchema), authController.refresh);
 
