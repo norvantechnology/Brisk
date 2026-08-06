@@ -40,6 +40,10 @@ const options: swaggerJSDoc.Options = {
         description: '📂 Category Master & Sub-Category Master CRUD management, display ordering, filters, and icon/color settings.',
       },
       {
+        name: '[Admin] Customers Management & GDPR',
+        description: '👥 Customers Directory, Profile creation/management, KPI stats, and GDPR Account Deletion Requests workflow.',
+      },
+      {
         name: '[Customer & Trader] Authentication',
         description: '📱 Mobile registration, OTP SMS verification, login, and session refresh for Customers and Traders.',
       },

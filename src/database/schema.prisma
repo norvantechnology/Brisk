@@ -114,6 +114,14 @@ enum DiscountType {
   FREE_SERVICE
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  BLOCKED
+  SUSPENDED
+}
+
 enum DeletionRequestStatus {
   PENDING
   UNDER_REVIEW
@@ -134,16 +142,28 @@ enum ActorType {
 // ==========================================
 
 model User {
-  id             String   @id @default(uuid()) @db.Uuid
-  fullName       String   @map("full_name")
-  email          String   @unique
-  mobileNumber   String   @unique @map("mobile_number")
-  passwordHash   String   @map("password_hash")
-  appleIdToken   String?  @map("apple_id_token")
-  mobileVerified Boolean  @default(false) @map("mobile_verified")
-  role           UserRole @default(CUSTOMER)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id                 String     @id @default(uuid()) @db.Uuid
+  customerCode       String?    @unique @map("customer_code")
+  fullName           String     @map("full_name")
+  email              String     @unique
+  mobileNumber       String     @unique @map("mobile_number")
+  alternatePhone     String?    @map("alternate_phone")
+  passwordHash       String     @map("password_hash")
+  profilePhotoUrl    String?    @map("profile_photo_url")
+  appleIdToken       String?    @map("apple_id_token")
+  mobileVerified     Boolean    @default(false) @map("mobile_verified")
+  emailVerified      Boolean    @default(false) @map("email_verified")
+  role               UserRole   @default(CUSTOMER)
+  status             UserStatus @default(ACTIVE)
+  city               String?
+  country            String?
+  preferredLanguage  String?    @default("English (UK)") @map("preferred_language")
+  preferredTimeSlot  String?    @default("Morning (09:00 - 12:00)") @map("preferred_time_slot")
+  emailNotifications Boolean    @default(true) @map("email_notifications")
+  smsAlerts          Boolean    @default(true) @map("sms_alerts")
+  promoNotifications Boolean    @default(false) @map("promo_notifications")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
 
   // Relationships
   traderProfile          Trader?
@@ -759,15 +779,18 @@ model Notification {
 }
 
 model AccountDeletionRequest {
-  id          String                @id @default(uuid()) @db.Uuid
-  userId      String                @unique @map("user_id") @db.Uuid
-  status      DeletionRequestStatus @default(PENDING)
-  reason      String?               @db.Text
-  reviewedById String?              @map("reviewed_by_id") @db.Uuid
-  requestedAt DateTime              @default(now()) @map("requested_at")
-  processedAt DateTime?             @map("processed_at")
-  createdAt   DateTime              @default(now()) @map("created_at")
-  updatedAt   DateTime              @updatedAt @map("updated_at")
+  id                 String                @id @default(uuid()) @db.Uuid
+  requestRef         String?               @unique @map("request_ref")
+  userId             String                @unique @map("user_id") @db.Uuid
+  status             DeletionRequestStatus @default(PENDING)
+  reason             String?               @db.Text
+  additionalComments String?               @map("additional_comments") @db.Text
+  reviewedById       String?               @map("reviewed_by_id") @db.Uuid
+  reviewedByLabel    String?               @map("reviewed_by_label")
+  requestedAt        DateTime              @default(now()) @map("requested_at")
+  processedAt        DateTime?             @map("processed_at")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
 
   // Relationships
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)

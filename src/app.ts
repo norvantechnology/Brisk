@@ -7,6 +7,7 @@ import { setupSwagger } from './config/swagger';
 import authRoutes from './modules/auth/auth.routes';
 import adminAuthRoutes from './modules/admin/admin-auth/admin-auth.routes';
 import adminCategoryRoutes from './modules/admin/admin-categories/admin-categories.routes';
+import adminCustomerRoutes from './modules/admin/admin-customers/admin-customers.routes';
 
 const app = express();
 
@@ -29,6 +30,7 @@ setupSwagger(app);
 app.use('/auth', authRoutes);
 app.use('/admin/auth', adminAuthRoutes);
 app.use('/admin', adminCategoryRoutes);
+app.use('/admin', adminCustomerRoutes);
 
 /**
  * @swagger

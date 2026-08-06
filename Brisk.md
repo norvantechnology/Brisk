@@ -1374,10 +1374,26 @@ sequenceDiagram
   - `DELETE /admin/sub-categories/:id`: Delete Sub-Category (with job dependency safety checks).
 - **Category Seeder**: Seeded 10 master categories and sub-categories (Plumbing, Electrical, Carpentry, Painting, Cleaning, Interior Design, HVAC, Security, Solar, Roofing) matching live admin UI data.
 
-#### 5. Swagger Categorization & Documentation
+#### 5. Phase 9C — Admin Customers Management & GDPR Deletion Requests (`src/modules/admin/admin-customers/`)
+- **Customer Directory Endpoints** *(Matches Screenshots 1, 2 & 3)*:
+  - `GET /admin/customers/stats`: KPI stat cards (`totalCustomers`, `activeCustomers`, `inactiveOrBlocked`, `newThisMonth`, `totalRevenue`, `avgOrderValue`).
+  - `GET /admin/customers`: Paginated list of customers with search (`search` by name, email, mobile, `CUST-####`), status filter (`status`: `ACTIVE`, `INACTIVE`, `PENDING`, `BLOCKED`, `SUSPENDED`), country filter (`country`), `location` (city, country), `totalOrders`, `totalSpent`, and join date.
+  - `POST /admin/customers`: Manual customer creation (Supports Full Name, Email, Primary Phone, Alternate Phone, Profile Photo URL, Status, Email/Phone Verification flags, Preferred Language, Preferred Time Slot, and Notification preferences).
+  - `GET /admin/customers/:id`: Get Customer profile detail with total orders, total bookings, addresses, properties, and total spent.
+  - `PATCH /admin/customers/:id`: Update Customer profile details.
+  - `DELETE /admin/customers/:id`: Delete Customer profile.
+- **Account Deletion Requests & GDPR Purge Endpoints** *(Matches Screenshots 4 & 5)*:
+  - `GET /admin/customers/deletion-requests/stats`: KPI stat cards (`pendingRequests`, `underReview`, `approvedQueue`, `completedDeletions`).
+  - `GET /admin/customers/deletion-requests`: Paginated list with request reference (`DEL-#####`), customer info, reason, status (`PENDING`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`, `COMPLETED`), reviewed by label, and requested date.
+  - `GET /admin/customers/deletion-requests/:id`: Request detail view with customer identity, request details (selected reason + additional comments), customer activity context (total jobs, bookings, offers used, saved addresses), and audit timeline.
+  - `PATCH /admin/customers/deletion-requests/:id`: Update status (`UNDER_REVIEW`, `APPROVED`, `REJECTED`, `COMPLETED`). Automatically executes GDPR PII anonymization (`Deleted Customer`, `deleted-cus-###@anonymized.brisk.internal`, `+00 0000000000`) on `COMPLETED` status per §13.4.2.
+- **Customers & Deletion Seeder**: Seeded sample customer profiles (`Sarah Murphy`, `David Miller`, `Emma Watson`, `Robert Langdon`, `Deleted Customer`, `Betty Wright`, etc.) and corresponding deletion requests (`DEL-00021`, `DEL-00022`, `DEL-00023`, `DEL-00019`, `DEL-00015`).
+
+#### 6. Swagger Categorization & Documentation
 - Organized Swagger UI into structured group tags:
   - `🔐 [Admin] Authentication`
   - `📂 [Admin] Category & Sub-Category Master`
+  - `👥 [Admin] Customers Management & GDPR`
   - `📱 [Customer & Trader] Authentication`
   - `🛠️ [System] Health & Diagnostics`
 - Removed cluttered top description block and added concise summaries beside every API route URL for fast navigation.
