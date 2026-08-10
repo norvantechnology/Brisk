@@ -108,6 +108,26 @@ router.get('/customers', validate(customerFilterSchema), customerAdminController
  */
 router.post('/customers', validate(createCustomerSchema), customerAdminController.createCustomer);
 
+// ==========================================
+// ACCOUNT DELETION REQUESTS ROUTES (must be before /customers/:id)
+// ==========================================
+
+router.get('/customers/deletion-requests/stats', customerAdminController.getDeletionRequestStats);
+
+router.get(
+  '/customers/deletion-requests',
+  validate(deletionRequestFilterSchema),
+  customerAdminController.listDeletionRequests
+);
+
+router.get('/customers/deletion-requests/:id', customerAdminController.getDeletionRequest);
+
+router.patch(
+  '/customers/deletion-requests/:id',
+  validate(updateDeletionRequestSchema),
+  customerAdminController.updateDeletionRequest
+);
+
 /**
  * @swagger
  * /admin/customers/{id}:
@@ -183,116 +203,6 @@ router.patch('/customers/:id', validate(updateCustomerSchema), customerAdminCont
  *         description: Customer not found.
  */
 router.delete('/customers/:id', customerAdminController.deleteCustomer);
-
-// ==========================================
-// ACCOUNT DELETION REQUESTS ROUTES (Screenshot 4 & 5)
-// ==========================================
-
-/**
- * @swagger
- * /admin/customers/deletion-requests/stats:
- *   get:
- *     summary: Retrieve Account Deletion Requests KPI Stat Cards
- *     tags: ['🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests']
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Stat metrics retrieved (Pending Requests, Under Review, Approved Queue, Completed Deletions).
- */
-router.get('/customers/deletion-requests/stats', customerAdminController.getDeletionRequestStats);
-
-/**
- * @swagger
- * /admin/customers/deletion-requests:
- *   get:
- *     summary: List Account Deletion Requests (Paginated, Search, Status & Reason Filters)
- *     tags: ['🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests']
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
- *       - in: query
- *         name: search
- *         schema: { type: string }
- *         description: Search by request reference (DEL-#####), reason, customer name, email, or phone.
- *       - in: query
- *         name: status
- *         schema: { type: string, enum: [PENDING, UNDER_REVIEW, APPROVED, REJECTED, COMPLETED] }
- *       - in: query
- *         name: reason
- *         schema: { type: string }
- *       - in: query
- *         name: sort
- *         schema: { type: string, enum: [newest, oldest], default: newest }
- *     responses:
- *       200:
- *         description: Account deletion requests list retrieved matching Screenshot 4 format.
- */
-router.get('/customers/deletion-requests', validate(deletionRequestFilterSchema), customerAdminController.listDeletionRequests);
-
-/**
- * @swagger
- * /admin/customers/deletion-requests/{id}:
- *   get:
- *     summary: Get Account Deletion Request detail view by ID
- *     tags: ['🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests']
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200:
- *         description: Account deletion request detail retrieved with customer info, activity context, and timeline matching Screenshot 5 format.
- *       404:
- *         description: Account deletion request not found.
- */
-router.get('/customers/deletion-requests/:id', customerAdminController.getDeletionRequest);
-
-/**
- * @swagger
- * /admin/customers/deletion-requests/{id}:
- *   patch:
- *     summary: Update Account Deletion Request Status (Start Review, Approve, Reject, Complete GDPR Purge)
- *     tags: ['🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests']
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - status
- *             properties:
- *               status:
- *                 type: string
- *                 enum: [PENDING, UNDER_REVIEW, APPROVED, REJECTED, COMPLETED]
- *                 example: UNDER_REVIEW
- *               notes:
- *                 type: string
- *                 example: Started GDPR compliance review.
- *     responses:
- *       200:
- *         description: Deletion request updated successfully. Performs GDPR PII anonymization on COMPLETED status.
- *       404:
- *         description: Deletion request not found.
- */
-router.patch('/customers/deletion-requests/:id', validate(updateDeletionRequestSchema), customerAdminController.updateDeletionRequest);
 
 // ==========================================
 // CUSTOMER PAYMENT & BILLING MANAGEMENT ROUTES (Screenshots 1, 2, 3, 4, 5)
