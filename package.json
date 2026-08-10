@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "render-build": "npm install && npm run db:generate && npm run db:migrate:deploy && npm run build",
+    "render-build": "npm install && npm run db:generate && npm run db:push && npm run build",
     "start": "node dist/server.js",
     "db:generate": "prisma generate --schema=src/database/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=src/database/schema.prisma",
