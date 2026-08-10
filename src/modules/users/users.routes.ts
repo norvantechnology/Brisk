@@ -13,7 +13,7 @@ router.use(authMiddleware);
  * /users/me:
  *   get:
  *     summary: Get full Customer or Trader user profile (email is read-only)
- *     tags: ['Customer App — Profile']
+ *     tags: ['Customer / Profile']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -27,7 +27,7 @@ router.get('/me', usersController.getProfile);
  * /users/me/stats:
  *   get:
  *     summary: Get derived profile stats (jobs posted, saved traders count)
- *     tags: ['Customer App — Profile']
+ *     tags: ['Customer / Profile']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -41,7 +41,7 @@ router.get('/me/stats', usersController.getStats);
  * /users/me:
  *   patch:
  *     summary: Update user profile and notification preferences (email cannot be changed)
- *     tags: ['Customer App — Profile']
+ *     tags: ['Customer / Profile']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -73,7 +73,7 @@ router.patch('/me', validate(updateProfileSchema), usersController.updateProfile
  * /users/deactivate:
  *   post:
  *     summary: Submit GDPR account deactivation request (processed in 24–48 hours)
- *     tags: ['Customer App — Profile']
+ *     tags: ['Customer / Profile']
  *     security:
  *       - bearerAuth: []
  *     requestBody:

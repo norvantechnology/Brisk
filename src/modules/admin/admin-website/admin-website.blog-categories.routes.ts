@@ -22,7 +22,7 @@ router.use(adminAuthMiddleware);
  * /admin/blog/categories:
  *   get:
  *     summary: List blog categories (paginated)
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -59,7 +59,7 @@ router.get('/', validate(listCategoriesQuerySchema), controller.listCategories);
  * /admin/blog/categories:
  *   post:
  *     summary: Create blog category
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -87,7 +87,7 @@ router.post('/', validate(createCategorySchema), controller.createCategory);
  * /admin/blog/categories/bulk-status:
  *   post:
  *     summary: Bulk update blog category status
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -113,7 +113,7 @@ router.post('/bulk-status', validate(bulkCategoryStatusSchema), controller.bulkC
  * /admin/blog/categories/bulk-delete:
  *   post:
  *     summary: Bulk delete blog categories
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -140,7 +140,7 @@ router.post('/bulk-delete', validate(bulkCategoryDeleteSchema), controller.bulkC
  * /admin/blog/categories/{id}:
  *   get:
  *     summary: Get blog category details
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -159,7 +159,7 @@ router.get('/:id', validate(idParamSchema), controller.getCategory);
  * /admin/blog/categories/{id}:
  *   put:
  *     summary: Update blog category
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -192,7 +192,7 @@ router.put('/:id', validate(updateCategorySchema), controller.updateCategory);
  * /admin/blog/categories/{id}:
  *   delete:
  *     summary: Delete blog category (blocked if articles assigned)
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -213,7 +213,7 @@ router.delete('/:id', validate(idParamSchema), controller.deleteCategory);
  * /admin/blog/categories/{id}/status:
  *   patch:
  *     summary: Activate or deactivate blog category
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -241,7 +241,7 @@ router.patch('/:id/status', validate(patchCategoryStatusSchema), controller.patc
  * /admin/blog/categories/{id}/sort-order:
  *   patch:
  *     summary: Update blog category sort order
- *     tags: ['Admin Panel — Website · Blog Categories']
+ *     tags: ['Admin / Website / Blog Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:

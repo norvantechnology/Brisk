@@ -28,7 +28,7 @@ router.use(adminAuthMiddleware);
  * /admin/customers/stats:
  *   get:
  *     summary: Retrieve Customer Directory KPI Stat Cards
- *     tags: ['Admin Panel — Customers']
+ *     tags: ['Admin / Customers']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -42,7 +42,7 @@ router.get('/customers/stats', customerAdminController.getCustomerDirectoryStats
  * /admin/customers:
  *   get:
  *     summary: List Customers Directory (Paginated, Search, Status & Country Filters)
- *     tags: ['Admin Panel — Customers']
+ *     tags: ['Admin / Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -73,7 +73,7 @@ router.get('/customers', validate(customerFilterSchema), customerAdminController
  * /admin/customers:
  *   post:
  *     summary: Create new Customer Profile
- *     tags: ['Admin Panel — Customers']
+ *     tags: ['Admin / Customers']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -117,7 +117,7 @@ router.post('/customers', validate(createCustomerSchema), customerAdminControlle
  * /admin/customers/deletion-requests/stats:
  *   get:
  *     summary: Deletion request queue KPI stats
- *     tags: ['Admin Panel — Deletion Requests']
+ *     tags: ['Admin / Deletion Requests']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -131,7 +131,7 @@ router.get('/customers/deletion-requests/stats', customerAdminController.getDele
  * /admin/customers/deletion-requests:
  *   get:
  *     summary: List GDPR account deletion requests
- *     tags: ['Admin Panel — Deletion Requests']
+ *     tags: ['Admin / Deletion Requests']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -162,7 +162,7 @@ router.get(
  * /admin/customers/deletion-requests/{id}:
  *   get:
  *     summary: Get deletion request detail
- *     tags: ['Admin Panel — Deletion Requests']
+ *     tags: ['Admin / Deletion Requests']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -183,7 +183,7 @@ router.get('/customers/deletion-requests/:id', customerAdminController.getDeleti
  * /admin/customers/deletion-requests/{id}:
  *   patch:
  *     summary: Review / process a deletion request
- *     tags: ['Admin Panel — Deletion Requests']
+ *     tags: ['Admin / Deletion Requests']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -215,7 +215,7 @@ router.patch(
  * /admin/customers/{id}:
  *   get:
  *     summary: Get Customer Profile detail by ID
- *     tags: ['Admin Panel — Customers']
+ *     tags: ['Admin / Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -236,7 +236,7 @@ router.get('/customers/:id', customerAdminController.getCustomer);
  * /admin/customers/{id}:
  *   patch:
  *     summary: Update Customer Profile
- *     tags: ['Admin Panel — Customers']
+ *     tags: ['Admin / Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -270,7 +270,7 @@ router.patch('/customers/:id', validate(updateCustomerSchema), customerAdminCont
  * /admin/customers/{id}:
  *   delete:
  *     summary: Delete Customer Profile
- *     tags: ['Admin Panel — Customers']
+ *     tags: ['Admin / Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -295,7 +295,7 @@ router.delete('/customers/:id', customerAdminController.deleteCustomer);
  * /admin/customer-payments/stats:
  *   get:
  *     summary: Retrieve Payment & Billing Header KPI Stat Cards
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -309,7 +309,7 @@ router.get('/customer-payments/stats', customerAdminController.getCustomerPaymen
  * /admin/customer-payments/transactions:
  *   get:
  *     summary: List Payment Transactions (Paginated, Search, Status & Method Filters)
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -343,7 +343,7 @@ router.get('/customer-payments/transactions', validate(paymentTransactionFilterS
  * /admin/customer-payments/transactions/{id}:
  *   get:
  *     summary: Get single Customer Payment Transaction detail modal view by ID
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -364,7 +364,7 @@ router.get('/customer-payments/transactions/:id', customerAdminController.getTra
  * /admin/customer-payments/invoices:
  *   get:
  *     summary: List Billing & Invoices (Paginated, Search & Status Filters)
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -392,7 +392,7 @@ router.get('/customer-payments/invoices', validate(invoiceFilterSchema), custome
  * /admin/customer-payments/invoices/{id}:
  *   get:
  *     summary: Get single Tax Invoice detail view by ID
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -413,7 +413,7 @@ router.get('/customer-payments/invoices/:id', customerAdminController.getInvoice
  * /admin/customer-payments/refunds:
  *   get:
  *     summary: List Refunds Management Queue (Paginated, Search & Status Filters)
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -441,7 +441,7 @@ router.get('/customer-payments/refunds', validate(refundFilterSchema), customerA
  * /admin/customer-payments/refunds/{id}/process:
  *   patch:
  *     summary: Process Customer Payment Refund (Approve & Execute Refund)
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -478,7 +478,7 @@ router.patch('/customer-payments/refunds/:id/process', validate(processRefundSch
  * /admin/customer-payments/loyalty:
  *   get:
  *     summary: Retrieve Customer Loyalty & Rewards Summary and Activity Feed
- *     tags: ['Admin Panel — Payments']
+ *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     responses:

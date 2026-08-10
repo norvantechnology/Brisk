@@ -25,7 +25,7 @@ router.use(adminAuthMiddleware);
  * /admin/categories:
  *   get:
  *     summary: List Master Categories (Paginated, Search, Status & Featured Filters)
- *     tags: ['Admin Panel — Categories']
+ *     tags: ['Admin / Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -62,7 +62,7 @@ router.get('/categories', validate(categoryFilterSchema), categoryAdminControlle
  * /admin/categories:
  *   post:
  *     summary: Create new Master Category
- *     tags: ['Admin Panel — Categories']
+ *     tags: ['Admin / Categories']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -101,7 +101,7 @@ router.post('/categories', validate(createCategorySchema), categoryAdminControll
  * /admin/categories/{id}:
  *   get:
  *     summary: Get Master Category detail by ID
- *     tags: ['Admin Panel — Categories']
+ *     tags: ['Admin / Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -122,7 +122,7 @@ router.get('/categories/:id', categoryAdminController.getCategory);
  * /admin/categories/{id}:
  *   patch:
  *     summary: Update Master Category detail
- *     tags: ['Admin Panel — Categories']
+ *     tags: ['Admin / Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -159,7 +159,7 @@ router.patch('/categories/:id', validate(updateCategorySchema), categoryAdminCon
  * /admin/categories/{id}:
  *   delete:
  *     summary: Delete Master Category
- *     tags: ['Admin Panel — Categories']
+ *     tags: ['Admin / Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -186,7 +186,7 @@ router.delete('/categories/:id', categoryAdminController.deleteCategory);
  * /admin/sub-categories:
  *   get:
  *     summary: List Sub-Categories (Paginated, Search, Parent Category & Status Filters)
- *     tags: ['Admin Panel — Sub-Categories']
+ *     tags: ['Admin / Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -221,7 +221,7 @@ router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminCo
  * /admin/sub-categories:
  *   post:
  *     summary: Create new Sub-Category
- *     tags: ['Admin Panel — Sub-Categories']
+ *     tags: ['Admin / Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -253,7 +253,7 @@ router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminC
  * /admin/sub-categories/{id}:
  *   get:
  *     summary: Get Sub-Category detail by ID
- *     tags: ['Admin Panel — Sub-Categories']
+ *     tags: ['Admin / Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -274,7 +274,7 @@ router.get('/sub-categories/:id', categoryAdminController.getSubcategory);
  * /admin/sub-categories/{id}:
  *   patch:
  *     summary: Update Sub-Category detail
- *     tags: ['Admin Panel — Sub-Categories']
+ *     tags: ['Admin / Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -308,7 +308,7 @@ router.patch('/sub-categories/:id', validate(updateSubcategorySchema), categoryA
  * /admin/sub-categories/{id}:
  *   delete:
  *     summary: Delete Sub-Category
- *     tags: ['Admin Panel — Sub-Categories']
+ *     tags: ['Admin / Sub-Categories']
  *     security:
  *       - bearerAuth: []
  *     parameters:

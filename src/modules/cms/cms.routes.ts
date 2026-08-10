@@ -9,7 +9,7 @@ const router = Router();
  *   get:
  *     summary: Website layout bootstrap (SEO, social, featured article, testimonials, page nav)
  *     description: Single optimized call for homepage/layout shell. Uses published Website Management data only.
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: audience
@@ -25,7 +25,7 @@ router.get('/bootstrap', cmsController.getBootstrap);
  * /cms/pages:
  *   get:
  *     summary: List published website pages (nav/sitemap — no HTML body)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: audience
@@ -41,7 +41,7 @@ router.get('/pages', cmsController.listPages);
  * /cms/pages/{slug}:
  *   get:
  *     summary: Get published CMS page by slug (full content)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: path
  *         name: slug
@@ -63,7 +63,7 @@ router.get('/pages/:slug', cmsController.getPageBySlug);
  * /cms/social-links:
  *   get:
  *     summary: List active social links for footer/header
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     responses:
  *       200:
  *         description: Active social links ordered by sort_order.
@@ -75,7 +75,7 @@ router.get('/social-links', cmsController.getSocialLinks);
  * /cms/knowledge-hub:
  *   get:
  *     summary: List published Knowledge Hub sections (cards — no blocks)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     responses:
  *       200:
  *         description: Published guide cards.
@@ -87,7 +87,7 @@ router.get('/knowledge-hub', cmsController.getKnowledgeHub);
  * /cms/knowledge-hub/{slug}:
  *   get:
  *     summary: Get published Knowledge Hub section detail with content blocks
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: path
  *         name: slug
@@ -106,7 +106,7 @@ router.get('/knowledge-hub/:slug', cmsController.getKnowledgeBySlug);
  * /cms/blog/categories:
  *   get:
  *     summary: List active blog categories with published post counts
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     responses:
  *       200:
  *         description: Active blog categories.
@@ -118,7 +118,7 @@ router.get('/blog/categories', cmsController.getBlogCategories);
  * /cms/blog/featured:
  *   get:
  *     summary: Get the featured/spotlight blog article (hero)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     responses:
  *       200:
  *         description: Featured article card or null.
@@ -130,7 +130,7 @@ router.get('/blog/featured', cmsController.getFeaturedBlogPost);
  * /cms/blog/posts:
  *   get:
  *     summary: List published blog posts (paginated cards — no full HTML body)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: page
@@ -162,7 +162,7 @@ router.get('/blog/articles', cmsController.getBlogPosts);
  * /cms/blog/posts/{slug}:
  *   get:
  *     summary: Get published blog post by slug (full article HTML)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: path
  *         name: slug
@@ -182,7 +182,7 @@ router.get('/blog/articles/:slug', cmsController.getBlogPostBySlug);
  * /cms/faq-categories:
  *   get:
  *     summary: List FAQ categories that have published FAQs
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: audience
@@ -198,7 +198,7 @@ router.get('/faq-categories', cmsController.getFaqCategories);
  * /cms/faqs:
  *   get:
  *     summary: List published FAQs for Help Center
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: audience
@@ -220,7 +220,7 @@ router.get('/faqs', cmsController.getFaqs);
  * /cms/testimonials:
  *   get:
  *     summary: List published testimonials (homepage carousel)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: featured
@@ -242,7 +242,7 @@ router.get('/testimonials', cmsController.getTestimonials);
  * /cms/legal:
  *   get:
  *     summary: List published legal policies (footer links)
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     responses:
  *       200:
  *         description: Legal policy summaries with current version.
@@ -254,7 +254,7 @@ router.get('/legal', cmsController.listLegalPolicies);
  * /cms/legal/{slug}:
  *   get:
  *     summary: Get latest published legal policy version by slug
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     parameters:
  *       - in: path
  *         name: slug
@@ -273,7 +273,7 @@ router.get('/legal/:slug', cmsController.getLegalBySlug);
  * /cms/seo:
  *   get:
  *     summary: Get public SEO / site head settings
- *     tags: ['Website — Public Content']
+ *     tags: ['Website / Content']
  *     responses:
  *       200:
  *         description: SEO settings for public site head injection.

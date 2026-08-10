@@ -15,7 +15,7 @@ const router = Router();
  * /admin/auth/login:
  *   post:
  *     summary: Authenticate Admin user via Email & Password to retrieve JWT Tokens and Profile
- *     tags: ['Admin Panel — Auth']
+ *     tags: ['Admin / Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -48,7 +48,7 @@ router.post('/login', validate(adminLoginSchema), adminAuthController.login);
  * /admin/auth/refresh:
  *   post:
  *     summary: Issue new Access & Refresh Token using valid Admin Refresh Token
- *     tags: ['Admin Panel — Auth']
+ *     tags: ['Admin / Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -74,7 +74,7 @@ router.post('/refresh', validate(adminRefreshSchema), adminAuthController.refres
  * /admin/auth/me:
  *   get:
  *     summary: Retrieve currently authenticated Admin User profile details
- *     tags: ['Admin Panel — Auth']
+ *     tags: ['Admin / Auth']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -90,7 +90,7 @@ router.get('/me', adminAuthMiddleware, adminAuthController.getMe);
  * /admin/auth/password:
  *   patch:
  *     summary: Change Admin Password (requires old password & strong password rules)
- *     tags: ['Admin Panel — Auth']
+ *     tags: ['Admin / Auth']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -133,7 +133,7 @@ router.patch(
  * /admin/auth/logout:
  *   post:
  *     summary: Invalidate current Admin user session
- *     tags: ['Admin Panel — Auth']
+ *     tags: ['Admin / Auth']
  *     security:
  *       - bearerAuth: []
  *     responses:

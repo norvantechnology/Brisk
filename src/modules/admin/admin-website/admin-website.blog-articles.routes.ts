@@ -23,7 +23,7 @@ router.use(adminAuthMiddleware);
  * /admin/blog/articles:
  *   get:
  *     summary: List blog articles (filters, search, pagination)
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -66,7 +66,7 @@ router.get('/', validate(listArticlesQuerySchema), controller.listArticles);
  * /admin/blog/articles:
  *   post:
  *     summary: Create blog article
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -116,7 +116,7 @@ router.post('/', validate(createArticleSchema), controller.createArticle);
  * /admin/blog/articles/bulk-status:
  *   post:
  *     summary: Bulk update article publish status
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -142,7 +142,7 @@ router.post('/bulk-status', validate(bulkArticleStatusSchema), controller.bulkAr
  * /admin/blog/articles/bulk-delete:
  *   post:
  *     summary: Bulk soft-delete blog articles
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -167,7 +167,7 @@ router.post('/bulk-delete', validate(bulkArticleDeleteSchema), controller.bulkAr
  * /admin/blog/articles/{id}:
  *   get:
  *     summary: Get blog article details
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -186,7 +186,7 @@ router.get('/:id', validate(idParamSchema), controller.getArticle);
  * /admin/blog/articles/{id}:
  *   put:
  *     summary: Update blog article
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -235,7 +235,7 @@ router.put('/:id', validate(updateArticleSchema), controller.updateArticle);
  * /admin/blog/articles/{id}:
  *   delete:
  *     summary: Soft-delete blog article
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -254,7 +254,7 @@ router.delete('/:id', validate(idParamSchema), controller.deleteArticle);
  * /admin/blog/articles/{id}/status:
  *   patch:
  *     summary: Change article publish status
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -282,7 +282,7 @@ router.patch('/:id/status', validate(patchArticleStatusSchema), controller.patch
  * /admin/blog/articles/{id}/featured:
  *   patch:
  *     summary: Enable or disable Featured/Spotlight (only one featured at a time)
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -315,7 +315,7 @@ router.patch(
  *   post:
  *     summary: Set or replace article cover image URL
  *     description: JSON body with URL only (cover_image_url or cover_image). Multipart/S3 later.
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -351,7 +351,7 @@ router.post('/:id/cover-image', validate(coverImageSchema), controller.setCoverI
  * /admin/blog/articles/{id}/cover-image:
  *   delete:
  *     summary: Remove article cover image
- *     tags: ['Admin Panel — Website · Blog Articles']
+ *     tags: ['Admin / Website / Blog Articles']
  *     security:
  *       - bearerAuth: []
  *     parameters:
