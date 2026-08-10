@@ -144,6 +144,39 @@ enum ActorType {
   CUSTOMER
 }
 
+enum CmsAudience {
+  BOTH
+  CUSTOMER
+  TRADER
+}
+
+enum CmsPublishStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CmsActiveStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CmsKnowledgeBlockType {
+  STEP_CARD
+  FEATURE_CARD
+  TEXT_BLOCK
+  CTA_BANNER
+}
+
+enum SurveyRegistrationStatus {
+  NEW
+  PENDING
+  REVIEWED
+  CONTACTED
+  REJECTED
+}
+
 // ==========================================
 // CORE AUTH & USERS
 // ==========================================
@@ -211,6 +244,11 @@ model AdminUser {
   processedPayouts        Payout[]                 @relation("ProcessedByAdmin")
   processedRefunds        Refund[]                 @relation("RefundProcessedByAdmin")
   reviewedDeletionRequest AccountDeletionRequest[] @relation("ReviewedByAdmin")
+  updatedCmsPages         CmsStaticPage[]          @relation("CmsPageUpdatedBy")
+  createdBlogPosts        CmsBlogPost[]            @relation("CmsBlogCreatedBy")
+  publishedLegalVersions  CmsLegalPolicyVersion[]  @relation("CmsLegalPublishedBy")
+  updatedSeoSettings      CmsSeoSettings[]         @relation("CmsSeoUpdatedBy")
+  reviewedSurveyConsumers SurveyConsumerRegistration[] @relation("SurveyConsumerReviewedBy")
 
   @@map("admin_users")
 }
@@ -867,4 +905,247 @@ model TraderRegistration {
   trader Trader? @relation(fields: [traderId], references: [id])
 
   @@map("trader_registrations")
+}
+
+// ==========================================
+// WEBSITE MANAGEMENT — CMS
+// ==========================================
+
+model CmsStaticPage {
+  id              String           @id @default(uuid()) @db.Uuid
+  title           String
+  slug            String           @unique
+  content         String?          @db.Text
+  targetAudience  CmsAudience      @default(BOTH) @map("target_audience")
+  status          CmsPublishStatus @default(DRAFT)
+  isActive        Boolean          @default(true) @map("is_active")
+  updatedById     String?          @map("updated_by_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("CmsPageUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("cms_static_pages")
+}
+
+model CmsSocialLink {
+  id         String          @id @default(uuid()) @db.Uuid
+  platform   String
+  profileUrl String          @map("profile_url")
+  sortOrder  Int             @default(0) @map("sort_order")
+  status     CmsActiveStatus @default(ACTIVE)
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  @@map("cms_social_links")
+}
+
+model CmsKnowledgeGuide {
+  id              String           @id @default(uuid()) @db.Uuid
+  title           String
+  slug            String           @unique
+  description     String?          @db.Text
+  detailedContent String?          @map("detailed_content") @db.Text
+  graphicImageUrl String?          @map("graphic_image_url")
+  iconName        String?          @map("icon_name")
+  ctaButtonText   String?          @map("cta_button_text")
+  ctaUrl          String?          @map("cta_url")
+  sortOrder       Int              @default(0) @map("sort_order")
+  status          CmsPublishStatus @default(DRAFT)
+  seoTitle        String?          @map("seo_title")
+  seoDescription  String?          @map("seo_description") @db.Text
+  deletedAt       DateTime?        @map("deleted_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  blocks CmsKnowledgeBlock[]
+
+  @@map("cms_knowledge_guides")
+}
+
+model CmsKnowledgeBlock {
+  id          String                @id @default(uuid()) @db.Uuid
+  guideId     String                @map("guide_id") @db.Uuid
+  blockType   CmsKnowledgeBlockType @default(TEXT_BLOCK) @map("block_type")
+  title       String?
+  description String?               @db.Text
+  content     String?               @db.Text
+  iconName    String?               @map("icon_name")
+  imageUrl    String?               @map("image_url")
+  buttonText  String?               @map("button_text")
+  buttonUrl   String?               @map("button_url")
+  sortOrder   Int                   @default(0) @map("sort_order")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+
+  guide CmsKnowledgeGuide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+
+  @@map("cms_knowledge_blocks")
+}
+
+model CmsBlogCategory {
+  id          String          @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String          @unique
+  description String?         @db.Text
+  iconName    String?         @map("icon_name")
+  status      CmsActiveStatus @default(ACTIVE)
+  sortOrder   Int             @default(0) @map("sort_order")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  posts CmsBlogPost[]
+
+  @@map("cms_blog_categories")
+}
+
+model CmsBlogPost {
+  id                 String           @id @default(uuid()) @db.Uuid
+  title              String
+  slug               String           @unique
+  categoryId         String?          @map("category_id") @db.Uuid
+  coverImageUrl      String?          @map("cover_image_url")
+  excerpt            String?          @db.Text
+  content            String           @db.Text
+  authorName         String?          @map("author_name")
+  authorRole         String?          @map("author_role")
+  readingTime        String?          @map("reading_time")
+  publishedAt        DateTime?        @map("published_at")
+  status             CmsPublishStatus @default(DRAFT)
+  isFeatured         Boolean          @default(false) @map("is_featured")
+  seoTitle           String?          @map("seo_title")
+  seoDescription     String?          @map("seo_description") @db.Text
+  createdById        String?          @map("created_by_id") @db.Uuid
+  deletedAt          DateTime?        @map("deleted_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  category  CmsBlogCategory? @relation(fields: [categoryId], references: [id])
+  createdBy AdminUser?       @relation("CmsBlogCreatedBy", fields: [createdById], references: [id])
+
+  @@map("cms_blog_posts")
+}
+
+model CmsFaqCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  faqs CmsFaq[]
+
+  @@map("cms_faq_categories")
+}
+
+model CmsFaq {
+  id             String           @id @default(uuid()) @db.Uuid
+  question       String
+  answer         String           @db.Text
+  categoryId     String?          @map("category_id") @db.Uuid
+  targetAudience CmsAudience      @default(BOTH) @map("target_audience")
+  status         CmsPublishStatus @default(DRAFT)
+  displayOrder   Int              @default(0) @map("display_order")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  category CmsFaqCategory? @relation(fields: [categoryId], references: [id])
+
+  @@map("cms_faqs")
+}
+
+model CmsTestimonial {
+  id             String           @id @default(uuid()) @db.Uuid
+  authorName     String           @map("author_name")
+  authorRole     String?          @map("author_role")
+  companyName    String?          @map("company_name")
+  badgeLabel     String?          @map("badge_label")
+  authorAvatarUrl String?         @map("author_avatar_url")
+  quoteText      String           @map("quote_text") @db.Text
+  rating         Int              @default(5)
+  targetAudience CmsAudience      @default(BOTH) @map("target_audience")
+  status         CmsPublishStatus @default(DRAFT)
+  isFeatured     Boolean          @default(false) @map("is_featured")
+  displayOrder   Int              @default(0) @map("display_order")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  @@map("cms_testimonials")
+}
+
+model CmsLegalPolicy {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions CmsLegalPolicyVersion[]
+
+  @@map("cms_legal_policies")
+}
+
+model CmsLegalPolicyVersion {
+  id            String           @id @default(uuid()) @db.Uuid
+  policyId      String           @map("policy_id") @db.Uuid
+  versionLabel  String           @map("version_label")
+  content       String           @db.Text
+  effectiveDate DateTime         @map("effective_date")
+  status        CmsPublishStatus @default(DRAFT)
+  publishedById String?          @map("published_by_id") @db.Uuid
+  publishedAt   DateTime?        @map("published_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  policy      CmsLegalPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  publishedBy AdminUser?     @relation("CmsLegalPublishedBy", fields: [publishedById], references: [id])
+
+  @@map("cms_legal_policy_versions")
+}
+
+model CmsSeoSettings {
+  id               String   @id @default(uuid()) @db.Uuid
+  globalSiteTitle  String   @map("global_site_title")
+  metaDescription  String   @map("meta_description") @db.Text
+  metaKeywords     String?  @map("meta_keywords") @db.Text
+  canonicalBaseUrl String   @map("canonical_base_url")
+  ogImageUrl       String?  @map("og_image_url")
+  twitterHandle    String?  @map("twitter_handle")
+  gaMeasurementId  String?  @map("ga_measurement_id")
+  robotsTxt        String?  @map("robots_txt") @db.Text
+  updatedById      String?  @map("updated_by_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("CmsSeoUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("cms_seo_settings")
+}
+
+// ==========================================
+// WEBSITE MANAGEMENT — SURVEYS
+// ==========================================
+
+model SurveyConsumerRegistration {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  registrationCode     String                    @unique @map("registration_code")
+  fullName             String                    @map("full_name")
+  email                String
+  phone                String?
+  county               String?
+  ageRange             String?                   @map("age_range")
+  consentLaunchUpdates Boolean                   @default(false) @map("consent_launch_updates")
+  consentMarketing     Boolean                   @default(false) @map("consent_marketing")
+  consentPartnerComm   Boolean                   @default(false) @map("consent_partner_comm")
+  agreementAccepted    Boolean                   @default(false) @map("agreement_accepted")
+  status               SurveyRegistrationStatus  @default(NEW)
+  notes                String?                   @db.Text
+  submittedAt          DateTime                  @default(now()) @map("submitted_at")
+  reviewedById         String?                   @map("reviewed_by_id") @db.Uuid
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+
+  reviewedBy AdminUser? @relation("SurveyConsumerReviewedBy", fields: [reviewedById], references: [id])
+
+  @@map("survey_consumer_registrations")
 }

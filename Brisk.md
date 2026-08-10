@@ -7,8 +7,6 @@
 > Build approach: **step by step, module by module**, starting with backend core (auth → users/traders → categories → jobs → quotes/offers → payments → loyalty → chat/notifications), each shipped and tested before moving to the next.
 >
 > **v2 update:** Actual Figma screenshots of the Customer App (Onboarding, My Property, My Address, Profile, Notifications, Offers, Post-a-Job) have now been reviewed directly (not just the process docs). This revealed a **module the process docs never mentioned at all**: **Property & Utilities Management** — a "My Property" tab where customers submit electricity/gas meter readings (MPRN/GPRN) and manage utility subscriptions (Bins, Electricity, Gas, Home Insurance). This is added as new §4A (property model), §5 (folder structure), and §6.2A (module logic) below. The architecture decision (modular monolith, no microservices) is unchanged and reconfirmed.
->
-> **v3 update:** 19 screenshots of the live **BRISK Admin Panel** (brisk-admin.netlify.app) have now been reviewed screen-by-screen — every button, form field, table column, and filter. Full Admin Panel requirements, data model extensions, and APIs are now documented in **§14**. This also **resolved a previously open item — the platform fee is confirmed at 10%** (see §9 and §13.9). No microservices were introduced — the Admin Panel is served by the same monolith, just a different set of routes/controllers guarded by admin roles.
 
 ---
 
@@ -23,9 +21,8 @@
 | `BRISK_Loyalty_Process_Documentation_EN.docx` | BRISK Points (BRP) balance, claiming loyalty offers, redemption codes |
 | `BRISK_Microservices_vs_Monolith_Simple_Comparison.pdf` | Architecture decision input — see §1 |
 | `BRISK_Logo.pdf` | Brand only (BRISK — "Making Things Quicker") — no functional content |
-| **19 Figma screenshots (Customer App UI)** — Onboarding/Welcome, Login, Face ID biometric login, Create Account, My Property (meter readings), My Address (address book + Add Address modal), My Profile, Edit Profile, Account deactivation flow, Notifications, Traders Offers + Filters modal, Post a New Job Step 1, Brisk Offers | **New, higher-fidelity source** — confirms/extends the docx flows and reveals the Property & Utilities module (§4A/§6.2A) that no process doc mentioned. Customer app only — trader app screenshots not yet provided. |
+| **35 screenshots — BRISK Admin Panel** (live build, Aug 2026) | Highest-fidelity admin source for this update. Covers: Dashboard KPIs + activity chart + audit log; Category Master; Customers Directory; Traders Management + Verification queue; Jobs & Services status tabs; Marketplace Offer Management; Reports (Revenue with **10% platform fee**, Offers performance, Category performance, Reviews, Platform Activity/compliance); **Website Management → CMS** (Dashboard, Website Pages, Social Links, Knowledge Hub, Blog Posts + Create Article modal, Blog Categories + Create Category modal, FAQ + Add FAQ modal, Testimonials + Add Testimonial modal, Legal & Policies versioning, Global SEO & robots.txt); **Survey Management** (Consumer Launch Party Registrations CRM). Full breakdown in **§14**. |
 | Figma proto links (Customer App UI, Trader UI App) | Still **could not be auto-fetched** — Figma proto links require an authenticated session and are blocked for automated tools. The 19 screenshots above cover a meaningful chunk of the Customer app directly; the Trader UI App proto link is still unreviewed. See §12. |
-| **19 screenshots — BRISK Admin Panel** (`brisk-admin.netlify.app`, live build, not Figma) | **New, highest-fidelity source yet** — a working admin web app, not a mockup. Covers: Admin Dashboard, System Users (RBAC), Customers directory, Account Deletion Requests, Customer Payment & Billing, Traders Management, Trader Registration wizard (8 steps), Trader Verification/Audit portal, Jobs & Services, Offer Management (+ Create Offer form), Category Master, Sub-Category Master, and Reports & Analytics (Dashboard, Customers, Traders tabs). Full breakdown in **§14**. This confirms real field names, real status enums, and the **platform fee (10%)** that was previously an open item. |
 
 ---
 
@@ -208,17 +205,13 @@ erDiagram
     TRADERS {
         uuid id PK
         uuid user_id FK
-        string trader_type "SOLO | COMPANY"
         string business_name
         string bio
         int years_experience
         int jobs_done_count
         decimal avg_rating
         boolean top_rated
-        string verification_status "pending | verified | rejected | suspended"
-        string trader_code "e.g. TRD-1006"
-        string service_radius
-        string bank_account_ref "tokenized/Stripe Connect account id"
+        string verification_status
     }
 
     JOBS {
@@ -410,15 +403,6 @@ erDiagram
     CATEGORIES {
         uuid id PK
         string name
-        string category_code "e.g. CAT-PLUMB"
-        string url_slug
-        text description
-        string icon_name
-        string brand_theme_color "hex"
-        string banner_image_url
-        int display_order
-        string status "active | inactive"
-        boolean featured
     }
 
     SUBCATEGORIES {
@@ -426,10 +410,6 @@ erDiagram
         uuid category_id FK
         string name
         string service_type
-        string code
-        string url_slug
-        boolean featured
-        string status "active | inactive"
     }
 
     JOB_IMAGES {
@@ -615,59 +595,9 @@ brisk-backend/
 │   │   │   ├── uploads.controller.ts
 │   │   │   └── s3.service.ts         # pre-signed URLs
 │   │   │
-│   │   └── admin/                    # Admin Panel backend — see §14 for full spec
-│   │       ├── admin-auth/
-│   │       │   ├── admin-auth.routes.ts
-│   │       │   ├── admin-auth.controller.ts
-│   │       │   └── admin-auth.service.ts      # separate admin login, RBAC roles (Admin/Super Admin)
-│   │       ├── admin-users/
-│   │       │   ├── admin-users.routes.ts
-│   │       │   ├── admin-users.controller.ts
-│   │       │   └── admin-users.service.ts     # System Users screen: CRUD, roles, status
-│   │       ├── admin-dashboard/
-│   │       │   ├── admin-dashboard.routes.ts
-│   │       │   ├── admin-dashboard.controller.ts
-│   │       │   └── admin-dashboard.service.ts # overview stats, activity trend, audit log feed, shortcuts
-│   │       ├── admin-customers/
-│   │       │   ├── admin-customers.routes.ts
-│   │       │   ├── admin-customers.controller.ts
-│   │       │   └── admin-customers.service.ts # directory, deletion requests queue, payment/billing views
-│   │       ├── admin-traders/
-│   │       │   ├── admin-traders.routes.ts
-│   │       │   ├── admin-traders.controller.ts
-│   │       │   ├── admin-traders.service.ts       # directory, CRUD
-│   │       │   ├── trader-registration.service.ts # 8-step onboarding wizard, resumable
-│   │       │   └── trader-verification.service.ts # document audit/approve/reject queue
-│   │       ├── admin-jobs/
-│   │       │   ├── admin-jobs.routes.ts
-│   │       │   ├── admin-jobs.controller.ts
-│   │       │   └── admin-jobs.service.ts      # cross-customer/trader job oversight, status tabs
-│   │       ├── admin-offers/
-│   │       │   ├── admin-offers.routes.ts
-│   │       │   ├── admin-offers.controller.ts
-│   │       │   └── admin-offers.service.ts    # unified OFFERS CRUD (platform + trader), analytics
-│   │       ├── admin-categories/
-│   │       │   ├── admin-categories.routes.ts
-│   │       │   ├── admin-categories.controller.ts
-│   │       │   └── admin-categories.service.ts # category/sub-category master CRUD
-│   │       ├── admin-transactions/
-│   │       │   ├── admin-transactions.routes.ts
-│   │       │   ├── admin-transactions.controller.ts
-│   │       │   └── admin-transactions.service.ts
-│   │       ├── admin-payouts/
-│   │       │   ├── admin-payouts.routes.ts
-│   │       │   ├── admin-payouts.controller.ts
-│   │       │   └── admin-payouts.service.ts   # trader payout ledger, manual payout actions
-│   │       ├── admin-reports/
-│   │       │   ├── admin-reports.routes.ts
-│   │       │   ├── admin-reports.controller.ts
-│   │       │   └── admin-reports.service.ts   # read-only aggregation per report tab, CSV export
-│   │       ├── admin-audit/
-│   │       │   ├── admin-audit.routes.ts
-│   │       │   └── admin-audit.service.ts     # writes to AUDIT_LOGS, feeds Recent Audit Log widget
-│   │       └── admin-cms/                     # System & Governance — scope still thin, see §13.12
-│   │           ├── admin-cms.routes.ts
-│   │           └── admin-cms.controller.ts
+│   │   └── admin/                    # internal/ops endpoints (later phase)
+│   │       ├── admin.routes.ts
+│   │       └── admin.controller.ts
 │   │
 │   ├── database/
 │   │   ├── schema.prisma             # (if Prisma) full schema from §4
@@ -716,23 +646,19 @@ brisk-backend/
 ## 6. Module-by-Module Logic (mapped to the process docs)
 
 ### 6.1 Auth Module
-- `POST /auth/register` — full name (profile photo optional — **deferred**, no S3 upload in v1 yet), email, phone number (with country dial code, e.g. `+353`), password, `role` (`CUSTOMER` | `TRADER`), `acceptedTerms: true` → creates unverified user, triggers OTP. Password rules confirmed on-screen: **min 8 characters, one uppercase letter, one number/special character** — enforce server-side in `auth.validation.ts`. Terms & Privacy checkbox required (`acceptedTerms` must be `true`).
-- `POST /auth/verify-otp` — verifies OTP, activates account. Payload: `{ mobileNumber, code }` (6-digit code).
-- `POST /auth/resend-otp` — resends OTP to an **unverified** mobile number. Payload: `{ mobileNumber }`. **60-second cooldown** between sends (returns `429` if called too soon). OTP expires after **10 minutes**. Mock SMS OTP `123456` enabled for dev/staging until SNS/Twilio is configured.
-- `POST /auth/login` — email + password → JWT access + refresh token. If mobile is unverified, returns `401` and auto-sends OTP (respecting the same 60s cooldown).
-- `GET /auth/me` — returns authenticated Customer/Trader profile (requires Bearer access token).
-- **Biometric ("Face ID") login** — local biometric unlocks a device-stored refresh token; app calls `POST /auth/refresh`. **No biometric data sent to backend.**
-- `POST /auth/refresh` — issue new access token from refresh token. Payload: `{ refreshToken }`.
-- `POST /auth/logout` — invalidate client session (stateless JWT — client discards tokens; requires Bearer access token).
-- `POST /auth/apple-signin` — **DEFERRED** (open item §11 — confirm with client before integrating Apple identity token).
-- **Image/profile photo upload** — **DEFERRED** (S3 pre-signed URLs not built yet; `profilePhotoUrl` can be set later via Users module once uploads module exists — see §6.13).
-- Same module serves both Customer app and Trader app; `role` on the user record plus a `traders` profile record auto-created when role = `TRADER` and OTP is verified.
+- `POST /auth/register` — full name (photo optional via `Add Photo`), email, phone number (with country dial code, e.g. `+353`), password → creates unverified user, triggers OTP. Password rules confirmed on-screen: **min 8 characters, one uppercase letter, one number/special character** (live checklist UI) — enforce the same rules server-side in `auth.validation.ts`, don't trust client-side checks alone. Terms & Privacy checkbox required before submit.
+- `POST /auth/verify-otp` — verifies OTP, activates account.
+- `POST /auth/login` — email + password → JWT access + refresh token.
+- **Biometric ("Face ID") login** — screens show a dedicated in-app Face ID screen ("Biometric system active" / "Sign in with Face ID" / "Use Password Instead"), separate from the login screen's own "Face ID" shortcut button. This is standard **local-biometric-unlocks-stored-refresh-token** UX: the phone's OS biometric API unlocks a refresh token the app already stored in secure device storage after a prior password login; the app then just calls `POST /auth/refresh` as normal. **No biometric data is ever sent to or processed by the backend.** No new endpoint is strictly required beyond refresh — flag if BRISK instead wants server-side "device trust" tracking (e.g. `POST /auth/devices/register` to list/revoke trusted devices from Security settings).
+- `POST /auth/apple-signin` — verifies Apple identity token, only if native Sign in with Apple is also wanted as a separate path (to confirm — see Open Items).
+- `POST /auth/refresh`, `POST /auth/logout`.
+- Same module serves both Customer app and Trader app; a `role` field (`customer` / `trader`) on the user record plus a `traders` profile record when role = trader.
 
 ### 6.2 Users & Traders Modules
 - Users: profile CRUD (Display Name, Email — shown **read-only/locked** with a padlock icon once set, Phone with country code), preferences (Notifications on/off toggle).
 - Profile screen shows three **derived stats**: Jobs Posted, Avg Rating (as a customer, if BRISK collects ratings both ways — to confirm), Saved Traders (count from the new `SAVED_TRADERS` table — a "favorite trader" feature not previously documented; needs a `POST /traders/:id/save` / `DELETE /traders/:id/save` pair).
 - **Account deactivation** (confirmed via 3-dot menu → "Deactivate Account"): `POST /users/deactivate` creates a deletion request in `pending_review` status, does **not** delete data immediately. Response screen explicitly states: processing window **24–48 hours**, data is "permanently purged following GDPR compliance protocols" once approved, and "an admin might reach out via chat if any active subscriptions need manual closure" — meaning deactivation must check for `SUBSCRIPTIONS` rows in `active` status on the user's properties and flag them for manual admin closure before final purge. Model this as a real workflow, not a soft-delete flag: `ACCOUNT_DELETION_REQUESTS(id, user_id, status[pending_review|admin_contacted|approved|purged|cancelled], requested_at, processed_at)`.
-- Traders: profile (photo, bio, years of experience, jobs-done counter, avg rating, "Top Rated" badge, verification status), category specialization. **Confirmed via Admin Panel:** every trader has a `trader_type: SOLO | COMPANY` (shown as "Individual"/"Business" on the customer-facing directory and "SOLO"/"COMPANY" in admin) — company traders additionally carry a `business_name`. Full registration is a wizard (see §13.5) — the fields captured there (business entity, category & services, bank details, service radius) extend this module's data model considerably beyond what the customer-facing docs implied.
+- Traders: profile (photo, bio, years of experience, jobs-done counter, avg rating, "Top Rated" badge, verification status), category specialization.
 - `jobs_done_count` and `avg_rating` are **derived/denormalized** fields, recalculated whenever a booking completes or a rating is submitted (via a service method, not client-writable).
 
 ### 6.2A Property & Utilities Module (new — see §4A)
@@ -746,7 +672,6 @@ brisk-backend/
 ### 6.3 Categories Module
 - Category → Subcategory tree (Residential/Commercial toggle, matches "All Sub-Category" screen).
 - Read-mostly, cached at the app layer (Redis once introduced) since this data changes rarely.
-- **Full schema confirmed via Admin Panel Category Master** (see §13.7 for complete field list and forms): categories now confirmed to carry `category_code` (e.g. `CAT-PLUMB`), `url_slug`, `description`, `icon_name`, `brand_theme_color` (hex), `banner_image_url`, `display_order`, `status` (`active`/`inactive`), and a `featured` flag (drives homepage/nav placement) — plus admin-visible derived counts (`sub_categories_count`, `traders_count`). Subcategories mirror this with their own `code`, `featured`, `status`, plus derived `traders_count` and `jobs_count`. This is a much richer schema than originally scoped — update `CATEGORIES`/`SUBCATEGORIES` tables accordingly (now reflected in the §4 ER diagram).
 
 ### 6.4 Jobs Module (Job Posting Flow)
 Implements Consumer Journey §2 and the "Post a New Job" screens common to all three offer flows:
@@ -754,7 +679,7 @@ Implements Consumer Journey §2 and the "Post a New Job" screens common to all t
 - `POST /jobs/:id/publish` — validates address chosen, sets status `published`, becomes visible to eligible traders (matched by category + service radius).
 - `PATCH /jobs/:id/reschedule` — new date/time, notifies assigned trader, requires trader acceptance to confirm.
 - `PATCH /jobs/:id/cancel` — reason required, triggers refund logic per cancellation policy, notifies trader.
-- Job status machine — **confirmed and refined via Admin Panel Jobs & Services tabs** (`draft` is a pre-publish client-side/backend state not shown to admin, everything after `published` matches the admin tab list exactly): `draft → published(pending) → quoted → accepted → scheduled → in_progress → completed`, with `cancelled` and `payment_pending` as branches. Admin panel tabs are literally: **Pending, Quoted, Accepted, Scheduled, In Progress, Completed, Cancelled, Payment Pending** — use these exact string values for `JOBS.status` so admin filters map directly to a `WHERE status = ?` query, no translation layer needed.
+- Job status machine: `draft → published → quoted → accepted → confirmed → in_progress → completed` (+ `cancelled` branch at any pre-completion state, + `reschedule_requested`).
 
 ### 6.5 Quotes Module
 Two paths converge here:
@@ -767,7 +692,6 @@ Two paths converge here:
 - **Confirmed filter modal** (`GET /trader-offers?...`) supports: `date_range` (`today|yesterday|last_7_days|last_30_days|custom` with `from`/`to`), `trader_ids[]` (multi-select, with search-as-you-type), `offer_type` (`percentage|flat_amount`), `category_id` (multi-select with icon per category). Build this as real query params, not a single opaque "filter" blob, so each control maps 1:1 to a param.
 - **Brisk Offers** (`Brisk Offers` tab): platform-curated offers tied to a trader ("10% off Pest Control services", "Free Electrical Inspection"), each with a `tag` field (`special_local_promo`, `limited_availability`, etc.) and a distinct action-button label per offer (`Claim Offer` vs `Book Inspection` — model as a `cta_label`/`cta_action` pair rather than hardcoding "claim" everywhere, since "Book Inspection" implies a different downstream flow than a discount claim). Screen also shows the BRISK points balance inline even though this tab is about discounts, not points — just a persistent header, no functional link to redemption.
 - **Promo Codes**: BRISK-issued codes (e.g. `PEST10BRISK`, `ALL10BRISK`) searchable/filterable by category, applied at the **invoice/checkout step** (not tied to a specific job upfront) via `POST /invoices/:id/apply-promo`. Validated for category scope, validity window, and (recommended, to confirm) one-use-per-customer.
-- **Reconciled with Admin Panel (v3):** the Admin Offer Management screen treats all offers as **one unified table** with a discriminator `offer_type: PLATFORM | TRADER` — a `PLATFORM` offer is what the customer app shows under "Brisk Offers", a `TRADER` offer is what the customer app shows under "Traders Offers". **Recommendation: implement a single `OFFERS` table** (see §13.6 for the full confirmed schema — offer_id, offer_title, offer_badge_tag, coupon_code, short_description, full_description, banner_image, discount_type, discount_value, valid_from, valid_until, categories[], sub_categories[], created_by, trader_id nullable, status) rather than two separate tables (`TRADER_OFFERS`/`BRISK_OFFERS`) as originally modeled in §4 — the customer app's two tabs are just `WHERE offer_type = 'TRADER'` vs `WHERE offer_type = 'PLATFORM'` on the same table. This supersedes the earlier `TRADER_OFFERS`/`BRISK_OFFERS` split in the ER diagram — keep both table names as a compatibility note but build against the unified `OFFERS` table.
 
 ### 6.7 Bookings & Invoices Modules
 - A `BOOKING` is created the moment a quote is accepted (either path).
@@ -951,7 +875,7 @@ sequenceDiagram
 
 ---
 
-## 8. AWS Services Map
+
 
 | Need | Service | Notes |
 |---|---|---|
@@ -977,11 +901,9 @@ From all three offer-flow docs, an invoice can carry **up to two discount types 
 Total = Service Charge
         − Trader/Brisk Offer Discount (if a trader/brisk offer was claimed pre-job)
         − Promo Code Discount (if applied at checkout, separately)
-        + Platform Fee (10% of service charge — CONFIRMED, see below)
+        + Platform Fee (**10%** of service charge — confirmed via Admin Reports Revenue screen, §14.7.1)
         + Tax (if applicable)
 ```
-
-**Platform fee — now confirmed at 10%.** The Admin Panel's Reports & Analytics → Financial Revenue Aggregation screen explicitly labels a line item **"Platform Fees (10%)"** as a component of Net Platform Revenue (Gross Revenue → + Platform Fees 10% → − Discounts & Offers → − Refunds Issued → = Net Platform Revenue). This resolves the previously open commission-model item. Note: the Admin Jobs & Services and Customer Payment tables show a `fee` value per transaction alongside the discount — implement `INVOICES.platform_fee = ROUND(service_charge * 0.10, 2)`, computed server-side and never trusted from the client. **Still to confirm:** whether the 10% is charged to the customer (added to total paid, as modeled above) or deducted from the trader's payout (charged to the trader, total paid by customer stays at service charge − discounts). The admin screenshots show fee as a separate visible line on the customer-facing transaction row, which suggests it's customer-facing, but this needs explicit sign-off before Payments is built — see §14 Open Items.
 
 Billing: `individual` (full name, address, city, postal code) or `company` (+ company name, TIN number) — captured **at checkout**, not on the user profile, since a customer may switch between the two per transaction.
 
@@ -994,20 +916,17 @@ Payment methods (all via Stripe): Apple Pay, Google Pay, Credit/Debit Card.
 Build and ship in this order — each phase should be runnable/testable before starting the next.
 
 1. **Phase 0 — Foundation**: repo scaffold, TypeScript config, Express app skeleton, Docker Compose (local Postgres), env config, health-check route, error middleware, logger, Swagger scaffold.
-2. **Phase 1 — Auth & Users**: register/OTP/**resend-otp**/login/refresh/**logout**/**me**, Apple Sign-In (deferred), JWT middleware, role guard, Users module (profile, stats, deactivation workflow), Traders module (profile). **Auth module complete except Apple Sign-In and S3 profile photos.**
+2. **Phase 1 — Auth & Users**: register/OTP/login/refresh, Apple Sign-In, JWT middleware, role guard, Users module (profile, stats, deactivation workflow), Traders module (profile).
 3. **Phase 1B — Property & Utilities**: Addresses (My Address tab, Add Address modal), Meters (MPRN/GPRN registration + reading submission), Subscriptions (utility provider checklist). Independent of Jobs/Payments — can be built in parallel with Phase 2.
-4. **Phase 2 — Categories & Jobs**: category/subcategory seed + endpoints (full admin-confirmed schema per §13.8), Jobs module full CRUD + publish + reschedule + cancel, 8-value status enum per §13.6, S3 pre-signed upload for job photos.
-5. **Phase 3 — Quotes & Offers**: Quotes module (submit/compare/accept), unified `OFFERS` module (platform + trader, per §13.7) with filters, Promo Codes.
-6. **Phase 4 — Bookings & Invoices**: booking status machine, invoice breakdown builder (service charge, discounts, 10% platform fee per §9 — pending direction confirmation, tax).
-7. **Phase 5 — Payments**: Stripe integration, PaymentIntent creation, webhook handler, receipts, payment history, Stripe Connect payouts to traders (§13.9).
+4. **Phase 2 — Categories & Jobs**: category/subcategory seed + endpoints, Jobs module full CRUD + publish + reschedule + cancel, S3 pre-signed upload for job photos.
+5. **Phase 3 — Quotes & Offers**: Quotes module (submit/compare/accept), Trader Offers (+ filters), Brisk Offers, Promo Codes.
+6. **Phase 4 — Bookings & Invoices**: booking status machine, invoice breakdown builder.
+7. **Phase 5 — Payments**: Stripe integration, PaymentIntent creation, webhook handler, receipts, payment history.
 8. **Phase 6 — Loyalty**: points balance, offers, redemption with transactional safety.
 9. **Phase 7 — Chat & Notifications**: Socket.IO gateway, push notification worker, in-app notification feed (typed per §6.12).
 10. **Phase 8 — Ratings & Booking History polish**: ratings/reviews, saved traders, booking history filters, booking details screen endpoint.
-11. **Phase 9 — Admin Panel Core** (per §14): admin auth/RBAC (`ADMIN_USERS`, roles), System Users CRUD, Admin Dashboard (stats, activity trend, audit log feed — build `AUDIT_LOGS` writes into every module from here on), Customers directory + Account Deletion Requests admin workflow (anonymize-on-purge per §13.4.2), Traders directory.
-12. **Phase 9B — Trader Onboarding & Verification**: 8-step resumable registration wizard (`TRADER_REGISTRATIONS`, §13.5.2), Document Upload + Verification/Audit queue (§13.5.3), Payouts (`PAYOUTS`, Stripe Connect, §13.9).
-13. **Phase 9C — Admin Marketplace Ops**: admin Jobs & Services oversight view + admin-initiated job creation, admin Category/Sub-Category Master CRUD (§13.8), admin Offer Management + Create Platform Offer form (§13.7).
-14. **Phase 9D — Reports & Analytics**: Analytics Dashboard, Customers/Traders report tabs first (fully spec'd, §13.10), remaining tabs once screenshotted.
-15. **Phase 10 — Hardening**: rate limiting, load testing against the concurrency table in the architecture doc, CloudWatch alarms, backups.
+11. **Phase 9 — Admin/Ops** (as scope firms up): trader verification/KYC review, account-deletion approval queue, dispute handling, manual refunds.
+12. **Phase 10 — Hardening**: rate limiting, load testing against the concurrency table in the architecture doc, CloudWatch alarms, backups.
 
 ---
 
@@ -1016,8 +935,8 @@ Build and ship in this order — each phase should be runnable/testable before s
 Explicitly tracking these so nothing is assumed silently — please confirm each as we get to it:
 
 - [ ] **Trader verification/KYC** — what documents, who reviews, manual vs automated.
-- [x] ~~**Platform fee & commission model**~~ — **RESOLVED (v3):** 10% platform fee, confirmed via Admin Panel Reports screen. Still need to confirm whether it's charged to customer or deducted from trader payout — see §13.9.
-- [ ] **Cancellation policy specifics** — refund percentages by time-to-service, who defines this (currently just "per platform's cancellation policy").
+- [x] ~~**Platform fee & commission model**~~ — **RESOLVED (v7 screenshots):** Admin Reports → Revenue shows **Platform Fees (10%)** as an explicit KPI. Still confirm whether fee is charged to customer vs deducted from trader payout before Payments module ships.
+- [ ] **Cancellation policy specifics** — refund percentages by time-to-service, who defines this (currently just "per platform's cancellation policy"). Legal CMS has a Refund & Cancellation Policy document — use that as source of truth once content is locked.
 - [ ] **"Premium Utility Pack - Annual Subscription"** mentioned in Order Summary — is this a real subscription product needing its own billing module, or a placeholder in the mock data?
 - [ ] **Trader-side app requirements** — this doc leans Customer-app-flow-heavy since that's what the process docs covered in depth; Trader app functional flow doc wasn't provided yet (quote submission, job acceptance, chat, payout/earnings, availability calendar all need their own pass).
 - [ ] **Payouts to traders** — Stripe Connect (recommended) vs manual payout — not covered in docs yet.
@@ -1041,292 +960,12 @@ Explicitly tracking these so nothing is assumed silently — please confirm each
    - Share Figma "Dev Mode" exports/specs (CSS/tokens/inspect JSON), or
    - Invite view access to an account usable via browser tooling in a future session.
 2. **Trader App screenshots/process doc** — still the biggest gap. Everything trader-side (submit quote, accept job, chat, payout/earnings, availability, KYC upload) is inferred only from mentions inside the customer-facing material.
-3. **Remaining Admin Panel screens** (see full list in §13.15) — most urgently: the `Audit & Verify` document-review detail screen, Reports tabs beyond Analytics Dashboard/Customers/Traders, CMS & Content / Document Rules / Settings screens, and steps 2–8 of the Trader Registration wizard for both Solo and Company entity modes.
-4. Answers to the Open Items checklists above (§11 and §13.15), as they get decided — I'll fold each into this file as an update rather than a rewrite.
+3. **Remaining Admin Panel screens** (see checklist in §14.12) — most urgently: Document Rules, Sub Categories detail forms, Transactions page, Survey Trader + Analytics tabs, CMS Header/Footer/Media/Email/Banner editors, Admin Users & Roles, Settings, Create Website Page / Knowledge Guide / Legal version modals.
+4. Answers to the Open Items checklist above, as they get decided — I'll fold each into this file as an update rather than a rewrite.
 
 ---
 
-## 13. Admin Panel — Full Requirements, Data Model & APIs (v3)
-
-> Source: 19 screenshots of the **live** BRISK Admin Panel (`brisk-admin.netlify.app`), reviewed screen-by-screen — every stat card, table column, filter, button, and form field. This is the highest-fidelity source in this whole document because it's a working build, not a mockup. The Admin Panel is **served by the same modular monolith** — it is not a separate service. It just mounts a different set of routes (`/admin/*`) guarded by admin roles, reusing the same modules' services wherever the data overlaps with the Customer/Trader apps (e.g. admin Jobs & Services reads from the same `JOBS`/`BOOKINGS` tables as the Customer app, it does not duplicate them).
-
-### 13.0 Confirmed Admin Navigation (full sidebar)
-
-```
-MAIN OVERVIEW
-  Dashboard
-USER MANAGEMENT
-  System Users
-  Customers → All Customers, Account Deletion Requests, Payment Methods
-  Traders & Merchants → All Traders, Trader Registration, Documents
-MARKETPLACE OPERATIONS
-  Jobs & Services
-  Offers & Promotions
-  Category Master → Categories, Sub-Categories
-  Transactions
-  Payments & Payouts
-REPORTS & ANALYTICS
-  Reports & Analytics → Analytics Dashboard, Customers, Traders, Jobs & Services,
-                         Revenue & Payments, Offers & Promotions, Category Performance,
-                         Reviews & Ratings, Platform Activity, Exported Reports
-MARKETING & CRM
-  Launch Party Survey (name only seen — content/purpose not yet reviewed, see Open Items)
-SYSTEM & GOVERNANCE
-  CMS & Content
-  Document Rules
-  Settings
-```
-
-Every list screen in the admin panel follows the same shape — worth building as one reusable pattern rather than bespoke per screen: a **stats-card row** (3–6 KPI cards) → a **search bar + 1–4 dropdown filters** → a **data table** with sortable columns (`↑↓` icons) → **row actions** (view/edit/duplicate/delete icons, or a menu) → **top-right actions** (`Refresh`, `Export`/`Export CSV`, a primary `+ Add X` button) → pagination footer.
-
-### 13.1 Admin Auth & RBAC
-
-- Confirmed roles (from System Users table): **`ADMIN`** and **`SUPER ADMIN`**. Super Admin is the higher-privilege role (seen managing role/status of other admins). Design `ADMIN_USERS.role` as an extensible enum, not a boolean, since more granular roles (e.g. "Support", "Finance") are likely once the team grows.
-- Admin login is **separate from customer/trader auth** — distinct portal, distinct session. Reuse the same JWT infrastructure (`auth` module) but a distinct `POST /admin/auth/login` and a `role` check middleware that only allows `ADMIN`/`SUPER ADMIN` through `/admin/*` routes.
-- Admin's own account settings (top-right profile menu "Super Admin / SUPER ADMIN") — supports password change with **Old Password / New Password / Confirm New Password** (rules: min 8 chars, upper+lower+number — confirmed on the Add/Edit User form) via a dedicated `PATCH /admin/users/me/password` (or `/admin/users/:id/password` for a Super Admin resetting another admin's password).
-
-### 13.2 Admin Dashboard
-
-**Confirmed stat cards** (each with a value + a `%` delta badge, e.g. `+12.4%`):
-`Total System Users`, `Verified Traders`, `Active Customers`, `Active Service Jobs`, `Pending Verification`, `Total Revenue`, `Monthly Growth`, `Total Transactions`.
-
-- `GET /admin/dashboard/stats` returns all 8 in one call — each is a simple aggregate query (counts/sums) plus a period-over-period delta (confirm the comparison window — likely month-over-month given "Monthly Growth" is itself one of the cards).
-- **Marketplace Activity Trend** — a dual-series bar chart (Transactions `$` vs Job Postings) by month, with an overall growth badge (`+24.8% Growth`). `GET /admin/dashboard/activity-trend?months=12` returns `[{month, transactions_amount, job_postings_count}]`.
-- **Recent Audit Log** — a live feed: `New Trader Registered` / `Job Posting Published` / `Payout Processed` / `Verification Pending Review`, each with a relative timestamp ("2 minutes ago"), a description, and an actor (`By: System Automations`, `By: Metro Logistics`, `By: Finance Gateway`). This confirms a real `AUDIT_LOGS` table is needed, written to by every module on significant events (see §13.13). `GET /admin/audit-logs?limit=10` powers this widget; a "View All" link goes to a full audit log screen (not yet screenshotted — flag if scope needed beyond the dashboard widget).
-- **Account Deletion Requests widget** — mini funnel: `Pending` (12), `In Review` (5), `Approved` (3) — same data as the full Deletion Requests screen (§13.4.2), just counts. `GET /admin/customers/deletion-requests/summary`.
-- **Quick Admin Actions** ("Marketplace Management Shortcuts") — 4 shortcut cards, each just a deep link, no new API: `Add User` (badge-free) → System Users create form; `Review Trader Document` (badge shows live pending count, `24 Pending`) → Trader Verification queue; `Post New Job` → admin-side job creation (confirms admins can create a job on a customer's behalf — needs `POST /admin/jobs` with a `customer_id` field, distinct from the customer's own `POST /jobs`); `Manage Categories` → Category Master.
-- Top bar actions: `Export Summary` (dashboard as PDF/CSV), `+ New Admin Action` (purpose unclear from a single screenshot — likely a generic quick-action launcher; flag as open item), `Refresh Dashboard`.
-
-### 13.3 System Users (Admin/Super Admin management)
-
-**List** (`GET /admin/users`): search by name/email/phone; filters `All Roles`, `All Statuses`. Table columns: `USER` (avatar+name+email), `PHONE`, `ROLE` (`ADMIN`/`SUPER ADMIN` badge), `STATUS` (`ACTIVE` badge), `JOINED`, `LAST LOGIN`, row menu (`...`). Actions: `Refresh`, `Export`, `+ Add User`.
-
-**Create/Edit form** (`POST /admin/users`, `PATCH /admin/users/:id`) — confirmed fields, in three groups:
-1. **Profile**: Profile Photo (upload, JPG/PNG/WebP, max 400×400px/5MB), Full Name*, Email Address (**read-only** once set — "Admin account email address cannot be changed"), Phone Number* (with country code selector), Address (free text).
-2. **Security & Credentials**: Old Password*, New Password* (min 8 chars, upper/lower/number), Confirm New Password* — own `Update Password` button, submitted separately from the profile save (`PATCH /admin/users/:id/password`).
-3. **Role & Access Status**: Assigned Role* (dropdown: Admin/Super Admin), Account Status* (dropdown: Active/Inactive/Suspended — infer the last two from the pattern; only "Active" seen so far).
-
-`Cancel` / `Create User` (or `Save Changes` on edit) buttons.
-
-### 13.4 Customers Management
-
-#### 14.4.1 All Customers (`GET /admin/customers`)
-Stat cards: `Total Customers` (100), `Active Customers` (57), `Inactive/Blocked` (29), `New This Month` (8), `Total Revenue` (£75,548.50), `Avg Order Value` (£111.59).
-Search + `All Statuses` + `All Countries` filters. Table: `CUSTOMER` (avatar+name+`CUST-####` id), `CONTACT INFORMATION` (email+phone), `LOCATION` (city, country), `TOTAL ORDERS`, `TOTAL SPENT`, `STATUS` (`Active`/`Inactive`/`Pending`/`Blocked` — 4-state enum, confirmed), `JOINED`, row actions (view/edit/more/delete icons). `+ Add New Customer` button (confirms admin can create a customer record manually — `POST /admin/customers`).
-
-#### 14.4.2 Account Deletion Requests (`GET /admin/customers/deletion-requests`)
-Stat cards: `Pending Requests`, `Under Review`, `Approved Queue`, `Completed Deletions`.
-Search + `All Statuses` + `All Deletion Reasons` + sort (`Newest First`) filters. Table: `REQUEST REF` (`DEL-#####`), `CUSTOMER` (avatar+name+id), `EMAIL`, `PHONE`, `REASON` (free text, e.g. "Privacy concerns", "I no longer need the service", "Poor service experience", "Other reasons"), `REQUESTED AT`, `STATUS` (`PENDING`/`UNDER REVIEW`/`APPROVED`/`REJECTED`/`COMPLETED` — 5-state, more granular than the 4-state I'd assumed earlier), `REVIEWED BY` (admin name, e.g. "Super Admin (Snehal Vyas)", "Compliance Lead", "Operations Admin"), `View Request` action.
-**GDPR anonymization confirmed on the completed row**: `Deleted Customer` / `deleted-cus-005@anonymized.brisk.internal` / `+00 0000000000` — this is the exact pattern to implement: on final purge, **do not hard-delete the row** (breaks referential integrity with historical bookings/payments/reviews) — instead anonymize PII fields in place (`full_name → 'Deleted Customer'`, `email → 'deleted-cus-{id}@anonymized.brisk.internal'`, `phone → '+00 0000000000'`) and keep the row + its foreign-keyed history intact. This refines the earlier §6.2 `ACCOUNT_DELETION_REQUESTS` design — statuses are now confirmed as `pending → under_review → approved|rejected → completed`, with `reviewed_by` (an `ADMIN_USERS` FK) and `reason` (customer-supplied free text) added to the table.
-`Export CSV`, `Refresh` buttons.
-
-#### 14.4.3 Customer Payment & Billing (`GET /admin/customers/:id/payments` or a global `/admin/customer-payment`)
-Stat cards: `Available Cash` (€685.00 — customer's platform wallet/credit balance, a concept not previously in this doc — see Open Items), `Default Method` (masked card, e.g. Visa ****4242), `Pending Payments` (count), `Pending Refunds` (€ amount), `Last Payment` (date).
-**5 tabs**: `Payment Overview`, `Payment Transactions` (badge count), `Billing & Invoices` (badge count), `Refunds Queue`, `Loyalty & Rewards`.
-**Payment Transactions table**: `TRANSACTION REF` (`TXN-########`), `CUSTOMER`, `JOB/BOOKING` (title + `BKG-####` + category), `TRADER`, `SERVICE CHARGE`, `FEE/OFFER` (shows either a positive `Fee: €X.XX` or a discount+fee pair like `-€20.00` / `Fee: €10.00`), `TOTAL PAID`, `PAYMENT METHOD` (Visa/Google Pay/Apple Pay icon+label), `STATUS` (`Pending`/`Processing`/`Completed`/`Paid`), `View Details` action. Search by TXN ID/customer/job/trader; filter by payment status, payment method; sort newest first. `+ Add Payment Method` button.
-**Important:** the exact arithmetic relationship between `service_charge`, the discount amount, the `fee`, and `total_paid` is **not fully resolvable from the screenshots alone** — some rows show `total_paid = service_charge + fee` with the discount seemingly already baked into `service_charge`, others don't add up cleanly under that assumption. Do not guess the formula into production — confirm the exact calculation with the actual formula/spreadsheet before finalizing `invoices.service.ts`. This is now a flagged Open Item (§13.15).
-
-### 13.5 Traders & Merchants Management
-
-#### 14.5.1 All Traders (`GET /admin/traders`)
-Stat cards: `Total Traders`, `Active Traders`, `Suspended`, `Pending Verification`, `Total Revenue`, `Avg Rating`.
-Search + `All Statuses` + `All Categories` + `All Verifications` + `All Countries` filters. Table: `TRADER` (avatar+name+`TRD-####` id), `BUSINESS` (business name + `Individual`/`Business` type), `CONTACT`, `LISTINGS` (count), `REVENUE`, `RATING` (stars + review count), `STATUS` (`Active`/`Inactive`/`Pending`), `VERIFIED` (`Verified`/`Pending`/`Unverified` — separate from account `STATUS`, confirming verification is its own state machine, not folded into status), `JOINED`. `+ Add New Trader` button.
-
-#### 14.5.2 Trader Registration & Verification Wizard (`/admin/traders/create`)
-An **8-step wizard**, confirmed step list with a progress bar (`Step 1 of 8`, `% Completed`):
-1. **Basic Information** — actually labeled on-screen as "Account & Credentials": Mobile Number* (with country code), Email Address*, Password (optional), Confirm Password (optional), then an **OTP Verification Code** field + `Verify OTP` button (test OTP shown as `123456` in a dev/staging build — confirms OTP-gated step 1).
-2. **Personal...** (truncated in sidebar — likely "Personal Information": name, DOB, ID details — not yet screenshotted in full)
-3. **Address Details**
-4. **Category & Services** (trader picks which categories/subcategories they service)
-5. **Document Upload** (KYC/verification docs — ties into §13.5.3)
-6. **Bank Details** (payout account — ties into Stripe Connect, see §13.9)
-7. **Service Radius** (geographic coverage — confirms the job-matching radius model flagged as an open item earlier IS a real, admin-configurable per-trader field)
-8. **Review & Submit**
-
-A top-level toggle switches the whole wizard between **`Solo Trader`** and **`Company Entity`** modes — expect different required fields per mode (e.g. Company Entity likely requires a registered business name/number that Solo Trader doesn't — not yet confirmed field-by-field since only step 1 was screenshotted in the flow, but the toggle itself is confirmed).
-
-**Backend implication — build this as a resumable, step-saved wizard, not a single giant form submit:** `POST /admin/traders/registration/start` → returns a `registration_id`; then `PATCH /admin/traders/registration/:id/step/:stepNumber` per step, validating only that step's fields and persisting partial progress (so an admin can leave and resume); `POST /admin/traders/registration/:id/submit` on step 8 finalizes and creates the actual `TRADERS`/`USERS` rows. Track `TRADER_REGISTRATIONS(id, entity_type[solo|company], current_step, status[in_progress|submitted|approved|rejected], step_data JSONB, ...)` — storing in-progress step data as JSONB is reasonable here since the shape varies by entity type and step.
-`Save & Continue` button advances each step.
-
-#### 14.5.3 Trader Verification & Audit Portal (`/admin/trader-verification`)
-Search + `All Trader Types` + `All Statuses` filters. Table: `TRADER NAME & ENTITY` (name + `TRD-REG-###` id + email), `TYPE` (`SOLO`/`COMPANY` badge), `TRADE CATEGORY`, `DOCUMENT DOCS` (file count, e.g. "2 File(s)"), `STATUS` (`Pending`/etc.), `AUDIT` → `Audit & Verify` action button (opens a review UI — not fully screenshotted, but confirms a document-by-document approve/reject flow is needed: `POST /admin/traders/:id/documents/:docId/verify` with `{decision: approve|reject, notes}`).
-**Automated Audit Logs** side panel — a per-trader log of verification events (currently "0 Logs" / "No verification log events generated yet" in the sample data) — same `AUDIT_LOGS` table as the dashboard widget, filtered to this trader.
-`+ Launch Onboarding Wizard` (shortcut into §13.5.2), `Refresh Queue` buttons.
-
-### 13.6 Jobs & Services (Admin oversight)
-
-`GET /admin/jobs`. Stat cards: `Total Jobs`, `Active Jobs`, `Pending Jobs`, `Completed Jobs`, `Cancelled Jobs`, `Payment Pending`.
-**Status tabs** (confirmed exact set, now the authoritative job status enum — see §6.4 update): `All Jobs`, `Pending`, `Quoted`, `Accepted`, `Scheduled`, `In Progress`, `Completed`, `Cancelled`, `Payment Pending`.
-Table: `JOB ID` (`BRK-####`), `JOB TITLE & CATEGORY` (title + category • subcategory + an `Offer` tag chip when a trader/brisk offer was applied), `CUSTOMER` (name+phone), `ASSIGNED TRADER` (name + partner type: `Company Partner`/`Solo Professional`), `LOCATION`, `AMOUNT` (current amount, with the **original estimate shown struck through** when it differs — e.g. `€144.00` current, `Est. €140` struck through — confirms jobs can be re-quoted/adjusted post-acceptance and the UI keeps the original estimate visible), `PAYMENT` (`Paid` badge), `STATUS`. `Filter`, `Refresh`, `Export` buttons, search by Job ID/Title/Customer/Trader.
-This is a **read/oversight surface for admins**, not a new job engine — it queries the same `JOBS`/`BOOKINGS`/`QUOTES`/`INVOICES` tables the Customer/Trader apps write to (§6.4–§6.7). The one net-new admin capability confirmed is **creating a job on a customer's behalf** (`Post New Job` shortcut from the dashboard, §13.2) — needs `POST /admin/jobs` accepting an explicit `customer_id`.
-
-### 13.7 Offers & Promotions (Admin — unified model)
-
-`GET /admin/offers`. Tabs: `Offer List & Management` (badge count), `Analytics & Statistics`.
-Stat cards: `Total Offers` (with a Platform/Trader split, e.g. "3 — 1 Platform • 2 Trader"), `Active Offers`, `Total Claims`, `Revenue Generated`, `Avg Conversion %` (views-to-claim ratio).
-Filters: search by Offer ID/Title/Trader/Coupon Code; `All Offer Types`, `All Statuses`, `All Categories`, `All Sub-Categories`, `Reset Filters`.
-Table: `OFFER ID` (`OFF-####`), `OFFER TITLE` (+ coupon `Code:` shown under it when present), `OFFER TYPE` (`PLATFORM`/`TRADER` badge), `CREATED BY`, `TRADER` (blank for platform offers), `CATEGORY`, `SUB CATEGORY`, `DISCOUNT` (e.g. "Fixed €10", "20%", "Free Visit" — confirms discount can be a non-monetary label too, not just amount/percent), `VALID FROM`, `VALID UNTIL`, `STATUS`.
-`Export CSV`, `Refresh`, `+ Create Platform Offer` buttons.
-
-**Create New Platform Offer form** (`POST /admin/offers`) — confirmed full field set, in 3 groups:
-1. **Offer Basic Information**: Offer Title*, Offer Badge Tag (free text, e.g. "Special promo"), Coupon Code (optional), Short Description* (1-line summary), Full Detailed Description* (textarea — terms/scope), Banner Image (URL paste or file upload, recommended 1200×400px).
-2. **Discount & Pricing Configuration**: Discount Type* (dropdown: `Flat Amount (€)` / `Percentage`), Discount Value*, Valid From Date*, Valid Until Date*.
-3. **Category & Service Targeting**: Categories* (multi-select chips including an "All Categories" option), Sub-Categories (multi-select chips including an "All Sub-Categories" option) — form continues below the fold, not fully captured.
-
-**This confirms the recommendation in §6.6**: build one unified `OFFERS` table (`offer_type: PLATFORM | TRADER`) rather than the earlier separate `TRADER_OFFERS`/`BRISK_OFFERS` tables. Updated schema:
-```
-OFFERS(
-  id, offer_code /* OFF-#### */, offer_type[PLATFORM|TRADER],
-  title, badge_tag, coupon_code, short_description, full_description, banner_image_url,
-  discount_type[flat|percentage|free_service], discount_value, discount_label /* e.g. "Free Visit" */,
-  category_ids[], subcategory_ids[], /* or "all" sentinel */
-  created_by (admin_user_id, nullable), trader_id (nullable, required if offer_type=TRADER),
-  valid_from, valid_until, status[active|expired|disabled],
-  claims_count, revenue_generated, views_count /* for conversion % */
-)
-```
-Trader-created offers (from the Trader app, not yet screenshotted) would `POST /trader-offers` with `offer_type` forced to `TRADER` and `trader_id` forced to the authenticated trader — same underlying table and validation, narrower permission.
-
-### 13.8 Category Master
-
-#### 14.8.1 Categories (`GET /admin/categories`)
-Stat-free, straight to table. Search + `All Statuses` + `All Types` filters. Table: `ORDER` (`#1, #2...` — this is `display_order`), `CATEGORY NAME` (icon+name+description), `CODE & SLUG`, `SUB-CATS` (count), `TRADERS` (count), `FEATURED` (`Featured`/`Standard` badge), `STATUS` (`Active`), row actions (view/edit/duplicate/delete). `+ Add New Category` button.
-
-**Create Master Category form** (`POST /admin/categories`) — confirmed fields:
-- **Basic Category Specification**: Category Name*, Category Code* (e.g. `CAT-PLUMB`), URL Slug* (e.g. `plumbing-services`), Description*.
-- **Visual Presentation & Branding**: Icon Name* (dropdown — icon library reference, e.g. "Wrench"), Brand Theme Color* (hex input + a palette of preset swatches), Category Banner Image URL* (direct URL, not upload — differs from the Offer form which supports file upload; confirm if this should also get upload support later).
-- **Ordering & Master Controls**: Display Order* (numeric), Category Status* (dropdown: Active/...), `Feature on Homepage & Navigation` checkbox (drives the `featured` flag).
-`Cancel` / `Create Master Category` buttons.
-
-#### 14.8.2 Sub-Categories (`GET /admin/sub-categories`)
-Search + `All Categories` + `All Statuses` + page-size filter. Table: `#`, `SUB-CATEGORY` (name+slug), `PARENT CATEGORY` (linked), `CODE`, `TRADERS` (count), `JOBS` (count), `FEATURED`, `STATUS`, row actions. `+ Add Sub-Category` button. Paginated (seen: 100 total records across 10 pages).
-
-### 13.9 Transactions, Payments & Payouts
-
-- **Transactions** (sidebar item, separate from Payments & Payouts) — not individually screenshotted beyond its sidebar presence and its appearance as a dashboard stat (`Total Transactions`); treat as the ledger view of `PAYMENTS` rows across the whole marketplace (superset of the per-customer Payment Transactions table in §13.4.3).
-- **Payments & Payouts** (sidebar item) — trader-facing side of money movement: the dashboard audit log already confirms a `Payout Processed` event type ("$4,250.00 transferred to Global Spares Merchant Account", actor "By: Finance Gateway"). This means **Stripe Connect (or equivalent) is the right call for trader payouts** (flagged as an open item in the original plan — now more clearly needed, not optional) — `PAYOUTS(id, trader_id, amount, status[pending|processing|completed|failed], stripe_transfer_id, processed_at)`.
-- **Platform fee — confirmed 10%** (§9) — appears explicitly on the Reports → Analytics Dashboard's Financial Revenue Aggregation panel: `Gross Revenue → + Platform Fees (10%) → − Discounts & Offers (118 Redeemed) → − Refunds Issued → = NET PLATFORM REVENUE`, each row with a `Drill Down` action (implies a detail/breakdown endpoint per financial metric, not just a flat total: `GET /admin/reports/revenue/:metric/drill-down`).
-
-### 13.10 Reports & Analytics
-
-A dedicated reporting module with its own **8 sub-tabs** (horizontally scrollable): `Analytics Dashboard`, `Customers`, `Traders`, `Jobs & Services`, `Revenue & Payments`, `Offers & Promotions`, `Category Performance`, `Reviews & Ratings` (+ sidebar also lists `Platform Activity` and `Exported Reports` as separate items). Every tab shares: a date-range dropdown (`Last 30 Days` confirmed, presumably others), `Reset`, `Export Report`.
-
-- **Analytics Dashboard tab**: cross-cutting KPI summary — Customer Analytics KPIs (Total/New/Active [83% active rate]/Inactive Customers, Deletion Requests), Trader Performance KPIs (Total/Solo/Company/Verified/Pending Verification/Suspended Traders), Jobs & Services Overview (Total/Completed/Cancelled jobs, Job Completion Success Rate %, Average Job Value), Financial Revenue Aggregation (see §13.9).
-- **Customers tab** (`/admin/reports/customers`): richer customer analytics — adds `Customers with Jobs` (78% conversion), `Completed Jobs`, `Cancelled Jobs` (8% cancellation), `Customers w/ Payments`; a **Geographic Customer Distribution** breakdown by region with percentage bars (confirmed regions in sample data: Dublin & Leinster, Cork & Munster, Greater London, Manchester & Northwest, Other European Regions — confirms BRISK's initial target geography is **Ireland + UK**, useful for the earlier "target countries/currencies" open item); an **Account Deletion Requests** panel with a GDPR-review alert banner ("8 pending customer deletion requests require GDPR review" + `Review Requests` button) and a short list.
-- **Traders tab** (`/admin/reports/traders`): "Trader Performance & Verification Intelligence" — stats (Total/Solo/Company/Verified/Pending Docs/Rejected/Suspended/Active), and a **Top Trader Ranking & Performance Ledger** table: `Trader Name`, `Type` (`SOLO`/`COMPANY`), `Jobs Received`, `Completed`, `Cancelled`, `Completion Rate`, `Revenue`, `Rating`, `Status` — sortable by any column, trader name links through to a drill-down detail view.
-- **Jobs & Services, Revenue & Payments, Offers & Promotions, Category Performance, Reviews & Ratings tabs**: sidebar-confirmed to exist, content not yet screenshotted — build each as `GET /admin/reports/:tab?range=` returning the equivalent aggregate shape to the tabs above (counts, rates, a ranked/ledger table); flag for a follow-up screenshot pass once available rather than guessing exact fields.
-
-**Backend implication:** every report tab is a **read-only aggregation endpoint** — no separate reporting database is needed at this scale (per the original monolith/Postgres decision), just well-indexed aggregate queries (and consider materialized views or a nightly rollup table once traffic grows, but not for v1).
-
-### 13.11 Marketing & CRM
-
-Only the sidebar label **"Launch Party Survey"** has been seen — no screen content reviewed yet. Do not build anything for this beyond a placeholder route until screenshots are provided (see §13.15 Open Items).
-
-### 13.12 System & Governance
-
-Sidebar confirms **CMS & Content**, **Document Rules**, and **Settings** exist as sections, but no screen content for any of them has been screenshotted yet (only visible as collapsed sidebar entries in several screenshots). Do not guess their scope — likely candidates based on naming alone: CMS & Content (static page/FAQ management), Document Rules (KYC document-type requirements per category, referenced implicitly by the trader Document Upload wizard step), Settings (platform-wide config, e.g. the 10% fee rate, tax rules). Flagged for a follow-up screenshot pass — see §13.15.
-
-### 13.13 New / Updated Entities Summary (v3)
-
-New entities this update adds to the §4 ER diagram (add these to `schema.prisma` alongside the existing ones):
-
-```
-ADMIN_USERS(id, full_name, email, phone, address, password_hash, role[ADMIN|SUPER_ADMIN],
-            status[active|inactive], profile_photo_s3_key, joined_at, last_login_at)
-
-AUDIT_LOGS(id, event_type /* trader_registered|job_published|payout_processed|
-           verification_pending|deletion_requested|... extensible enum */,
-           actor_type[system|admin|trader|customer], actor_id, actor_label /* e.g. "System Automations" */,
-           subject_type, subject_id, description, created_at)
-
-TRADER_REGISTRATIONS(id, entity_type[solo|company], current_step, status[in_progress|submitted|approved|rejected],
-                      step_data JSONB, trader_id FK nullable /* set once finalized */, created_at, updated_at)
-
-PAYOUTS(id, trader_id FK, amount, status[pending|processing|completed|failed],
-        stripe_transfer_id, processed_at, processed_by FK -> ADMIN_USERS nullable)
-```
-
-Updated existing entities (fields added by this update, already applied to the §4 ER diagram inline where noted):
-- `ACCOUNT_DELETION_REQUESTS` — confirmed 5-state status (`pending → under_review → approved|rejected → completed`), `reason` (free text), `reviewed_by` FK → `ADMIN_USERS`.
-- `TRADERS` — added `trader_type[SOLO|COMPANY]`, `trader_code`, `service_radius`, `bank_account_ref`, refined `verification_status` enum.
-- `CATEGORIES` / `SUBCATEGORIES` — added `category_code`/`code`, `url_slug`, `icon_name`, `brand_theme_color`, `banner_image_url`, `display_order`, `status`, `featured`.
-- `JOBS.status` — refined to the exact 8-value enum confirmed in §13.6/§6.4.
-- `TRADER_OFFERS` / `BRISK_OFFERS` → **superseded by unified `OFFERS`** (§13.7) — keep as a migration note, don't build the old split tables.
-- `INVOICES.platform_fee` — now has a confirmed rate (10%) but an unconfirmed charge-direction (customer vs trader) — see §13.15.
-
-### 13.14 New Sequence Diagrams
-
-```mermaid
-sequenceDiagram
-    actor Admin
-    participant API as Admin API
-    participant DB as PostgreSQL
-
-    Admin->>API: POST /admin/traders/registration/start {entity_type}
-    API->>DB: insert trader_registration (status=in_progress, step=1)
-    API-->>Admin: registration_id
-
-    loop Steps 1-7
-        Admin->>API: PATCH /admin/traders/registration/:id/step/:n {step_data}
-        API->>DB: merge step_data JSONB, update current_step
-    end
-
-    Admin->>API: POST /admin/traders/registration/:id/submit
-    API->>DB: create USERS + TRADERS rows, status=submitted
-    API-->>Admin: trader created, pending verification
-```
-
-```mermaid
-sequenceDiagram
-    actor Admin
-    participant API as Admin API
-    participant DB as PostgreSQL
-
-    Admin->>API: GET /admin/trader-verification (queue)
-    API->>DB: fetch pending trader documents
-    API-->>Admin: list with document counts
-
-    Admin->>API: POST /admin/traders/:id/documents/:docId/verify {decision, notes}
-    API->>DB: update document status, insert audit_log
-    alt all documents approved
-        API->>DB: traders.verification_status = verified
-    else any rejected
-        API->>DB: traders.verification_status = rejected
-    end
-    API-->>Admin: updated status
-```
-
-```mermaid
-sequenceDiagram
-    actor Admin
-    participant API as Admin API
-    participant DB as PostgreSQL
-
-    Admin->>API: GET /admin/customers/deletion-requests
-    API->>DB: fetch by status filter
-    API-->>Admin: table (pending/under_review/approved/rejected/completed)
-
-    Admin->>API: PATCH /admin/customers/deletion-requests/:id {status: approved, reviewed_by}
-    API->>DB: update status, insert audit_log
-    Note over API,DB: background job later anonymizes PII\nand sets status=completed (see §13.4.2)
-```
-
-### 13.15 Admin Panel — Open Items
-
-- [ ] **`Available Cash` / customer wallet balance** (§13.4.3) — is this a real stored-credit/wallet feature (refunds credited back as platform balance instead of to card) or just a display of something else? Not mentioned anywhere else in the material. Needs a `WALLETS(user_id, balance)` table and its own credit/debit service if real.
-- [ ] **Fee/discount/total-paid formula** (§13.4.3) — the exact arithmetic isn't consistently derivable from the sample rows shown. Get the real formula before building `invoices.service.ts`.
-- [ ] **Platform fee direction** — charged on top of what the customer pays, or deducted from the trader's payout? (§9, §13.9)
-- [ ] **`+ New Admin Action` button** (dashboard) — purpose unclear from one screenshot.
-- [ ] **Company Entity vs Solo Trader field differences** in the registration wizard — only step 1 was screenshotted; steps 2–8 likely diverge by entity type.
-- [ ] **Document Rules module** — likely defines which KYC documents are required per category (referenced by the wizard's Document Upload step) but content unseen.
-- [ ] **CMS & Content, Settings modules** — no screens reviewed yet.
-- [ ] **Marketing & CRM / "Launch Party Survey"** — name only, no content reviewed.
-- [ ] **Reports tabs beyond Analytics Dashboard/Customers/Traders** (Jobs & Services, Revenue & Payments, Offers & Promotions, Category Performance, Reviews & Ratings, Platform Activity, Exported Reports) — sidebar-confirmed to exist, content not yet seen.
-- [ ] **Admin "Review Trader Document" detail UI** — the `Audit & Verify` button opens something not captured in these screenshots; need the actual document-review screen to spec the approve/reject UI precisely.
-
----
-
-## 14. Conventions for Cursor
+## 13. Conventions for Cursor
 
 - TypeScript strict mode on.
 - One module = one folder under `src/modules/`, no cross-module DB queries — a module only touches its own tables directly; if it needs another module's data, it calls that module's service function.
@@ -1338,110 +977,603 @@ sequenceDiagram
 
 ---
 
-## 15. Live Implementation Ledger & Status (v5)
+## 14. Admin Panel — Full Requirements from Live Screenshots (v7 — Aug 2026)
 
-> **Build Execution Status:** Live deployment active on Render Cloud (`https://brisk-aclm.onrender.com`) connected to Render PostgreSQL Database (`brisk_db_5f0z`). Code repository synchronized on GitHub (`https://github.com/norvantechnology/Brisk.git`).
+> **Source:** 35 admin-panel screenshots reviewed screen-by-screen (Dashboard, Masters, Customers, Traders, Jobs, Offers, Reports tabs, **Website Management → CMS (all tabs + forms)**, Survey Management). This section is the authoritative admin IA / schema / API contract until remaining unscreened pages arrive.
+>
+> Admin Panel is served by the **same modular monolith** under `/admin/*`, guarded by admin JWT + role (`ADMIN` | `SUPER_ADMIN`).
+>
+> Shared list-page pattern on every screen: **KPI cards → search + dropdown filters → data table/cards → row actions → Refresh / primary CTA → pagination**.
 
-### Completed Phases & Delivered API Modules
+### 14.0 Confirmed Admin Sidebar Navigation (full IA)
 
-#### 1. Phase 0 — Monolith Foundation & Schema
-- **Database Schema**: Comprehensive Prisma schema (`src/database/schema.prisma`) featuring 32 domain models and 18 enums synced to PostgreSQL cloud database.
-- **Infrastructure & Utilities**: Express.js server, Helmet security headers, CORS middleware, Winston logger (`src/utils/logger.ts`), standard API response helper (`src/utils/apiResponse.ts`), and centralized error handling middleware.
-- **Dynamic OpenAPI / Swagger UI**: Mounted at `/api-docs` with dynamic server selection (Local + Render Cloud).
+```
+MAIN OVERVIEW
+  Dashboard
 
-#### 2. Phase 1 — Customer & Trader Mobile Auth (`src/modules/auth/`) — **COMPLETE (v5)**
-All endpoints live at `/auth/*`. Swagger tag: `📱 [App Auth] Customer & Trader Mobile Auth`. Mock OTP `123456` active until SNS/Twilio integration.
+MASTERS MANAGEMENT
+  Categories
+  Sub Categories
+  Document Rules
 
-| Method | Endpoint | Auth | Status | Request Body |
-|--------|----------|------|--------|--------------|
-| `POST` | `/auth/register` | None | ✅ Done | `{ fullName, email, mobileNumber, password, role, acceptedTerms }` |
-| `POST` | `/auth/verify-otp` | None | ✅ Done | `{ mobileNumber, code }` |
-| `POST` | `/auth/resend-otp` | None | ✅ Done | `{ mobileNumber }` |
-| `POST` | `/auth/login` | None | ✅ Done | `{ email, password }` |
-| `POST` | `/auth/refresh` | None | ✅ Done | `{ refreshToken }` |
-| `GET` | `/auth/me` | Bearer | ✅ Done | — |
-| `POST` | `/auth/logout` | Bearer | ✅ Done | — |
-| `POST` | `/auth/apple-signin` | — | ⏸ Deferred | Awaiting client confirmation (§11) |
+USER RECORDS
+  Customers
+    → All Customers
+    → Account Verification / Deletion Requests  (badge count, e.g. 3)
+    → Payment Methods
+  Traders & Merchants
+    → All Traders
+    → Documents / Verification Queue           (badge count, e.g. 5)
 
-**Payload rules (enforced by Zod in `auth.validation.ts`):**
-- `fullName` — min 2 chars, trimmed
-- `email` — valid email, lowercased
-- `mobileNumber` — E.164 format (e.g. `+353871234567`)
-- `password` — min 8 chars, 1 uppercase, 1 number/special char
-- `role` — `CUSTOMER` or `TRADER`
-- `acceptedTerms` — must be `true` on register
-- `code` — exactly 6 digits on verify-otp
+OPERATIONS
+  Jobs & Services
+  Offers & Promotions
+  Transactions
 
-**OTP behaviour:**
-- OTP expires in **10 minutes**
-- Resend cooldown: **60 seconds** (`429` if too soon)
-- Login on unverified account auto-sends OTP (respects cooldown)
-- Trader profile row auto-created on successful OTP verify when `role = TRADER`
+USER MANAGEMENT
+  Admin Users
+  Roles & Permissions
 
-**Token behaviour:**
-- Access token TTL: **15 minutes** (`type: user_access`)
-- Refresh token TTL: **7 days** (`type: user_refresh`)
-- Biometric/Face ID: client-side only → calls `POST /auth/refresh`
+REPORTS & ANALYTICS
+  Analytics Dashboard
+  Customer Reports
+  Trader Reports
+  Jobs & Services
+  Revenue & Payments
+  Offers & Promotions
+  Category & Service
+  Reviews & Ratings
+  Platform Activity
 
-**Deferred (not built yet):**
-- `POST /auth/apple-signin` — Apple Sign-In
-- Profile photo upload — S3/uploads module (§6.13); no image fields on register for now
+WEBSITE MANAGEMENT
+  CMS Management   ← horizontal tabs (see §14.8)
+  Survey Management ← tabs: Consumer / Trader / Analytics
 
-#### 3. Phase 9A — Admin Authentication & Audit Logging (`src/modules/admin/admin-auth/`)
-- `POST /admin/auth/login`: Admin & Super Admin authentication with audit log recording.
-- `POST /admin/auth/refresh`: Admin session token refresh.
-- `GET /admin/auth/me`: Profile retrieval for active admin session.
-- `PATCH /admin/auth/password`: Secure admin password update with old password verification.
-- `POST /admin/auth/logout`: Invalidate admin session.
-- **Super Admin Seeder**: Seeded `admin@brisk.com` / `Password1!` into database.
+SETTINGS
+  Settings
+```
 
-#### 4. Phase 9B — Admin Category & Sub-Category Master (`src/modules/admin/admin-categories/`)
-- **Master Category Endpoints**:
-  - `GET /admin/categories`: Paginated list of Master Categories with search (`search`), status filter (`status`), featured filter (`featured`), display ordering, and calculated `subCategoriesCount`, `tradersCount`, and `jobsCount`.
-  - `POST /admin/categories`: Create Master Category with unique category code and URL slug.
-  - `GET /admin/categories/:id`: Get Master Category detail with sub-categories list.
-  - `PATCH /admin/categories/:id`: Update Master Category details.
-  - `DELETE /admin/categories/:id`: Delete Master Category (with dependency safety checks).
-- **Sub-Category Master Endpoints** *(Matches Admin Panel Screenshot 4)*:
-  - `GET /admin/sub-categories`: Paginated list of Sub-Categories with row numbers (`#`), subcategory name & slug, parent category linkage, `code`, `serviceType`, derived `tradersCount` & `jobsCount`, `featured`, `status`, and `actions`.
-  - `POST /admin/sub-categories`: Create Sub-Category under parent Category.
-  - `GET /admin/sub-categories/:id`: Get Sub-Category detail.
-  - `PATCH /admin/sub-categories/:id`: Update Sub-Category details.
-  - `DELETE /admin/sub-categories/:id`: Delete Sub-Category (with job dependency safety checks).
-- **Category Seeder**: Seeded 10 master categories and sub-categories (Plumbing, Electrical, Carpentry, Painting, Cleaning, Interior Design, HVAC, Security, Solar, Roofing) matching live admin UI data.
+Top chrome (every page): global search (“Search anything across portal”), notification bell, “System Super Admin” profile menu. Sidebar footer: logged-in admin name + role + logout.
 
-#### 5. Phase 9C — Admin Customers Management & GDPR Deletion Requests (`src/modules/admin/admin-customers/`)
-- **Customer Directory Endpoints** *(Matches Screenshots 1, 2 & 3)*:
-  - `GET /admin/customers/stats`: KPI stat cards (`totalCustomers`, `activeCustomers`, `inactiveOrBlocked`, `newThisMonth`, `totalRevenue`, `avgOrderValue`).
-  - `GET /admin/customers`: Paginated list of customers with search (`search` by name, email, mobile, `CUST-####`), status filter (`status`: `ACTIVE`, `INACTIVE`, `PENDING`, `BLOCKED`, `SUSPENDED`), country filter (`country`), `location` (city, country), `totalOrders`, `totalSpent`, and join date.
-  - `POST /admin/customers`: Manual customer creation (Supports Full Name, Email, Primary Phone, Alternate Phone, Profile Photo URL, Status, Email/Phone Verification flags, Preferred Language, Preferred Time Slot, and Notification preferences).
-  - `GET /admin/customers/:id`: Get Customer profile detail with total orders, total bookings, addresses, properties, and total spent.
-  - `PATCH /admin/customers/:id`: Update Customer profile details.
-  - `DELETE /admin/customers/:id`: Delete Customer profile.
-- **Account Deletion Requests & GDPR Purge Endpoints** *(Matches Screenshots 4 & 5)*:
-  - `GET /admin/customers/deletion-requests/stats`: KPI stat cards (`pendingRequests`, `underReview`, `approvedQueue`, `completedDeletions`).
-  - `GET /admin/customers/deletion-requests`: Paginated list with request reference (`DEL-#####`), customer info, reason, status (`PENDING`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`, `COMPLETED`), reviewed by label, and requested date.
-  - `GET /admin/customers/deletion-requests/:id`: Request detail view with customer identity, request details (selected reason + additional comments), customer activity context (total jobs, bookings, offers used, saved addresses), and audit timeline.
-  - `PATCH /admin/customers/deletion-requests/:id`: Update status (`UNDER_REVIEW`, `APPROVED`, `REJECTED`, `COMPLETED`). Automatically executes GDPR PII anonymization (`Deleted Customer`, `deleted-cus-###@anonymized.brisk.internal`, `+00 0000000000`) on `COMPLETED` status per §13.4.2.
-- **Customer Payment & Billing Management Endpoints** *(Matches Payment & Billing Management Screenshots 1 - 5 & Modals)*:
-  - `GET /admin/customer-payments/stats`: Top header KPI stat cards (`availableCash`: €685.00, `defaultMethod`: Visa (4242), `pendingPaymentsCount`: 2, `pendingRefundsAmount`: €0.00, `lastPaymentDate`: 22 Jul).
-  - `GET /admin/customer-payments/transactions`: Paginated list of customer job transactions (`TXN-98234109`, customer `Sarah Murphy`, job `Radiator Valve Replace...`, trader `Mark Wilson`, service charge €95, fee/offer, total paid €100, payment method `Visa ****4242`, status `Pending`).
-  - `GET /admin/customer-payments/transactions/:id`: Single Payment Transaction modal detail view matching Modal Screenshot 3 (Top status cards, Job & Booking information, Customer/Trader profile links, Payment Amount Breakdown, Individual Billing Address, and Invoice Reference link).
-  - `GET /admin/customer-payments/invoices`: Paginated billing invoices (`INV-2026-001`, customer `Sarah Murphy`, job `Kitchen Tap Repair`, trader `Mark Wilson`, invoice date `2026-07-22`, amount €120, status `Paid`).
-  - `GET /admin/customer-payments/invoices/:id`: Single Tax Invoice modal detail view matching Modal Screenshot 2 (Company header with VAT Reg # GB 9903112233, Customer details, Verified Trader Partner info with VAT # GB88291844, Service Line items, Tax VAT, Convenience Fee, Promo Discount, Grand Total, and Digital Verification QR reference).
-  - `GET /admin/customer-payments/refunds`: Refunds management queue (`REF-8812`, TXN `TXN-98234108`, customer `Robert Vance`, job `Roof Leak Repair...`, original €365, refund amount €365, reason, status `Refund Completed` / `Refund Approved`).
-  - `PATCH /admin/customer-payments/refunds/:id/process`: Action endpoint to process & execute customer refunds (`APPROVED` -> `COMPLETED`) with audit trail.
-  - `GET /admin/customer-payments/loyalty`: Customer loyalty & rewards summary (`availableLoyaltyPoints`: 1050 pts, `totalLifetimeEarned`: 1250 pts, `pointsRedeemed`: 200 pts, recent points activity feed).
-- **Payment & Loyalty Seeder**: Seeded sample payment transactions (`TXN-98234109`, `TXN-98234107`, `TXN-98234106`), invoice `INV-2026-001`, refund requests (`REF-8812`, `REF-8813`), and loyalty points balance matching live Figma screenshots.
+### 14.1 Admin Dashboard (`GET /admin/dashboard/*`)
 
-#### 6. Swagger Categorization & Documentation
-- Organized Swagger UI into clean, distinct sub-module tags for frontend developer clarity:
-  - `🔐 [Admin Auth] Authentication & Profile`: Admin Portal login, session token refresh, admin profile, password updates, and session logout.
-  - `📂 [Admin Category] Master Categories`: Master Category CRUD, category code/slug checks, display order, theme color, icon name, and stats.
-  - `🏷️ [Admin Category] Master Sub-Categories`: Master Sub-Category CRUD, parent category association, service types, and safety checks.
-  - `👥 [Admin Customer] 1. All Customers Directory`: Customer directory table, search, filters (status, country), customer profile creation (10 form fields), profile detail view, update, and deletion.
-  - `🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests`: GDPR account deletion request queue, stats, request detail inspection, approval modal, and automated in-place PII anonymization.
-  - `💳 [Admin Customer] 3. Payment & Billing Management`: Customer transactions table, tax invoice details & PDF data, refunds management queue & action processing, and customer loyalty rewards feed.
-  - `📱 [App Auth] Customer & Trader Mobile Auth`: Register, verify OTP, resend OTP, login, refresh, profile (`/me`), and logout.
-  - `🛠️ [System] Health & Diagnostics`: API health check, uptime metrics, and database connection status verification.
-- Removed cluttered top description blocks and added clear, concise summaries beside every API route URL for fast navigation.
+**Confirmed KPI cards** (value + MoM % delta badge):
+`Total System Users`, `Verified Traders`, `Active Customers`, `Total Jobs` / `Active Service Jobs`, `Pending Verification`, `Total Revenue`, `Monthly Growth`, `Total Transactions`.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /admin/dashboard/stats` | All 8 KPI cards + period-over-period deltas |
+| `GET /admin/dashboard/activity-trend?months=12` | Dual-series chart: Transactions ($) vs Job Postings by month (+ growth badge) |
+| `GET /admin/audit-logs?limit=10` | Recent Audit Log widget (`New Trader Registered`, `Job Posting Published`, `Payout Processed`, …) |
+
+### 14.2 Masters — Categories (`/admin/categories`)
+
+Already partially implemented. Screenshot confirms:
+
+- Filters: search (name/code/slug/description), All Statuses, All Types
+- Columns: ORDER, CATEGORY NAME (+ description), CODE & SLUG, SUB-CATS, TRADERS, FEATURED (`Featured`/`Standard`), STATUS (`Active`), ACTIONS (View, Edit, Document Rules/shield, Delete)
+- Actions: Refresh, + Add New Category
+- Codes e.g. `CAT-PLUMB`, `CAT-ELECT`, `CAT-CARP`…
+
+**Sub Categories** and **Document Rules** pages: labeled in sidebar — full field specs pending next screenshot batch.
+
+### 14.3 Customers Directory (`/admin/customers`)
+
+KPIs: Total / Active / Inactive / New This Month / Total Revenue / Avg Order Value.
+
+Filters: search name/email/phone, All Statuses, All Countries, page size.
+
+Columns: Customer (+ `CUST-####`), Email, Primary Phone, Country, Status (`ACTIVE`/`PENDING`/`INACTIVE`/`SUSPENDED`), Email Verified, Phone Verified, Language, Actions (⋮).
+
+Actions: Refresh, + Add Customer.
+
+### 14.4 Traders Management (`/admin/traders`)
+
+KPIs: Total Traders, Active, Suspended, Pending Verification, Total Revenue, Avg Rating.
+
+Filters: search name/business/email/code, All Statuses, All Categories, All Verifications, All Countries.
+
+Columns: Trader (`TRD-####`), Business (name + Individual/Business), Contact, Listings, Revenue, Rating (stars + count), Status, Verified (`Verified`/`Pending`), Joined.
+
+**Trader Verification Queue** (`/admin/trader-verification`):
+- Filters: search, All Trader Types, All Statuses
+- Columns: Trader Name & Entity, TYPE (`SOLO`/`COMPANY`/`GOLD` badge), Trade Category, Document Docs (file count), Status, Audit → “Audit & Verify”
+- Side panel: Automated Audit Logs
+- Actions: Refresh Queue, + Launch Onboarding Wizard
+
+### 14.5 Jobs & Services — Admin (`/admin/jobs`)
+
+KPIs: Total, Active, Pending, Completed, Cancelled, Payment Pending.
+
+Status tabs (authoritative job status enum): `All` · `Pending` · `Quoted` · `Accepted` · `Scheduled` · `In Progress` · `Completed` · `Cancelled` · `Payment Pending`.
+
+Columns: JOB ID (`BRK-####`), TITLE & CATEGORY (+ optional `Offer` badge), CUSTOMER, ASSIGNED TRADER (Company Partner / Solo Professional), LOCATION, AMOUNT (+ Est.), PAYMENT (`Paid`), STATUS.
+
+### 14.6 Offers — Admin Operations (`/admin/offers`)
+
+Tabs: Offer List & Management · Analytics & Statistics.
+
+KPIs: Total Offers (Platform/Trader split), Active, Total Claims, Revenue Generated, Avg Conversion %.
+
+Filters: search Offer ID/Title/Trader/Coupon, Offer Type, Status, Category, Sub-Category, Reset.
+
+Columns: OFFER ID (`OFF-####`), Title + Coupon Code, TYPE (`PLATFORM`/`TRADER`), Created By, Trader, Category, Sub Category, Discount (`Fixed €N` / `%` / `Free Visit`), Valid From/Until, Status.
+
+Action: + Create Platform Offer.
+
+### 14.7 Reports & Analytics
+
+Horizontal report tabs: Analytics Dashboard · Customers · Traders · Jobs & Services · Revenue & Payments · Offers & Promotions · Category Performance · Reviews & Ratings · (+ Platform Activity in sidebar).
+
+#### 14.7.1 Revenue & Payments
+- Filters: date range (Last 30 Days), aggregation Daily/Weekly/Monthly/Yearly, Reset
+- KPIs: Gross Job Value, **Platform Fees (10%)**, Trader Payouts, Discounts & Offers, Refunds Issued, Net Platform Revenue
+- Ledger rows with drill-downs: View Transactions / Fees / Offers / Refunds / Payouts / Export Financials
+- **Confirms platform fee = 10%** (resolves earlier open item)
+
+#### 14.7.2 Offers Performance
+- KPIs: Total / Admin / Trader / Active / Expired / Claims / Used / Unused / Discount Given
+- Breakdown table: Offer Name, Created By/Trader, Category, Valid Until, Claims, Used, Discount, Status
+
+#### 14.7.3 Category Performance
+- Table: Category, Sub-Cats, Total Jobs, Completed, Cancelled, Revenue, Avg Job Value, View Breakdown
+
+#### 14.7.4 Reviews & Ratings
+- Overall score + star distribution
+- Top Rated Traders + Traders Requiring Quality Audit
+
+#### 14.7.5 Platform Activity & Compliance
+- KPIs: Customer Registrations, Trader Registrations, Jobs Posted, Offers Claimed, Successful Payments, Deletion Requests
+- Table: Trader Document Verification Audit (missing docs, rule status `Mandatory Missing`/`Expired`, Verify Trader)
+
+| Endpoint pattern | Purpose |
+|------------------|---------|
+| `GET /admin/reports/revenue` | Financial KPIs + ledger |
+| `GET /admin/reports/offers` | Offer performance KPIs + breakdown |
+| `GET /admin/reports/categories` | Category performance ledger |
+| `GET /admin/reports/categories/:id/breakdown` | Sub-category / trader drill-down |
+| `GET /admin/reports/reviews` | Ratings intelligence |
+| `GET /admin/reports/activity` | Activity summary + document audit |
+
+---
+
+### 14.8 Website Management — CMS Management (FULL — highest priority from this screenshot batch)
+
+> **Implementation status (Aug 2026):** **SHIPPED** in code — Prisma models + enums, admin module `src/modules/admin/admin-cms/` (Dashboard, Pages, Social Links, FAQ, Testimonials, Legal, SEO), public reads `src/modules/cms/`, Swagger tags under `[Admin CMS]*` / `[Public CMS]` / `[Website]*`. Mounts: `/admin/cms/*`, `/cms/*`, plus canonical blog/knowledge under `/admin/blog/*` and `/admin/knowledge-hub/*`. Image fields accept **URL strings** until S3. Run `prisma migrate deploy` / `db push` so CMS + survey tables exist on the target DB before calling APIs.
+
+> **Website API contract (doc):** Blog and Knowledge Hub admin APIs live **only** in `src/modules/admin/admin-website/` — `/admin/blog/*` and `/admin/knowledge-hub/*` (snake_case request/response fields, UUID ids, soft delete). `/admin/cms/*` no longer exposes duplicate blog/knowledge routes; dashboard stats may still **count** those tables. Images are URL strings in JSON payloads (multipart/S3 later).
+
+CMS lives under **Website Management → CMS Management**. Every CMS screen shares a horizontal tab bar:
+
+```
+CMS Dashboard | Website Pages | Social Links | Knowledge Hub | Blog Posts |
+Blog Categories | FAQ | Testimonials | Legal & Policies | SEO
+```
+
+Quick Actions on CMS Dashboard also imply future modules (not yet full-page screenshotted): **Header Navigation**, **Footer Links**, **Media Library**, **Email Templates**, **Notification Templates**, **Banners**.
+
+All CMS admin routes mount under `/admin/cms/*`. Public/read endpoints for mobile/web (published-only) mount under `/cms/*` or `/content/*` where needed.
+
+#### 14.8.1 CMS Dashboard
+
+**KPIs:** Website Pages (published count), Blog Articles (+ categories), Knowledge Hub guides, Navigation & Footer link count, Media Files, Email Templates, Notification Templates, Legal & Policies.
+
+**Quick Actions:** Create Website Page, Publish Blog Article, Create Knowledge Guide, Header Navigation, Footer Links, Add FAQ, Add Banner, Media Library, Manage Legal Policies.
+
+**Recent CMS Audit Activity Log** + Refresh.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /admin/cms/dashboard/stats` | KPI cards |
+| `GET /admin/cms/dashboard/audit?limit=` | Recent CMS audit feed |
+
+---
+
+#### 14.8.2 Website Pages (Static Pages)
+
+**UI:** Badge “5 Pages Configured” · Refresh · **+ Create New Page**  
+**Filters:** search title/slug · All Audiences · All Statuses  
+**Columns:** Page Title & Slug · Target Audience · Status · Updated By · Updated At · Actions  
+**Row actions:** View · Edit · Translate (globe) · History · Delete  
+
+**Audience enum:** `BOTH` | `CUSTOMER` | `TRADER`  
+**Status enum:** `DRAFT` | `PUBLISHED` | `ARCHIVED` (UI shows Published; draft/archived inferred for create/edit)
+
+**Sample pages:** About BRISK (`/about-brisk`, Both), How BRISK Works for Customers (`/customer-how-it-works`, Customer), Trader Registration Guide (`/trader-registration-guide`, Trader), Customer Safety (`/customer-safety`), Trader Safety (`/trader-safety`).
+
+**Table `cms_static_pages`:**
+```
+id, title, slug (unique), content (HTML/Markdown),
+target_audience [BOTH|CUSTOMER|TRADER],
+status [DRAFT|PUBLISHED|ARCHIVED],
+is_active Boolean,
+updated_by_admin_id FK → admin_users,
+created_at, updated_at
+```
+
+| Method | Endpoint | Logic |
+|--------|----------|-------|
+| `GET` | `/admin/cms/pages` | Paginated list + search/audience/status filters |
+| `POST` | `/admin/cms/pages` | Create page |
+| `GET` | `/admin/cms/pages/:id` | Detail for view/edit |
+| `PATCH` | `/admin/cms/pages/:id` | Update |
+| `PATCH` | `/admin/cms/pages/:id/toggle` | Active/inactive or publish toggle |
+| `POST` | `/admin/cms/pages/:id/duplicate` | Clone (if product adds duplicate — History/Translate already on UI) |
+| `DELETE` | `/admin/cms/pages/:id` | Delete |
+| `GET` | `/cms/pages/:slug` | Public published page by slug + audience |
+
+**Flow:** Admin Create → draft/publish → mobile/web app fetches published slug filtered by audience.
+
+---
+
+#### 14.8.3 Social Links
+
+**UI:** Refresh · **+ Add Social Link**  
+**Columns:** Platform · Profile URL · Sort Order · Status (`ACTIVE`) · Actions (Edit, Delete)
+
+**Sample platforms:** LinkedIn, Facebook, Instagram, YouTube, TikTok, X (Twitter).
+
+**Table `cms_social_links`:**
+```
+id, platform (string or enum), profile_url, sort_order Int,
+status [ACTIVE|INACTIVE], created_at, updated_at
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET/POST` | `/admin/cms/social-links` |
+| `PATCH/DELETE` | `/admin/cms/social-links/:id` |
+| `GET` | `/cms/social-links` | Public active links ordered by `sort_order` |
+
+---
+
+#### 14.8.4 Knowledge Hub
+
+**UI:** Refresh · **+ Create Guide Section** · **card grid** (not table)  
+**Per card:** thumbnail · `PUBLISHED` · title · index `#N` · description · content-block count · updated_at · Preview Live · Edit · Delete  
+
+**Sample guides:** How BRISK Works (3 blocks), Trader Verification (1), Smart Milestones & Escrow (updated 2026-07-28).
+
+**Tables:**
+```
+cms_knowledge_guides(
+  id, title, description, thumbnail_url, display_order,
+  status [DRAFT|PUBLISHED], updated_at, created_at
+)
+cms_knowledge_blocks(
+  id, guide_id FK, title, body, block_order, media_url?
+)
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET/POST` | `/admin/knowledge-hub/sections` | Canonical (admin-website) |
+| `GET/PATCH/DELETE` | `/admin/knowledge-hub/sections/:id` |
+| `POST` | `/admin/knowledge-hub/sections/:id/graphic` | JSON URL only; multipart/S3 later |
+| Nested blocks | `/admin/knowledge-hub/sections/:id/blocks*` | Block CRUD + reorder |
+| `GET` | `/cms/knowledge-hub` | Public published guides + blocks |
+
+---
+
+#### 14.8.5 Blog Posts
+
+**UI:** Refresh · **+ Publish New Article**  
+**Featured Spotlight panel:** one hero article · **Unset Featured Spotlight** (only one featured at a time)  
+**Filters:** search title/author · All Categories · All Statuses  
+**Columns:** Article & Cover · Category · Author · Published Date (+ reading time) · Featured (star) · Status · Actions (View/Edit/Delete)
+
+**Create Blog Article modal fields (required *):**
+- Article Title *
+- Category * (Customer Guides, Trader Growth, Trust & Security, Industry Trends)
+- URL Slug *
+- Cover Image * (Change Image / Remove) — **S3 deferred; accept URL string for now**
+- Short Description / Summary Excerpt *
+- Full Article Content * (rich text: B/I/U/S, H1–H3, lists, quote, link, HTML source)
+- Author Name, Author Role, Reading Time
+- Publish Date, Publishing Status (`Published (Live)` / Draft)
+- Checkbox: Featured Spotlight Article (Hero Banner)
+- SEO Title Tag, Meta Description
+
+**Logic:** Setting `is_featured=true` must unset any previous featured post (transaction).
+
+**Table `cms_blog_posts`:**
+```
+id, title, slug (unique), category_id FK, cover_image_url,
+excerpt, content (HTML), author_name, author_role,
+reading_time_minutes, published_at,
+status [DRAFT|PUBLISHED|ARCHIVED],
+is_featured Boolean,
+seo_title, seo_description,
+created_by_admin_id, created_at, updated_at
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET` | `/admin/blog/articles` | Canonical list + filters (admin-website) |
+| `POST` | `/admin/blog/articles` | Create / publish |
+| `GET/PATCH/DELETE` | `/admin/blog/articles/:id` |
+| `PATCH` | `/admin/blog/articles/:id/featured` | Set/unset featured (atomic) |
+| `POST/DELETE` | `/admin/blog/articles/:id/cover-image` | JSON URL only; multipart/S3 later |
+| `GET` | `/cms/blog/posts` | Public list |
+| `GET` | `/cms/blog/posts/:slug` | Public detail |
+| `GET` | `/cms/blog/featured` | Featured spotlight |
+
+---
+
+#### 14.8.6 Blog Categories
+
+**UI:** Refresh · **+ Create Category**  
+**Columns:** Category Name · URL Slug · Description · Sort Order · Status (`ACTIVE`) · Actions (Edit, Delete)
+
+**Create Blog Category modal:** Name *, URL Slug *, Description, Lucide Icon name, Status * (`Active`), Sort Order *
+
+**Table `cms_blog_categories`:**
+```
+id, name, slug (unique), description, icon_name,
+status [ACTIVE|INACTIVE], sort_order Int,
+created_at, updated_at
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET/POST` | `/admin/blog/categories` | Canonical (admin-website) |
+| `PATCH/DELETE` | `/admin/blog/categories/:id` |
+| `GET` | `/cms/blog/categories` | Public active categories |
+
+---
+
+#### 14.8.7 FAQ
+
+**UI:** Badge “5 FAQ Items” · Refresh · **+ Add FAQ Item**  
+**Filters:** search question/answer · All FAQ Categories · All Audiences  
+**Columns:** SEQ # (up/down reorder handles) · Question & Answer snippet · Category · Audience · Status · Actions (Edit, Delete)
+
+**FAQ categories (sample):** `JOBS`, `VERIFICATION`, `REGISTRATION`, `PAYMENTS`  
+**Audience:** `CUSTOMER` | `TRADER` | `BOTH`  
+**Status:** `DRAFT` | `PUBLISHED`
+
+**Add FAQ modal:** Question *, Answer *, FAQ Category *, Target Audience *, Display Order *, Status * (`Published (Live)`)
+
+**Tables:**
+```
+cms_faq_categories(id, name, slug)
+cms_faqs(
+  id, question, answer, category_id FK,
+  target_audience [CUSTOMER|TRADER|BOTH],
+  status [DRAFT|PUBLISHED|ARCHIVED],
+  display_order Int, created_at, updated_at
+)
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET/POST` | `/admin/cms/faqs` |
+| `GET/PATCH/DELETE` | `/admin/cms/faqs/:id` |
+| `PATCH` | `/admin/cms/faqs/reorder` | Bulk update `display_order` |
+| `GET` | `/admin/cms/faq-categories` |
+| `GET` | `/cms/faqs?audience=` | Public FAQs filtered by role |
+
+**Flow:** Help Center in Customer/Trader apps filters by `target_audience` + `PUBLISHED`, ordered by `display_order`.
+
+---
+
+#### 14.8.8 Testimonials
+
+**UI:** Refresh · **+ Add Testimonial** · **card grid**  
+**KPIs:** Total Quotes (live published), Average Score, Homepage Spotlight (featured count)
+
+**Filters:** search author/role/quote · All Audiences · All Statuses  
+**Card badges:** `VERIFIED CUSTOMER` / `TOP RATED TRADER` / `COMMERCIAL CLIENT` · `PUBLISHED` · star rating · Featured star · Preview/Edit/Delete
+
+**Add Testimonial modal:** Author Name *, Role/Location *, Company Name (optional), Badge Tag Label, Author Avatar * (URL for now), Quote *, Star Rating 1–5 *, Target Audience *, Publishing Status *, Display Sort Order *, Featured Homepage Highlight (toggle)
+
+**Table `cms_testimonials`:**
+```
+id, author_name, author_role, company_name?,
+badge_label, author_avatar_url, quote_text,
+rating Int 1–5,
+target_audience [CUSTOMER|TRADER|BOTH|COMMERCIAL],
+status [DRAFT|PUBLISHED],
+is_featured Boolean, display_order Int,
+created_at, updated_at
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET` | `/admin/cms/testimonials` + `/stats` |
+| `POST/PATCH/DELETE` | `/admin/cms/testimonials` / `:id` |
+| `GET` | `/cms/testimonials?featured=true` | Homepage carousel |
+
+---
+
+#### 14.8.9 Legal & Policies (versioned)
+
+**UI:** Badge “3 Legal Policies” · Refresh  
+**Columns:** Policy Name + slug · Current Version · Effective Date · Published By · Status · Actions: **History (N)** · **Publish New Version**
+
+**Confirmed policies:**
+| Name | Slug | Version |
+|------|------|---------|
+| Terms & Conditions | `/terms-and-conditions` | v2.1 |
+| Privacy Policy & GDPR Compliance | `/privacy-policy` | v1.4 |
+| Refund & Cancellation Policy | `/refund-policy` | v1.2 |
+
+**Tables:**
+```
+cms_legal_policies(id, name, slug unique, created_at, updated_at)
+cms_legal_policy_versions(
+  id, policy_id FK, version_label (e.g. "2.1"),
+  content HTML, effective_date,
+  status [DRAFT|PUBLISHED],
+  published_by_admin_id FK, published_at, created_at
+)
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET` | `/admin/cms/legal-policies` |
+| `GET` | `/admin/cms/legal-policies/:id/versions` | History |
+| `POST` | `/admin/cms/legal-policies/:id/versions` | Publish new version (sets previous current aside) |
+| `GET` | `/cms/legal/:slug` | Public current published version |
+
+**Flow:** Publish New Version → create version row → mark as current → apps show latest `PUBLISHED` by slug. History button lists prior versions (audit).
+
+---
+
+#### 14.8.10 Global SEO & Metadata
+
+**UI:** Refresh · form sections · **Save SEO Settings** · “Last updated by {admin} at {timestamp}”
+
+**Section 1 — Default Website Meta Tags:**
+- Global Site Title *
+- Default Meta Description *
+- Default Meta Keywords (tag list / comma string)
+
+**Section 2 — OpenGraph & Social Sharing:**
+- Canonical Base URL * (e.g. `https://brisk.ie`)
+- Default OpenGraph Image URL
+- Twitter / X Handle (`@briskmarket`)
+- Google Analytics Measurement ID (`G-…`)
+
+**Section 3 — Search Engine Indexing:**
+- Robots.txt directives (multiline textarea)
+
+**Table `cms_seo_settings` (singleton row):**
+```
+id, global_site_title, meta_description, meta_keywords,
+canonical_base_url, og_image_url, twitter_handle,
+ga_measurement_id, robots_txt,
+updated_by_admin_id, updated_at
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET` | `/admin/cms/seo` |
+| `PUT` | `/admin/cms/seo` | Upsert singleton + audit who/when |
+| `GET` | `/cms/seo` | Public site head injection |
+
+---
+
+### 14.9 Website Management — Survey Management
+
+> **Implementation status (Aug 2026):** **Consumer tab SHIPPED** — `src/modules/admin/admin-surveys/` (`/admin/surveys/consumer*`) + public `POST /surveys/consumer`. Trader Survey + Analytics tabs still pending screenshots.
+
+**Tabs:** Consumer Survey Registrations · Trader Survey Registrations · Survey Analytics & Opt-Ins
+
+#### 14.9.1 Consumer Launch Party Registrations (screenshotted)
+
+**Actions:** Export CSV · Refresh  
+**KPIs:** Total · Today · Pending · Reviewed · Contacted · Rejected  
+
+**Filters:** Search Name/Email/Phone · County · Age Range · Status · Launch Updates · Marketing Emails · Trusted Partners · Date Range · Sort (Newest First) · Reset Filters  
+
+**Columns:** Checkbox · ID (`CS-####`) · Full Name · Email & Contact · County · Age · Launch Updates (Yes/No) · Marketing (Yes/No) · Partner Comm (Yes/No) · Agreement (`Accepted`) · Submitted · Status (`NEW`/`REVIEWED`/`CONTACTED`/`REJECTED`) · Actions (View, Edit, More)
+
+**Table `survey_consumer_registrations`:**
+```
+id, registration_code (CS-####), full_name, email, phone,
+county, age_range,
+consent_launch_updates Boolean,
+consent_marketing Boolean,
+consent_partner_comm Boolean,
+agreement_accepted Boolean,
+status [NEW|REVIEWED|CONTACTED|REJECTED|PENDING],
+submitted_at, reviewed_by_admin_id?, notes?,
+created_at, updated_at
+```
+
+| Method | Endpoint |
+|--------|----------|
+| `GET` | `/admin/surveys/consumer` | List + filters + pagination |
+| `GET` | `/admin/surveys/consumer/stats` | KPI cards |
+| `GET` | `/admin/surveys/consumer/:id` | Detail |
+| `PATCH` | `/admin/surveys/consumer/:id` | Status / CRM notes |
+| `GET` | `/admin/surveys/consumer/export` | CSV export |
+| `POST` | `/surveys/consumer` | Public signup form (mobile/web) |
+
+**Trader Survey + Analytics tabs:** labeled in UI — full field specs pending next screenshot batch.
+
+---
+
+### 14.10 New / Updated Admin Entities Summary (v7)
+
+| Table | Purpose |
+|-------|---------|
+| `cms_static_pages` | Website static pages by audience |
+| `cms_social_links` | Footer social channels |
+| `cms_knowledge_guides` + `cms_knowledge_blocks` | Knowledge Hub |
+| `cms_blog_categories` | Blog taxonomy |
+| `cms_blog_posts` | Blog articles + featured spotlight |
+| `cms_faq_categories` + `cms_faqs` | Help Center FAQs |
+| `cms_testimonials` | Homepage / marketing quotes |
+| `cms_legal_policies` + `cms_legal_policy_versions` | Versioned legal docs |
+| `cms_seo_settings` | Singleton global SEO |
+| `survey_consumer_registrations` | Launch party consumer CRM |
+| `survey_trader_registrations` | *(pending screenshots)* |
+| `document_rules` | Trader doc compliance *(pending Document Rules page)* |
+| `trader_documents` | Uploaded KYC docs *(pending detail screen)* |
+
+Also reuse existing: `admin_users`, `audit_logs`, `categories`, `subcategories`, `users`, `traders`, `jobs`, `offers`, `payments`, `refunds`, `payouts`, `account_deletion_requests`.
+
+### 14.11 Suggested Module Folders
+
+```
+src/modules/admin/
+  admin-cms/
+    pages / social-links / knowledge-hub / blog / faq /
+    testimonials / legal / seo / dashboard
+  admin-surveys/
+    consumer / trader / analytics
+  admin-reports/
+  admin-dashboard/
+  admin-traders/   (+ verification)
+  admin-jobs/
+  admin-offers/
+```
+
+### 14.12 Screenshot Coverage Gaps (awaiting next batch)
+
+Explicitly **not** fully field-specified yet (sidebar/tabs visible only):
+
+- [ ] CMS: Header Navigation editor, Footer Links editor, Media Library, Email Templates, Notification Templates, Banners
+- [ ] Survey: Trader Survey Registrations tab, Survey Analytics & Opt-Ins tab
+- [ ] Masters: Sub Categories full page, Document Rules full page
+- [ ] Customers: Account Verification detail, Payment Methods tab
+- [ ] Operations: Transactions page
+- [ ] Reports: Analytics Dashboard, Customer Reports, Trader Reports, Jobs & Services report pages
+- [ ] User Management: Admin Users CRUD, Roles & Permissions
+- [ ] Settings page
+- [ ] Create Website Page form, Create Knowledge Guide form, Legal “Publish New Version” / History detail modals
+
+When the next screenshots arrive, fold them into this section without rewriting — append subsection field lists only.
+
+### 14.13 Build Priority Note (after current mobile Phase 1)
+
+Recommended order once Auth/Users/Property are solid:
+
+1. Finish remaining Admin core that unblocks ops: Dashboard stats, Traders directory, Jobs oversight, Offers CRUD  
+2. **CMS Management** — ✅ **done** (all §14.8 tabs + public `/cms` reads)  
+3. Survey Management CRM — ✅ **consumer done**; trader + analytics pending screenshots  
+4. Reports aggregations  
+5. Document Rules + Trader Verification detail  
+
+S3 uploads still deferred globally — CMS image fields accept **URL strings** until Uploads module (§6.13) ships.
+
+### 14.14 Website Management — Implemented API Ledger (v7)
+
+| Area | Admin / Public | Notes |
+|------|----------------|-------|
+| CMS Dashboard | `GET /admin/cms/dashboard/stats`, `GET /admin/cms/dashboard/audit` | Media/email/notif KPIs return `0` until those modules ship |
+| Website Pages | CRUD `/admin/cms/pages*` · `GET /cms/pages`, `GET /cms/pages/:slug` | List = nav summaries; detail = full content |
+| Social Links | CRUD `/admin/cms/social-links*` · `GET /cms/social-links` | ACTIVE only |
+| Knowledge Hub | CRUD `/admin/knowledge-hub/*` · `GET /cms/knowledge-hub`, `GET /cms/knowledge-hub/:slug` | List = cards; detail = blocks |
+| Blog Categories | CRUD `/admin/blog/categories*` · `GET /cms/blog/categories` | Active + posts_count |
+| Blog Posts | CRUD `/admin/blog/articles*` · `GET /cms/blog/posts`, `/cms/blog/articles`, `:slug`, `/cms/blog/featured` | Paginated cards; scheduled goes live when date ≤ now |
+| FAQ | CRUD `/admin/cms/faqs*` · `GET /cms/faq-categories`, `GET /cms/faqs` | Audience + category filters |
+| Testimonials | CRUD `/admin/cms/testimonials*` · `GET /cms/testimonials` | featured / audience / limit |
+| Legal | versions `/admin/cms/legal-policies*` · `GET /cms/legal`, `GET /cms/legal/:slug` | Footer list + full version |
+| SEO | `GET/PUT /admin/cms/seo` · `GET /cms/seo` | Singleton |
+| Website bootstrap | — · `GET /cms/bootstrap?audience=` | One call: seo + social + featured article + testimonials + page nav |
+| Survey Consumer | `/admin/surveys/consumer*` · `POST /surveys/consumer` | Codes `CS-####` |
+
+**Public website contract:** `/cms/*` GETs use **snake_case**, published/active-only data from Website Management DB. List endpoints omit heavy HTML bodies; detail-by-slug returns full content. No auth.
