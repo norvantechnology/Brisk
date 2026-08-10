@@ -10,7 +10,7 @@ const router = Router();
  * /surveys/consumer:
  *   post:
  *     summary: Public consumer launch-party survey signup
- *     tags: ['📋 [Public Survey] Consumer Signup']
+ *     tags: ['Website — Survey Signup']
  *     requestBody:
  *       required: true
  *       content:

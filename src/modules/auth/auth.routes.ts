@@ -17,7 +17,7 @@ const router = Router();
  * /auth/register:
  *   post:
  *     summary: Register Customer or Trader account and send 6-digit SMS OTP verification code
- *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     tags: ['Mobile Apps — Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -70,7 +70,7 @@ router.post('/register', validate(registerSchema), authController.register);
  * /auth/verify-otp:
  *   post:
  *     summary: Verify 6-digit SMS OTP code to activate Customer/Trader mobile number
- *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     tags: ['Mobile Apps — Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -102,7 +102,7 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
  * /auth/resend-otp:
  *   post:
  *     summary: Resend 6-digit SMS OTP to an unverified mobile number (60s cooldown)
- *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     tags: ['Mobile Apps — Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -132,7 +132,7 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  * /auth/login:
  *   post:
  *     summary: Authenticate Customer or Trader via email and password
- *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     tags: ['Mobile Apps — Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -163,7 +163,7 @@ router.post('/login', validate(loginSchema), authController.login);
  * /auth/refresh:
  *   post:
  *     summary: Issue a new access token using a valid refresh token
- *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     tags: ['Mobile Apps — Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -189,7 +189,7 @@ router.post('/refresh', validate(refreshSchema), authController.refresh);
  * /auth/me:
  *   get:
  *     summary: Get the currently authenticated Customer or Trader profile
- *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     tags: ['Mobile Apps — Auth']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -205,7 +205,7 @@ router.get('/me', authMiddleware, authController.getMe);
  * /auth/logout:
  *   post:
  *     summary: Log out the current Customer or Trader session (client should discard tokens)
- *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     tags: ['Mobile Apps — Auth']
  *     security:
  *       - bearerAuth: []
  *     responses:

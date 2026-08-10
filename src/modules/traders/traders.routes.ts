@@ -14,7 +14,7 @@ router.use(authMiddleware, roleMiddleware(['TRADER']));
  * /traders/me:
  *   get:
  *     summary: Get authenticated Trader business profile and stats
- *     tags: ['🔧 [App Trader] Trader Profile']
+ *     tags: ['Trader App — Profile']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -30,7 +30,7 @@ router.get('/me', tradersController.getMyTraderProfile);
  * /traders/me:
  *   patch:
  *     summary: Update authenticated Trader profile (bio, business info, category)
- *     tags: ['🔧 [App Trader] Trader Profile']
+ *     tags: ['Trader App — Profile']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
