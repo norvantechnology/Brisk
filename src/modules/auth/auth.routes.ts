@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import * as authController from './auth.controller';
 import { validate } from '../../middlewares/validate.middleware';
-import { registerSchema, verifyOtpSchema, loginSchema, refreshSchema } from './auth.validation';
+import { authMiddleware } from '../../middlewares/auth.middleware';
+import {
+  registerSchema,
+  verifyOtpSchema,
+  resendOtpSchema,
+  loginSchema,
+  refreshSchema,
+} from './auth.validation';
 
 const router = Router();
 
@@ -9,8 +16,8 @@ const router = Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Register Customer or Trader account & send 6-digit SMS OTP verification code
- *     tags: ['[Customer & Trader] Authentication']
+ *     summary: Register Customer or Trader account and send 6-digit SMS OTP verification code
+ *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -23,6 +30,7 @@ const router = Router();
  *               - mobileNumber
  *               - password
  *               - role
+ *               - acceptedTerms
  *             properties:
  *               fullName:
  *                 type: string
@@ -41,13 +49,19 @@ const router = Router();
  *                 type: string
  *                 enum: [CUSTOMER, TRADER]
  *                 example: CUSTOMER
+ *               acceptedTerms:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Must be true — user accepted Terms & Privacy Policy.
  *     responses:
  *       201:
- *         description: User registered successfully. OTP code sent.
+ *         description: User registered successfully. OTP sent.
  *       400:
- *         description: Validation error or invalid input parameters.
+ *         description: Validation error.
  *       409:
  *         description: Email or mobile number already exists.
+ *       429:
+ *         description: OTP resend cooldown active.
  */
 router.post('/register', validate(registerSchema), authController.register);
 
@@ -56,7 +70,7 @@ router.post('/register', validate(registerSchema), authController.register);
  * /auth/verify-otp:
  *   post:
  *     summary: Verify 6-digit SMS OTP code to activate Customer/Trader mobile number
- *     tags: ['[Customer & Trader] Authentication']
+ *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -75,20 +89,50 @@ router.post('/register', validate(registerSchema), authController.register);
  *                 example: "123456"
  *     responses:
  *       200:
- *         description: Mobile number verified successfully. Account activated.
+ *         description: Mobile number verified successfully.
  *       400:
- *         description: Invalid or expired OTP code.
+ *         description: Invalid or expired OTP, or already verified.
  *       404:
- *         description: User with this mobile number does not exist.
+ *         description: User not found.
  */
 router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
 
 /**
  * @swagger
+ * /auth/resend-otp:
+ *   post:
+ *     summary: Resend 6-digit SMS OTP to an unverified mobile number (60s cooldown)
+ *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - mobileNumber
+ *             properties:
+ *               mobileNumber:
+ *                 type: string
+ *                 example: "+353871234567"
+ *     responses:
+ *       200:
+ *         description: New OTP sent successfully.
+ *       400:
+ *         description: Mobile number already verified.
+ *       404:
+ *         description: User not found.
+ *       429:
+ *         description: Resend cooldown active — wait before requesting again.
+ */
+router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
+
+/**
+ * @swagger
  * /auth/login:
  *   post:
- *     summary: Authenticate Customer or Trader via Email & Password to retrieve JWT Tokens
- *     tags: ['[Customer & Trader] Authentication']
+ *     summary: Authenticate Customer or Trader via email and password
+ *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -108,9 +152,9 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
  *                 example: Password1!
  *     responses:
  *       200:
- *         description: Logged in successfully. Returns JWT tokens.
+ *         description: Logged in successfully. Returns JWT tokens and user profile.
  *       401:
- *         description: Invalid email/password, or mobile number unverified.
+ *         description: Invalid credentials or mobile not verified (OTP may be resent).
  */
 router.post('/login', validate(loginSchema), authController.login);
 
@@ -118,8 +162,8 @@ router.post('/login', validate(loginSchema), authController.login);
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Issue new User Access Token using valid Refresh Token
- *     tags: ['[Customer & Trader] Authentication']
+ *     summary: Issue a new access token using a valid refresh token
+ *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
  *     requestBody:
  *       required: true
  *       content:
@@ -134,10 +178,42 @@ router.post('/login', validate(loginSchema), authController.login);
  *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *     responses:
  *       200:
- *         description: Session token refreshed successfully.
+ *         description: Access token refreshed successfully.
  *       401:
  *         description: Invalid or expired refresh token.
  */
 router.post('/refresh', validate(refreshSchema), authController.refresh);
+
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     summary: Get the currently authenticated Customer or Trader profile
+ *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile retrieved successfully.
+ *       401:
+ *         description: Missing or invalid access token.
+ */
+router.get('/me', authMiddleware, authController.getMe);
+
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Log out the current Customer or Trader session (client should discard tokens)
+ *     tags: ['📱 [App Auth] Customer & Trader Mobile Auth']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logged out successfully.
+ *       401:
+ *         description: Missing or invalid access token.
+ */
+router.post('/logout', authMiddleware, authController.logout);
 
 export default router;

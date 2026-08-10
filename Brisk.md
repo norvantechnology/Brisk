@@ -716,13 +716,17 @@ brisk-backend/
 ## 6. Module-by-Module Logic (mapped to the process docs)
 
 ### 6.1 Auth Module
-- `POST /auth/register` — full name (photo optional via `Add Photo`), email, phone number (with country dial code, e.g. `+353`), password → creates unverified user, triggers OTP. Password rules confirmed on-screen: **min 8 characters, one uppercase letter, one number/special character** (live checklist UI) — enforce the same rules server-side in `auth.validation.ts`, don't trust client-side checks alone. Terms & Privacy checkbox required before submit.
-- `POST /auth/verify-otp` — verifies OTP, activates account.
-- `POST /auth/login` — email + password → JWT access + refresh token.
-- **Biometric ("Face ID") login** — screens show a dedicated in-app Face ID screen ("Biometric system active" / "Sign in with Face ID" / "Use Password Instead"), separate from the login screen's own "Face ID" shortcut button. This is standard **local-biometric-unlocks-stored-refresh-token** UX: the phone's OS biometric API unlocks a refresh token the app already stored in secure device storage after a prior password login; the app then just calls `POST /auth/refresh` as normal. **No biometric data is ever sent to or processed by the backend.** No new endpoint is strictly required beyond refresh — flag if BRISK instead wants server-side "device trust" tracking (e.g. `POST /auth/devices/register` to list/revoke trusted devices from Security settings).
-- `POST /auth/apple-signin` — verifies Apple identity token, only if native Sign in with Apple is also wanted as a separate path (to confirm — see Open Items).
-- `POST /auth/refresh`, `POST /auth/logout`.
-- Same module serves both Customer app and Trader app; a `role` field (`customer` / `trader`) on the user record plus a `traders` profile record when role = trader.
+- `POST /auth/register` — full name (profile photo optional — **deferred**, no S3 upload in v1 yet), email, phone number (with country dial code, e.g. `+353`), password, `role` (`CUSTOMER` | `TRADER`), `acceptedTerms: true` → creates unverified user, triggers OTP. Password rules confirmed on-screen: **min 8 characters, one uppercase letter, one number/special character** — enforce server-side in `auth.validation.ts`. Terms & Privacy checkbox required (`acceptedTerms` must be `true`).
+- `POST /auth/verify-otp` — verifies OTP, activates account. Payload: `{ mobileNumber, code }` (6-digit code).
+- `POST /auth/resend-otp` — resends OTP to an **unverified** mobile number. Payload: `{ mobileNumber }`. **60-second cooldown** between sends (returns `429` if called too soon). OTP expires after **10 minutes**. Mock SMS OTP `123456` enabled for dev/staging until SNS/Twilio is configured.
+- `POST /auth/login` — email + password → JWT access + refresh token. If mobile is unverified, returns `401` and auto-sends OTP (respecting the same 60s cooldown).
+- `GET /auth/me` — returns authenticated Customer/Trader profile (requires Bearer access token).
+- **Biometric ("Face ID") login** — local biometric unlocks a device-stored refresh token; app calls `POST /auth/refresh`. **No biometric data sent to backend.**
+- `POST /auth/refresh` — issue new access token from refresh token. Payload: `{ refreshToken }`.
+- `POST /auth/logout` — invalidate client session (stateless JWT — client discards tokens; requires Bearer access token).
+- `POST /auth/apple-signin` — **DEFERRED** (open item §11 — confirm with client before integrating Apple identity token).
+- **Image/profile photo upload** — **DEFERRED** (S3 pre-signed URLs not built yet; `profilePhotoUrl` can be set later via Users module once uploads module exists — see §6.13).
+- Same module serves both Customer app and Trader app; `role` on the user record plus a `traders` profile record auto-created when role = `TRADER` and OTP is verified.
 
 ### 6.2 Users & Traders Modules
 - Users: profile CRUD (Display Name, Email — shown **read-only/locked** with a padlock icon once set, Phone with country code), preferences (Notifications on/off toggle).
@@ -990,7 +994,7 @@ Payment methods (all via Stripe): Apple Pay, Google Pay, Credit/Debit Card.
 Build and ship in this order — each phase should be runnable/testable before starting the next.
 
 1. **Phase 0 — Foundation**: repo scaffold, TypeScript config, Express app skeleton, Docker Compose (local Postgres), env config, health-check route, error middleware, logger, Swagger scaffold.
-2. **Phase 1 — Auth & Users**: register/OTP/login/refresh, Apple Sign-In, JWT middleware, role guard, Users module (profile, stats, deactivation workflow), Traders module (profile).
+2. **Phase 1 — Auth & Users**: register/OTP/**resend-otp**/login/refresh/**logout**/**me**, Apple Sign-In (deferred), JWT middleware, role guard, Users module (profile, stats, deactivation workflow), Traders module (profile). **Auth module complete except Apple Sign-In and S3 profile photos.**
 3. **Phase 1B — Property & Utilities**: Addresses (My Address tab, Add Address modal), Meters (MPRN/GPRN registration + reading submission), Subscriptions (utility provider checklist). Independent of Jobs/Payments — can be built in parallel with Phase 2.
 4. **Phase 2 — Categories & Jobs**: category/subcategory seed + endpoints (full admin-confirmed schema per §13.8), Jobs module full CRUD + publish + reschedule + cancel, 8-value status enum per §13.6, S3 pre-signed upload for job photos.
 5. **Phase 3 — Quotes & Offers**: Quotes module (submit/compare/accept), unified `OFFERS` module (platform + trader, per §13.7) with filters, Promo Codes.
@@ -1334,7 +1338,7 @@ sequenceDiagram
 
 ---
 
-## 15. Live Implementation Ledger & Status (v4)
+## 15. Live Implementation Ledger & Status (v5)
 
 > **Build Execution Status:** Live deployment active on Render Cloud (`https://brisk-aclm.onrender.com`) connected to Render PostgreSQL Database (`brisk_db_5f0z`). Code repository synchronized on GitHub (`https://github.com/norvantechnology/Brisk.git`).
 
@@ -1345,11 +1349,43 @@ sequenceDiagram
 - **Infrastructure & Utilities**: Express.js server, Helmet security headers, CORS middleware, Winston logger (`src/utils/logger.ts`), standard API response helper (`src/utils/apiResponse.ts`), and centralized error handling middleware.
 - **Dynamic OpenAPI / Swagger UI**: Mounted at `/api-docs` with dynamic server selection (Local + Render Cloud).
 
-#### 2. Phase 1 — Customer & Trader Mobile Auth (`src/modules/auth/`)
-- `POST /auth/register`: Mobile user account registration with Zod validation.
-- `POST /auth/verify-otp`: Mobile number OTP verification (Static test OTP `123456` enabled for testing).
-- `POST /auth/login`: Customer & Trader authentication with mobile verification enforcement and JWT access/refresh token generation.
-- `POST /auth/refresh`: Session refresh returning new JWT access token.
+#### 2. Phase 1 — Customer & Trader Mobile Auth (`src/modules/auth/`) — **COMPLETE (v5)**
+All endpoints live at `/auth/*`. Swagger tag: `📱 [App Auth] Customer & Trader Mobile Auth`. Mock OTP `123456` active until SNS/Twilio integration.
+
+| Method | Endpoint | Auth | Status | Request Body |
+|--------|----------|------|--------|--------------|
+| `POST` | `/auth/register` | None | ✅ Done | `{ fullName, email, mobileNumber, password, role, acceptedTerms }` |
+| `POST` | `/auth/verify-otp` | None | ✅ Done | `{ mobileNumber, code }` |
+| `POST` | `/auth/resend-otp` | None | ✅ Done | `{ mobileNumber }` |
+| `POST` | `/auth/login` | None | ✅ Done | `{ email, password }` |
+| `POST` | `/auth/refresh` | None | ✅ Done | `{ refreshToken }` |
+| `GET` | `/auth/me` | Bearer | ✅ Done | — |
+| `POST` | `/auth/logout` | Bearer | ✅ Done | — |
+| `POST` | `/auth/apple-signin` | — | ⏸ Deferred | Awaiting client confirmation (§11) |
+
+**Payload rules (enforced by Zod in `auth.validation.ts`):**
+- `fullName` — min 2 chars, trimmed
+- `email` — valid email, lowercased
+- `mobileNumber` — E.164 format (e.g. `+353871234567`)
+- `password` — min 8 chars, 1 uppercase, 1 number/special char
+- `role` — `CUSTOMER` or `TRADER`
+- `acceptedTerms` — must be `true` on register
+- `code` — exactly 6 digits on verify-otp
+
+**OTP behaviour:**
+- OTP expires in **10 minutes**
+- Resend cooldown: **60 seconds** (`429` if too soon)
+- Login on unverified account auto-sends OTP (respects cooldown)
+- Trader profile row auto-created on successful OTP verify when `role = TRADER`
+
+**Token behaviour:**
+- Access token TTL: **15 minutes** (`type: user_access`)
+- Refresh token TTL: **7 days** (`type: user_refresh`)
+- Biometric/Face ID: client-side only → calls `POST /auth/refresh`
+
+**Deferred (not built yet):**
+- `POST /auth/apple-signin` — Apple Sign-In
+- Profile photo upload — S3/uploads module (§6.13); no image fields on register for now
 
 #### 3. Phase 9A — Admin Authentication & Audit Logging (`src/modules/admin/admin-auth/`)
 - `POST /admin/auth/login`: Admin & Super Admin authentication with audit log recording.
@@ -1406,6 +1442,6 @@ sequenceDiagram
   - `👥 [Admin Customer] 1. All Customers Directory`: Customer directory table, search, filters (status, country), customer profile creation (10 form fields), profile detail view, update, and deletion.
   - `🗑️ [Admin Customer] 2. Account Deletion & GDPR Requests`: GDPR account deletion request queue, stats, request detail inspection, approval modal, and automated in-place PII anonymization.
   - `💳 [Admin Customer] 3. Payment & Billing Management`: Customer transactions table, tax invoice details & PDF data, refunds management queue & action processing, and customer loyalty rewards feed.
-  - `📱 [App Auth] Customer & Trader Mobile Auth`: Mobile user registration, OTP SMS verification, login, and session refresh.
+  - `📱 [App Auth] Customer & Trader Mobile Auth`: Register, verify OTP, resend OTP, login, refresh, profile (`/me`), and logout.
   - `🛠️ [System] Health & Diagnostics`: API health check, uptime metrics, and database connection status verification.
 - Removed cluttered top description blocks and added clear, concise summaries beside every API route URL for fast navigation.

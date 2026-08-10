@@ -57,7 +57,8 @@ const options: swaggerJSDoc.Options = {
       },
       {
         name: '📱 [App Auth] Customer & Trader Mobile Auth',
-        description: 'Mobile user registration, OTP SMS verification, login, and session refresh for Customer and Trader mobile apps.',
+        description:
+          'Mobile user registration, OTP verify/resend, login, session refresh, profile, and logout for Customer and Trader apps.',
       },
       {
         name: '🛠️ [System] Health & Diagnostics',
