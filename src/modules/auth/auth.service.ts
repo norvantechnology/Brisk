@@ -185,13 +185,13 @@ export const loginUser = async (input: LoginInput) => {
     }
 
     return {
-      requiresOtpVerification: true,
-      code: 'MOBILE_NOT_VERIFIED',
+      requiresOtpVerification: true as const,
+      code: 'MOBILE_NOT_VERIFIED' as const,
       userId: user.id,
       email: user.email,
       mobileNumber: user.mobileNumber,
       role: user.role,
-      mobileVerified: false,
+      mobileVerified: false as const,
       otpSent,
       ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
       otpExpiresInMinutes: getOtpExpiryMinutes(),
@@ -205,7 +205,7 @@ export const loginUser = async (input: LoginInput) => {
   const tokens = createAuthTokens(user);
 
   return {
-    requiresOtpVerification: false,
+    requiresOtpVerification: false as const,
     user: {
       id: user.id,
       fullName: user.fullName,
