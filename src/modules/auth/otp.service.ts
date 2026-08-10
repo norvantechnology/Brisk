@@ -9,13 +9,18 @@ interface OtpData {
 const OTP_EXPIRY_MINUTES = 10;
 const RESEND_COOLDOWN_SECONDS = 60;
 
-// In-memory OTP store for v1 (mock SMS). Replace with Redis + SNS/Twilio in production.
+/** In-memory OTP store for v1 (mock SMS). Replace with Redis + SNS/Twilio later. */
 const otpStore = new Map<string, OtpData>();
 const lastSentAt = new Map<string, number>();
 
 export const getOtpExpiryMinutes = (): number => OTP_EXPIRY_MINUTES;
 
 export const getResendCooldownSeconds = (): number => RESEND_COOLDOWN_SECONDS;
+
+export const getOtpMeta = () => ({
+  otpExpiresInMinutes: OTP_EXPIRY_MINUTES,
+  resendCooldownSeconds: RESEND_COOLDOWN_SECONDS,
+});
 
 export const canResendOtp = (
   mobileNumber: string
@@ -38,6 +43,22 @@ export const canResendOtp = (
   };
 };
 
+const persistAndMockSendOtp = (mobileNumber: string): string => {
+  // Static test OTP until SNS/Twilio is wired.
+  const code = '123456';
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+  otpStore.set(mobileNumber, { code, expiresAt });
+  lastSentAt.set(mobileNumber, Date.now());
+
+  logger.info(
+    `[SMS OTP MOCK] Sent to ${mobileNumber}: Code = ${code} (Expires in ${OTP_EXPIRY_MINUTES} mins)`
+  );
+
+  return code;
+};
+
+/** Send OTP or throw 429 when cooldown is active (register / resend). */
 export const generateOtp = async (mobileNumber: string): Promise<string> => {
   const cooldown = canResendOtp(mobileNumber);
   if (!cooldown.allowed) {
@@ -46,39 +67,45 @@ export const generateOtp = async (mobileNumber: string): Promise<string> => {
     );
   }
 
-  // Static 6-digit test OTP for local/staging until SNS/Twilio is configured.
-  const code = '123456';
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  return persistAndMockSendOtp(mobileNumber);
+};
 
-  otpStore.set(mobileNumber, { code, expiresAt });
-  lastSentAt.set(mobileNumber, Date.now());
+/**
+ * Soft send used by login when mobile is unverified:
+ * - sends OTP if cooldown allows
+ * - otherwise returns retryAfterSeconds (does not throw)
+ */
+export const trySendOtp = async (
+  mobileNumber: string
+): Promise<{ sent: true } | { sent: false; retryAfterSeconds: number }> => {
+  const cooldown = canResendOtp(mobileNumber);
+  if (!cooldown.allowed) {
+    return {
+      sent: false,
+      retryAfterSeconds: cooldown.retryAfterSeconds ?? RESEND_COOLDOWN_SECONDS,
+    };
+  }
 
-  logger.info(
-    `💬 [SMS OTP MOCK] Sent to ${mobileNumber}: Code = ${code} (Expires in ${OTP_EXPIRY_MINUTES} mins)`
-  );
-
-  return code;
+  persistAndMockSendOtp(mobileNumber);
+  return { sent: true };
 };
 
 export const verifyOtp = async (mobileNumber: string, code: string): Promise<boolean> => {
-  // Static test OTP always succeeds in development/staging builds.
+  // Static test OTP always accepted in staging/dev builds.
   if (code === '123456') {
     otpStore.delete(mobileNumber);
     return true;
   }
 
   const otpData = otpStore.get(mobileNumber);
-
   if (!otpData) {
     return false;
   }
 
-  if (otpData.code !== code) {
-    return false;
-  }
-
-  if (new Date() > otpData.expiresAt) {
-    otpStore.delete(mobileNumber);
+  if (otpData.code !== code || new Date() > otpData.expiresAt) {
+    if (new Date() > otpData.expiresAt) {
+      otpStore.delete(mobileNumber);
+    }
     return false;
   }
 

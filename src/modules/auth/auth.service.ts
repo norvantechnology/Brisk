@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { Prisma, User, UserRole, UserStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import {
@@ -7,15 +8,41 @@ import {
   NotFoundError,
   UnauthorizedError,
   BadRequestError,
+  ForbiddenError,
 } from '../../utils/errors';
 import {
-  canResendOtp,
   generateOtp,
-  getOtpExpiryMinutes,
-  getResendCooldownSeconds,
+  getOtpMeta,
+  trySendOtp,
   verifyOtp,
 } from './otp.service';
 import type { RegisterInput, VerifyOtpInput, ResendOtpInput, LoginInput } from './auth.validation';
+
+type AuthUser = Pick<
+  User,
+  'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified' | 'status' | 'passwordHash'
+>;
+
+const PUBLIC_USER_SELECT = {
+  id: true,
+  fullName: true,
+  email: true,
+  mobileNumber: true,
+  role: true,
+  mobileVerified: true,
+} as const;
+
+const toPublicUser = (
+  user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'>,
+  mobileVerifiedOverride?: boolean
+) => ({
+  id: user.id,
+  fullName: user.fullName,
+  email: user.email,
+  mobileNumber: user.mobileNumber,
+  role: user.role,
+  mobileVerified: mobileVerifiedOverride ?? user.mobileVerified,
+});
 
 const createAuthTokens = (user: { id: string; email: string; role: string }) => {
   const accessToken = jwt.sign(
@@ -33,25 +60,115 @@ const createAuthTokens = (user: { id: string; email: string; role: string }) => 
   return { accessToken, refreshToken };
 };
 
+const buildSessionPayload = (
+  user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'>
+) => {
+  const tokens = createAuthTokens(user);
+  return {
+    requiresOtpVerification: false as const,
+    user: toPublicUser(user),
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+  };
+};
+
+const buildOtpRequiredPayload = async (user: AuthUser) => {
+  const sendResult = await trySendOtp(user.mobileNumber);
+  const otpMeta = getOtpMeta();
+
+  if (sendResult.sent) {
+    return {
+      requiresOtpVerification: true as const,
+      code: 'MOBILE_NOT_VERIFIED' as const,
+      userId: user.id,
+      email: user.email,
+      mobileNumber: user.mobileNumber,
+      role: user.role,
+      mobileVerified: false as const,
+      otpSent: true as const,
+      ...otpMeta,
+      message:
+        'Mobile number is not verified. A verification code has been sent to your mobile number.',
+    };
+  }
+
+  return {
+    requiresOtpVerification: true as const,
+    code: 'MOBILE_NOT_VERIFIED' as const,
+    userId: user.id,
+    email: user.email,
+    mobileNumber: user.mobileNumber,
+    role: user.role,
+    mobileVerified: false as const,
+    otpSent: false as const,
+    retryAfterSeconds: sendResult.retryAfterSeconds,
+    ...otpMeta,
+    message: `Mobile number is not verified. Please wait ${sendResult.retryAfterSeconds} seconds before requesting a new code, or use POST /auth/resend-otp.`,
+  };
+};
+
+const assertAccountCanAuthenticate = (user: Pick<User, 'status'>) => {
+  if (user.status === UserStatus.BLOCKED || user.status === UserStatus.SUSPENDED) {
+    throw new ForbiddenError('Your account has been restricted. Please contact support.');
+  }
+  if (user.status === UserStatus.INACTIVE) {
+    throw new ForbiddenError('Your account is inactive. Please contact support.');
+  }
+};
+
+const findUserByMobileOrThrow = async (mobileNumber: string) => {
+  const user = await prisma.user.findUnique({ where: { mobileNumber } });
+  if (!user) {
+    throw new NotFoundError('User with this mobile number does not exist.');
+  }
+  return user;
+};
+
+const assertMobileAwaitingVerification = (user: Pick<User, 'mobileVerified'>) => {
+  if (user.mobileVerified) {
+    throw new BadRequestError('Mobile number is already verified.');
+  }
+};
+
+const ensureTraderProfile = async (
+  tx: Prisma.TransactionClient,
+  user: Pick<User, 'id' | 'role'>
+) => {
+  if (user.role !== UserRole.TRADER) {
+    return;
+  }
+
+  const existingProfile = await tx.trader.findUnique({
+    where: { userId: user.id },
+  });
+
+  if (!existingProfile) {
+    await tx.trader.create({
+      data: { userId: user.id },
+    });
+  }
+};
+
+// ==========================================
+// AUTH FLOWS
+// ==========================================
+
 export const registerUser = async (input: RegisterInput) => {
   const { fullName, email, mobileNumber, password, role } = input;
 
-  const existingEmail = await prisma.user.findUnique({
-    where: { email },
-  });
+  const [existingEmail, existingMobile] = await Promise.all([
+    prisma.user.findUnique({ where: { email }, select: { id: true } }),
+    prisma.user.findUnique({ where: { mobileNumber }, select: { id: true } }),
+  ]);
+
   if (existingEmail) {
     throw new ConflictError('Email is already registered.');
   }
-
-  const existingMobile = await prisma.user.findUnique({
-    where: { mobileNumber },
-  });
   if (existingMobile) {
     throw new ConflictError('Mobile number is already registered.');
   }
 
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash(password, salt);
+  const passwordHash = await bcrypt.hash(password, 10);
 
   const user = await prisma.user.create({
     data: {
@@ -61,108 +178,82 @@ export const registerUser = async (input: RegisterInput) => {
       passwordHash,
       role,
       mobileVerified: false,
+      status: UserStatus.PENDING,
     },
   });
 
   await generateOtp(mobileNumber);
 
   return {
-    userId: user.id,
-    mobileNumber: user.mobileNumber,
-    email: user.email,
-    role: user.role,
-    mobileVerified: false,
     message: 'Registration successful. Verification code has been sent to your mobile number.',
-    otpExpiresInMinutes: getOtpExpiryMinutes(),
-    resendCooldownSeconds: getResendCooldownSeconds(),
+    data: {
+      userId: user.id,
+      mobileNumber: user.mobileNumber,
+      email: user.email,
+      role: user.role,
+      mobileVerified: false,
+      requiresOtpVerification: true,
+      ...getOtpMeta(),
+    },
   };
 };
 
 export const verifyUserOtp = async (input: VerifyOtpInput) => {
   const { mobileNumber, code } = input;
+  const user = await findUserByMobileOrThrow(mobileNumber);
 
-  const user = await prisma.user.findUnique({
-    where: { mobileNumber },
-  });
-  if (!user) {
-    throw new NotFoundError('User with this mobile number does not exist.');
-  }
-
-  if (user.mobileVerified) {
-    throw new BadRequestError('Mobile number is already verified.');
-  }
+  assertMobileAwaitingVerification(user);
+  assertAccountCanAuthenticate(user);
 
   const isValid = await verifyOtp(mobileNumber, code);
   if (!isValid) {
     throw new BadRequestError('Invalid or expired verification code.');
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
+  const verifiedUser = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
       where: { id: user.id },
-      data: { mobileVerified: true },
+      data: {
+        mobileVerified: true,
+        status: UserStatus.ACTIVE,
+      },
+      select: PUBLIC_USER_SELECT,
     });
 
-    if (user.role === 'TRADER') {
-      const existingProfile = await tx.trader.findUnique({
-        where: { userId: user.id },
-      });
-      if (!existingProfile) {
-        await tx.trader.create({
-          data: {
-            userId: user.id,
-          },
-        });
-      }
-    }
+    await ensureTraderProfile(tx, user);
+    return updated;
   });
-
-  const tokens = createAuthTokens(user);
 
   return {
     message: 'Mobile number verified successfully. Your account is now active.',
-    user: {
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      mobileNumber: user.mobileNumber,
-      role: user.role,
-      mobileVerified: true,
-    },
-    accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
+    data: buildSessionPayload({ ...verifiedUser, mobileVerified: true }),
   };
 };
 
 export const resendUserOtp = async (input: ResendOtpInput) => {
   const { mobileNumber } = input;
+  const user = await findUserByMobileOrThrow(mobileNumber);
 
-  const user = await prisma.user.findUnique({
-    where: { mobileNumber },
-  });
-  if (!user) {
-    throw new NotFoundError('User with this mobile number does not exist.');
-  }
-
-  if (user.mobileVerified) {
-    throw new BadRequestError('Mobile number is already verified.');
-  }
+  assertMobileAwaitingVerification(user);
+  assertAccountCanAuthenticate(user);
 
   await generateOtp(mobileNumber);
 
   return {
     message: 'A new verification code has been sent to your mobile number.',
-    otpExpiresInMinutes: getOtpExpiryMinutes(),
-    resendCooldownSeconds: getResendCooldownSeconds(),
+    data: {
+      mobileNumber: user.mobileNumber,
+      requiresOtpVerification: true,
+      otpSent: true,
+      ...getOtpMeta(),
+    },
   };
 };
 
 export const loginUser = async (input: LoginInput) => {
   const { email, password } = input;
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     throw new UnauthorizedError('Invalid email or password.');
   }
@@ -172,50 +263,20 @@ export const loginUser = async (input: LoginInput) => {
     throw new UnauthorizedError('Invalid email or password.');
   }
 
+  assertAccountCanAuthenticate(user);
+
+  // Valid credentials, but OTP still pending → soft success for mobile apps.
   if (!user.mobileVerified) {
-    const cooldown = canResendOtp(user.mobileNumber);
-    let otpSent = false;
-    let retryAfterSeconds: number | undefined;
-
-    if (cooldown.allowed) {
-      await generateOtp(user.mobileNumber);
-      otpSent = true;
-    } else {
-      retryAfterSeconds = cooldown.retryAfterSeconds;
-    }
-
+    const otpPayload = await buildOtpRequiredPayload(user);
     return {
-      requiresOtpVerification: true as const,
-      code: 'MOBILE_NOT_VERIFIED' as const,
-      userId: user.id,
-      email: user.email,
-      mobileNumber: user.mobileNumber,
-      role: user.role,
-      mobileVerified: false as const,
-      otpSent,
-      ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
-      otpExpiresInMinutes: getOtpExpiryMinutes(),
-      resendCooldownSeconds: getResendCooldownSeconds(),
-      message: otpSent
-        ? 'Mobile number is not verified. A verification code has been sent to your mobile number.'
-        : `Mobile number is not verified. Please wait ${retryAfterSeconds} seconds before requesting a new code, or use POST /auth/resend-otp.`,
+      message: otpPayload.message,
+      data: otpPayload,
     };
   }
 
-  const tokens = createAuthTokens(user);
-
   return {
-    requiresOtpVerification: false as const,
-    user: {
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      mobileNumber: user.mobileNumber,
-      role: user.role,
-      mobileVerified: user.mobileVerified,
-    },
-    accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
+    message: 'Logged in successfully.',
+    data: buildSessionPayload(user),
   };
 };
 
@@ -229,24 +290,25 @@ export const refreshUserSession = async (token: string) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, role: true },
+      select: { id: true, email: true, role: true, status: true, mobileVerified: true },
     });
 
     if (!user) {
       throw new UnauthorizedError('User session no longer exists.');
     }
 
-    const accessToken = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, type: 'user_access' },
-      env.JWT_SECRET,
-      { expiresIn: '15m' }
-    );
+    assertAccountCanAuthenticate(user);
 
-    return {
-      accessToken,
-    };
+    if (!user.mobileVerified) {
+      throw new ForbiddenError('Mobile number is not verified.', {
+        code: 'MOBILE_NOT_VERIFIED',
+      });
+    }
+
+    const { accessToken } = createAuthTokens(user);
+    return { accessToken };
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       throw error;
     }
     throw new UnauthorizedError('Invalid or expired refresh token.');
@@ -257,12 +319,7 @@ export const getAuthenticatedUser = async (userId: string) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      id: true,
-      fullName: true,
-      email: true,
-      mobileNumber: true,
-      role: true,
-      mobileVerified: true,
+      ...PUBLIC_USER_SELECT,
       emailVerified: true,
       profilePhotoUrl: true,
       status: true,
@@ -282,8 +339,6 @@ export const getAuthenticatedUser = async (userId: string) => {
   return user;
 };
 
-export const logoutUser = async () => {
-  return {
-    message: 'Logged out successfully.',
-  };
-};
+export const logoutUser = async () => ({
+  message: 'Logged out successfully.',
+});

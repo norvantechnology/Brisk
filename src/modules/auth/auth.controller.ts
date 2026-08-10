@@ -10,15 +10,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       res,
       statusCode: 201,
       message: result.message,
-      data: {
-        userId: result.userId,
-        mobileNumber: result.mobileNumber,
-        email: result.email,
-        role: result.role,
-        mobileVerified: result.mobileVerified,
-        otpExpiresInMinutes: result.otpExpiresInMinutes,
-        resendCooldownSeconds: result.resendCooldownSeconds,
-      },
+      data: result.data,
     });
   } catch (error) {
     next(error);
@@ -32,11 +24,7 @@ export const verifyOtp = async (req: Request, res: Response, next: NextFunction)
       res,
       statusCode: 200,
       message: result.message,
-      data: {
-        user: result.user,
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-      },
+      data: result.data,
     });
   } catch (error) {
     next(error);
@@ -50,10 +38,7 @@ export const resendOtp = async (req: Request, res: Response, next: NextFunction)
       res,
       statusCode: 200,
       message: result.message,
-      data: {
-        otpExpiresInMinutes: result.otpExpiresInMinutes,
-        resendCooldownSeconds: result.resendCooldownSeconds,
-      },
+      data: result.data,
     });
   } catch (error) {
     next(error);
@@ -63,41 +48,11 @@ export const resendOtp = async (req: Request, res: Response, next: NextFunction)
 export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const result = await authService.loginUser(req.body);
-
-    if (result.requiresOtpVerification) {
-      sendResponse({
-        res,
-        statusCode: 200,
-        message: result.message,
-        data: {
-          requiresOtpVerification: true,
-          code: result.code,
-          userId: result.userId,
-          email: result.email,
-          mobileNumber: result.mobileNumber,
-          role: result.role,
-          mobileVerified: false,
-          otpSent: result.otpSent,
-          ...(result.retryAfterSeconds !== undefined
-            ? { retryAfterSeconds: result.retryAfterSeconds }
-            : {}),
-          otpExpiresInMinutes: result.otpExpiresInMinutes,
-          resendCooldownSeconds: result.resendCooldownSeconds,
-        },
-      });
-      return;
-    }
-
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Logged in successfully.',
-      data: {
-        requiresOtpVerification: false,
-        user: result.user,
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-      },
+      message: result.message,
+      data: result.data,
     });
   } catch (error) {
     next(error);
