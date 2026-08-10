@@ -64,13 +64,26 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
   try {
     const result = await authService.loginUser(req.body);
 
-    if ('requiresOtpVerification' in result && result.requiresOtpVerification) {
-      const { message, ...data } = result;
+    if (result.requiresOtpVerification) {
       sendResponse({
         res,
         statusCode: 200,
-        message,
-        data,
+        message: result.message,
+        data: {
+          requiresOtpVerification: true,
+          code: result.code,
+          userId: result.userId,
+          email: result.email,
+          mobileNumber: result.mobileNumber,
+          role: result.role,
+          mobileVerified: false,
+          otpSent: result.otpSent,
+          ...(result.retryAfterSeconds !== undefined
+            ? { retryAfterSeconds: result.retryAfterSeconds }
+            : {}),
+          otpExpiresInMinutes: result.otpExpiresInMinutes,
+          resendCooldownSeconds: result.resendCooldownSeconds,
+        },
       });
       return;
     }
@@ -79,7 +92,12 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       res,
       statusCode: 200,
       message: 'Logged in successfully.',
-      data: result,
+      data: {
+        requiresOtpVerification: false,
+        user: result.user,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
     });
   } catch (error) {
     next(error);
