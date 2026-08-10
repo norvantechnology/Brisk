@@ -273,8 +273,8 @@ export const updateCustomer = async (
 };
 
 export const deleteCustomer = async (adminId: string, adminLabel: string, id: string) => {
-  const customer = await prisma.user.findFirst({ where: { id, role: UserRole.CUSTOMER } });
-  if (!customer) {
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) {
     throw new NotFoundError('Customer not found.');
   }
 
@@ -288,7 +288,7 @@ export const deleteCustomer = async (adminId: string, adminLabel: string, id: st
       actorLabel: adminLabel,
       subjectType: 'User',
       subjectId: id,
-      description: `Deleted Customer Profile: "${customer.fullName}".`,
+      description: `Deleted User Profile: "${user.fullName}" (${user.role}).`,
     },
   });
 };
@@ -349,37 +349,48 @@ export const listDeletionRequests = async (filters: DeletionRequestQueryFilters)
       skip,
       take: limit,
       orderBy,
-      include: {
-        user: {
-          select: {
-            id: true,
-            customerCode: true,
-            fullName: true,
-            email: true,
-            mobileNumber: true,
-            profilePhotoUrl: true,
-          },
-        },
-      },
     }),
   ]);
 
-  const formattedRequests = requests.map((req) => ({
-    id: req.id,
-    requestRef: req.requestRef || `DEL-${req.id.substring(0, 5).toUpperCase()}`,
-    customer: {
-      id: req.user.id,
-      customerCode: req.user.customerCode || `CUST-${req.user.id.substring(0, 3).toUpperCase()}`,
-      fullName: req.user.fullName,
-      profilePhotoUrl: req.user.profilePhotoUrl,
+  const userIds = [...new Set(requests.map((r) => r.userId))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: {
+      id: true,
+      customerCode: true,
+      fullName: true,
+      email: true,
+      mobileNumber: true,
+      profilePhotoUrl: true,
     },
-    email: req.user.email,
-    phone: req.user.mobileNumber,
-    reason: req.reason || 'Privacy concerns',
-    requestedAt: req.requestedAt,
-    status: req.status,
-    reviewedByLabel: req.reviewedByLabel || '—',
-  }));
+  });
+  const usersById = new Map(users.map((user) => [user.id, user]));
+
+  const formattedRequests = requests.flatMap((req) => {
+    const user = usersById.get(req.userId);
+    if (!user) {
+      return [];
+    }
+
+    return [
+      {
+        id: req.id,
+        requestRef: req.requestRef || `DEL-${req.id.substring(0, 5).toUpperCase()}`,
+        customer: {
+          id: user.id,
+          customerCode: user.customerCode || `CUST-${user.id.substring(0, 3).toUpperCase()}`,
+          fullName: user.fullName,
+          profilePhotoUrl: user.profilePhotoUrl,
+        },
+        email: user.email,
+        phone: user.mobileNumber,
+        reason: req.reason || 'Privacy concerns',
+        requestedAt: req.requestedAt,
+        status: req.status,
+        reviewedByLabel: req.reviewedByLabel || '—',
+      },
+    ];
+  });
 
   return {
     meta: {
