@@ -7,6 +7,7 @@ import {
   NotFoundError,
   UnauthorizedError,
   BadRequestError,
+  ForbiddenError,
 } from '../../utils/errors';
 import {
   canResendOtp,
@@ -68,6 +69,10 @@ export const registerUser = async (input: RegisterInput) => {
 
   return {
     userId: user.id,
+    mobileNumber: user.mobileNumber,
+    email: user.email,
+    role: user.role,
+    mobileVerified: false,
     message: 'Registration successful. Verification code has been sent to your mobile number.',
     otpExpiresInMinutes: getOtpExpiryMinutes(),
     resendCooldownSeconds: getResendCooldownSeconds(),
@@ -113,8 +118,20 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
     }
   });
 
+  const tokens = createAuthTokens(user);
+
   return {
     message: 'Mobile number verified successfully. Your account is now active.',
+    user: {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      mobileNumber: user.mobileNumber,
+      role: user.role,
+      mobileVerified: true,
+    },
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
   };
 };
 
@@ -157,16 +174,41 @@ export const loginUser = async (input: LoginInput) => {
   }
 
   if (!user.mobileVerified) {
+    const unverifiedPayload = {
+      userId: user.id,
+      email: user.email,
+      mobileNumber: user.mobileNumber,
+      role: user.role,
+      mobileVerified: false,
+      otpExpiresInMinutes: getOtpExpiryMinutes(),
+      resendCooldownSeconds: getResendCooldownSeconds(),
+    };
+
     const cooldown = canResendOtp(user.mobileNumber);
     if (cooldown.allowed) {
       await generateOtp(user.mobileNumber);
-      throw new UnauthorizedError(
-        'Mobile number is not verified. A verification code has been sent to your mobile number.'
+      throw new ForbiddenError(
+        'Mobile number is not verified. A verification code has been sent to your mobile number.',
+        {
+          code: 'MOBILE_NOT_VERIFIED',
+          data: {
+            ...unverifiedPayload,
+            otpSent: true,
+          },
+        }
       );
     }
 
-    throw new UnauthorizedError(
-      `Mobile number is not verified. Please wait ${cooldown.retryAfterSeconds} seconds before requesting a new code, or use POST /auth/resend-otp.`
+    throw new ForbiddenError(
+      `Mobile number is not verified. Please wait ${cooldown.retryAfterSeconds} seconds before requesting a new code, or use POST /auth/resend-otp.`,
+      {
+        code: 'MOBILE_NOT_VERIFIED',
+        data: {
+          ...unverifiedPayload,
+          otpSent: false,
+          retryAfterSeconds: cooldown.retryAfterSeconds,
+        },
+      }
     );
   }
 

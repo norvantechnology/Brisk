@@ -28,10 +28,20 @@ export const errorMiddleware = (
     logger.error('Unhandled Server Error:', err);
   }
 
+  const appData =
+    err instanceof AppError && err.data !== undefined
+      ? typeof err.data === 'object' && err.data !== null && !Array.isArray(err.data)
+        ? { ...(err.data as Record<string, unknown>), ...(err.code ? { code: err.code } : {}) }
+        : err.data
+      : err instanceof AppError && err.code
+        ? { code: err.code }
+        : undefined;
+
   sendResponse({
     res,
     statusCode,
     message,
+    data: appData,
     error: errors || undefined,
   });
 };

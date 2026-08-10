@@ -55,7 +55,7 @@ const router = Router();
  *                 description: Must be true — user accepted Terms & Privacy Policy.
  *     responses:
  *       201:
- *         description: User registered successfully. OTP sent.
+ *         description: User registered successfully. OTP sent. Returns mobileNumber for the OTP screen.
  *       400:
  *         description: Validation error.
  *       409:
@@ -89,7 +89,7 @@ router.post('/register', validate(registerSchema), authController.register);
  *                 example: "123456"
  *     responses:
  *       200:
- *         description: Mobile number verified successfully.
+ *         description: Mobile verified. Returns user profile plus access and refresh tokens.
  *       400:
  *         description: Invalid or expired OTP, or already verified.
  *       404:
@@ -152,9 +152,13 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *                 example: Password1!
  *     responses:
  *       200:
- *         description: Logged in successfully. Returns JWT tokens and user profile.
+ *         description: Logged in successfully. Returns JWT tokens and user profile (includes mobileNumber).
  *       401:
- *         description: Invalid credentials or mobile not verified (OTP may be resent).
+ *         description: Invalid email or password.
+ *       403:
+ *         description: |
+ *           Mobile not verified (`data.code` = `MOBILE_NOT_VERIFIED`).
+ *           Response `data` includes `mobileNumber`, `userId`, `otpSent`, and cooldown fields so the app can open the OTP screen.
  */
 router.post('/login', validate(loginSchema), authController.login);
 

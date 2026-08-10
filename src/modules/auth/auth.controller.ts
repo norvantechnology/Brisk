@@ -12,6 +12,10 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       message: result.message,
       data: {
         userId: result.userId,
+        mobileNumber: result.mobileNumber,
+        email: result.email,
+        role: result.role,
+        mobileVerified: result.mobileVerified,
         otpExpiresInMinutes: result.otpExpiresInMinutes,
         resendCooldownSeconds: result.resendCooldownSeconds,
       },
@@ -28,6 +32,11 @@ export const verifyOtp = async (req: Request, res: Response, next: NextFunction)
       res,
       statusCode: 200,
       message: result.message,
+      data: {
+        user: result.user,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
     });
   } catch (error) {
     next(error);
