@@ -6,7 +6,7 @@ const passwordSchema = z
   .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
   .regex(/[0-9!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one number or special character');
 
-export const registerSchema = z.object({
+const registerBodySchema = z.object({
   fullName: z.string().trim().min(2, 'Name must be at least 2 characters long'),
   email: z.string().trim().email('Invalid email format').toLowerCase(),
   mobileNumber: z
@@ -19,7 +19,11 @@ export const registerSchema = z.object({
   }),
 });
 
-export const verifyOtpSchema = z.object({
+export const registerSchema = z.object({
+  body: registerBodySchema,
+});
+
+const verifyOtpBodySchema = z.object({
   mobileNumber: z
     .string()
     .trim()
@@ -27,11 +31,27 @@ export const verifyOtpSchema = z.object({
   code: z.string().length(6, 'Verification code must be exactly 6 characters long'),
 });
 
-export const loginSchema = z.object({
+export const verifyOtpSchema = z.object({
+  body: verifyOtpBodySchema,
+});
+
+const loginBodySchema = z.object({
   email: z.string().trim().email('Invalid email format').toLowerCase(),
   password: z.string().min(1, 'Password is required'),
 });
 
-export const refreshSchema = z.object({
+export const loginSchema = z.object({
+  body: loginBodySchema,
+});
+
+const refreshBodySchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
+
+export const refreshSchema = z.object({
+  body: refreshBodySchema,
+});
+
+export type RegisterInput = z.infer<typeof registerBodySchema>;
+export type VerifyOtpInput = z.infer<typeof verifyOtpBodySchema>;
+export type LoginInput = z.infer<typeof loginBodySchema>;

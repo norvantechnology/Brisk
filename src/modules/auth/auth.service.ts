@@ -4,12 +4,7 @@ import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { ConflictError, NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/errors';
 import { generateOtp, verifyOtp } from './otp.service';
-import { registerSchema, verifyOtpSchema, loginSchema } from './auth.validation';
-import { z } from 'zod';
-
-type RegisterInput = z.infer<typeof registerSchema>;
-type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
-type LoginInput = z.infer<typeof loginSchema>;
+import type { RegisterInput, VerifyOtpInput, LoginInput } from './auth.validation';
 
 export const registerUser = async (input: RegisterInput) => {
   const { fullName, email, mobileNumber, password, role } = input;
