@@ -152,13 +152,12 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *                 example: Password1!
  *     responses:
  *       200:
- *         description: Logged in successfully. Returns JWT tokens and user profile (includes mobileNumber).
+ *         description: |
+ *           Success in two forms:
+ *           1) Fully verified user — returns accessToken, refreshToken, user.
+ *           2) Mobile not verified — `data.requiresOtpVerification=true` with mobileNumber for OTP screen (HTTP 200, not an error).
  *       401:
  *         description: Invalid email or password.
- *       403:
- *         description: |
- *           Mobile not verified (`data.code` = `MOBILE_NOT_VERIFIED`).
- *           Response `data` includes `mobileNumber`, `userId`, `otpSent`, and cooldown fields so the app can open the OTP screen.
  */
 router.post('/login', validate(loginSchema), authController.login);
 

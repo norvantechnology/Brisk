@@ -7,7 +7,6 @@ import {
   NotFoundError,
   UnauthorizedError,
   BadRequestError,
-  ForbiddenError,
 } from '../../utils/errors';
 import {
   canResendOtp,
@@ -174,47 +173,39 @@ export const loginUser = async (input: LoginInput) => {
   }
 
   if (!user.mobileVerified) {
-    const unverifiedPayload = {
+    const cooldown = canResendOtp(user.mobileNumber);
+    let otpSent = false;
+    let retryAfterSeconds: number | undefined;
+
+    if (cooldown.allowed) {
+      await generateOtp(user.mobileNumber);
+      otpSent = true;
+    } else {
+      retryAfterSeconds = cooldown.retryAfterSeconds;
+    }
+
+    return {
+      requiresOtpVerification: true,
+      code: 'MOBILE_NOT_VERIFIED',
       userId: user.id,
       email: user.email,
       mobileNumber: user.mobileNumber,
       role: user.role,
       mobileVerified: false,
+      otpSent,
+      ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
       otpExpiresInMinutes: getOtpExpiryMinutes(),
       resendCooldownSeconds: getResendCooldownSeconds(),
+      message: otpSent
+        ? 'Mobile number is not verified. A verification code has been sent to your mobile number.'
+        : `Mobile number is not verified. Please wait ${retryAfterSeconds} seconds before requesting a new code, or use POST /auth/resend-otp.`,
     };
-
-    const cooldown = canResendOtp(user.mobileNumber);
-    if (cooldown.allowed) {
-      await generateOtp(user.mobileNumber);
-      throw new ForbiddenError(
-        'Mobile number is not verified. A verification code has been sent to your mobile number.',
-        {
-          code: 'MOBILE_NOT_VERIFIED',
-          data: {
-            ...unverifiedPayload,
-            otpSent: true,
-          },
-        }
-      );
-    }
-
-    throw new ForbiddenError(
-      `Mobile number is not verified. Please wait ${cooldown.retryAfterSeconds} seconds before requesting a new code, or use POST /auth/resend-otp.`,
-      {
-        code: 'MOBILE_NOT_VERIFIED',
-        data: {
-          ...unverifiedPayload,
-          otpSent: false,
-          retryAfterSeconds: cooldown.retryAfterSeconds,
-        },
-      }
-    );
   }
 
   const tokens = createAuthTokens(user);
 
   return {
+    requiresOtpVerification: false,
     user: {
       id: user.id,
       fullName: user.fullName,
