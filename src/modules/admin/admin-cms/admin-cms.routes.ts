@@ -35,7 +35,7 @@ router.use(adminAuthMiddleware);
  * /admin/cms/dashboard/stats:
  *   get:
  *     summary: Retrieve CMS Dashboard KPI Stat Cards
- *     tags: ['🌐 [Admin CMS] Dashboard']
+ *     tags: ['Admin Panel — Website · Dashboard']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -51,7 +51,7 @@ router.get('/dashboard/stats', cmsAdminController.getCmsDashboardStats);
  * /admin/cms/dashboard/audit:
  *   get:
  *     summary: Retrieve Recent CMS Audit Activity Log
- *     tags: ['🌐 [Admin CMS] Dashboard']
+ *     tags: ['Admin Panel — Website · Dashboard']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -76,7 +76,7 @@ router.get('/dashboard/audit', validate(dashboardAuditSchema), cmsAdminControlle
  * /admin/cms/pages:
  *   get:
  *     summary: List Website Pages (Paginated, Search, Status & Audience Filters)
- *     tags: ['📄 [Admin CMS] Website Pages']
+ *     tags: ['Admin Panel — Website · Pages']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -117,7 +117,7 @@ router.get('/pages', validate(listFilterSchema), cmsAdminController.listPages);
  * /admin/cms/pages:
  *   post:
  *     summary: Create new Website Page
- *     tags: ['📄 [Admin CMS] Website Pages']
+ *     tags: ['Admin Panel — Website · Pages']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -151,7 +151,7 @@ router.post('/pages', validate(createPageSchema), cmsAdminController.createPage)
  * /admin/cms/pages/{id}:
  *   get:
  *     summary: Get Website Page detail by ID
- *     tags: ['📄 [Admin CMS] Website Pages']
+ *     tags: ['Admin Panel — Website · Pages']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -172,7 +172,7 @@ router.get('/pages/:id', validate(idParamSchema), cmsAdminController.getPage);
  * /admin/cms/pages/{id}:
  *   patch:
  *     summary: Update Website Page
- *     tags: ['📄 [Admin CMS] Website Pages']
+ *     tags: ['Admin Panel — Website · Pages']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -206,7 +206,7 @@ router.patch('/pages/:id', validate(updatePageSchema), cmsAdminController.update
  * /admin/cms/pages/{id}/toggle:
  *   patch:
  *     summary: Toggle Website Page active status
- *     tags: ['📄 [Admin CMS] Website Pages']
+ *     tags: ['Admin Panel — Website · Pages']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -227,7 +227,7 @@ router.patch('/pages/:id/toggle', validate(idParamSchema), cmsAdminController.to
  * /admin/cms/pages/{id}/duplicate:
  *   post:
  *     summary: Duplicate Website Page
- *     tags: ['📄 [Admin CMS] Website Pages']
+ *     tags: ['Admin Panel — Website · Pages']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -248,7 +248,7 @@ router.post('/pages/:id/duplicate', validate(idParamSchema), cmsAdminController.
  * /admin/cms/pages/{id}:
  *   delete:
  *     summary: Delete Website Page
- *     tags: ['📄 [Admin CMS] Website Pages']
+ *     tags: ['Admin Panel — Website · Pages']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -273,7 +273,7 @@ router.delete('/pages/:id', validate(idParamSchema), cmsAdminController.deletePa
  * /admin/cms/social-links:
  *   get:
  *     summary: List Social Links (Paginated, Search & Status Filters)
- *     tags: ['🔗 [Admin CMS] Social Links']
+ *     tags: ['Admin Panel — Website · Social Links']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -304,7 +304,7 @@ router.get('/social-links', validate(listFilterSchema), cmsAdminController.listS
  * /admin/cms/social-links:
  *   post:
  *     summary: Create new Social Link
- *     tags: ['🔗 [Admin CMS] Social Links']
+ *     tags: ['Admin Panel — Website · Social Links']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -334,7 +334,7 @@ router.post('/social-links', validate(createSocialLinkSchema), cmsAdminControlle
  * /admin/cms/social-links/{id}:
  *   patch:
  *     summary: Update Social Link
- *     tags: ['🔗 [Admin CMS] Social Links']
+ *     tags: ['Admin Panel — Website · Social Links']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -366,7 +366,7 @@ router.patch('/social-links/:id', validate(updateSocialLinkSchema), cmsAdminCont
  * /admin/cms/social-links/{id}:
  *   delete:
  *     summary: Delete Social Link
- *     tags: ['🔗 [Admin CMS] Social Links']
+ *     tags: ['Admin Panel — Website · Social Links']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -391,7 +391,7 @@ router.delete('/social-links/:id', validate(idParamSchema), cmsAdminController.d
  * /admin/cms/faq-categories:
  *   get:
  *     summary: List FAQ Categories
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -418,7 +418,7 @@ router.get('/faq-categories', validate(listFilterSchema), cmsAdminController.lis
  * /admin/cms/faq-categories:
  *   post:
  *     summary: Create FAQ Category
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -446,7 +446,7 @@ router.post('/faq-categories', validate(createFaqCategorySchema), cmsAdminContro
  * /admin/cms/faqs:
  *   get:
  *     summary: List FAQs (Paginated, Search, Category, Audience & Status Filters)
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -483,7 +483,7 @@ router.get('/faqs', validate(listFilterSchema), cmsAdminController.listFaqs);
  * /admin/cms/faqs:
  *   post:
  *     summary: Create FAQ Item
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -513,7 +513,7 @@ router.post('/faqs', validate(createFaqSchema), cmsAdminController.createFaq);
  * /admin/cms/faqs/reorder:
  *   patch:
  *     summary: Bulk Reorder FAQ Items by displayOrder
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -546,7 +546,7 @@ router.patch('/faqs/reorder', validate(reorderFaqsSchema), cmsAdminController.re
  * /admin/cms/faqs/{id}:
  *   get:
  *     summary: Get FAQ detail by ID
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -567,7 +567,7 @@ router.get('/faqs/:id', validate(idParamSchema), cmsAdminController.getFaq);
  * /admin/cms/faqs/{id}:
  *   patch:
  *     summary: Update FAQ Item
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -601,7 +601,7 @@ router.patch('/faqs/:id', validate(updateFaqSchema), cmsAdminController.updateFa
  * /admin/cms/faqs/{id}:
  *   delete:
  *     summary: Delete FAQ Item
- *     tags: ['❓ [Admin CMS] FAQ']
+ *     tags: ['Admin Panel — Website · FAQ']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -626,7 +626,7 @@ router.delete('/faqs/:id', validate(idParamSchema), cmsAdminController.deleteFaq
  * /admin/cms/testimonials/stats:
  *   get:
  *     summary: Retrieve Testimonial KPI Stats
- *     tags: ['💬 [Admin CMS] Testimonials']
+ *     tags: ['Admin Panel — Website · Testimonials']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -640,7 +640,7 @@ router.get('/testimonials/stats', cmsAdminController.getTestimonialStats);
  * /admin/cms/testimonials:
  *   get:
  *     summary: List Testimonials (Paginated, Search, Audience, Status & Featured Filters)
- *     tags: ['💬 [Admin CMS] Testimonials']
+ *     tags: ['Admin Panel — Website · Testimonials']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -677,7 +677,7 @@ router.get('/testimonials', validate(listFilterSchema), cmsAdminController.listT
  * /admin/cms/testimonials:
  *   post:
  *     summary: Create Testimonial
- *     tags: ['💬 [Admin CMS] Testimonials']
+ *     tags: ['Admin Panel — Website · Testimonials']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -712,7 +712,7 @@ router.post('/testimonials', validate(createTestimonialSchema), cmsAdminControll
  * /admin/cms/testimonials/{id}:
  *   patch:
  *     summary: Update Testimonial
- *     tags: ['💬 [Admin CMS] Testimonials']
+ *     tags: ['Admin Panel — Website · Testimonials']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -751,7 +751,7 @@ router.patch('/testimonials/:id', validate(updateTestimonialSchema), cmsAdminCon
  * /admin/cms/testimonials/{id}:
  *   delete:
  *     summary: Delete Testimonial
- *     tags: ['💬 [Admin CMS] Testimonials']
+ *     tags: ['Admin Panel — Website · Testimonials']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -776,7 +776,7 @@ router.delete('/testimonials/:id', validate(idParamSchema), cmsAdminController.d
  * /admin/cms/legal-policies:
  *   get:
  *     summary: List Legal Policies (Paginated & Search)
- *     tags: ['⚖️ [Admin CMS] Legal & Policies']
+ *     tags: ['Admin Panel — Website · Legal']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -804,7 +804,7 @@ router.get('/legal-policies', validate(listFilterSchema), cmsAdminController.lis
  * /admin/cms/legal-policies:
  *   post:
  *     summary: Create Legal Policy
- *     tags: ['⚖️ [Admin CMS] Legal & Policies']
+ *     tags: ['Admin Panel — Website · Legal']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -832,7 +832,7 @@ router.post('/legal-policies', validate(createLegalPolicySchema), cmsAdminContro
  * /admin/cms/legal-policies/{id}/versions:
  *   get:
  *     summary: Get Legal Policy Version History
- *     tags: ['⚖️ [Admin CMS] Legal & Policies']
+ *     tags: ['Admin Panel — Website · Legal']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -853,7 +853,7 @@ router.get('/legal-policies/:id/versions', validate(idParamSchema), cmsAdminCont
  * /admin/cms/legal-policies/{id}/versions:
  *   post:
  *     summary: Publish new Legal Policy Version
- *     tags: ['⚖️ [Admin CMS] Legal & Policies']
+ *     tags: ['Admin Panel — Website · Legal']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -897,7 +897,7 @@ router.post(
  * /admin/cms/seo:
  *   get:
  *     summary: Get Global SEO Settings
- *     tags: ['🔍 [Admin CMS] SEO']
+ *     tags: ['Admin Panel — Website · SEO']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -911,7 +911,7 @@ router.get('/seo', cmsAdminController.getSeoSettings);
  * /admin/cms/seo:
  *   put:
  *     summary: Upsert Global SEO Settings
- *     tags: ['🔍 [Admin CMS] SEO']
+ *     tags: ['Admin Panel — Website · SEO']
  *     security:
  *       - bearerAuth: []
  *     requestBody:

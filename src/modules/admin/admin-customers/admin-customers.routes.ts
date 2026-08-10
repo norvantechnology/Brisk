@@ -28,7 +28,7 @@ router.use(adminAuthMiddleware);
  * /admin/customers/stats:
  *   get:
  *     summary: Retrieve Customer Directory KPI Stat Cards
- *     tags: ['👥 [Admin Customer] 1. All Customers Directory']
+ *     tags: ['Admin Panel — Customers']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -42,7 +42,7 @@ router.get('/customers/stats', customerAdminController.getCustomerDirectoryStats
  * /admin/customers:
  *   get:
  *     summary: List Customers Directory (Paginated, Search, Status & Country Filters)
- *     tags: ['👥 [Admin Customer] 1. All Customers Directory']
+ *     tags: ['Admin Panel — Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -73,7 +73,7 @@ router.get('/customers', validate(customerFilterSchema), customerAdminController
  * /admin/customers:
  *   post:
  *     summary: Create new Customer Profile
- *     tags: ['👥 [Admin Customer] 1. All Customers Directory']
+ *     tags: ['Admin Panel — Customers']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -112,16 +112,98 @@ router.post('/customers', validate(createCustomerSchema), customerAdminControlle
 // ACCOUNT DELETION REQUESTS ROUTES (must be before /customers/:id)
 // ==========================================
 
+/**
+ * @swagger
+ * /admin/customers/deletion-requests/stats:
+ *   get:
+ *     summary: Deletion request queue KPI stats
+ *     tags: ['Admin Panel — Deletion Requests']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Deletion request stats retrieved.
+ */
 router.get('/customers/deletion-requests/stats', customerAdminController.getDeletionRequestStats);
 
+/**
+ * @swagger
+ * /admin/customers/deletion-requests:
+ *   get:
+ *     summary: List GDPR account deletion requests
+ *     tags: ['Admin Panel — Deletion Requests']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Deletion requests retrieved.
+ */
 router.get(
   '/customers/deletion-requests',
   validate(deletionRequestFilterSchema),
   customerAdminController.listDeletionRequests
 );
 
+/**
+ * @swagger
+ * /admin/customers/deletion-requests/{id}:
+ *   get:
+ *     summary: Get deletion request detail
+ *     tags: ['Admin Panel — Deletion Requests']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Deletion request detail retrieved.
+ *       404:
+ *         description: Request not found.
+ */
 router.get('/customers/deletion-requests/:id', customerAdminController.getDeletionRequest);
 
+/**
+ * @swagger
+ * /admin/customers/deletion-requests/{id}:
+ *   patch:
+ *     summary: Review / process a deletion request
+ *     tags: ['Admin Panel — Deletion Requests']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string }
+ *               adminNotes: { type: string }
+ *     responses:
+ *       200:
+ *         description: Deletion request updated.
+ */
 router.patch(
   '/customers/deletion-requests/:id',
   validate(updateDeletionRequestSchema),
@@ -133,7 +215,7 @@ router.patch(
  * /admin/customers/{id}:
  *   get:
  *     summary: Get Customer Profile detail by ID
- *     tags: ['👥 [Admin Customer] 1. All Customers Directory']
+ *     tags: ['Admin Panel — Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -154,7 +236,7 @@ router.get('/customers/:id', customerAdminController.getCustomer);
  * /admin/customers/{id}:
  *   patch:
  *     summary: Update Customer Profile
- *     tags: ['👥 [Admin Customer] 1. All Customers Directory']
+ *     tags: ['Admin Panel — Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -188,7 +270,7 @@ router.patch('/customers/:id', validate(updateCustomerSchema), customerAdminCont
  * /admin/customers/{id}:
  *   delete:
  *     summary: Delete Customer Profile
- *     tags: ['👥 [Admin Customer] 1. All Customers Directory']
+ *     tags: ['Admin Panel — Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -213,7 +295,7 @@ router.delete('/customers/:id', customerAdminController.deleteCustomer);
  * /admin/customer-payments/stats:
  *   get:
  *     summary: Retrieve Payment & Billing Header KPI Stat Cards
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -227,7 +309,7 @@ router.get('/customer-payments/stats', customerAdminController.getCustomerPaymen
  * /admin/customer-payments/transactions:
  *   get:
  *     summary: List Payment Transactions (Paginated, Search, Status & Method Filters)
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -261,7 +343,7 @@ router.get('/customer-payments/transactions', validate(paymentTransactionFilterS
  * /admin/customer-payments/transactions/{id}:
  *   get:
  *     summary: Get single Customer Payment Transaction detail modal view by ID
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -282,7 +364,7 @@ router.get('/customer-payments/transactions/:id', customerAdminController.getTra
  * /admin/customer-payments/invoices:
  *   get:
  *     summary: List Billing & Invoices (Paginated, Search & Status Filters)
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -310,7 +392,7 @@ router.get('/customer-payments/invoices', validate(invoiceFilterSchema), custome
  * /admin/customer-payments/invoices/{id}:
  *   get:
  *     summary: Get single Tax Invoice detail view by ID
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -331,7 +413,7 @@ router.get('/customer-payments/invoices/:id', customerAdminController.getInvoice
  * /admin/customer-payments/refunds:
  *   get:
  *     summary: List Refunds Management Queue (Paginated, Search & Status Filters)
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -359,7 +441,7 @@ router.get('/customer-payments/refunds', validate(refundFilterSchema), customerA
  * /admin/customer-payments/refunds/{id}/process:
  *   patch:
  *     summary: Process Customer Payment Refund (Approve & Execute Refund)
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -396,7 +478,7 @@ router.patch('/customer-payments/refunds/:id/process', validate(processRefundSch
  * /admin/customer-payments/loyalty:
  *   get:
  *     summary: Retrieve Customer Loyalty & Rewards Summary and Activity Feed
- *     tags: ['💳 [Admin Customer] 3. Payment & Billing Management']
+ *     tags: ['Admin Panel — Payments']
  *     security:
  *       - bearerAuth: []
  *     responses:

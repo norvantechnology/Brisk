@@ -17,7 +17,7 @@ router.use(adminAuthMiddleware);
  * /admin/surveys/consumer/stats:
  *   get:
  *     summary: Survey consumer registration KPI cards
- *     tags: ['📋 [Admin Survey] Consumer Registrations']
+ *     tags: ['Admin Panel — Surveys · Consumer']
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -33,7 +33,7 @@ router.get('/consumer/stats', surveyAdminController.getConsumerStats);
  * /admin/surveys/consumer/export:
  *   get:
  *     summary: Export survey consumer registrations as CSV
- *     tags: ['📋 [Admin Survey] Consumer Registrations']
+ *     tags: ['Admin Panel — Surveys · Consumer']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -75,7 +75,7 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  * /admin/surveys/consumer:
  *   get:
  *     summary: List survey consumer registrations
- *     tags: ['📋 [Admin Survey] Consumer Registrations']
+ *     tags: ['Admin Panel — Surveys · Consumer']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -123,7 +123,7 @@ router.get('/consumer', validate(surveyFilterSchema), surveyAdminController.list
  * /admin/surveys/consumer/{id}:
  *   get:
  *     summary: Get survey consumer registration by ID
- *     tags: ['📋 [Admin Survey] Consumer Registrations']
+ *     tags: ['Admin Panel — Surveys · Consumer']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -144,7 +144,7 @@ router.get('/consumer/:id', validate(idParamSchema), surveyAdminController.getCo
  * /admin/surveys/consumer/{id}:
  *   patch:
  *     summary: Update survey consumer status and CRM notes
- *     tags: ['📋 [Admin Survey] Consumer Registrations']
+ *     tags: ['Admin Panel — Surveys · Consumer']
  *     security:
  *       - bearerAuth: []
  *     parameters:

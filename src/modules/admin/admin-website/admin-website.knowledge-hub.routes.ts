@@ -27,7 +27,7 @@ router.use(adminAuthMiddleware);
  * /admin/knowledge-hub/sections:
  *   get:
  *     summary: List Knowledge Hub sections
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -64,7 +64,7 @@ router.get('/sections', validate(listSectionsQuerySchema), controller.listSectio
  * /admin/knowledge-hub/sections:
  *   post:
  *     summary: Create Knowledge Hub section
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -126,7 +126,7 @@ router.post('/sections', validate(createSectionSchema), controller.createSection
  * /admin/knowledge-hub/bulk-status:
  *   post:
  *     summary: Bulk update Knowledge Hub section publishing status
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -152,7 +152,7 @@ router.post('/bulk-status', validate(bulkSectionStatusSchema), controller.bulkSe
  * /admin/knowledge-hub/bulk-delete:
  *   post:
  *     summary: Bulk soft-delete Knowledge Hub sections
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -177,7 +177,7 @@ router.post('/bulk-delete', validate(bulkSectionDeleteSchema), controller.bulkSe
  * /admin/knowledge-hub/sections/{id}:
  *   get:
  *     summary: Get Knowledge Hub section details (with blocks)
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -196,7 +196,7 @@ router.get('/sections/:id', validate(idParamSchema), controller.getSection);
  * /admin/knowledge-hub/sections/{id}:
  *   put:
  *     summary: Update Knowledge Hub section
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -246,7 +246,7 @@ router.put('/sections/:id', validate(updateSectionSchema), controller.updateSect
  * /admin/knowledge-hub/sections/{id}:
  *   delete:
  *     summary: Soft-delete Knowledge Hub section
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -265,7 +265,7 @@ router.delete('/sections/:id', validate(idParamSchema), controller.deleteSection
  * /admin/knowledge-hub/sections/{id}/status:
  *   patch:
  *     summary: Change Knowledge Hub section publishing status
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -297,7 +297,7 @@ router.patch(
  * /admin/knowledge-hub/sections/{id}/sort-order:
  *   patch:
  *     summary: Update Knowledge Hub section sort order
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -330,7 +330,7 @@ router.patch(
  *   post:
  *     summary: Set or replace section graphic URL
  *     description: JSON body with URL only (graphic_image_url or graphic_image). Multipart/S3 later.
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -366,7 +366,7 @@ router.post('/sections/:id/graphic', validate(graphicImageSchema), controller.se
  * /admin/knowledge-hub/sections/{id}/graphic:
  *   delete:
  *     summary: Remove section graphic
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -385,7 +385,7 @@ router.delete('/sections/:id/graphic', validate(idParamSchema), controller.remov
  * /admin/knowledge-hub/sections/{id}/blocks:
  *   get:
  *     summary: List content blocks for a section
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -404,7 +404,7 @@ router.get('/sections/:id/blocks', validate(idParamSchema), controller.listBlock
  * /admin/knowledge-hub/sections/{id}/blocks:
  *   post:
  *     summary: Add a content block
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -441,7 +441,7 @@ router.post('/sections/:id/blocks', validate(createBlockSchema), controller.crea
  * /admin/knowledge-hub/sections/{id}/blocks/reorder:
  *   patch:
  *     summary: Reorder content blocks
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -480,7 +480,7 @@ router.patch(
  * /admin/knowledge-hub/sections/{id}/blocks/{blockId}:
  *   put:
  *     summary: Update a content block
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -525,7 +525,7 @@ router.put(
  * /admin/knowledge-hub/sections/{id}/blocks/{blockId}:
  *   delete:
  *     summary: Delete a content block
- *     tags: ['📚 [Website] Knowledge Hub']
+ *     tags: ['Admin Panel — Website · Knowledge Hub']
  *     security:
  *       - bearerAuth: []
  *     parameters:
