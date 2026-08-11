@@ -73,6 +73,10 @@ router.get('/consumer/stats', surveyAdminController.getConsumerStats);
  *         schema: { type: string }
  *         description: Filter by age range e.g. 18-29
  *       - in: query
+ *         name: dateFilter
+ *         schema: { type: string, enum: [all, today, thisWeek, thisMonth] }
+ *         description: Admin All Dates dropdown (all / today / thisWeek / thisMonth)
+ *       - in: query
  *         name: consentLaunchUpdates
  *         schema: { type: string, enum: [true, false] }
  *       - in: query
@@ -145,6 +149,17 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  *       - in: query
  *         name: ageRange
  *         schema: { type: string }
+ *         description: e.g. 18-29 or 18–29 (en-dash and hyphen both match)
+ *       - in: query
+ *         name: dateFilter
+ *         schema: { type: string, enum: [all, today, thisWeek, thisMonth] }
+ *         description: |
+ *           Admin "All Dates" dropdown:
+ *           - all = no date limit
+ *           - today = submitted today
+ *           - thisWeek = from Monday of current week
+ *           - thisMonth = from 1st of current month
+ *           Example: `/admin/surveys/consumer?dateFilter=today`
  *       - in: query
  *         name: consentLaunchUpdates
  *         schema: { type: string, enum: [true, false] }

@@ -200,6 +200,12 @@ export const surveyFilterSchema = z.object({
     /** Date filters (ISO date or datetime) */
     submittedFrom: z.string().optional(),
     submittedTo: z.string().optional(),
+    /**
+     * Admin "All Dates" dropdown:
+     * all | today | thisWeek | thisMonth
+     * (also accepts this_week / this_month / "This Week")
+     */
+    dateFilter: z.string().optional(),
   }),
 });
 
@@ -220,20 +226,37 @@ export const updateSurveyTraderSchema = z.object({
 });
 
 export const createSurveyConsumerPublicSchema = z.object({
-  body: z.object({
-    fullName: z.string().trim().min(1, 'Full name is required'),
-    email: z.string().trim().email('Invalid email format'),
-    phone: z.string().trim().min(1, 'Contact number is required'),
-    country: z.string().trim().min(1, 'Country is required'),
-    county: z.string().trim().optional(),
-    ageRange: z.string().trim().optional(),
-    consentLaunchUpdates: z.boolean().optional().default(false),
-    consentMarketing: z.boolean().optional().default(false),
-    consentPartnerComm: z.boolean().optional().default(false),
-    agreementAccepted: z.literal(true, {
-      errorMap: () => ({ message: 'You must accept the Privacy Policy and Terms.' }),
-    }),
-  }),
+  body: z
+    .object({
+      fullName: z.string().trim().min(1, 'Full name is required'),
+      email: z.string().trim().email('Invalid email format'),
+      phone: z.string().trim().min(1, 'Contact number is required'),
+      /** Admin UI / website location field — use county (e.g. Dublin), not country. */
+      county: z.string().trim().min(1, 'County is required').optional(),
+      /** Deprecated alias — accepted for older clients; prefer county. */
+      country: z.string().trim().min(1).optional(),
+      ageRange: z.string().trim().optional(),
+      consentLaunchUpdates: z.boolean().optional().default(false),
+      consentMarketing: z.boolean().optional().default(false),
+      consentPartnerComm: z.boolean().optional().default(false),
+      agreementAccepted: z.literal(true, {
+        errorMap: () => ({ message: 'You must accept the Privacy Policy and Terms.' }),
+      }),
+    })
+    .superRefine((body, ctx) => {
+      if (!body.county && !body.country) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'County is required',
+          path: ['county'],
+        });
+      }
+    })
+    .transform((body) => ({
+      ...body,
+      county: (body.county || body.country || '').trim(),
+      country: body.country?.trim(),
+    })),
 });
 
 export const createSurveyTraderPublicSchema = z.object({

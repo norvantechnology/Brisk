@@ -26,6 +26,8 @@ export type SurveyConsumerFilters = {
   sortOrder?: string;
   submittedFrom?: string;
   submittedTo?: string;
+  /** Admin date dropdown: all | today | thisWeek | thisMonth */
+  dateFilter?: string;
 };
 
 export type UpdateSurveyConsumerInput = {
@@ -37,8 +39,10 @@ export type CreateSurveyConsumerPublicInput = {
   fullName: string;
   email: string;
   phone: string;
-  country: string;
-  county?: string;
+  /** Preferred location field for consumer survey (admin UI uses County). */
+  county: string;
+  /** Optional — kept for backward compatibility with older website payloads. */
+  country?: string;
   ageRange?: string;
   consentLaunchUpdates?: boolean;
   consentMarketing?: boolean;
@@ -84,6 +88,87 @@ const parseBoolQuery = (value?: string): boolean | undefined => {
 const startOfTodayUtc = (): Date => {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+};
+
+/** Normalize age labels so "18–29" (en-dash) matches "18-29" (hyphen). */
+export const normalizeAgeRange = (value?: string | null): string | undefined => {
+  if (!value) return undefined;
+  const normalized = value
+    .trim()
+    .replace(/[\u2010-\u2015\u2212]/g, '-') // hyphens / dashes / minus
+    .replace(/\s+/g, '');
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const resolveDateFilterRange = (
+  dateFilter?: string
+): { gte?: Date; lte?: Date } | undefined => {
+  if (!dateFilter) return undefined;
+
+  const key = dateFilter.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (!key || key === 'all') return undefined;
+
+  const now = new Date();
+  const todayStart = startOfTodayUtc();
+
+  if (key === 'today') {
+    return { gte: todayStart };
+  }
+
+  if (key === 'thisweek') {
+    // Monday 00:00 UTC of current week
+    const day = todayStart.getUTCDay(); // 0 Sun … 6 Sat
+    const daysFromMonday = day === 0 ? 6 : day - 1;
+    const weekStart = new Date(todayStart);
+    weekStart.setUTCDate(weekStart.getUTCDate() - daysFromMonday);
+    return { gte: weekStart };
+  }
+
+  if (key === 'thismonth') {
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    return { gte: monthStart };
+  }
+
+  return undefined;
+};
+
+const applySubmittedAtFilters = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  where: Record<string, any>,
+  filters: Pick<SurveyConsumerFilters, 'submittedFrom' | 'submittedTo' | 'dateFilter'>
+) => {
+  const existing =
+    where.submittedAt && typeof where.submittedAt === 'object' && !(where.submittedAt instanceof Date)
+      ? { ...where.submittedAt }
+      : {};
+  const submittedAt: Prisma.DateTimeFilter = { ...existing };
+
+  const preset = resolveDateFilterRange(filters.dateFilter);
+  if (preset?.gte) {
+    submittedAt.gte = preset.gte;
+  }
+  if (preset?.lte) {
+    submittedAt.lte = preset.lte;
+  }
+
+  if (filters.submittedFrom) {
+    const from = new Date(filters.submittedFrom);
+    if (!Number.isNaN(from.getTime())) {
+      submittedAt.gte =
+        submittedAt.gte instanceof Date && submittedAt.gte > from ? submittedAt.gte : from;
+    }
+  }
+  if (filters.submittedTo) {
+    const to = new Date(filters.submittedTo);
+    if (!Number.isNaN(to.getTime())) {
+      submittedAt.lte =
+        submittedAt.lte instanceof Date && submittedAt.lte < to ? submittedAt.lte : to;
+    }
+  }
+
+  if (Object.keys(submittedAt).length > 0) {
+    where.submittedAt = submittedAt;
+  }
 };
 
 const escapeCsv = (value: unknown): string => {
@@ -158,8 +243,20 @@ const buildConsumerWhere = (filters: SurveyConsumerFilters): Prisma.SurveyConsum
     where.country = { equals: filters.country, mode: 'insensitive' };
   }
 
-  if (filters.ageRange) {
-    where.ageRange = filters.ageRange;
+  const ageRange = normalizeAgeRange(filters.ageRange);
+  if (ageRange) {
+    // Match both hyphen and en-dash variants stored in DB
+    const ageVariants = Array.from(
+      new Set([ageRange, ageRange.replace(/-/g, '–'), ageRange.replace(/-/g, '—')])
+    );
+    where.AND = [
+      ...((where.AND as Prisma.SurveyConsumerRegistrationWhereInput[]) ?? []),
+      {
+        OR: ageVariants.map((variant) => ({
+          ageRange: { equals: variant, mode: 'insensitive' as const },
+        })),
+      },
+    ];
   }
 
   const consentLaunchUpdates = parseBoolQuery(filters.consentLaunchUpdates);
@@ -177,22 +274,7 @@ const buildConsumerWhere = (filters: SurveyConsumerFilters): Prisma.SurveyConsum
     where.consentPartnerComm = consentPartnerComm;
   }
 
-  const submittedAt: Prisma.DateTimeFilter = {};
-  if (filters.submittedFrom) {
-    const from = new Date(filters.submittedFrom);
-    if (!Number.isNaN(from.getTime())) {
-      submittedAt.gte = from;
-    }
-  }
-  if (filters.submittedTo) {
-    const to = new Date(filters.submittedTo);
-    if (!Number.isNaN(to.getTime())) {
-      submittedAt.lte = to;
-    }
-  }
-  if (Object.keys(submittedAt).length > 0) {
-    where.submittedAt = submittedAt;
-  }
+  applySubmittedAtFilters(where, filters);
 
   return where;
 };
@@ -419,6 +501,9 @@ export const exportConsumersCsv = async (filters: SurveyConsumerFilters): Promis
 
 export const createConsumerRegistration = async (input: CreateSurveyConsumerPublicInput) => {
   const registrationCode = await generateRegistrationCode();
+  const county = input.county.trim();
+  const country = input.country?.trim() || county;
+  const ageRange = normalizeAgeRange(input.ageRange);
 
   const registration = await prisma.surveyConsumerRegistration.create({
     data: {
@@ -426,9 +511,9 @@ export const createConsumerRegistration = async (input: CreateSurveyConsumerPubl
       fullName: input.fullName,
       email: input.email,
       phone: input.phone,
-      country: input.country,
-      county: input.county,
-      ageRange: input.ageRange,
+      country,
+      county,
+      ageRange,
       consentLaunchUpdates: input.consentLaunchUpdates ?? false,
       consentMarketing: input.consentMarketing ?? false,
       consentPartnerComm: input.consentPartnerComm ?? false,
@@ -517,22 +602,7 @@ const buildTraderWhere = (filters: SurveyTraderFilters): Prisma.SurveyTraderRegi
     where.consentPartnerComm = consentPartnerComm;
   }
 
-  const submittedAt: Prisma.DateTimeFilter = {};
-  if (filters.submittedFrom) {
-    const from = new Date(filters.submittedFrom);
-    if (!Number.isNaN(from.getTime())) {
-      submittedAt.gte = from;
-    }
-  }
-  if (filters.submittedTo) {
-    const to = new Date(filters.submittedTo);
-    if (!Number.isNaN(to.getTime())) {
-      submittedAt.lte = to;
-    }
-  }
-  if (Object.keys(submittedAt).length > 0) {
-    where.submittedAt = submittedAt;
-  }
+  applySubmittedAtFilters(where, filters);
 
   return where;
 };

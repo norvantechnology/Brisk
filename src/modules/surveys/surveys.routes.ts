@@ -35,7 +35,7 @@ const router = Router();
  *               - fullName
  *               - email
  *               - phone
- *               - country
+ *               - county
  *               - agreementAccepted
  *             properties:
  *               fullName:
@@ -51,13 +51,17 @@ const router = Router();
  *                 type: string
  *                 description: Contact / mobile number (required)
  *                 example: "+353871234567"
+ *               county:
+ *                 type: string
+ *                 description: County / location (required) — e.g. Dublin. Prefer this over country.
+ *                 example: Dublin
  *               country:
  *                 type: string
- *                 description: Selected country from dropdown (required)
+ *                 description: Optional legacy alias — if county is missing, country is accepted and stored as county
  *                 example: Ireland
  *               ageRange:
  *                 type: string
- *                 description: Optional — e.g. 18-29, 30-39, 40-49, 50-59, 60+
+ *                 description: Optional — e.g. 18-29 or 18–29 (dashes normalized)
  *                 example: "18-29"
  *               consentLaunchUpdates:
  *                 type: boolean

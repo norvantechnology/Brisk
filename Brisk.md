@@ -1492,7 +1492,7 @@ updated_by_admin_id, updated_at
 | Full Name | Yes | |
 | Contact Number | Yes | |
 | Email Address | Yes | |
-| Country | Yes | Dropdown (e.g. Ireland, United Kingdom, …) |
+| Country / County | Yes | Website may send `county` (preferred) or legacy `country` |
 | Age Range | No | e.g. `18-29`, `30-39`, `40-49`, `50-59`, `60+` |
 | Launch updates (Yes/No) | No | `consentLaunchUpdates` |
 | Marketing (Yes/No) | No | `consentMarketing` |
@@ -1510,7 +1510,7 @@ submitted_at, reviewed_by_admin_id?, notes?, created_at, updated_at
 
 | Method | Endpoint | Who uses it |
 |--------|----------|-------------|
-| `POST` | `/surveys/consumer` | **Website** — when user submits consumer survey |
+| `POST` | `/surveys/consumer` | **Website** — when user submits consumer survey (`county` required; `country` accepted as legacy alias) |
 | `GET` | `/admin/surveys/consumer` | **Admin panel** — list all consumer signups (`sortBy`/`sortOrder`, filters) |
 | `GET` | `/admin/surveys/consumer/stats` | **Admin panel** — KPI cards |
 | `GET` | `/admin/surveys/consumer/:id` | **Admin panel** — view one signup |
