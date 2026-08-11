@@ -75,11 +75,40 @@ export const forgotPasswordSchema = z.object({
   body: forgotPasswordBodySchema,
 });
 
-const resetPasswordBodySchema = z.object({
+/** Step 2 of forgot-password: verify OTP only (does not change password). */
+const verifyResetOtpBodySchema = z.object({
   mobileNumber: mobileNumberSchema,
   code: otpCodeSchema,
-  newPassword: passwordSchema,
 });
+
+export const verifyResetOtpSchema = z.object({
+  body: verifyResetOtpBodySchema,
+});
+
+/**
+ * Step 3: set new password.
+ * Prefer resetToken from verify-reset-otp.
+ * Legacy one-shot still accepted: mobileNumber + code + newPassword.
+ */
+const resetPasswordBodySchema = z
+  .object({
+    resetToken: z.string().trim().min(1).optional(),
+    mobileNumber: mobileNumberSchema.optional(),
+    code: otpCodeSchema.optional(),
+    newPassword: passwordSchema,
+  })
+  .superRefine((body, ctx) => {
+    if (body.resetToken) {
+      return;
+    }
+    if (!body.mobileNumber || !body.code) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide resetToken from verify-reset-otp, or mobileNumber + code.',
+        path: ['resetToken'],
+      });
+    }
+  });
 
 export const resetPasswordSchema = z.object({
   body: resetPasswordBodySchema,
@@ -90,4 +119,5 @@ export type VerifyOtpInput = z.infer<typeof verifyOtpBodySchema>;
 export type ResendOtpInput = z.infer<typeof resendOtpBodySchema>;
 export type LoginInput = z.infer<typeof loginBodySchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordBodySchema>;
+export type VerifyResetOtpInput = z.infer<typeof verifyResetOtpBodySchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordBodySchema>;

@@ -9,6 +9,7 @@ import {
   loginSchema,
   refreshSchema,
   forgotPasswordSchema,
+  verifyResetOtpSchema,
   resetPasswordSchema,
 } from './auth.validation';
 
@@ -71,8 +72,11 @@ router.post('/register', validate(registerSchema), authController.register);
  * @swagger
  * /auth/verify-otp:
  *   post:
- *     summary: Verify 6-digit SMS OTP code to activate Customer/Trader mobile number
+ *     summary: Verify signup SMS OTP to activate mobile number (NOT forgot-password)
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       Use only after **register** / unverified **login**.
+ *       For forgot-password OTP use **POST /auth/verify-reset-otp** instead.
  *     requestBody:
  *       required: true
  *       content:
@@ -199,37 +203,65 @@ router.post('/forgot-password', validate(forgotPasswordSchema), authController.f
 
 /**
  * @swagger
- * /auth/reset-password:
+ * /auth/verify-reset-otp:
  *   post:
- *     summary: Reset password using SMS OTP from forgot-password flow
+ *     summary: Verify forgot-password OTP (step 2) — returns resetToken
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Forgot password flow:**
+ *       1. POST /auth/forgot-password { email }
+ *       2. POST /auth/verify-reset-otp { mobileNumber, code } → resetToken
+ *       3. POST /auth/reset-password { resetToken, newPassword }
+ *
+ *       Do **not** call POST /auth/verify-otp here (that is for signup only).
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - mobileNumber
- *               - code
- *               - newPassword
+ *             required: [mobileNumber, code]
  *             properties:
- *               mobileNumber:
- *                 type: string
- *                 example: "+353871234567"
- *               code:
- *                 type: string
- *                 example: "123456"
- *               newPassword:
- *                 type: string
- *                 example: NewPassword1!
+ *               mobileNumber: { type: string, example: "+353871234567" }
+ *               code: { type: string, example: "123456" }
  *     responses:
  *       200:
- *         description: |
- *           Password updated. If mobile already verified, returns access + refresh tokens.
- *           If mobile still unverified, returns requiresOtpVerification for account activation.
+ *         description: OTP OK. Returns resetToken for change-password screen.
  *       400:
  *         description: Invalid or expired OTP.
+ *       404:
+ *         description: User not found.
+ */
+router.post('/verify-reset-otp', validate(verifyResetOtpSchema), authController.verifyResetOtp);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Set new password after forgot-password OTP (step 3)
+ *     tags: ['Mobile / Auth']
+ *     description: |
+ *       Preferred: `{ resetToken, newPassword }` from verify-reset-otp (no OTP again).
+ *       Legacy one-shot still works: `{ mobileNumber, code, newPassword }`.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [newPassword]
+ *             properties:
+ *               resetToken: { type: string, description: From verify-reset-otp }
+ *               mobileNumber: { type: string, example: "+353871234567" }
+ *               code: { type: string, example: "123456" }
+ *               newPassword: { type: string, example: NewPassword1! }
+ *     responses:
+ *       200:
+ *         description: Password updated. Returns tokens if mobile already verified.
+ *       400:
+ *         description: Invalid OTP (legacy) or validation error.
+ *       401:
+ *         description: Invalid or expired resetToken.
  *       404:
  *         description: User not found.
  */

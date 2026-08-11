@@ -126,6 +126,24 @@ export const forgotPassword = async (
   }
 };
 
+export const verifyResetOtp = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await authService.verifyPasswordResetOtp(req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const resetPassword = async (
   req: Request,
   res: Response,

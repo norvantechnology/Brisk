@@ -24,6 +24,7 @@ import type {
   ResendOtpInput,
   LoginInput,
   ForgotPasswordInput,
+  VerifyResetOtpInput,
   ResetPasswordInput,
 } from './auth.validation';
 
@@ -355,6 +356,19 @@ export const logoutUser = async () => ({
 const FORGOT_PASSWORD_GENERIC_MESSAGE =
   'If an account exists for this email, a verification code has been sent to the registered mobile number.';
 
+const RESET_TOKEN_EXPIRES_IN = '15m';
+
+const createPasswordResetToken = (user: { id: string; mobileNumber: string }) =>
+  jwt.sign(
+    {
+      id: user.id,
+      mobileNumber: user.mobileNumber,
+      type: 'password_reset',
+    },
+    env.JWT_SECRET,
+    { expiresIn: RESET_TOKEN_EXPIRES_IN }
+  );
+
 export const forgotPassword = async (input: ForgotPasswordInput) => {
   const { email } = input;
 
@@ -417,20 +431,55 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
   };
 };
 
-export const resetPassword = async (input: ResetPasswordInput) => {
-  const { mobileNumber, code, newPassword } = input;
+/**
+ * Forgot-password step 2 — verify OTP only.
+ * Do NOT use POST /auth/verify-otp (that is for signup mobile activation).
+ */
+export const verifyPasswordResetOtp = async (input: VerifyResetOtpInput) => {
+  const { mobileNumber, code } = input;
 
   const user = await prisma.user.findUnique({
     where: { mobileNumber },
-    select: PUBLIC_USER_SELECT,
+    select: {
+      id: true,
+      email: true,
+      mobileNumber: true,
+      role: true,
+      status: true,
+      mobileVerified: true,
+    },
   });
 
   if (!user) {
     throw new NotFoundError('User with this mobile number does not exist.');
   }
 
+  assertAccountCanAuthenticate(user);
+
+  const isValid = await verifyOtp(mobileNumber, code, 'password_reset');
+  if (!isValid) {
+    throw new BadRequestError('Invalid or expired verification code.');
+  }
+
+  const resetToken = createPasswordResetToken(user);
+
+  return {
+    message: 'Verification code confirmed. You can now set a new password.',
+    data: {
+      resetToken,
+      resetTokenExpiresInMinutes: 15,
+      userId: user.id,
+      email: user.email,
+      mobileNumber: user.mobileNumber,
+      role: user.role,
+      mobileVerified: user.mobileVerified,
+    },
+  };
+};
+
+const applyNewPassword = async (userId: string, newPassword: string) => {
   const fullUser = await prisma.user.findUnique({
-    where: { id: user.id },
+    where: { id: userId },
     select: { id: true, status: true, mobileVerified: true },
   });
 
@@ -440,15 +489,10 @@ export const resetPassword = async (input: ResetPasswordInput) => {
 
   assertAccountCanAuthenticate(fullUser);
 
-  const isValid = await verifyOtp(mobileNumber, code, 'password_reset');
-  if (!isValid) {
-    throw new BadRequestError('Invalid or expired verification code.');
-  }
-
   const passwordHash = await bcrypt.hash(newPassword, 10);
 
   const updatedUser = await prisma.user.update({
-    where: { id: user.id },
+    where: { id: userId },
     data: { passwordHash },
     select: PUBLIC_USER_SELECT,
   });
@@ -472,4 +516,51 @@ export const resetPassword = async (input: ResetPasswordInput) => {
       ...getOtpMeta(),
     },
   };
+};
+
+export const resetPassword = async (input: ResetPasswordInput) => {
+  const { resetToken, mobileNumber, code, newPassword } = input;
+
+  // Preferred app flow: OTP already verified → resetToken only
+  if (resetToken) {
+    try {
+      const decoded = jwt.verify(resetToken, env.JWT_SECRET) as {
+        id: string;
+        mobileNumber?: string;
+        type?: string;
+      };
+
+      if (decoded.type !== 'password_reset') {
+        throw new UnauthorizedError('Invalid or expired reset token.');
+      }
+
+      return applyNewPassword(decoded.id, newPassword);
+    } catch (error) {
+      if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+        throw error;
+      }
+      throw new UnauthorizedError('Invalid or expired reset token.');
+    }
+  }
+
+  // Legacy one-shot: mobileNumber + code + newPassword
+  if (!mobileNumber || !code) {
+    throw new BadRequestError('Provide resetToken, or mobileNumber + code.');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { mobileNumber },
+    select: { id: true },
+  });
+
+  if (!user) {
+    throw new NotFoundError('User with this mobile number does not exist.');
+  }
+
+  const isValid = await verifyOtp(mobileNumber, code, 'password_reset');
+  if (!isValid) {
+    throw new BadRequestError('Invalid or expired verification code.');
+  }
+
+  return applyNewPassword(user.id, newPassword);
 };
