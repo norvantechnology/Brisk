@@ -192,7 +192,14 @@ export const surveyFilterSchema = z.object({
     consentLaunchUpdates: z.string().optional(),
     consentMarketing: z.string().optional(),
     consentPartnerComm: z.string().optional(),
+    /** Legacy date sort: newest | oldest (still supported) */
     sort: z.enum(['newest', 'oldest']).optional(),
+    /** Admin UI sort: name | status | submittedAt */
+    sortBy: z.enum(['name', 'status', 'submittedAt', 'companyName']).optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional(),
+    /** Date filters (ISO date or datetime) */
+    submittedFrom: z.string().optional(),
+    submittedTo: z.string().optional(),
   }),
 });
 

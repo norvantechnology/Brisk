@@ -1,3 +1,5 @@
+import { SubcategoryPriceEnteredBy } from '@prisma/client';
+
 export interface CategoryQueryFilters {
   page?: number;
   limit?: number;
@@ -41,6 +43,26 @@ export interface UpdateCategoryInput {
   featured?: boolean;
 }
 
+export type QaFormField = {
+  id: string;
+  type:
+    | 'text'
+    | 'textarea'
+    | 'number'
+    | 'dropdown'
+    | 'single_choice'
+    | 'multi_choice'
+    | 'date'
+    | 'boolean';
+  label: string;
+  required?: boolean;
+  placeholder?: string;
+  helpText?: string;
+  options?: Array<{ label: string; value: string }>;
+  min?: number;
+  max?: number;
+};
+
 export interface CreateSubcategoryInput {
   categoryId: string;
   name: string;
@@ -49,6 +71,10 @@ export interface CreateSubcategoryInput {
   urlSlug: string;
   featured?: boolean;
   status?: string;
+  siteVisitEnabled?: boolean;
+  priceEnabled?: boolean;
+  priceEnteredBy?: SubcategoryPriceEnteredBy | 'CUSTOMER' | 'TRADER';
+  qaFormSchema?: QaFormField[] | null;
 }
 
 export interface UpdateSubcategoryInput {
@@ -59,4 +85,8 @@ export interface UpdateSubcategoryInput {
   urlSlug?: string;
   featured?: boolean;
   status?: string;
+  siteVisitEnabled?: boolean;
+  priceEnabled?: boolean;
+  priceEnteredBy?: SubcategoryPriceEnteredBy | 'CUSTOMER' | 'TRADER';
+  qaFormSchema?: QaFormField[] | null;
 }

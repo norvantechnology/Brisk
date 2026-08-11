@@ -33,16 +33,72 @@ export const updateCategorySchema = z.object({
   }),
 });
 
+const qaFormOptionSchema = z.object({
+  label: z.string().min(1),
+  value: z.string().min(1),
+});
+
+/** Admin form-builder field saved as JSON on the sub-category. */
+export const qaFormFieldSchema = z.object({
+  id: z.string().min(1, 'Field id is required.'),
+  type: z.enum([
+    'text',
+    'textarea',
+    'number',
+    'dropdown',
+    'single_choice',
+    'multi_choice',
+    'date',
+    'boolean',
+  ]),
+  label: z.string().min(1, 'Field label is required.'),
+  required: z.boolean().optional().default(false),
+  placeholder: z.string().optional(),
+  helpText: z.string().optional(),
+  options: z.array(qaFormOptionSchema).optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+});
+
+export const qaFormSchema = z.array(qaFormFieldSchema).superRefine((fields, ctx) => {
+  const ids = new Set<string>();
+  fields.forEach((field, index) => {
+    if (ids.has(field.id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate field id "${field.id}".`,
+        path: [index, 'id'],
+      });
+    }
+    ids.add(field.id);
+
+    const needsOptions = ['dropdown', 'single_choice', 'multi_choice'].includes(field.type);
+    if (needsOptions && (!field.options || field.options.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Field type "${field.type}" requires at least one option.`,
+        path: [index, 'options'],
+      });
+    }
+  });
+});
+
+const subcategoryBodyBase = {
+  categoryId: z.string().uuid('Invalid Category ID format.'),
+  name: z.string().min(1, 'Sub-category name is required.'),
+  serviceType: z.string().optional(),
+  code: z.string().optional(),
+  urlSlug: z.string().min(1, 'URL slug is required.'),
+  featured: z.boolean().optional().default(false),
+  status: z.enum(['active', 'inactive']).optional().default('active'),
+  siteVisitEnabled: z.boolean().optional().default(false),
+  priceEnabled: z.boolean().optional().default(true),
+  priceEnteredBy: z.enum(['CUSTOMER', 'TRADER']).optional().default('CUSTOMER'),
+  qaFormSchema: qaFormSchema.optional().nullable(),
+};
+
 export const createSubcategorySchema = z.object({
-  body: z.object({
-    categoryId: z.string().uuid('Invalid Category ID format.'),
-    name: z.string().min(1, 'Sub-category name is required.'),
-    serviceType: z.string().optional(),
-    code: z.string().optional(),
-    urlSlug: z.string().min(1, 'URL slug is required.'),
-    featured: z.boolean().optional().default(false),
-    status: z.enum(['active', 'inactive']).optional().default('active'),
-  }),
+  body: z.object(subcategoryBodyBase),
 });
 
 export const updateSubcategorySchema = z.object({
@@ -57,6 +113,10 @@ export const updateSubcategorySchema = z.object({
     urlSlug: z.string().min(1).optional(),
     featured: z.boolean().optional(),
     status: z.enum(['active', 'inactive']).optional(),
+    siteVisitEnabled: z.boolean().optional(),
+    priceEnabled: z.boolean().optional(),
+    priceEnteredBy: z.enum(['CUSTOMER', 'TRADER']).optional(),
+    qaFormSchema: qaFormSchema.optional().nullable(),
   }),
 });
 

@@ -410,6 +410,10 @@ erDiagram
         uuid category_id FK
         string name
         string service_type
+        boolean site_visit_enabled
+        boolean price_enabled
+        enum price_entered_by "CUSTOMER|TRADER"
+        json qa_form_schema "admin-built Q&A form fields"
     }
 
     JOB_IMAGES {
@@ -674,6 +678,13 @@ brisk-backend/
 ### 6.3 Categories Module
 - Category → Subcategory tree (Residential/Commercial toggle, matches "All Sub-Category" screen).
 - Read-mostly, cached at the app layer (Redis once introduced) since this data changes rarely.
+- **Sub-category flags (admin):**
+  - `siteVisitEnabled` — turn site visit on/off for that service.
+  - `priceEnabled` — show or hide the price field when posting a job.
+  - `priceEnteredBy` — `CUSTOMER` or `TRADER` (who fills the price when the price field is shown).
+- **Sub-category Q&A form builder:** Admin builds a form when creating/editing a sub-category and saves it as JSON (`qaFormSchema`). Supported field types: `text`, `textarea`, `number`, `dropdown`, `single_choice`, `multi_choice`, `date`, `boolean`. When a customer/trader posts a job for that sub-category, the app renders this form and stores answers on the job as `qaFormAnswers` JSON.
+- **App read APIs (no admin token):** `GET /categories`, `GET /categories/:id`, `GET /categories/slug/:slug`, `GET /sub-categories`, `GET /sub-categories/:id` — active-only; each sub-category returns `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`. Swagger tag **Mobile / Categories**.
+- **Jobs create API** (accepting `qaFormAnswers`) still pending Phase 2 Jobs module — DB column already exists.
 
 ### 6.4 Jobs Module (Job Posting Flow)
 Implements Consumer Journey §2 and the "Post a New Job" screens common to all three offer flows:
@@ -1500,7 +1511,7 @@ submitted_at, reviewed_by_admin_id?, notes?, created_at, updated_at
 | Method | Endpoint | Who uses it |
 |--------|----------|-------------|
 | `POST` | `/surveys/consumer` | **Website** — when user submits consumer survey |
-| `GET` | `/admin/surveys/consumer` | **Admin panel** — list all consumer signups |
+| `GET` | `/admin/surveys/consumer` | **Admin panel** — list all consumer signups (`sortBy`/`sortOrder`, filters) |
 | `GET` | `/admin/surveys/consumer/stats` | **Admin panel** — KPI cards |
 | `GET` | `/admin/surveys/consumer/:id` | **Admin panel** — view one signup |
 | `PATCH` | `/admin/surveys/consumer/:id` | **Admin panel** — change status / add notes |

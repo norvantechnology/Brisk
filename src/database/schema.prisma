@@ -177,6 +177,12 @@ enum SurveyRegistrationStatus {
   REJECTED
 }
 
+/// Who enters the job price for this sub-category (when price field is shown).
+enum SubcategoryPriceEnteredBy {
+  CUSTOMER
+  TRADER
+}
+
 // ==========================================
 // CORE AUTH & USERS
 // ==========================================
@@ -429,16 +435,24 @@ model Category {
 }
 
 model Subcategory {
-  id          String   @id @default(uuid()) @db.Uuid
-  categoryId  String   @map("category_id") @db.Uuid
-  name        String
-  serviceType String?  @map("service_type")
-  code        String?
-  urlSlug     String   @map("url_slug")
-  featured    Boolean  @default(false)
-  status      String   @default("active") // active | inactive
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                 String                      @id @default(uuid()) @db.Uuid
+  categoryId         String                      @map("category_id") @db.Uuid
+  name               String
+  serviceType        String?                     @map("service_type")
+  code               String?
+  urlSlug            String                      @map("url_slug")
+  featured           Boolean                     @default(false)
+  status             String                      @default("active") // active | inactive
+  /// Admin toggle: site visit required / available for this service
+  siteVisitEnabled   Boolean                     @default(false) @map("site_visit_enabled")
+  /// Admin toggle: show price field when posting a job for this sub-category
+  priceEnabled       Boolean                     @default(true) @map("price_enabled")
+  /// Who fills the price when priceEnabled=true
+  priceEnteredBy     SubcategoryPriceEnteredBy   @default(CUSTOMER) @map("price_entered_by")
+  /// Admin-built Q&A form schema (JSON). Mobile apps render these fields when posting a job.
+  qaFormSchema       Json?                       @map("qa_form_schema")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  updatedAt          DateTime                    @updatedAt @map("updated_at")
 
   // Relationships
   category Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -466,6 +480,8 @@ model Job {
   postcode      String?
   status        JobStatus @default(DRAFT)
   scheduledDate DateTime? @map("scheduled_date")
+  /// Answers to subcategory.qaFormSchema when the job was posted (fieldId → value)
+  qaFormAnswers Json?     @map("qa_form_answers")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

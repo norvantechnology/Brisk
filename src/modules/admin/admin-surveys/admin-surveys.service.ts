@@ -22,6 +22,10 @@ export type SurveyConsumerFilters = {
   consentMarketing?: string;
   consentPartnerComm?: string;
   sort?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  submittedFrom?: string;
+  submittedTo?: string;
 };
 
 export type UpdateSurveyConsumerInput = {
@@ -173,7 +177,53 @@ const buildConsumerWhere = (filters: SurveyConsumerFilters): Prisma.SurveyConsum
     where.consentPartnerComm = consentPartnerComm;
   }
 
+  const submittedAt: Prisma.DateTimeFilter = {};
+  if (filters.submittedFrom) {
+    const from = new Date(filters.submittedFrom);
+    if (!Number.isNaN(from.getTime())) {
+      submittedAt.gte = from;
+    }
+  }
+  if (filters.submittedTo) {
+    const to = new Date(filters.submittedTo);
+    if (!Number.isNaN(to.getTime())) {
+      submittedAt.lte = to;
+    }
+  }
+  if (Object.keys(submittedAt).length > 0) {
+    where.submittedAt = submittedAt;
+  }
+
   return where;
+};
+
+const buildConsumerOrderBy = (
+  filters: SurveyConsumerFilters
+): Prisma.SurveyConsumerRegistrationOrderByWithRelationInput => {
+  const hasSortBy = Boolean(filters.sortBy);
+  const order: Prisma.SortOrder =
+    filters.sortOrder === 'asc' || filters.sortOrder === 'desc'
+      ? filters.sortOrder
+      : filters.sortBy === 'submittedAt'
+        ? 'desc'
+        : hasSortBy
+          ? 'asc'
+          : 'desc';
+
+  if (filters.sortBy === 'name') {
+    return { fullName: order };
+  }
+  if (filters.sortBy === 'status') {
+    return { status: order };
+  }
+  if (filters.sortBy === 'submittedAt') {
+    return { submittedAt: order };
+  }
+
+  // Legacy: sort=newest|oldest (default newest)
+  return {
+    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
+  };
 };
 
 const reviewedBySelect = {
@@ -229,9 +279,7 @@ export const getConsumerStats = async () => {
 export const listConsumers = async (filters: SurveyConsumerFilters) => {
   const { page, limit, skip } = parsePageLimit(filters);
   const where = buildConsumerWhere(filters);
-  const orderBy: Prisma.SurveyConsumerRegistrationOrderByWithRelationInput = {
-    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
-  };
+  const orderBy = buildConsumerOrderBy(filters);
 
   const [total, registrations] = await Promise.all([
     prisma.surveyConsumerRegistration.count({ where }),
@@ -317,9 +365,7 @@ export const updateConsumer = async (
 
 export const exportConsumersCsv = async (filters: SurveyConsumerFilters): Promise<string> => {
   const where = buildConsumerWhere(filters);
-  const orderBy: Prisma.SurveyConsumerRegistrationOrderByWithRelationInput = {
-    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
-  };
+  const orderBy = buildConsumerOrderBy(filters);
 
   const registrations = await prisma.surveyConsumerRegistration.findMany({
     where,
@@ -471,7 +517,55 @@ const buildTraderWhere = (filters: SurveyTraderFilters): Prisma.SurveyTraderRegi
     where.consentPartnerComm = consentPartnerComm;
   }
 
+  const submittedAt: Prisma.DateTimeFilter = {};
+  if (filters.submittedFrom) {
+    const from = new Date(filters.submittedFrom);
+    if (!Number.isNaN(from.getTime())) {
+      submittedAt.gte = from;
+    }
+  }
+  if (filters.submittedTo) {
+    const to = new Date(filters.submittedTo);
+    if (!Number.isNaN(to.getTime())) {
+      submittedAt.lte = to;
+    }
+  }
+  if (Object.keys(submittedAt).length > 0) {
+    where.submittedAt = submittedAt;
+  }
+
   return where;
+};
+
+const buildTraderOrderBy = (
+  filters: SurveyTraderFilters
+): Prisma.SurveyTraderRegistrationOrderByWithRelationInput => {
+  const hasSortBy = Boolean(filters.sortBy);
+  const order: Prisma.SortOrder =
+    filters.sortOrder === 'asc' || filters.sortOrder === 'desc'
+      ? filters.sortOrder
+      : filters.sortBy === 'submittedAt'
+        ? 'desc'
+        : hasSortBy
+          ? 'asc'
+          : 'desc';
+
+  if (filters.sortBy === 'name') {
+    return { fullName: order };
+  }
+  if (filters.sortBy === 'companyName') {
+    return { companyName: order };
+  }
+  if (filters.sortBy === 'status') {
+    return { status: order };
+  }
+  if (filters.sortBy === 'submittedAt') {
+    return { submittedAt: order };
+  }
+
+  return {
+    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
+  };
 };
 
 // ==========================================
@@ -517,9 +611,7 @@ export const getTraderStats = async () => {
 export const listTraders = async (filters: SurveyTraderFilters) => {
   const { page, limit, skip } = parsePageLimit(filters);
   const where = buildTraderWhere(filters);
-  const orderBy: Prisma.SurveyTraderRegistrationOrderByWithRelationInput = {
-    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
-  };
+  const orderBy = buildTraderOrderBy(filters);
 
   const [total, registrations] = await Promise.all([
     prisma.surveyTraderRegistration.count({ where }),
@@ -605,9 +697,7 @@ export const updateTrader = async (
 
 export const exportTradersCsv = async (filters: SurveyTraderFilters): Promise<string> => {
   const where = buildTraderWhere(filters);
-  const orderBy: Prisma.SurveyTraderRegistrationOrderByWithRelationInput = {
-    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
-  };
+  const orderBy = buildTraderOrderBy(filters);
 
   const registrations = await prisma.surveyTraderRegistration.findMany({
     where,

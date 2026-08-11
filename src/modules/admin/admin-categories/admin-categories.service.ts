@@ -9,6 +9,7 @@ import {
   UpdateSubcategoryInput,
 } from './admin-categories.types';
 import { ActorType, Prisma } from '@prisma/client';
+import { serializeSubcategory } from '../../categories/categories.serializers';
 
 // ==========================================
 // CATEGORY MASTER SERVICES
@@ -98,6 +99,7 @@ export const getCategoryById = async (id: string) => {
         select: {
           traders: true,
           jobs: true,
+          subcategories: true,
         },
       },
     },
@@ -107,7 +109,33 @@ export const getCategoryById = async (id: string) => {
     throw new NotFoundError('Category not found.');
   }
 
-  return category;
+  return {
+    id: category.id,
+    name: category.name,
+    categoryCode: category.categoryCode,
+    urlSlug: category.urlSlug,
+    description: category.description,
+    iconName: category.iconName,
+    brandThemeColor: category.brandThemeColor,
+    bannerImageUrl: category.bannerImageUrl,
+    displayOrder: category.displayOrder,
+    status: category.status,
+    featured: category.featured,
+    subCategoriesCount: category._count.subcategories,
+    tradersCount: category._count.traders,
+    jobsCount: category._count.jobs,
+    subcategories: category.subcategories.map((sub) =>
+      serializeSubcategory(sub, {
+        parentCategory: {
+          id: category.id,
+          name: category.name,
+          categoryCode: category.categoryCode,
+        },
+      })
+    ),
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
+  };
 };
 
 export const createCategory = async (adminId: string, adminLabel: string, input: CreateCategoryInput) => {
@@ -288,13 +316,8 @@ export const listSubcategories = async (filters: SubcategoryQueryFilters) => {
         where: { categoryId: sub.categoryId },
       });
 
-      return {
+      return serializeSubcategory(sub, {
         rowNumber: skip + index + 1,
-        id: sub.id,
-        name: sub.name,
-        code: sub.code,
-        urlSlug: sub.urlSlug,
-        serviceType: sub.serviceType,
         parentCategory: {
           id: sub.category.id,
           name: sub.category.name,
@@ -302,11 +325,7 @@ export const listSubcategories = async (filters: SubcategoryQueryFilters) => {
         },
         tradersCount,
         jobsCount: sub._count.jobs,
-        featured: sub.featured,
-        status: sub.status,
-        createdAt: sub.createdAt,
-        updatedAt: sub.updatedAt,
-      };
+      });
     })
   );
 
@@ -325,7 +344,14 @@ export const getSubcategoryById = async (id: string) => {
   const subcategory = await prisma.subcategory.findUnique({
     where: { id },
     include: {
-      category: true,
+      category: {
+        select: {
+          id: true,
+          name: true,
+          categoryCode: true,
+          urlSlug: true,
+        },
+      },
       _count: {
         select: {
           jobs: true,
@@ -338,7 +364,14 @@ export const getSubcategoryById = async (id: string) => {
     throw new NotFoundError('Sub-category not found.');
   }
 
-  return subcategory;
+  return serializeSubcategory(subcategory, {
+    parentCategory: {
+      id: subcategory.category.id,
+      name: subcategory.category.name,
+      categoryCode: subcategory.category.categoryCode,
+    },
+    jobsCount: subcategory._count.jobs,
+  });
 };
 
 export const createSubcategory = async (adminId: string, adminLabel: string, input: CreateSubcategoryInput) => {
@@ -347,11 +380,16 @@ export const createSubcategory = async (adminId: string, adminLabel: string, inp
     throw new NotFoundError('Parent Category not found.');
   }
 
+  const { qaFormSchema, ...rest } = input;
+
   const subcategory = await prisma.subcategory.create({
-    data: input,
+    data: {
+      ...rest,
+      qaFormSchema: qaFormSchema === null ? Prisma.JsonNull : qaFormSchema ?? undefined,
+    },
     include: {
       category: {
-        select: { name: true },
+        select: { id: true, name: true, categoryCode: true },
       },
     },
   });
@@ -368,7 +406,13 @@ export const createSubcategory = async (adminId: string, adminLabel: string, inp
     },
   });
 
-  return subcategory;
+  return serializeSubcategory(subcategory, {
+    parentCategory: {
+      id: subcategory.category.id,
+      name: subcategory.category.name,
+      categoryCode: subcategory.category.categoryCode,
+    },
+  });
 };
 
 export const updateSubcategory = async (
@@ -387,11 +431,18 @@ export const updateSubcategory = async (
     if (!parentCategory) throw new NotFoundError('Parent Category not found.');
   }
 
+  const { qaFormSchema, ...rest } = input;
+
   const updatedSubcategory = await prisma.subcategory.update({
     where: { id },
-    data: input,
+    data: {
+      ...rest,
+      ...(qaFormSchema !== undefined
+        ? { qaFormSchema: qaFormSchema === null ? Prisma.JsonNull : qaFormSchema }
+        : {}),
+    },
     include: {
-      category: { select: { name: true } },
+      category: { select: { id: true, name: true, categoryCode: true } },
     },
   });
 
@@ -407,7 +458,13 @@ export const updateSubcategory = async (
     },
   });
 
-  return updatedSubcategory;
+  return serializeSubcategory(updatedSubcategory, {
+    parentCategory: {
+      id: updatedSubcategory.category.id,
+      name: updatedSubcategory.category.name,
+      categoryCode: updatedSubcategory.category.categoryCode,
+    },
+  });
 };
 
 export const deleteSubcategory = async (adminId: string, adminLabel: string, id: string) => {

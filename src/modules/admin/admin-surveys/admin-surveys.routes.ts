@@ -85,6 +85,18 @@ router.get('/consumer/stats', surveyAdminController.getConsumerStats);
  *         name: sort
  *         schema: { type: string, enum: [newest, oldest] }
  *         description: Sort by submission date (default newest first)
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [name, status, submittedAt] }
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc] }
+ *       - in: query
+ *         name: submittedFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: submittedTo
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200:
  *         description: CSV file download.
@@ -143,8 +155,33 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  *         name: consentPartnerComm
  *         schema: { type: string, enum: [true, false] }
  *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [name, status, submittedAt] }
+ *         description: |
+ *           Admin Sort dropdown:
+ *           - name + asc = Name A–Z
+ *           - name + desc = Name Z–A
+ *           - status + asc = Status A–Z
+ *           - status + desc = Status Z–A
+ *           - submittedAt + desc = Newest First (default if sortOrder omitted)
+ *           - submittedAt + asc = Oldest First
+ *           Example: `/admin/surveys/consumer?sortBy=name&sortOrder=asc`
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc] }
+ *         description: Used with sortBy (default asc when sortBy is set)
+ *       - in: query
  *         name: sort
  *         schema: { type: string, enum: [newest, oldest] }
+ *         description: Legacy date sort (used only when sortBy is not provided)
+ *       - in: query
+ *         name: submittedFrom
+ *         schema: { type: string, format: date-time }
+ *         description: Filter submitted_at from this date (ISO)
+ *       - in: query
+ *         name: submittedTo
+ *         schema: { type: string, format: date-time }
+ *         description: Filter submitted_at until this date (ISO)
  *     responses:
  *       200:
  *         description: Paginated list of consumer survey registrations.
@@ -333,6 +370,19 @@ router.get('/trader/export', validate(surveyFilterSchema), surveyAdminController
  *       - in: query
  *         name: sort
  *         schema: { type: string, enum: [newest, oldest] }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [name, status, submittedAt, companyName] }
+ *         description: Same Sort dropdown as Consumer tab (+ companyName for traders)
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc] }
+ *       - in: query
+ *         name: submittedFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: submittedTo
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200:
  *         description: Paginated list of trader survey registrations.

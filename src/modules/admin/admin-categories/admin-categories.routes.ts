@@ -242,6 +242,55 @@ router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminCo
  *               urlSlug: { type: string, example: 'leak-repair-pipework' }
  *               featured: { type: boolean, example: true }
  *               status: { type: string, enum: [active, inactive], example: 'active' }
+ *               siteVisitEnabled:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Enable/disable site visit for this sub-category
+ *               priceEnabled:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Show price field when posting a job for this sub-category
+ *               priceEnteredBy:
+ *                 type: string
+ *                 enum: [CUSTOMER, TRADER]
+ *                 example: CUSTOMER
+ *                 description: Who enters the price (customer or trader)
+ *               qaFormSchema:
+ *                 type: array
+ *                 description: |
+ *                   Admin-built Q&A form (JSON). Mobile app shows these fields when user selects this sub-category for a job.
+ *                   Field types: text, textarea, number, dropdown, single_choice, multi_choice, date, boolean.
+ *                 items:
+ *                   type: object
+ *                   required: [id, type, label]
+ *                   properties:
+ *                     id: { type: string, example: 'issue_type' }
+ *                     type: { type: string, enum: [text, textarea, number, dropdown, single_choice, multi_choice, date, boolean] }
+ *                     label: { type: string, example: 'What is the issue?' }
+ *                     required: { type: boolean, example: true }
+ *                     placeholder: { type: string }
+ *                     helpText: { type: string }
+ *                     options:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           label: { type: string, example: 'Leak' }
+ *                           value: { type: string, example: 'leak' }
+ *                     min: { type: number }
+ *                     max: { type: number }
+ *                 example:
+ *                   - id: issue_type
+ *                     type: dropdown
+ *                     label: What is the issue?
+ *                     required: true
+ *                     options:
+ *                       - { label: Leak, value: leak }
+ *                       - { label: Blockage, value: blockage }
+ *                   - id: notes
+ *                     type: textarea
+ *                     label: Extra details
+ *                     required: false
  *     responses:
  *       201:
  *         description: Sub-Category created successfully.
@@ -295,6 +344,15 @@ router.get('/sub-categories/:id', categoryAdminController.getSubcategory);
  *               urlSlug: { type: string }
  *               featured: { type: boolean }
  *               status: { type: string, enum: [active, inactive] }
+ *               siteVisitEnabled: { type: boolean, description: Enable/disable site visit }
+ *               priceEnabled: { type: boolean, description: Show/hide price field on job post }
+ *               priceEnteredBy: { type: string, enum: [CUSTOMER, TRADER], description: Who enters the price }
+ *               qaFormSchema:
+ *                 type: array
+ *                 nullable: true
+ *                 description: Replace the full Q&A form JSON (null clears the form)
+ *                 items:
+ *                   type: object
  *     responses:
  *       200:
  *         description: Sub-Category updated successfully.

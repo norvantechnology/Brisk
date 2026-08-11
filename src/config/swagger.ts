@@ -46,6 +46,7 @@ const options: swaggerJSDoc.Options = {
       { name: 'Website / Content', description: 'Public /cms reads' },
       { name: 'Website / Surveys', description: 'Website survey forms — consumer-survey & trader-survey pages. No login needed.' },
       { name: 'Mobile / Auth', description: 'Customer & Trader auth' },
+      { name: 'Mobile / Categories', description: 'Service categories & sub-categories for apps (site visit, price flags, Q&A form)' },
       { name: 'Customer / Profile', description: 'Customer profile' },
       { name: 'Trader / Profile', description: 'Trader profile' },
       { name: 'System / Health', description: 'Health check' },
