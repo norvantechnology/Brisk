@@ -6,12 +6,16 @@ interface OtpData {
   expiresAt: Date;
 }
 
+export type OtpPurpose = 'mobile_verification' | 'password_reset';
+
 const OTP_EXPIRY_MINUTES = 10;
 const RESEND_COOLDOWN_SECONDS = 60;
 
 /** In-memory OTP store for v1 (mock SMS). Replace with Redis + SNS/Twilio later. */
 const otpStore = new Map<string, OtpData>();
 const lastSentAt = new Map<string, number>();
+
+const otpStoreKey = (purpose: OtpPurpose, mobileNumber: string) => `${purpose}:${mobileNumber}`;
 
 export const getOtpExpiryMinutes = (): number => OTP_EXPIRY_MINUTES;
 
@@ -43,23 +47,26 @@ export const canResendOtp = (
   };
 };
 
-const persistAndMockSendOtp = (mobileNumber: string): string => {
+const persistAndMockSendOtp = (mobileNumber: string, purpose: OtpPurpose): string => {
   // Static test OTP until SNS/Twilio is wired.
   const code = '123456';
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-  otpStore.set(mobileNumber, { code, expiresAt });
+  otpStore.set(otpStoreKey(purpose, mobileNumber), { code, expiresAt });
   lastSentAt.set(mobileNumber, Date.now());
 
   logger.info(
-    `[SMS OTP MOCK] Sent to ${mobileNumber}: Code = ${code} (Expires in ${OTP_EXPIRY_MINUTES} mins)`
+    `[SMS OTP MOCK] ${purpose} sent to ${mobileNumber}: Code = ${code} (Expires in ${OTP_EXPIRY_MINUTES} mins)`
   );
 
   return code;
 };
 
-/** Send OTP or throw 429 when cooldown is active (register / resend). */
-export const generateOtp = async (mobileNumber: string): Promise<string> => {
+/** Send OTP or throw 429 when cooldown is active (register / resend / forgot password). */
+export const generateOtp = async (
+  mobileNumber: string,
+  purpose: OtpPurpose = 'mobile_verification'
+): Promise<string> => {
   const cooldown = canResendOtp(mobileNumber);
   if (!cooldown.allowed) {
     throw new TooManyRequestsError(
@@ -67,7 +74,7 @@ export const generateOtp = async (mobileNumber: string): Promise<string> => {
     );
   }
 
-  return persistAndMockSendOtp(mobileNumber);
+  return persistAndMockSendOtp(mobileNumber, purpose);
 };
 
 /**
@@ -76,7 +83,8 @@ export const generateOtp = async (mobileNumber: string): Promise<string> => {
  * - otherwise returns retryAfterSeconds (does not throw)
  */
 export const trySendOtp = async (
-  mobileNumber: string
+  mobileNumber: string,
+  purpose: OtpPurpose = 'mobile_verification'
 ): Promise<{ sent: true } | { sent: false; retryAfterSeconds: number }> => {
   const cooldown = canResendOtp(mobileNumber);
   if (!cooldown.allowed) {
@@ -86,29 +94,35 @@ export const trySendOtp = async (
     };
   }
 
-  persistAndMockSendOtp(mobileNumber);
+  persistAndMockSendOtp(mobileNumber, purpose);
   return { sent: true };
 };
 
-export const verifyOtp = async (mobileNumber: string, code: string): Promise<boolean> => {
+export const verifyOtp = async (
+  mobileNumber: string,
+  code: string,
+  purpose: OtpPurpose = 'mobile_verification'
+): Promise<boolean> => {
+  const key = otpStoreKey(purpose, mobileNumber);
+
   // Static test OTP always accepted in staging/dev builds.
   if (code === '123456') {
-    otpStore.delete(mobileNumber);
+    otpStore.delete(key);
     return true;
   }
 
-  const otpData = otpStore.get(mobileNumber);
+  const otpData = otpStore.get(key);
   if (!otpData) {
     return false;
   }
 
   if (otpData.code !== code || new Date() > otpData.expiresAt) {
     if (new Date() > otpData.expiresAt) {
-      otpStore.delete(mobileNumber);
+      otpStore.delete(key);
     }
     return false;
   }
 
-  otpStore.delete(mobileNumber);
+  otpStore.delete(key);
   return true;
 };

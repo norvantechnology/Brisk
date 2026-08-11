@@ -9,14 +9,23 @@ import {
   UnauthorizedError,
   BadRequestError,
   ForbiddenError,
+  TooManyRequestsError,
 } from '../../utils/errors';
 import {
   generateOtp,
   getOtpMeta,
+  getResendCooldownSeconds,
   trySendOtp,
   verifyOtp,
 } from './otp.service';
-import type { RegisterInput, VerifyOtpInput, ResendOtpInput, LoginInput } from './auth.validation';
+import type {
+  RegisterInput,
+  VerifyOtpInput,
+  ResendOtpInput,
+  LoginInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
+} from './auth.validation';
 
 type AuthUser = Pick<
   User,
@@ -342,3 +351,125 @@ export const getAuthenticatedUser = async (userId: string) => {
 export const logoutUser = async () => ({
   message: 'Logged out successfully.',
 });
+
+const FORGOT_PASSWORD_GENERIC_MESSAGE =
+  'If an account exists for this email, a verification code has been sent to the registered mobile number.';
+
+export const forgotPassword = async (input: ForgotPasswordInput) => {
+  const { email } = input;
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      email: true,
+      mobileNumber: true,
+      role: true,
+      status: true,
+    },
+  });
+
+  if (!user) {
+    return {
+      message: FORGOT_PASSWORD_GENERIC_MESSAGE,
+      data: {
+        requiresPasswordReset: false as const,
+        otpSent: false as const,
+        ...getOtpMeta(),
+      },
+    };
+  }
+
+  assertAccountCanAuthenticate(user);
+
+  try {
+    await generateOtp(user.mobileNumber, 'password_reset');
+  } catch (error) {
+    if (error instanceof TooManyRequestsError) {
+      return {
+        message: FORGOT_PASSWORD_GENERIC_MESSAGE,
+        data: {
+          requiresPasswordReset: true as const,
+          userId: user.id,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
+          role: user.role,
+          otpSent: false as const,
+          retryAfterSeconds: getResendCooldownSeconds(),
+          ...getOtpMeta(),
+        },
+      };
+    }
+    throw error;
+  }
+
+  return {
+    message: FORGOT_PASSWORD_GENERIC_MESSAGE,
+    data: {
+      requiresPasswordReset: true as const,
+      userId: user.id,
+      email: user.email,
+      mobileNumber: user.mobileNumber,
+      role: user.role,
+      otpSent: true as const,
+      ...getOtpMeta(),
+    },
+  };
+};
+
+export const resetPassword = async (input: ResetPasswordInput) => {
+  const { mobileNumber, code, newPassword } = input;
+
+  const user = await prisma.user.findUnique({
+    where: { mobileNumber },
+    select: PUBLIC_USER_SELECT,
+  });
+
+  if (!user) {
+    throw new NotFoundError('User with this mobile number does not exist.');
+  }
+
+  const fullUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { id: true, status: true, mobileVerified: true },
+  });
+
+  if (!fullUser) {
+    throw new NotFoundError('User not found.');
+  }
+
+  assertAccountCanAuthenticate(fullUser);
+
+  const isValid = await verifyOtp(mobileNumber, code, 'password_reset');
+  if (!isValid) {
+    throw new BadRequestError('Invalid or expired verification code.');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash },
+    select: PUBLIC_USER_SELECT,
+  });
+
+  if (fullUser.mobileVerified) {
+    return {
+      message: 'Password reset successfully. You are now logged in.',
+      data: buildSessionPayload(updatedUser),
+    };
+  }
+
+  return {
+    message: 'Password reset successfully. Please verify your mobile number to activate your account.',
+    data: {
+      requiresOtpVerification: true as const,
+      userId: updatedUser.id,
+      email: updatedUser.email,
+      mobileNumber: updatedUser.mobileNumber,
+      role: updatedUser.role,
+      mobileVerified: false as const,
+      ...getOtpMeta(),
+    },
+  };
+};

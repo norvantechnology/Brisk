@@ -249,6 +249,7 @@ model AdminUser {
   publishedLegalVersions  CmsLegalPolicyVersion[]  @relation("CmsLegalPublishedBy")
   updatedSeoSettings      CmsSeoSettings[]         @relation("CmsSeoUpdatedBy")
   reviewedSurveyConsumers SurveyConsumerRegistration[] @relation("SurveyConsumerReviewedBy")
+  reviewedSurveyTraders   SurveyTraderRegistration[]   @relation("SurveyTraderReviewedBy")
 
   @@map("admin_users")
 }
@@ -1132,6 +1133,7 @@ model SurveyConsumerRegistration {
   fullName             String                    @map("full_name")
   email                String
   phone                String?
+  country              String?
   county               String?
   ageRange             String?                   @map("age_range")
   consentLaunchUpdates Boolean                   @default(false) @map("consent_launch_updates")
@@ -1148,4 +1150,29 @@ model SurveyConsumerRegistration {
   reviewedBy AdminUser? @relation("SurveyConsumerReviewedBy", fields: [reviewedById], references: [id])
 
   @@map("survey_consumer_registrations")
+}
+
+model SurveyTraderRegistration {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  registrationCode     String                    @unique @map("registration_code")
+  fullName             String                    @map("full_name")
+  companyName          String                    @map("company_name")
+  email                String
+  phone                String
+  country              String
+  companyWebsite       String?                   @map("company_website")
+  consentLaunchUpdates Boolean                   @default(false) @map("consent_launch_updates")
+  consentMarketing     Boolean                   @default(false) @map("consent_marketing")
+  consentPartnerComm   Boolean                   @default(false) @map("consent_partner_comm")
+  agreementAccepted    Boolean                   @default(false) @map("agreement_accepted")
+  status               SurveyRegistrationStatus  @default(NEW)
+  notes                String?                   @db.Text
+  submittedAt          DateTime                  @default(now()) @map("submitted_at")
+  reviewedById         String?                   @map("reviewed_by_id") @db.Uuid
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+
+  reviewedBy AdminUser? @relation("SurveyTraderReviewedBy", fields: [reviewedById], references: [id])
+
+  @@map("survey_trader_registrations")
 }

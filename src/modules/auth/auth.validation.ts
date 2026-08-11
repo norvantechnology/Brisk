@@ -67,7 +67,27 @@ export const refreshSchema = z.object({
   body: refreshBodySchema,
 });
 
+const forgotPasswordBodySchema = z.object({
+  email: z.string().trim().email('Invalid email format').toLowerCase(),
+});
+
+export const forgotPasswordSchema = z.object({
+  body: forgotPasswordBodySchema,
+});
+
+const resetPasswordBodySchema = z.object({
+  mobileNumber: mobileNumberSchema,
+  code: otpCodeSchema,
+  newPassword: passwordSchema,
+});
+
+export const resetPasswordSchema = z.object({
+  body: resetPasswordBodySchema,
+});
+
 export type RegisterInput = z.infer<typeof registerBodySchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpBodySchema>;
 export type ResendOtpInput = z.infer<typeof resendOtpBodySchema>;
 export type LoginInput = z.infer<typeof loginBodySchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordBodySchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordBodySchema>;

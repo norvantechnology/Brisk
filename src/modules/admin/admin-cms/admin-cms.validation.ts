@@ -184,7 +184,9 @@ export const updateSeoSchema = z.object({
 export const surveyFilterSchema = z.object({
   query: z.object({
     ...paginationQuery,
+    search: z.string().optional(),
     status: z.nativeEnum(SurveyRegistrationStatus).optional(),
+    country: z.string().optional(),
     county: z.string().optional(),
     ageRange: z.string().optional(),
     consentLaunchUpdates: z.string().optional(),
@@ -202,18 +204,44 @@ export const updateSurveyConsumerSchema = z.object({
   }),
 });
 
+export const updateSurveyTraderSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({
+    status: z.nativeEnum(SurveyRegistrationStatus).optional(),
+    notes: z.string().optional(),
+  }),
+});
+
 export const createSurveyConsumerPublicSchema = z.object({
   body: z.object({
-    fullName: z.string().min(1),
-    email: z.string().email(),
-    phone: z.string().optional(),
-    county: z.string().optional(),
-    ageRange: z.string().optional(),
+    fullName: z.string().trim().min(1, 'Full name is required'),
+    email: z.string().trim().email('Invalid email format'),
+    phone: z.string().trim().min(1, 'Contact number is required'),
+    country: z.string().trim().min(1, 'Country is required'),
+    county: z.string().trim().optional(),
+    ageRange: z.string().trim().optional(),
     consentLaunchUpdates: z.boolean().optional().default(false),
     consentMarketing: z.boolean().optional().default(false),
     consentPartnerComm: z.boolean().optional().default(false),
     agreementAccepted: z.literal(true, {
-      errorMap: () => ({ message: 'Agreement must be accepted.' }),
+      errorMap: () => ({ message: 'You must accept the Privacy Policy and Terms.' }),
+    }),
+  }),
+});
+
+export const createSurveyTraderPublicSchema = z.object({
+  body: z.object({
+    fullName: z.string().trim().min(1, 'Full name is required'),
+    companyName: z.string().trim().min(1, 'Company name is required'),
+    email: z.string().trim().email('Invalid email format'),
+    phone: z.string().trim().min(1, 'Contact number is required'),
+    country: z.string().trim().min(1, 'Country is required'),
+    companyWebsite: z.string().trim().optional(),
+    consentLaunchUpdates: z.boolean().optional().default(false),
+    consentMarketing: z.boolean().optional().default(false),
+    consentPartnerComm: z.boolean().optional().default(false),
+    agreementAccepted: z.literal(true, {
+      errorMap: () => ({ message: 'You must accept the Privacy Policy and Terms.' }),
     }),
   }),
 });

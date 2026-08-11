@@ -8,6 +8,8 @@ import {
   resendOtpSchema,
   loginSchema,
   refreshSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from './auth.validation';
 
 const router = Router();
@@ -160,6 +162,78 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *         description: Invalid email or password.
  */
 router.post('/login', validate(loginSchema), authController.login);
+
+/**
+ * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     summary: Request a password reset code (SMS OTP to registered mobile)
+ *     tags: ['Mobile / Auth']
+ *     description: |
+ *       Customer and Trader apps — user enters email on "Forgot Password".
+ *       If the account exists, a 6-digit OTP is sent to the registered mobile number.
+ *       Response always uses the same message (does not reveal whether the email exists).
+ *       When `data.mobileNumber` is present, open the OTP + new-password screen.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: jane@example.com
+ *     responses:
+ *       200:
+ *         description: Generic success. Includes mobileNumber + otpSent when account found.
+ *       403:
+ *         description: Account blocked, suspended, or inactive.
+ *       429:
+ *         description: OTP resend cooldown active (returned as 200 with otpSent=false when applicable).
+ */
+router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Reset password using SMS OTP from forgot-password flow
+ *     tags: ['Mobile / Auth']
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - mobileNumber
+ *               - code
+ *               - newPassword
+ *             properties:
+ *               mobileNumber:
+ *                 type: string
+ *                 example: "+353871234567"
+ *               code:
+ *                 type: string
+ *                 example: "123456"
+ *               newPassword:
+ *                 type: string
+ *                 example: NewPassword1!
+ *     responses:
+ *       200:
+ *         description: |
+ *           Password updated. If mobile already verified, returns access + refresh tokens.
+ *           If mobile still unverified, returns requiresOtpVerification for account activation.
+ *       400:
+ *         description: Invalid or expired OTP.
+ *       404:
+ *         description: User not found.
+ */
+router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 
 /**
  * @swagger

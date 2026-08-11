@@ -649,6 +649,8 @@ brisk-backend/
 - `POST /auth/register` — full name (photo optional via `Add Photo`), email, phone number (with country dial code, e.g. `+353`), password → creates unverified user, triggers OTP. Password rules confirmed on-screen: **min 8 characters, one uppercase letter, one number/special character** (live checklist UI) — enforce the same rules server-side in `auth.validation.ts`, don't trust client-side checks alone. Terms & Privacy checkbox required before submit.
 - `POST /auth/verify-otp` — verifies OTP, activates account.
 - `POST /auth/login` — email + password → JWT access + refresh token.
+- `POST /auth/forgot-password` — email → sends **password-reset SMS OTP** to the user's registered mobile (same mock `123456` until SNS/Twilio ships). Always returns the same generic message whether or not the email exists; when the account is found, response includes `data.mobileNumber`, `data.requiresPasswordReset=true`, and `data.otpSent`. Works for **Customer and Trader** roles. Blocked/suspended/inactive accounts return `403`.
+- `POST /auth/reset-password` — `{ mobileNumber, code, newPassword }` → verifies password-reset OTP, updates password. If mobile already verified → returns tokens (auto-login). If mobile still pending → returns `requiresOtpVerification` so the app can route to `/auth/verify-otp`. Password rules same as register.
 - **Biometric ("Face ID") login** — screens show a dedicated in-app Face ID screen ("Biometric system active" / "Sign in with Face ID" / "Use Password Instead"), separate from the login screen's own "Face ID" shortcut button. This is standard **local-biometric-unlocks-stored-refresh-token** UX: the phone's OS biometric API unlocks a refresh token the app already stored in secure device storage after a prior password login; the app then just calls `POST /auth/refresh` as normal. **No biometric data is ever sent to or processed by the backend.** No new endpoint is strictly required beyond refresh — flag if BRISK instead wants server-side "device trust" tracking (e.g. `POST /auth/devices/register` to list/revoke trusted devices from Security settings).
 - `POST /auth/apple-signin` — verifies Apple identity token, only if native Sign in with Apple is also wanted as a separate path (to confirm — see Open Items).
 - `POST /auth/refresh`, `POST /auth/logout`.
@@ -1456,42 +1458,89 @@ updated_by_admin_id, updated_at
 
 ### 14.9 Website Management — Survey Management
 
-> **Implementation status (Aug 2026):** **Consumer tab SHIPPED** — `src/modules/admin/admin-surveys/` (`/admin/surveys/consumer*`) + public `POST /surveys/consumer`. Trader Survey + Analytics tabs still pending screenshots.
+> **Implementation status (Aug 2026):** **Consumer + Trader SHIPPED** — public `POST /surveys/consumer` + `POST /surveys/trader`; admin CRM at `/admin/surveys/consumer*` and `/admin/surveys/trader*`. **Survey Analytics tab** still pending (no screenshots yet).
 
-**Tabs:** Consumer Survey Registrations · Trader Survey Registrations · Survey Analytics & Opt-Ins
+**Website pages (public, no login):**
+- Consumer form: `https://brisk-next.netlify.app/consumer-survey` → `POST /surveys/consumer`
+- Trader form: `https://brisk-next.netlify.app/trader-survey` → `POST /surveys/trader`
 
-#### 14.9.1 Consumer Launch Party Registrations (screenshotted)
+**Simple flow (non-technical):**
+1. A visitor fills the survey on the BRISK website (consumer or trader page).
+2. They click **Submit Survey** / **Register Interest**.
+3. The website sends the form data to our backend API (no account needed).
+4. Backend saves it in the database with a reference code (`CS-0001` for consumers, `TS-0001` for traders) and status **NEW**.
+5. Admin staff open the Admin Panel → **Survey Management** tab to see the list, update status (Reviewed, Contacted, etc.), add notes, or export CSV for marketing/launch outreach.
 
-**Actions:** Export CSV · Refresh  
-**KPIs:** Total · Today · Pending · Reviewed · Contacted · Rejected  
+**Tabs:** Consumer Survey Registrations · Trader Survey Registrations · Survey Analytics & Opt-Ins *(analytics pending)*
 
-**Filters:** Search Name/Email/Phone · County · Age Range · Status · Launch Updates · Marketing Emails · Trusted Partners · Date Range · Sort (Newest First) · Reset Filters  
+#### 14.9.1 Consumer Survey — website `/consumer-survey`
 
-**Columns:** Checkbox · ID (`CS-####`) · Full Name · Email & Contact · County · Age · Launch Updates (Yes/No) · Marketing (Yes/No) · Partner Comm (Yes/No) · Agreement (`Accepted`) · Submitted · Status (`NEW`/`REVIEWED`/`CONTACTED`/`REJECTED`) · Actions (View, Edit, More)
+**Form fields (from live UI):**
+| Field | Required | Notes |
+|-------|----------|-------|
+| Full Name | Yes | |
+| Contact Number | Yes | |
+| Email Address | Yes | |
+| Country | Yes | Dropdown (e.g. Ireland, United Kingdom, …) |
+| Age Range | No | e.g. `18-29`, `30-39`, `40-49`, `50-59`, `60+` |
+| Launch updates (Yes/No) | No | `consentLaunchUpdates` |
+| Marketing (Yes/No) | No | `consentMarketing` |
+| Trusted partners (Yes/No) | No | `consentPartnerComm` |
+| Privacy/Terms checkbox | Yes | `agreementAccepted: true` |
 
 **Table `survey_consumer_registrations`:**
 ```
 id, registration_code (CS-####), full_name, email, phone,
-county, age_range,
-consent_launch_updates Boolean,
-consent_marketing Boolean,
-consent_partner_comm Boolean,
-agreement_accepted Boolean,
-status [NEW|REVIEWED|CONTACTED|REJECTED|PENDING],
-submitted_at, reviewed_by_admin_id?, notes?,
-created_at, updated_at
+country, county?, age_range,
+consent_launch_updates, consent_marketing, consent_partner_comm,
+agreement_accepted, status [NEW|PENDING|REVIEWED|CONTACTED|REJECTED],
+submitted_at, reviewed_by_admin_id?, notes?, created_at, updated_at
 ```
 
-| Method | Endpoint |
-|--------|----------|
-| `GET` | `/admin/surveys/consumer` | List + filters + pagination |
-| `GET` | `/admin/surveys/consumer/stats` | KPI cards |
-| `GET` | `/admin/surveys/consumer/:id` | Detail |
-| `PATCH` | `/admin/surveys/consumer/:id` | Status / CRM notes |
-| `GET` | `/admin/surveys/consumer/export` | CSV export |
-| `POST` | `/surveys/consumer` | Public signup form (mobile/web) |
+| Method | Endpoint | Who uses it |
+|--------|----------|-------------|
+| `POST` | `/surveys/consumer` | **Website** — when user submits consumer survey |
+| `GET` | `/admin/surveys/consumer` | **Admin panel** — list all consumer signups |
+| `GET` | `/admin/surveys/consumer/stats` | **Admin panel** — KPI cards |
+| `GET` | `/admin/surveys/consumer/:id` | **Admin panel** — view one signup |
+| `PATCH` | `/admin/surveys/consumer/:id` | **Admin panel** — change status / add notes |
+| `GET` | `/admin/surveys/consumer/export` | **Admin panel** — download CSV |
 
-**Trader Survey + Analytics tabs:** labeled in UI — full field specs pending next screenshot batch.
+#### 14.9.2 Trader Survey — website `/trader-survey`
+
+**Form fields (from live UI):**
+| Field | Required | Notes |
+|-------|----------|-------|
+| Full Name | Yes | |
+| Company Name | Yes | |
+| Contact Number | Yes | |
+| Email Address | Yes | |
+| Country | Yes | Dropdown |
+| Company Website | No | Optional URL |
+| Launch updates (Yes/No) | No | `consentLaunchUpdates` |
+| Marketing (Yes/No) | No | `consentMarketing` |
+| Trusted partners (Yes/No) | No | `consentPartnerComm` |
+| Privacy/Terms checkbox | Yes | `agreementAccepted: true` |
+
+**Table `survey_trader_registrations`:**
+```
+id, registration_code (TS-####), full_name, company_name, email, phone,
+country, company_website?,
+consent_launch_updates, consent_marketing, consent_partner_comm,
+agreement_accepted, status [NEW|PENDING|REVIEWED|CONTACTED|REJECTED],
+submitted_at, reviewed_by_admin_id?, notes?, created_at, updated_at
+```
+
+| Method | Endpoint | Who uses it |
+|--------|----------|-------------|
+| `POST` | `/surveys/trader` | **Website** — when tradesperson clicks Register Interest |
+| `GET` | `/admin/surveys/trader` | **Admin panel** — list all trader signups |
+| `GET` | `/admin/surveys/trader/stats` | **Admin panel** — KPI cards |
+| `GET` | `/admin/surveys/trader/:id` | **Admin panel** — view one signup |
+| `PATCH` | `/admin/surveys/trader/:id` | **Admin panel** — change status / add notes |
+| `GET` | `/admin/surveys/trader/export` | **Admin panel** — download CSV |
+
+**Survey Analytics & Opt-Ins tab:** still pending screenshots — no API yet.
 
 ---
 
@@ -1508,8 +1557,8 @@ created_at, updated_at
 | `cms_testimonials` | Homepage / marketing quotes |
 | `cms_legal_policies` + `cms_legal_policy_versions` | Versioned legal docs |
 | `cms_seo_settings` | Singleton global SEO |
-| `survey_consumer_registrations` | Launch party consumer CRM |
-| `survey_trader_registrations` | *(pending screenshots)* |
+| `survey_consumer_registrations` | Launch / consumer interest list (website form) |
+| `survey_trader_registrations` | Trader interest list (website form) |
 | `document_rules` | Trader doc compliance *(pending Document Rules page)* |
 | `trader_documents` | Uploaded KYC docs *(pending detail screen)* |
 
@@ -1536,7 +1585,7 @@ src/modules/admin/
 Explicitly **not** fully field-specified yet (sidebar/tabs visible only):
 
 - [ ] CMS: Header Navigation editor, Footer Links editor, Media Library, Email Templates, Notification Templates, Banners
-- [ ] Survey: Trader Survey Registrations tab, Survey Analytics & Opt-Ins tab
+- [ ] Survey: Survey Analytics & Opt-Ins tab
 - [ ] Masters: Sub Categories full page, Document Rules full page
 - [ ] Customers: Account Verification detail, Payment Methods tab
 - [ ] Operations: Transactions page
@@ -1553,7 +1602,7 @@ Recommended order once Auth/Users/Property are solid:
 
 1. Finish remaining Admin core that unblocks ops: Dashboard stats, Traders directory, Jobs oversight, Offers CRUD  
 2. **CMS Management** — ✅ **done** (all §14.8 tabs + public `/cms` reads)  
-3. Survey Management CRM — ✅ **consumer done**; trader + analytics pending screenshots  
+3. Survey Management CRM — ✅ **consumer + trader done**; analytics pending screenshots  
 4. Reports aggregations  
 5. Document Rules + Trader Verification detail  
 
@@ -1574,6 +1623,9 @@ S3 uploads still deferred globally — CMS image fields accept **URL strings** u
 | Legal | versions `/admin/cms/legal-policies*` · `GET /cms/legal`, `GET /cms/legal/:slug` | Footer list + full version |
 | SEO | `GET/PUT /admin/cms/seo` · `GET /cms/seo` | Singleton |
 | Website bootstrap | — · `GET /cms/bootstrap?audience=` | One call: seo + social + featured article + testimonials + page nav |
-| Survey Consumer | `/admin/surveys/consumer*` · `POST /surveys/consumer` | Codes `CS-####` |
+| Survey Consumer | `/admin/surveys/consumer*` · `POST /surveys/consumer` | Codes `CS-####` · Swagger **Admin / Surveys** + **Website / Surveys** |
+| Survey Trader | `/admin/surveys/trader*` · `POST /surveys/trader` | Codes `TS-####` · Swagger **Admin / Surveys** + **Website / Surveys** |
+| Survey Analytics | *(pending)* | No API yet — awaiting admin screenshots (§14.9) |
+| Mobile forgot password | `POST /auth/forgot-password` · `POST /auth/reset-password` | Swagger **Mobile / Auth** · SMS OTP v1 (SES email reset deferred) |
 
 **Public website contract:** `/cms/*` GETs use **snake_case**, published/active-only data from Website Management DB. List endpoints omit heavy HTML bodies; detail-by-slug returns full content. No auth.
