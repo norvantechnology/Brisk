@@ -7,6 +7,7 @@ import {
   serializePublicSection,
   serializePublicSectionItem,
 } from './page-sections.serializers';
+import { serializePublicSeo } from './cms.serializers';
 
 const PUBLISHED = CmsPublishStatus.PUBLISHED;
 
@@ -45,25 +46,183 @@ const getSectionByPageAndKey = async (pageSlug: string, sectionKey: string, admi
 
 export const getPublicMarketingPage = async (pageSlug: string) => {
   const page = await getPageBySlug(pageSlug);
-  const sections = await prisma.cmsPageSection.findMany({
-    where: { pageId: page.id, status: PUBLISHED },
-    orderBy: { sortOrder: 'asc' },
-    include: {
-      items: {
-        where: publishedItemWhere,
-        orderBy: [{ sortOrder: 'asc' }, { stepNumber: 'asc' }, { createdAt: 'asc' }],
+  const [sections, seoRow] = await Promise.all([
+    prisma.cmsPageSection.findMany({
+      where: { pageId: page.id, status: PUBLISHED },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        items: {
+          where: publishedItemWhere,
+          orderBy: [{ sortOrder: 'asc' }, { stepNumber: 'asc' }, { createdAt: 'asc' }],
+        },
       },
-    },
-  });
+    }),
+    prisma.cmsSeoSettings.findFirst({ orderBy: { updatedAt: 'desc' } }),
+  ]);
+
+  const seo = seoRow ? serializePublicSeo(seoRow) : null;
 
   return {
     page: {
+      id: page.id,
       slug: page.slug,
       title: page.title,
       status: page.status.toLowerCase(),
     },
+    seo: seo
+      ? {
+          meta_title: seo.global_site_title,
+          meta_description: seo.meta_description,
+          og_image: seo.og_image_url,
+        }
+      : null,
     sections: sections.map(serializePublicSection),
   };
+};
+
+export const listAdminMarketingPages = async () => {
+  const pages = await prisma.cmsMarketingPage.findMany({
+    orderBy: { slug: 'asc' },
+    include: {
+      _count: { select: { sections: true } },
+    },
+  });
+
+  return pages.map((page) => ({
+    id: page.id,
+    slug: page.slug,
+    title: page.title,
+    status: page.status,
+    sectionsCount: page._count.sections,
+    createdAt: page.createdAt,
+    updatedAt: page.updatedAt,
+  }));
+};
+
+export const listAdminPageSections = async (pageSlug: string) => {
+  const page = await getPageBySlug(pageSlug);
+  const sections = await prisma.cmsPageSection.findMany({
+    where: { pageId: page.id },
+    orderBy: { sortOrder: 'asc' },
+    include: {
+      items: { orderBy: [{ sortOrder: 'asc' }, { stepNumber: 'asc' }] },
+    },
+  });
+
+  return sections.map(serializeAdminSection);
+};
+
+export const getAdminSectionById = async (sectionId: string) => {
+  const section = await prisma.cmsPageSection.findUnique({
+    where: { id: sectionId },
+    include: {
+      items: { orderBy: [{ sortOrder: 'asc' }, { stepNumber: 'asc' }] },
+    },
+  });
+
+  if (!section) {
+    throw new NotFoundError('Section not found.');
+  }
+
+  return serializeAdminSection(section);
+};
+
+export const updateAdminSectionById = async (sectionId: string, input: UpsertSectionInput) => {
+  const existing = await prisma.cmsPageSection.findUnique({ where: { id: sectionId } });
+  if (!existing) {
+    throw new NotFoundError('Section not found.');
+  }
+
+  const section = await prisma.cmsPageSection.update({
+    where: { id: sectionId },
+    data: {
+      ...(input.sectionType ? { sectionType: input.sectionType } : {}),
+      title: input.title ?? undefined,
+      subtitle: input.subtitle ?? undefined,
+      description: input.description ?? undefined,
+      primaryButtonText: input.primaryButtonText ?? undefined,
+      primaryButtonUrl: input.primaryButtonUrl ?? undefined,
+      secondaryButtonText: input.secondaryButtonText ?? undefined,
+      secondaryButtonUrl: input.secondaryButtonUrl ?? undefined,
+      backgroundImage: input.backgroundImage ?? undefined,
+      backgroundVideo: input.backgroundVideo ?? undefined,
+      appStoreUrl: input.appStoreUrl ?? undefined,
+      googlePlayUrl: input.googlePlayUrl ?? undefined,
+      status: input.status ?? undefined,
+      sortOrder: input.sortOrder ?? undefined,
+    },
+    include: {
+      items: { orderBy: [{ sortOrder: 'asc' }, { stepNumber: 'asc' }] },
+    },
+  });
+
+  return serializeAdminSection(section);
+};
+
+export const deleteAdminSectionById = async (sectionId: string) => {
+  const existing = await prisma.cmsPageSection.findUnique({ where: { id: sectionId } });
+  if (!existing) {
+    throw new NotFoundError('Section not found.');
+  }
+
+  await prisma.cmsPageSection.delete({ where: { id: sectionId } });
+};
+
+export const updateAdminSectionStatus = async (sectionId: string, status: CmsPublishStatus) => {
+  const existing = await prisma.cmsPageSection.findUnique({ where: { id: sectionId } });
+  if (!existing) {
+    throw new NotFoundError('Section not found.');
+  }
+
+  const section = await prisma.cmsPageSection.update({
+    where: { id: sectionId },
+    data: { status },
+    include: { items: true },
+  });
+
+  return serializeAdminSection(section);
+};
+
+export const updateAdminSectionSortOrder = async (sectionId: string, sortOrder: number) => {
+  if (!Number.isInteger(sortOrder) || sortOrder < 0) {
+    throw new BadRequestError('sortOrder must be a non-negative integer.');
+  }
+
+  const existing = await prisma.cmsPageSection.findUnique({ where: { id: sectionId } });
+  if (!existing) {
+    throw new NotFoundError('Section not found.');
+  }
+
+  const section = await prisma.cmsPageSection.update({
+    where: { id: sectionId },
+    data: { sortOrder },
+    include: { items: true },
+  });
+
+  return serializeAdminSection(section);
+};
+
+export const getAdminSectionItemById = async (itemId: string) => {
+  const item = await prisma.cmsPageSectionItem.findUnique({ where: { id: itemId } });
+  if (!item) {
+    throw new NotFoundError('Section item not found.');
+  }
+
+  return serializeAdminSectionItem(item);
+};
+
+export const updateAdminSectionItemStatus = async (itemId: string, status: CmsPublishStatus) => {
+  const existing = await prisma.cmsPageSectionItem.findUnique({ where: { id: itemId } });
+  if (!existing) {
+    throw new NotFoundError('Section item not found.');
+  }
+
+  const item = await prisma.cmsPageSectionItem.update({
+    where: { id: itemId },
+    data: { status },
+  });
+
+  return serializeAdminSectionItem(item);
 };
 
 export const getPublicPageSection = async (pageSlug: string, sectionKey: string) =>

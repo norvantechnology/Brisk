@@ -1,6 +1,6 @@
 import { CmsPublishStatus, PrismaClient } from '@prisma/client';
 
-export const seedMarketingPages = async (prisma: PrismaClient) => {
+const seedCustomersPage = async (prisma: PrismaClient) => {
   const page = await prisma.cmsMarketingPage.upsert({
     where: { slug: 'customers' },
     update: { title: 'For Customers', status: CmsPublishStatus.PUBLISHED },
@@ -211,4 +211,236 @@ export const seedMarketingPages = async (prisma: PrismaClient) => {
 
   // silence unused variable warning for hero if needed
   void hero;
+};
+
+const seedTradersPage = async (prisma: PrismaClient) => {
+  const page = await prisma.cmsMarketingPage.upsert({
+    where: { slug: 'traders' },
+    update: { title: 'For Traders', status: CmsPublishStatus.PUBLISHED },
+    create: {
+      slug: 'traders',
+      title: 'For Traders',
+      status: CmsPublishStatus.PUBLISHED,
+    },
+  });
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'trader_hero' } },
+    update: {},
+    create: {
+      pageId: page.id,
+      sectionType: 'trader_hero',
+      sectionKey: 'trader_hero',
+      title: 'Grow Your Business with BRISK',
+      subtitle: 'Connect with customers looking for trusted professionals',
+      description:
+        'Find local jobs, submit competitive offers and build your professional reputation.',
+      primaryButtonText: 'Join BRISK',
+      primaryButtonUrl: '/register',
+      secondaryButtonText: 'Learn More',
+      secondaryButtonUrl: '/how-it-works',
+      backgroundImage: 'trader-hero.jpg',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 1,
+    },
+  });
+
+  const benefits = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'trader_benefits' } },
+    update: {},
+    create: {
+      pageId: page.id,
+      sectionType: 'trader_benefits',
+      sectionKey: 'trader_benefits',
+      title: 'Why Traders Choose BRISK',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 2,
+    },
+  });
+
+  const benefitItems = [
+    {
+      title: 'Find Local Jobs',
+      description:
+        'Discover relevant jobs in your local area based on your trade and availability.',
+      icon: 'location-search.svg',
+      sortOrder: 1,
+    },
+    {
+      title: 'Submit Offers',
+      description: 'Submit competitive offers directly to customers and win more work.',
+      icon: 'offer.svg',
+      sortOrder: 2,
+    },
+    {
+      title: 'Build Reputation',
+      description: 'Earn ratings and reviews that help you win future jobs.',
+      icon: 'reputation.svg',
+      sortOrder: 3,
+    },
+    {
+      title: 'Grow Business',
+      description: 'Scale your trade with steady local demand and transparent workflows.',
+      icon: 'growth.svg',
+      sortOrder: 4,
+    },
+  ];
+
+  for (const item of benefitItems) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: benefits.id, title: item.title },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: { sectionId: benefits.id, ...item, status: CmsPublishStatus.PUBLISHED },
+      });
+    }
+  }
+
+  const workflow = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'trader_workflow' } },
+    update: {},
+    create: {
+      pageId: page.id,
+      sectionType: 'trader_workflow',
+      sectionKey: 'trader_workflow',
+      title: 'How It Works for Traders',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 3,
+    },
+  });
+
+  const workflowSteps = [
+    {
+      stepNumber: 1,
+      title: 'Find Local Jobs',
+      description: 'Browse jobs that match your trade, location and availability.',
+      icon: 'search-job.svg',
+      sortOrder: 1,
+    },
+    {
+      stepNumber: 2,
+      title: 'Review Job Details',
+      description: 'Understand customer requirements before you quote.',
+      icon: 'review-job.svg',
+      sortOrder: 2,
+    },
+    {
+      stepNumber: 3,
+      title: 'Submit Your Offer',
+      description: 'Review customer requirements and submit your best offer.',
+      icon: 'submit-offer.svg',
+      sortOrder: 3,
+    },
+    {
+      stepNumber: 4,
+      title: 'Get Selected',
+      description: 'Customers compare offers and choose the best fit.',
+      icon: 'selected.svg',
+      sortOrder: 4,
+    },
+    {
+      stepNumber: 5,
+      title: 'Complete The Job',
+      description: 'Deliver quality work and keep customers updated.',
+      icon: 'complete-job.svg',
+      sortOrder: 5,
+    },
+    {
+      stepNumber: 6,
+      title: 'Build Your Reputation',
+      description: 'Collect reviews and grow your profile on BRISK.',
+      icon: 'build-reputation.svg',
+      sortOrder: 6,
+    },
+  ];
+
+  for (const step of workflowSteps) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: workflow.id, stepNumber: step.stepNumber },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: { sectionId: workflow.id, ...step, status: CmsPublishStatus.PUBLISHED },
+      });
+    }
+  }
+
+  const potential = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'professional_potential' } },
+    update: {},
+    create: {
+      pageId: page.id,
+      sectionType: 'professional_potential',
+      sectionKey: 'professional_potential',
+      title: 'Unlock Your Professional Potential',
+      description:
+        'BRISK helps professionals find quality work and build long-term customer relationships.',
+      backgroundImage: 'professional-potential.jpg',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
+  });
+
+  const potentialItems = [
+    {
+      title: 'More Local Opportunities',
+      description: 'Access a steady stream of jobs in your service area.',
+      icon: 'opportunities.svg',
+      sortOrder: 1,
+    },
+    {
+      title: 'Better Customer Connections',
+      description: 'Communicate directly with customers through BRISK.',
+      icon: 'connections.svg',
+      sortOrder: 2,
+    },
+    {
+      title: 'Transparent Job Process',
+      description: 'Clear scope, pricing, and milestones from start to finish.',
+      icon: 'transparent.svg',
+      sortOrder: 3,
+    },
+    {
+      title: 'Professional Growth',
+      description: 'Build your brand with verified credentials and reviews.',
+      icon: 'growth.svg',
+      sortOrder: 4,
+    },
+  ];
+
+  for (const item of potentialItems) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: potential.id, title: item.title },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: { sectionId: potential.id, ...item, status: CmsPublishStatus.PUBLISHED },
+      });
+    }
+  }
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'trader_cta' } },
+    update: {},
+    create: {
+      pageId: page.id,
+      sectionType: 'trader_cta',
+      sectionKey: 'trader_cta',
+      title: 'Ready to Grow Your Business?',
+      description: 'Join BRISK and start connecting with customers in your local area.',
+      primaryButtonText: 'Join BRISK',
+      primaryButtonUrl: '/register',
+      secondaryButtonText: 'Download App',
+      secondaryButtonUrl: '/download',
+      backgroundImage: 'trader-cta.jpg',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 5,
+    },
+  });
+};
+
+export const seedMarketingPages = async (prisma: PrismaClient) => {
+  await seedCustomersPage(prisma);
+  await seedTradersPage(prisma);
 };

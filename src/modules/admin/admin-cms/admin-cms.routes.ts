@@ -27,11 +27,16 @@ import {
   upsertPageSectionSchema,
   updatePageSectionSchema,
   pageSlugSectionKeyParamsSchema,
+  pageSlugParamSchema,
   sectionIdParamSchema,
   createSectionItemSchema,
   updateSectionItemSchema,
   sectionItemIdParamSchema,
   sectionItemSortOrderSchema,
+  sectionStatusSchema,
+  sectionSortOrderSchema,
+  sectionItemStatusSchema,
+  updateSectionByIdSchema,
 } from '../../cms/page-sections.validation';
 
 const router = Router();
@@ -808,6 +813,14 @@ router.patch(
 // MARKETING PAGE SECTIONS (Customers / Traders pages)
 // ==========================================
 
+router.get('/marketing-pages', pageSectionsAdminController.listAdminMarketingPages);
+
+router.get(
+  '/marketing-pages/:pageSlug/sections',
+  validate(pageSlugParamSchema),
+  pageSectionsAdminController.listAdminPageSections
+);
+
 router.get(
   '/marketing-pages/:pageSlug/sections/:sectionKey',
   validate(pageSlugSectionKeyParamsSchema),
@@ -827,6 +840,36 @@ router.put(
 );
 
 router.get(
+  '/sections/:sectionId',
+  validate(sectionIdParamSchema),
+  pageSectionsAdminController.getAdminSectionById
+);
+
+router.put(
+  '/sections/:sectionId',
+  validate(updateSectionByIdSchema),
+  pageSectionsAdminController.updateAdminSectionById
+);
+
+router.delete(
+  '/sections/:sectionId',
+  validate(sectionIdParamSchema),
+  pageSectionsAdminController.deleteAdminSectionById
+);
+
+router.patch(
+  '/sections/:sectionId/status',
+  validate(sectionStatusSchema),
+  pageSectionsAdminController.updateAdminSectionStatus
+);
+
+router.patch(
+  '/sections/:sectionId/sort-order',
+  validate(sectionSortOrderSchema),
+  pageSectionsAdminController.updateAdminSectionSortOrder
+);
+
+router.get(
   '/sections/:sectionId/items',
   validate(sectionIdParamSchema),
   pageSectionsAdminController.listAdminSectionItems
@@ -836,6 +879,12 @@ router.post(
   '/sections/:sectionId/items',
   validate(createSectionItemSchema),
   pageSectionsAdminController.createAdminSectionItem
+);
+
+router.get(
+  '/section-items/:itemId',
+  validate(sectionItemIdParamSchema),
+  pageSectionsAdminController.getAdminSectionItemById
 );
 
 router.put(
@@ -854,6 +903,12 @@ router.patch(
   '/section-items/:itemId/sort-order',
   validate(sectionItemSortOrderSchema),
   pageSectionsAdminController.updateAdminSectionItemSortOrder
+);
+
+router.patch(
+  '/section-items/:itemId/status',
+  validate(sectionItemStatusSchema),
+  pageSectionsAdminController.updateAdminSectionItemStatus
 );
 
 // ==========================================

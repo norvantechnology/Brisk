@@ -18,6 +18,7 @@ export const serializePublicSection = (
   section: CmsPageSection & { items?: CmsPageSectionItem[] }
 ) => ({
   id: section.id,
+  type: section.sectionType,
   section_type: section.sectionType,
   section_key: section.sectionKey,
   title: section.title,
@@ -29,6 +30,8 @@ export const serializePublicSection = (
   secondary_button_url: section.secondaryButtonUrl,
   background_image: section.backgroundImage,
   background_video: section.backgroundVideo,
+  image: section.backgroundImage,
+  video: section.backgroundVideo,
   app_store_url: section.appStoreUrl,
   google_play_url: section.googlePlayUrl,
   status: toApiStatus(section.status),

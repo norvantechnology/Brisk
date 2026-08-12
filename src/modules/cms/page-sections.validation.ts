@@ -103,3 +103,37 @@ export const sectionItemSortOrderSchema = z.object({
     sortOrder: z.number().int().min(0),
   }),
 });
+
+export const sectionStatusSchema = z.object({
+  params: z.object({
+    sectionId: z.string().uuid(),
+  }),
+  body: z.object({
+    status: z.nativeEnum(CmsPublishStatus),
+  }),
+});
+
+export const sectionSortOrderSchema = z.object({
+  params: z.object({
+    sectionId: z.string().uuid(),
+  }),
+  body: z.object({
+    sortOrder: z.number().int().min(0),
+  }),
+});
+
+export const sectionItemStatusSchema = z.object({
+  params: z.object({
+    itemId: z.string().uuid(),
+  }),
+  body: z.object({
+    status: z.nativeEnum(CmsPublishStatus),
+  }),
+});
+
+export const updateSectionByIdSchema = z.object({
+  params: z.object({
+    sectionId: z.string().uuid(),
+  }),
+  body: sectionBodySchema,
+});
