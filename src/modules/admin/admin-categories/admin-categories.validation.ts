@@ -136,7 +136,17 @@ export const subcategoryFilterSchema = z.object({
     limit: z.string().optional(),
     search: z.string().optional(),
     categoryId: z.string().optional(),
+    category_id: z.string().optional(),
     status: z.string().optional(),
     featured: z.string().optional(),
+  }).transform((query) => ({
+    ...query,
+    categoryId: query.categoryId ?? query.category_id,
+  })),
+});
+
+export const idParamSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid ID format.'),
   }),
 });

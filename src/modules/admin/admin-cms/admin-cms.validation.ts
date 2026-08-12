@@ -21,6 +21,8 @@ export const listFilterSchema = z.object({
     categoryId: z.string().optional(),
     featured: z.string().optional(),
     sort: z.string().optional(),
+    type: z.enum(['customer', 'trader', 'home']).optional(),
+    pageType: z.nativeEnum(CmsTestimonialPageType).optional(),
   }),
 });
 
@@ -141,7 +143,24 @@ export const createTestimonialSchema = z.object({
     isFeatured: z.boolean().optional().default(false),
     displayOrder: z.number().int().optional().default(0),
     sort_order: z.number().int().optional(),
-  }).transform((body) => ({
+  })
+    .superRefine((body, ctx) => {
+      if (!body.authorName && !body.name) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'authorName or name is required.',
+          path: ['authorName'],
+        });
+      }
+      if (!body.quoteText && !body.review) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'quoteText or review is required.',
+          path: ['quoteText'],
+        });
+      }
+    })
+    .transform((body) => ({
     authorName: body.authorName ?? body.name!,
     authorRole: body.authorRole ?? body.role,
     authorAvatarUrl: body.authorAvatarUrl ?? body.avatar,

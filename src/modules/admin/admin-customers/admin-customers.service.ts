@@ -7,8 +7,28 @@ import {
   UpdateCustomerInput,
   UpdateDeletionRequestInput,
 } from './admin-customers.types';
-import { ActorType, UserRole, UserStatus, DeletionRequestStatus, Prisma } from '@prisma/client';
+import { ActorType, UserRole, UserStatus, DeletionRequestStatus, Prisma, User, PaymentMethod } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+
+type CustomerUser = User & {
+  _count?: { jobs: number; bookings: number; payments: number };
+  addresses?: unknown[];
+  properties?: unknown[];
+  accountDeletionRequest?: unknown;
+};
+
+/** Never expose passwordHash in admin customer API responses. */
+const formatCustomerResponse = (user: CustomerUser, extras: Record<string, unknown> = {}) => {
+  const { passwordHash: _passwordHash, ...safeUser } = user;
+  void _passwordHash;
+
+  return {
+    ...safeUser,
+    primaryPhone: user.mobileNumber,
+    phoneVerified: user.mobileVerified,
+    ...extras,
+  };
+};
 
 // ==========================================
 // CUSTOMERS DIRECTORY SERVICES (Screenshot 1 & 2)
@@ -47,8 +67,8 @@ export const getCustomerDirectoryStats = async () => {
     activeCustomers,
     inactiveOrBlocked,
     newThisMonth,
-    totalRevenue: totalRevenueAgg._sum.amount ? Number(totalRevenueAgg._sum.amount) : 75548.5,
-    avgOrderValue: totalRevenueAgg._avg.amount ? Number(totalRevenueAgg._avg.amount) : 111.59,
+    totalRevenue: totalRevenueAgg._sum.amount ? Number(totalRevenueAgg._sum.amount) : 0,
+    avgOrderValue: totalRevenueAgg._avg.amount ? Number(totalRevenueAgg._avg.amount) : 0,
   };
 };
 
@@ -167,13 +187,12 @@ export const getCustomerById = async (id: string) => {
     where: { userId: user.id, status: 'COMPLETED' },
   });
 
-  return {
-    ...user,
+  return formatCustomerResponse(user, {
     customerCode: user.customerCode || `CUST-${user.id.substring(0, 4).toUpperCase()}`,
     totalOrders: user._count.jobs,
     totalBookings: user._count.bookings,
     totalSpent: spentAgg._sum.amount ? Number(spentAgg._sum.amount) : 0,
-  };
+  });
 };
 
 export const createCustomer = async (adminId: string, adminLabel: string, input: CreateCustomerInput) => {
@@ -224,7 +243,7 @@ export const createCustomer = async (adminId: string, adminLabel: string, input:
     },
   });
 
-  return customer;
+  return formatCustomerResponse(customer);
 };
 
 export const updateCustomer = async (
@@ -236,6 +255,20 @@ export const updateCustomer = async (
   const existing = await prisma.user.findFirst({ where: { id, role: UserRole.CUSTOMER } });
   if (!existing) {
     throw new NotFoundError('Customer not found.');
+  }
+
+  if (input.email && input.email !== existing.email) {
+    const emailTaken = await prisma.user.findUnique({ where: { email: input.email } });
+    if (emailTaken) {
+      throw new ConflictError('Customer email already exists.');
+    }
+  }
+
+  if (input.primaryPhone && input.primaryPhone !== existing.mobileNumber) {
+    const phoneTaken = await prisma.user.findUnique({ where: { mobileNumber: input.primaryPhone } });
+    if (phoneTaken) {
+      throw new ConflictError('Customer primary phone number already exists.');
+    }
   }
 
   const updatedCustomer = await prisma.user.update({
@@ -269,11 +302,11 @@ export const updateCustomer = async (
     },
   });
 
-  return updatedCustomer;
+  return formatCustomerResponse(updatedCustomer);
 };
 
 export const deleteCustomer = async (adminId: string, adminLabel: string, id: string) => {
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prisma.user.findFirst({ where: { id, role: UserRole.CUSTOMER } });
   if (!user) {
     throw new NotFoundError('Customer not found.');
   }
@@ -536,11 +569,11 @@ export const getCustomerPaymentHeaderStats = async () => {
   ]);
 
   return {
-    availableCash: 685.0,
-    defaultMethod: 'Visa (4242)',
+    availableCash: 0,
+    defaultMethod: null,
     pendingPaymentsCount,
-    pendingRefundsAmount: pendingRefundsAgg._sum.refundAmount ? Number(pendingRefundsAgg._sum.refundAmount) : 0.0,
-    lastPaymentDate: lastPayment?.paidAt ? lastPayment.paidAt.toISOString().split('T')[0] : '2026-07-22',
+    pendingRefundsAmount: pendingRefundsAgg._sum.refundAmount ? Number(pendingRefundsAgg._sum.refundAmount) : 0,
+    lastPaymentDate: lastPayment?.paidAt ? lastPayment.paidAt.toISOString().split('T')[0] : null,
   };
 };
 
@@ -562,6 +595,10 @@ export const listPaymentTransactions = async (filters: any) => {
 
   if (filters.status) {
     where.status = filters.status;
+  }
+
+  if (filters.method) {
+    where.method = filters.method as PaymentMethod;
   }
 
   const orderBy: Prisma.PaymentOrderByWithRelationInput =
@@ -615,25 +652,27 @@ export const listPaymentTransactions = async (filters: any) => {
         fullName: p.user.fullName,
       },
       jobBooking: {
-        title: job?.title || 'Radiator Valve Replacement',
-        bookingRef: booking?.bookingRef || 'BKG-7725',
-        categoryName: job?.category?.name || 'Plumbing & Heating',
+        title: job?.title ?? null,
+        bookingRef: booking?.bookingRef ?? null,
+        categoryName: job?.category?.name ?? null,
       },
-      trader: {
-        id: booking?.traderId || 'trader-021',
-        fullName: traderUser?.fullName || 'Mark Wilson',
-        traderCode: booking?.trader?.traderCode || 'trader-021',
-      },
-      serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 95.0,
+      trader: booking?.traderId
+        ? {
+            id: booking.traderId,
+            fullName: traderUser?.fullName ?? null,
+            traderCode: booking.trader?.traderCode ?? null,
+          }
+        : null,
+      serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 0,
       feeOffer: {
-        discount: p.discountAmount ? Number(p.discountAmount) : 0.0,
-        fee: p.feeAmount ? Number(p.feeAmount) : 5.0,
+        discount: p.discountAmount ? Number(p.discountAmount) : 0,
+        fee: p.feeAmount ? Number(p.feeAmount) : 0,
       },
       totalPaid: Number(p.amount),
       paymentMethod: {
         method: p.method,
-        brand: p.cardBrand || 'Visa',
-        last4: p.cardLast4 || '4242',
+        brand: p.cardBrand ?? null,
+        last4: p.cardLast4 ?? null,
       },
       status: p.status,
     };
@@ -684,29 +723,29 @@ export const getTransactionById = async (id: string) => {
     transactionRef: p.transactionRef || `TXN-${p.id.substring(0, 8).toUpperCase()}`,
     paymentStatus: p.status,
     totalAmountPaid: Number(p.amount),
-    paymentMethod: `${p.cardBrand || 'Visa'} ****${p.cardLast4 || '4242'}`,
+    paymentMethod: p.cardBrand && p.cardLast4 ? `${p.cardBrand} ****${p.cardLast4}` : p.method,
     transactionDate: p.paidAt || p.createdAt,
     jobBookingInfo: {
-      title: job?.title || 'Radiator Valve Replacement',
-      jobRef: booking?.bookingRef || 'BKG-7725',
-      categoryName: job?.category?.name || 'Plumbing & Heating',
-      customerName: `${p.user.fullName} (${p.user.customerCode || 'cust-081'})`,
-      traderName: `${traderUser?.fullName || 'Mark Wilson'} (${booking?.trader?.traderCode || 'trader-021'})`,
-      bookingDate: booking?.scheduledDate ? booking.scheduledDate.toISOString().split('T')[0] : '26/07/2026',
-      jobStatus: booking?.status || 'SCHEDULED',
+      title: job?.title ?? null,
+      jobRef: booking?.bookingRef ?? null,
+      categoryName: job?.category?.name ?? null,
+      customerName: p.user.fullName,
+      traderName: traderUser?.fullName ?? null,
+      bookingDate: booking?.scheduledDate ? booking.scheduledDate.toISOString().split('T')[0] : null,
+      jobStatus: booking?.status ?? null,
     },
     paymentAmountBreakdown: {
-      serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 95.0,
-      platformFee: p.feeAmount ? Number(p.feeAmount) : 5.0,
+      serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 0,
+      platformFee: p.feeAmount ? Number(p.feeAmount) : 0,
       totalAmountPaid: Number(p.amount),
     },
-    individualBillingAddress: {
-      fullName: p.user.fullName,
-      addressLine: primaryAddress
-        ? `${primaryAddress.addressLine1}, ${primaryAddress.city}, ${primaryAddress.eircode || ''}, ${primaryAddress.country}`
-        : '14 Kensington High Street, London, W8 4PT, United Kingdom',
-    },
-    invoiceRef: p.invoice?.invoiceNumber || 'INV-2026-005',
+    individualBillingAddress: primaryAddress
+      ? {
+          fullName: p.user.fullName,
+          addressLine: `${primaryAddress.addressLine1}, ${primaryAddress.city}, ${primaryAddress.eircode || ''}, ${primaryAddress.country}`,
+        }
+      : null,
+    invoiceRef: p.invoice?.invoiceNumber ?? null,
     invoiceId: p.invoiceId,
   };
 };
@@ -751,10 +790,10 @@ export const listBillingInvoices = async (filters: any) => {
 
   const formattedInvoices = invoices.map((inv) => ({
     id: inv.id,
-    invoiceNumber: inv.invoiceNumber || `INV-${inv.createdAt.getFullYear()}-001`,
-    customerName: inv.booking?.customer?.fullName || 'Sarah Murphy',
-    jobBookingTitle: inv.booking?.job?.title || 'Kitchen Tap Repair',
-    traderName: inv.booking?.trader?.user?.fullName || 'Mark Wilson',
+    invoiceNumber: inv.invoiceNumber ?? null,
+    customerName: inv.booking?.customer?.fullName ?? null,
+    jobBookingTitle: inv.booking?.job?.title ?? null,
+    traderName: inv.booking?.trader?.user?.fullName ?? null,
     invoiceDate: inv.createdAt,
     amount: Number(inv.totalAmount),
     status: inv.status,
@@ -802,29 +841,33 @@ export const getInvoiceById = async (id: string) => {
 
   return {
     id: inv.id,
-    invoiceNumber: inv.invoiceNumber || `INV-2026-001`,
+    invoiceNumber: inv.invoiceNumber ?? null,
     invoiceDate: inv.createdAt,
-    bookingRef: inv.booking?.bookingRef || 'BKG-7721',
+    bookingRef: inv.booking?.bookingRef ?? null,
     companyHeader: {
       title: 'BRISK MARKETPLACE',
       companyAddress: 'BRISK Services Ltd · 100 City Road, London EC1V 2NX',
       vatReg: 'GB 9903112233',
       supportEmail: 'support@briskmarket.com',
     },
-    billedToCustomerDetails: {
-      fullName: customer?.fullName || 'Sarah Murphy',
-      addressLine: primaryAddress
-        ? `${primaryAddress.addressLine1}, ${primaryAddress.city}, ${primaryAddress.eircode || ''}, ${primaryAddress.country}`
-        : '14 Kensington High Street, London, W8 4PT, United Kingdom',
-    },
-    verifiedTraderPartner: {
-      fullName: traderUser?.fullName || 'Mark Wilson',
-      companyName: trader?.businessName || 'Wilson Plumbing Ltd',
-      traderVat: 'GB88291844',
-      badge: 'BRISK Certified Service Provider',
-    },
+    billedToCustomerDetails: customer
+      ? {
+          fullName: customer.fullName,
+          addressLine: primaryAddress
+            ? `${primaryAddress.addressLine1}, ${primaryAddress.city}, ${primaryAddress.eircode || ''}, ${primaryAddress.country}`
+            : null,
+        }
+      : null,
+    verifiedTraderPartner: traderUser
+      ? {
+          fullName: traderUser.fullName,
+          companyName: trader?.businessName ?? null,
+          traderVat: null,
+          badge: 'BRISK Certified Service Provider',
+        }
+      : null,
     serviceItem: {
-      title: inv.booking?.job?.title || 'Kitchen Tap Repair',
+      title: inv.booking?.job?.title ?? null,
       description: 'On-site certified labor & inspection charges',
       subtotal: Number(inv.serviceCharge),
     },
@@ -836,7 +879,7 @@ export const getInvoiceById = async (id: string) => {
       grandTotal: Number(inv.totalAmount),
     },
     digitalVerification: {
-      transactionRef: payment?.transactionRef || 'TXN-98234105',
+      transactionRef: payment?.transactionRef ?? null,
     },
   };
 };
@@ -948,19 +991,25 @@ export const getLoyaltyRewardsSummary = async () => {
     },
   });
 
+  const earnedAgg = account
+    ? await prisma.loyaltyTransaction.aggregate({
+        where: { loyaltyAccountId: account.id, pointsChange: { gt: 0 } },
+        _sum: { pointsChange: true },
+      })
+    : null;
+
+  const redeemedAgg = account
+    ? await prisma.loyaltyTransaction.aggregate({
+        where: { loyaltyAccountId: account.id, pointsChange: { lt: 0 } },
+        _sum: { pointsChange: true },
+      })
+    : null;
+
   return {
-    availableLoyaltyPoints: account?.pointsBalance || 1050,
-    totalLifetimeEarned: 1250,
-    pointsRedeemed: 200,
-    recentRewardsActivity: account?.transactions || [
-      {
-        id: '1',
-        title: 'Completed Booking BKG-7721',
-        description: 'Points earned for completed job payment',
-        pointsChange: 50,
-        createdAt: '2026-07-22T05:30:00.000Z',
-      },
-    ],
+    availableLoyaltyPoints: account?.pointsBalance ?? 0,
+    totalLifetimeEarned: earnedAgg?._sum.pointsChange ?? 0,
+    pointsRedeemed: redeemedAgg?._sum.pointsChange ? Math.abs(redeemedAgg._sum.pointsChange) : 0,
+    recentRewardsActivity: account?.transactions ?? [],
   };
 };
 

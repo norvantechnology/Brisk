@@ -23,6 +23,7 @@ export type CmsListFilters = {
   featured?: string | boolean;
   sort?: string;
   type?: string;
+  pageType?: string;
 };
 
 export type CreatePageInput = {
@@ -177,9 +178,13 @@ const asAudience = (value?: string): CmsAudience | undefined => {
 
 const asTestimonialPageType = (value?: string): CmsTestimonialPageType | undefined => {
   if (!value) return undefined;
-  const normalized = value.trim().toUpperCase();
-  if (Object.values(CmsTestimonialPageType).includes(normalized as CmsTestimonialPageType)) {
-    return normalized as CmsTestimonialPageType;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'customer') return CmsTestimonialPageType.CUSTOMER;
+  if (normalized === 'trader') return CmsTestimonialPageType.TRADER;
+  if (normalized === 'home') return CmsTestimonialPageType.HOME;
+  const upper = value.trim().toUpperCase();
+  if (Object.values(CmsTestimonialPageType).includes(upper as CmsTestimonialPageType)) {
+    return upper as CmsTestimonialPageType;
   }
   return undefined;
 };
@@ -903,7 +908,7 @@ export const listTestimonials = async (filters: CmsListFilters = {}) => {
     where.isFeatured = featured;
   }
 
-  const pageType = asTestimonialPageType(filters.type);
+  const pageType = asTestimonialPageType(filters.type ?? filters.pageType);
   if (pageType) {
     where.pageType = pageType;
   }

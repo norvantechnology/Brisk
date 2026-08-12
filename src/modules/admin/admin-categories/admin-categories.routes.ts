@@ -9,6 +9,7 @@ import {
   updateSubcategorySchema,
   categoryFilterSchema,
   subcategoryFilterSchema,
+  idParamSchema,
 } from './admin-categories.validation';
 
 const router = Router();
@@ -115,7 +116,7 @@ router.post('/categories', validate(createCategorySchema), categoryAdminControll
  *       404:
  *         description: Category not found.
  */
-router.get('/categories/:id', categoryAdminController.getCategory);
+router.get('/categories/:id', validate(idParamSchema), categoryAdminController.getCategory);
 
 /**
  * @swagger
@@ -175,7 +176,7 @@ router.patch('/categories/:id', validate(updateCategorySchema), categoryAdminCon
  *       404:
  *         description: Category not found.
  */
-router.delete('/categories/:id', categoryAdminController.deleteCategory);
+router.delete('/categories/:id', validate(idParamSchema), categoryAdminController.deleteCategory);
 
 // ==========================================
 // SUB-CATEGORY MASTER ROUTES (Screenshot 4)
@@ -316,7 +317,7 @@ router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminC
  *       404:
  *         description: Sub-Category not found.
  */
-router.get('/sub-categories/:id', categoryAdminController.getSubcategory);
+router.get('/sub-categories/:id', validate(idParamSchema), categoryAdminController.getSubcategory);
 
 /**
  * @swagger
@@ -382,6 +383,6 @@ router.patch('/sub-categories/:id', validate(updateSubcategorySchema), categoryA
  *       404:
  *         description: Sub-Category not found.
  */
-router.delete('/sub-categories/:id', categoryAdminController.deleteSubcategory);
+router.delete('/sub-categories/:id', validate(idParamSchema), categoryAdminController.deleteSubcategory);
 
 export default router;

@@ -9,7 +9,7 @@ import {
   UpdateSubcategoryInput,
 } from './admin-categories.types';
 import { ActorType, Prisma } from '@prisma/client';
-import { serializeSubcategory } from '../../categories/categories.serializers';
+import { serializeCategory, serializeSubcategory } from '../../categories/categories.serializers';
 
 // ==========================================
 // CATEGORY MASTER SERVICES
@@ -58,24 +58,13 @@ export const listCategories = async (filters: CategoryQueryFilters) => {
     }),
   ]);
 
-  const formattedCategories = categories.map((cat) => ({
-    id: cat.id,
-    name: cat.name,
-    categoryCode: cat.categoryCode,
-    urlSlug: cat.urlSlug,
-    description: cat.description,
-    iconName: cat.iconName,
-    brandThemeColor: cat.brandThemeColor,
-    bannerImageUrl: cat.bannerImageUrl,
-    displayOrder: cat.displayOrder,
-    status: cat.status,
-    featured: cat.featured,
-    subCategoriesCount: cat._count.subcategories,
-    tradersCount: cat._count.traders,
-    jobsCount: cat._count.jobs,
-    createdAt: cat.createdAt,
-    updatedAt: cat.updatedAt,
-  }));
+  const formattedCategories = categories.map((cat) =>
+    serializeCategory(cat, {
+      subCategoriesCount: cat._count.subcategories,
+      tradersCount: cat._count.traders,
+      jobsCount: cat._count.jobs,
+    })
+  );
 
   return {
     meta: {
@@ -109,18 +98,7 @@ export const getCategoryById = async (id: string) => {
     throw new NotFoundError('Category not found.');
   }
 
-  return {
-    id: category.id,
-    name: category.name,
-    categoryCode: category.categoryCode,
-    urlSlug: category.urlSlug,
-    description: category.description,
-    iconName: category.iconName,
-    brandThemeColor: category.brandThemeColor,
-    bannerImageUrl: category.bannerImageUrl,
-    displayOrder: category.displayOrder,
-    status: category.status,
-    featured: category.featured,
+  return serializeCategory(category, {
     subCategoriesCount: category._count.subcategories,
     tradersCount: category._count.traders,
     jobsCount: category._count.jobs,
@@ -133,9 +111,7 @@ export const getCategoryById = async (id: string) => {
         },
       })
     ),
-    createdAt: category.createdAt,
-    updatedAt: category.updatedAt,
-  };
+  });
 };
 
 export const createCategory = async (adminId: string, adminLabel: string, input: CreateCategoryInput) => {
@@ -169,7 +145,7 @@ export const createCategory = async (adminId: string, adminLabel: string, input:
     },
   });
 
-  return category;
+  return serializeCategory(category);
 };
 
 export const updateCategory = async (
@@ -210,7 +186,7 @@ export const updateCategory = async (
     },
   });
 
-  return updatedCategory;
+  return serializeCategory(updatedCategory);
 };
 
 export const deleteCategory = async (adminId: string, adminLabel: string, id: string) => {
@@ -309,23 +285,15 @@ export const listSubcategories = async (filters: SubcategoryQueryFilters) => {
     }),
   ]);
 
-  const formattedSubcategories = await Promise.all(
-    subcategories.map(async (sub, index) => {
-      // Calculate trader count linked to category
-      const tradersCount = await prisma.trader.count({
-        where: { categoryId: sub.categoryId },
-      });
-
-      return serializeSubcategory(sub, {
-        rowNumber: skip + index + 1,
-        parentCategory: {
-          id: sub.category.id,
-          name: sub.category.name,
-          categoryCode: sub.category.categoryCode,
-        },
-        tradersCount,
-        jobsCount: sub._count.jobs,
-      });
+  const formattedSubcategories = subcategories.map((sub, index) =>
+    serializeSubcategory(sub, {
+      rowNumber: skip + index + 1,
+      parentCategory: {
+        id: sub.category.id,
+        name: sub.category.name,
+        categoryCode: sub.category.categoryCode,
+      },
+      jobsCount: sub._count.jobs,
     })
   );
 
