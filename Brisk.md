@@ -684,7 +684,7 @@ brisk-backend/
   - `priceEnabled` — show or hide the price field when posting a job.
   - `priceEnteredBy` — `CUSTOMER` or `TRADER` (who fills the price when the price field is shown).
 - **Sub-category Q&A form builder:** Admin builds a form when creating/editing a sub-category and saves it as JSON (`qaFormSchema`). Supported field types: `text`, `textarea`, `number`, `dropdown`, `single_choice`, `multi_choice`, `date`, `boolean`. When a customer/trader posts a job for that sub-category, the app renders this form and stores answers on the job as `qaFormAnswers` JSON.
-- **App read APIs (no admin token):** `GET /categories`, `GET /categories/:id`, `GET /categories/slug/:slug`, `GET /sub-categories`, `GET /sub-categories/:id` — active-only; list endpoints return `data` as an array plus `meta` (`total`, `page`, `limit`, `totalPages`) with `?page=&limit=` (default page 1, limit 20, max 100); detail endpoints return `data` as the object directly. Each sub-category includes `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`. Swagger tag **Mobile / Categories**.
+- **App read APIs (no admin token):** `GET /categories`, `GET /categories/:id`, `GET /categories/slug/:slug`, `GET /sub-categories`, `GET /sub-categories/:id` — active-only; list endpoints return full `data` array (no pagination); detail endpoints return `data` as the object directly. Each category includes `iconUrl`; each sub-category includes `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`. Swagger tag **Mobile / Categories**.
 - **Jobs create API** (accepting `qaFormAnswers`) still pending Phase 2 Jobs module — DB column already exists.
 
 ### 6.4 Jobs Module (Job Posting Flow)

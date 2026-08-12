@@ -1,5 +1,30 @@
 import { Subcategory, Category, SubcategoryPriceEnteredBy } from '@prisma/client';
 
+const DEFAULT_CATEGORY_ICON_BASE_URL = 'https://cdn.brisk.com/icons/categories';
+
+const isHttpUrl = (value: string | null | undefined): value is string =>
+  typeof value === 'string' && /^https?:\/\//i.test(value);
+
+/** Resolve a fetchable icon URL for mobile apps from stored iconName / slug. */
+export const resolveCategoryIconUrl = (
+  cat: Pick<Category, 'iconName' | 'urlSlug'>
+): string | null => {
+  if (isHttpUrl(cat.iconName)) {
+    return cat.iconName;
+  }
+
+  const baseUrl = (process.env.CATEGORY_ICON_BASE_URL ?? DEFAULT_CATEGORY_ICON_BASE_URL).replace(
+    /\/$/,
+    ''
+  );
+
+  if (cat.urlSlug) {
+    return `${baseUrl}/${cat.urlSlug}.svg`;
+  }
+
+  return null;
+};
+
 type SubcategoryRow = Pick<
   Subcategory,
   | 'id'
@@ -82,6 +107,7 @@ export const serializeCategory = (
   urlSlug: cat.urlSlug,
   description: cat.description,
   iconName: cat.iconName,
+  iconUrl: resolveCategoryIconUrl(cat),
   brandThemeColor: cat.brandThemeColor,
   bannerImageUrl: cat.bannerImageUrl,
   displayOrder: cat.displayOrder,
