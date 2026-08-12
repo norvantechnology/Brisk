@@ -45,24 +45,22 @@ export const listActiveCategories = async (filters: AppCategoryFilters = {}) => 
       },
     });
 
-    return {
-      categories: categories.map((cat) =>
-        serializeCategory(cat, {
-          subCategoriesCount: cat._count.subcategories,
-          tradersCount: cat._count.traders,
-          jobsCount: cat._count.jobs,
-          subcategories: cat.subcategories.map((sub) =>
-            serializeSubcategory(sub, {
-              parentCategory: {
-                id: cat.id,
-                name: cat.name,
-                categoryCode: cat.categoryCode,
-              },
-            })
-          ),
-        })
-      ),
-    };
+    return categories.map((cat) =>
+      serializeCategory(cat, {
+        subCategoriesCount: cat._count.subcategories,
+        tradersCount: cat._count.traders,
+        jobsCount: cat._count.jobs,
+        subcategories: cat.subcategories.map((sub) =>
+          serializeSubcategory(sub, {
+            parentCategory: {
+              id: cat.id,
+              name: cat.name,
+              categoryCode: cat.categoryCode,
+            },
+          })
+        ),
+      })
+    );
   }
 
   const categories = await prisma.category.findMany({
@@ -79,15 +77,13 @@ export const listActiveCategories = async (filters: AppCategoryFilters = {}) => 
     },
   });
 
-  return {
-    categories: categories.map((cat) =>
-      serializeCategory(cat, {
-        subCategoriesCount: cat._count.subcategories,
-        tradersCount: cat._count.traders,
-        jobsCount: cat._count.jobs,
-      })
-    ),
-  };
+  return categories.map((cat) =>
+    serializeCategory(cat, {
+      subCategoriesCount: cat._count.subcategories,
+      tradersCount: cat._count.traders,
+      jobsCount: cat._count.jobs,
+    })
+  );
 };
 
 export const getActiveCategoryById = async (id: string) => {
@@ -112,22 +108,20 @@ export const getActiveCategoryById = async (id: string) => {
     throw new NotFoundError('Category not found.');
   }
 
-  return {
-    category: serializeCategory(category, {
-      subCategoriesCount: category._count.subcategories,
-      tradersCount: category._count.traders,
-      jobsCount: category._count.jobs,
-      subcategories: category.subcategories.map((sub) =>
-        serializeSubcategory(sub, {
-          parentCategory: {
-            id: category.id,
-            name: category.name,
-            categoryCode: category.categoryCode,
-          },
-        })
-      ),
-    }),
-  };
+  return serializeCategory(category, {
+    subCategoriesCount: category._count.subcategories,
+    tradersCount: category._count.traders,
+    jobsCount: category._count.jobs,
+    subcategories: category.subcategories.map((sub) =>
+      serializeSubcategory(sub, {
+        parentCategory: {
+          id: category.id,
+          name: category.name,
+          categoryCode: category.categoryCode,
+        },
+      })
+    ),
+  });
 };
 
 export const getActiveCategoryBySlug = async (slug: string) => {
@@ -152,22 +146,20 @@ export const getActiveCategoryBySlug = async (slug: string) => {
     throw new NotFoundError('Category not found.');
   }
 
-  return {
-    category: serializeCategory(category, {
-      subCategoriesCount: category._count.subcategories,
-      tradersCount: category._count.traders,
-      jobsCount: category._count.jobs,
-      subcategories: category.subcategories.map((sub) =>
-        serializeSubcategory(sub, {
-          parentCategory: {
-            id: category.id,
-            name: category.name,
-            categoryCode: category.categoryCode,
-          },
-        })
-      ),
-    }),
-  };
+  return serializeCategory(category, {
+    subCategoriesCount: category._count.subcategories,
+    tradersCount: category._count.traders,
+    jobsCount: category._count.jobs,
+    subcategories: category.subcategories.map((sub) =>
+      serializeSubcategory(sub, {
+        parentCategory: {
+          id: category.id,
+          name: category.name,
+          categoryCode: category.categoryCode,
+        },
+      })
+    ),
+  });
 };
 
 export const listActiveSubcategories = async (filters: AppSubcategoryFilters = {}) => {
@@ -197,17 +189,15 @@ export const listActiveSubcategories = async (filters: AppSubcategoryFilters = {
     },
   });
 
-  return {
-    subcategories: subcategories.map((sub) =>
-      serializeSubcategory(sub, {
-        parentCategory: {
-          id: sub.category.id,
-          name: sub.category.name,
-          categoryCode: sub.category.categoryCode,
-        },
-      })
-    ),
-  };
+  return subcategories.map((sub) =>
+    serializeSubcategory(sub, {
+      parentCategory: {
+        id: sub.category.id,
+        name: sub.category.name,
+        categoryCode: sub.category.categoryCode,
+      },
+    })
+  );
 };
 
 export const getActiveSubcategoryById = async (id: string) => {
@@ -234,13 +224,11 @@ export const getActiveSubcategoryById = async (id: string) => {
     throw new NotFoundError('Sub-category not found.');
   }
 
-  return {
-    subcategory: serializeSubcategory(subcategory, {
-      parentCategory: {
-        id: subcategory.category.id,
-        name: subcategory.category.name,
-        categoryCode: subcategory.category.categoryCode,
-      },
-    }),
-  };
+  return serializeSubcategory(subcategory, {
+    parentCategory: {
+      id: subcategory.category.id,
+      name: subcategory.category.name,
+      categoryCode: subcategory.category.categoryCode,
+    },
+  });
 };

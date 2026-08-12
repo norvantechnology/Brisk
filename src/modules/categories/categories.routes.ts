@@ -34,7 +34,7 @@ export const subcategoriesRouter = Router();
  *         description: If true, nest active sub-categories (with Q&A form + flags) under each category
  *     responses:
  *       200:
- *         description: Active categories list.
+ *         description: Active categories list. `data` is an array of category objects.
  */
 categoriesRouter.get('/', validate(appCategoryListSchema), categoriesController.listCategories);
 
@@ -51,7 +51,7 @@ categoriesRouter.get('/', validate(appCategoryListSchema), categoriesController.
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Category with nested active sub-categories (flags + qaFormSchema).
+ *         description: Category object in `data` (with nested active sub-categories when applicable).
  *       404:
  *         description: Category not found or inactive.
  */
@@ -76,7 +76,7 @@ categoriesRouter.get('/slug/:slug', validate(slugParamSchema), categoriesControl
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Category detail with sub-categories.
+ *         description: Category object in `data` (with nested sub-categories).
  *       404:
  *         description: Category not found or inactive.
  */
@@ -107,7 +107,7 @@ categoriesRouter.get('/:id', validate(idParamSchema), categoriesController.getCa
  *         schema: { type: string, enum: [true, false] }
  *     responses:
  *       200:
- *         description: Active sub-categories with flags and qaFormSchema.
+ *         description: Active sub-categories list. `data` is an array of sub-category objects.
  */
 subcategoriesRouter.get('/', validate(appSubcategoryListSchema), categoriesController.listSubcategories);
 
@@ -129,7 +129,7 @@ subcategoriesRouter.get('/', validate(appSubcategoryListSchema), categoriesContr
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Sub-category detail.
+ *         description: Sub-category object in `data` (flags + qaFormSchema).
  *       404:
  *         description: Sub-category not found or inactive.
  */
