@@ -117,40 +117,32 @@ categoriesRouter.get('/:id', validate(idParamSchema), categoriesController.getCa
  * @swagger
  * /sub-categories:
  *   get:
- *     summary: List all active sub-categories (job-post flags + Q&A form)
+ *     summary: List sub-categories (optionally filtered by main category)
  *     tags: ['Mobile / Categories']
  *     description: |
- *       **Use on:** Post-job step 2 — after user picks a category, show sub-services for that trade.
+ *       Returns active sub-categories in `data` (no pagination, no `meta`).
  *
- *       **Auth:** Not required.
+ *       **categoryId behaviour:**
+ *       - Pass a main category UUID → only sub-categories for that category.
+ *       - Omit `categoryId`, or send empty / `null` → all active sub-categories.
  *
- *       **Pagination:** None — full matching list in `data` (no `meta`).
- *
- *       **Key response fields:**
- *       - **siteVisitEnabled** — If `true`, show site-visit scheduling UI on job post.
- *       - **priceEnabled** — If `true`, show price field on job post.
- *       - **priceEnteredBy** — `CUSTOMER` or `TRADER` — who fills the price when `priceEnabled=true`.
- *       - **qaFormSchema** — JSON array of dynamic form fields; render on job post screen.
- *       - **categoryId** — Parent category UUID; use to group or filter.
+ *       Each item includes `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`, and `categoryId`.
  *     parameters:
  *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
  *         description: |
- *           **Purpose:** Return only sub-categories belonging to one parent category.
- *           **When to use:** User selected a category — pass its `id` here.
- *           **When omitted:** Returns sub-categories across all active categories (usually only for admin/debug; prefer filtering).
- *           **Example:** `GET /sub-categories?categoryId=3f0f23dd-dfa2-4606-9eed-acdc22534f0f`
+ *           Main category UUID. When provided, returns sub-categories for that category only.
+ *           When omitted, empty, or `null`, returns all sub-categories.
+ *           Example — filtered: `?categoryId=536b6e62-36a7-4356-94c0-935b1653aa57`
+ *           Example — all: `GET /sub-categories` or `?categoryId=null`
  *       - in: query
  *         name: featured
  *         schema: { type: string, enum: [true, false] }
- *         description: |
- *           **Purpose:** Show only featured sub-categories (admin-marked).
- *           **How to use:** `featured=true` for "Popular services" under a category; omit for full list.
- *           **Example:** `GET /sub-categories?categoryId={uuid}&featured=true`
+ *         description: Optional. `true` = featured sub-categories only; omit for all.
  *     responses:
  *       200:
- *         description: Array of sub-category objects in `data`. No `meta`.
+ *         description: Array of sub-category objects in `data`.
  */
 subcategoriesRouter.get('/', validate(appSubcategoryListSchema), categoriesController.listSubcategories);
 
