@@ -26,6 +26,14 @@ export const subcategoriesRouter = Router();
  *       with **siteVisitEnabled**, **priceEnabled**, **priceEnteredBy**, and **qaFormSchema**.
  *     parameters:
  *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *         description: Page number (default 1)
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *         description: Items per page (default 20, max 100)
+ *       - in: query
  *         name: featured
  *         schema: { type: string, enum: [true, false] }
  *       - in: query
@@ -34,7 +42,7 @@ export const subcategoriesRouter = Router();
  *         description: If true, nest active sub-categories (with Q&A form + flags) under each category
  *     responses:
  *       200:
- *         description: Active categories list. `data` is an array of category objects.
+ *         description: Paginated categories. `data` is an array; `meta` has total, page, limit, totalPages.
  */
 categoriesRouter.get('/', validate(appCategoryListSchema), categoriesController.listCategories);
 
@@ -99,6 +107,14 @@ categoriesRouter.get('/:id', validate(idParamSchema), categoriesController.getCa
  *       When Jobs API ships, answers are saved as **qaFormAnswers** on the job.
  *     parameters:
  *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *         description: Page number (default 1)
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *         description: Items per page (default 20, max 100)
+ *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
  *         description: Filter by parent category
@@ -107,7 +123,7 @@ categoriesRouter.get('/:id', validate(idParamSchema), categoriesController.getCa
  *         schema: { type: string, enum: [true, false] }
  *     responses:
  *       200:
- *         description: Active sub-categories list. `data` is an array of sub-category objects.
+ *         description: Paginated sub-categories. `data` is an array; `meta` has total, page, limit, totalPages.
  */
 subcategoriesRouter.get('/', validate(appSubcategoryListSchema), categoriesController.listSubcategories);
 

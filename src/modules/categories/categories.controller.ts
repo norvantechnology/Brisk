@@ -4,12 +4,13 @@ import { sendResponse } from '../../utils/apiResponse';
 
 export const listCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await categoriesService.listActiveCategories(req.query);
+    const { items, meta } = await categoriesService.listActiveCategories(req.query);
     sendResponse({
       res,
       statusCode: 200,
       message: 'Categories retrieved successfully.',
-      data: result,
+      data: items,
+      meta,
     });
   } catch (error) {
     next(error);
@@ -54,12 +55,13 @@ export const listSubcategories = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await categoriesService.listActiveSubcategories(req.query);
+    const { items, meta } = await categoriesService.listActiveSubcategories(req.query);
     sendResponse({
       res,
       statusCode: 200,
       message: 'Sub-categories retrieved successfully.',
-      data: result,
+      data: items,
+      meta,
     });
   } catch (error) {
     next(error);
