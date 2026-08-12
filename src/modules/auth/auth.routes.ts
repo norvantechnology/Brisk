@@ -161,7 +161,7 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *         description: |
  *           Success in two forms:
  *           1) Fully verified user — returns accessToken, refreshToken, user.
- *           2) Mobile not verified — `data.requiresOtpVerification=true` with mobileNumber for OTP screen (HTTP 200, not an error).
+ *           2) Mobile not verified — **data.requiresOtpVerification=true** with mobileNumber for OTP screen (HTTP 200, not an error).
  *       401:
  *         description: Invalid email or password.
  */
@@ -177,7 +177,7 @@ router.post('/login', validate(loginSchema), authController.login);
  *       Customer and Trader apps — user enters email on "Forgot Password".
  *       If the account exists, a 6-digit OTP is sent to the registered mobile number.
  *       Response always uses the same message (does not reveal whether the email exists).
- *       When `data.mobileNumber` is present, open the OTP + new-password screen.
+ *       When **data.mobileNumber** is present, open the OTP + new-password screen.
  *     requestBody:
  *       required: true
  *       content:
@@ -241,8 +241,8 @@ router.post('/verify-reset-otp', validate(verifyResetOtpSchema), authController.
  *     summary: Set new password after forgot-password OTP (step 3)
  *     tags: ['Mobile / Auth']
  *     description: |
- *       Preferred: `{ resetToken, newPassword }` from verify-reset-otp (no OTP again).
- *       Legacy one-shot still works: `{ mobileNumber, code, newPassword }`.
+ *       Preferred: **resetToken** + **newPassword** from verify-reset-otp (no OTP again).
+ *       Legacy one-shot still works: **mobileNumber** + **code** + **newPassword**.
  *     requestBody:
  *       required: true
  *       content:

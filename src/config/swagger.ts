@@ -247,11 +247,84 @@ const SWAGGER_CSS = `
   .swagger-ui .tab li,
   .swagger-ui .tab li button,
   .swagger-ui .response-controls,
-  .swagger-ui .microlight,
   .swagger-ui .renderedMarkdown,
   .swagger-ui .renderedMarkdown p {
     color: var(--brisk-text) !important;
     opacity: 1 !important;
+  }
+
+  /* Markdown descriptions — lists, bold, and inline code */
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown,
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown p,
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown ol,
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown ul,
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown li,
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown strong,
+  .swagger-ui .opblock-description-wrapper .markdown,
+  .swagger-ui .opblock-description-wrapper .markdown p,
+  .swagger-ui .opblock-description-wrapper .markdown ol,
+  .swagger-ui .opblock-description-wrapper .markdown ul,
+  .swagger-ui .opblock-description-wrapper .markdown li,
+  .swagger-ui .opblock-description-wrapper .markdown strong {
+    color: var(--brisk-text) !important;
+    opacity: 1 !important;
+    line-height: 1.65 !important;
+  }
+
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown ol,
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown ul,
+  .swagger-ui .opblock-description-wrapper .markdown ol,
+  .swagger-ui .opblock-description-wrapper .markdown ul {
+    margin: 8px 0 12px !important;
+    padding-left: 24px !important;
+  }
+
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown li,
+  .swagger-ui .opblock-description-wrapper .markdown li {
+    margin: 0 0 8px !important;
+    display: list-item !important;
+  }
+
+  .swagger-ui .opblock-description-wrapper .renderedMarkdown code,
+  .swagger-ui .opblock-description-wrapper .markdown code,
+  .swagger-ui .renderedMarkdown code,
+  .swagger-ui .markdown code {
+    display: inline !important;
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+    padding: 1px 6px !important;
+    font-size: 13px !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+    vertical-align: baseline !important;
+    line-height: 1.5 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    box-shadow: none !important;
+  }
+
+  /* Inline code in descriptions must not use JSON dark-block styling */
+  .swagger-ui .opblock-description-wrapper .microlight,
+  .swagger-ui .opblock-description-wrapper .highlight-code,
+  .swagger-ui .renderedMarkdown .microlight,
+  .swagger-ui .markdown .microlight {
+    display: inline !important;
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+    padding: 1px 6px !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    box-shadow: none !important;
+  }
+
+  .swagger-ui .opblock-description-wrapper .microlight *,
+  .swagger-ui .renderedMarkdown .microlight *,
+  .swagger-ui .markdown .microlight * {
+    color: #0f172a !important;
+    background: transparent !important;
   }
 
   .swagger-ui .parameter__type,
@@ -320,17 +393,23 @@ const SWAGGER_CSS = `
   .swagger-ui .btn.authorize svg { fill: #ffffff !important; }
   .swagger-ui .authorization__btn svg { fill: var(--brisk-muted) !important; }
 
-  /* Code / examples stay dark for readability of JSON */
-  .swagger-ui .highlight-code,
-  .swagger-ui .microlight,
+  /* JSON request/response examples only — not description markdown */
+  .swagger-ui .responses-wrapper .highlight-code,
+  .swagger-ui .responses-wrapper .microlight,
+  .swagger-ui .body-param__example,
   .swagger-ui .example,
-  .swagger-ui .body-param__example {
+  .swagger-ui .model-example .highlight-code,
+  .swagger-ui .model-example .microlight {
     background: #0f172a !important;
     color: #e2e8f0 !important;
     border-radius: 6px !important;
   }
-  .swagger-ui .highlight-code * ,
-  .swagger-ui .microlight * {
+  .swagger-ui .responses-wrapper .highlight-code *,
+  .swagger-ui .responses-wrapper .microlight *,
+  .swagger-ui .body-param__example *,
+  .swagger-ui .example *,
+  .swagger-ui .model-example .highlight-code *,
+  .swagger-ui .model-example .microlight * {
     color: #e2e8f0 !important;
   }
 

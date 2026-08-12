@@ -15,14 +15,14 @@ const router = Router();
  *     summary: Submit consumer survey form (website)
  *     tags: ['Website / Surveys']
  *     description: |
- *       **Who uses this:** BRISK website — page `/consumer-survey` ("Join the BRISK Consumer Platform").
+ *       **Who uses this:** BRISK website — consumer-survey page ("Join the BRISK Consumer Platform").
  *
  *       **When to call:** User fills the form and clicks **Submit Survey**.
  *
  *       **Login needed?** No — anyone can submit.
  *
  *       **What it does:** Saves the person's details in the database for the app launch list.
- *       Returns a reference code like `CS-0001`.
+ *       Returns a reference code like **CS-0001**.
  *
  *       **Admin can see this later** in Admin Panel → Survey Management → Consumer tab.
  *     requestBody:
@@ -98,14 +98,14 @@ router.post(
  *     summary: Submit trader survey form (website)
  *     tags: ['Website / Surveys']
  *     description: |
- *       **Who uses this:** BRISK website — page `/trader-survey` ("Join the BRISK Trader Platform").
+ *       **Who uses this:** BRISK website — trader-survey page ("Join the BRISK Trader Platform").
  *
  *       **When to call:** Tradesperson fills the form and clicks **Register Interest**.
  *
  *       **Login needed?** No — anyone can submit.
  *
  *       **What it does:** Saves tradesperson / company details in the database for the trader launch list.
- *       Returns a reference code like `TS-0001`.
+ *       Returns a reference code like **TS-0001**.
  *
  *       **Admin can see this later** in Admin Panel → Survey Management → Trader tab.
  *     requestBody:

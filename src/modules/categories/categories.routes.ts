@@ -22,8 +22,8 @@ export const subcategoriesRouter = Router();
  *
  *       **Login needed?** No — only active categories are returned.
  *
- *       Pass `includeSubcategories=true` to also get each category's active sub-categories
- *       with `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, and `qaFormSchema`.
+ *       Pass **includeSubcategories=true** to also get each category's active sub-categories
+ *       with **siteVisitEnabled**, **priceEnabled**, **priceEnteredBy**, and **qaFormSchema**.
  *     parameters:
  *       - in: query
  *         name: featured
@@ -89,14 +89,14 @@ categoriesRouter.get('/:id', validate(idParamSchema), categoriesController.getCa
  *     summary: List active sub-categories (site visit, price flags, Q&A form)
  *     tags: ['Mobile / Categories']
  *     description: |
- *       **App job-post flow:**
- *       1. User picks a category
- *       2. App calls this with `categoryId`
- *       3. User picks a sub-category
- *       4. App reads `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`
- *       5. App shows site-visit UI / price field / dynamic Q&A form as configured by admin
+ *       **App job-post flow**
+ *       1. User picks a category.
+ *       2. App calls this endpoint with **categoryId** filter.
+ *       3. User picks a sub-category.
+ *       4. App reads **siteVisitEnabled**, **priceEnabled**, **priceEnteredBy**, **qaFormSchema**.
+ *       5. App shows site-visit UI, price field, and dynamic Q&A form as configured by admin.
  *
- *       Later when Jobs API ships, answers are saved as `qaFormAnswers` on the job.
+ *       When Jobs API ships, answers are saved as **qaFormAnswers** on the job.
  *     parameters:
  *       - in: query
  *         name: categoryId

@@ -159,7 +159,7 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  *           - today = submitted today
  *           - thisWeek = from Monday of current week
  *           - thisMonth = from 1st of current month
- *           Example: `/admin/surveys/consumer?dateFilter=today`
+ *           Example: /admin/surveys/consumer?dateFilter=today
  *       - in: query
  *         name: consentLaunchUpdates
  *         schema: { type: string, enum: [true, false] }
@@ -180,7 +180,7 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  *           - status + desc = Status Z–A
  *           - submittedAt + desc = Newest First (default if sortOrder omitted)
  *           - submittedAt + asc = Oldest First
- *           Example: `/admin/surveys/consumer?sortBy=name&sortOrder=asc`
+ *           Example: /admin/surveys/consumer?sortBy=name&sortOrder=asc
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc] }
