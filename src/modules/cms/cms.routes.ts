@@ -15,15 +15,30 @@ const router = Router();
  * /cms/bootstrap:
  *   get:
  *     summary: Website layout bootstrap (SEO, social, featured article, testimonials, page nav)
- *     description: Single optimized call for homepage/layout shell. Uses published Website Management data only.
+ *     description: |
+ *       **Use on:** App shell / layout wrapper — load once on page mount for header, footer, SEO, nav.
+ *
+ *       **Auth:** Not required.
+ *
+ *       **Does not include:** Full Customers/Traders page sections — use `GET /pages/{pageSlug}` for that.
+ *
+ *       **Typical pair:** `GET /cms/bootstrap?audience=customer` + `GET /pages/customers` + `GET /testimonials?type=customer`
  *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
+ *         description: |
+ *           **Purpose:** Scope nav links, FAQs, testimonials, and SEO defaults to the visitor type.
+ *           **customer** — For Customers site experience (nav items, audience-specific content).
+ *           **trader** — For Traders site experience.
+ *           **BOTH / both** — Shared homepage or neutral layout.
+ *           **Example:** `GET /cms/bootstrap?audience=customer`
  *     responses:
  *       200:
- *         description: Bootstrap payload for dynamic website shell.
+ *         description: |
+ *           Combined payload: SEO meta, social links, featured blog, testimonials snippet, published page nav.
+ *           Use field names as returned (mixed camelCase/snake_case depending on nested resource).
  */
 router.get('/bootstrap', cmsController.getBootstrap);
 
@@ -32,14 +47,21 @@ router.get('/bootstrap', cmsController.getBootstrap);
  * /cms/pages:
  *   get:
  *     summary: List published website pages (nav/sitemap — no HTML body)
+ *     description: |
+ *       **Use on:** Build header/footer navigation or sitemap.
+ *
+ *       **Not for:** Customers/Traders marketing pages — those use `GET /pages/customers` or `GET /pages/traders`.
  *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
+ *         description: |
+ *           **Purpose:** Filter nav pages visible to customer vs trader visitors.
+ *           **Example:** `GET /cms/pages?audience=customer` — only pages tagged for customers.
  *     responses:
  *       200:
- *         description: Published page summaries.
+ *         description: Page summaries (slug, title, audience) — no section HTML.
  */
 router.get('/pages', cmsController.listPages);
 
@@ -48,20 +70,29 @@ router.get('/pages', cmsController.listPages);
  * /cms/pages/{slug}:
  *   get:
  *     summary: Get published CMS page by slug (full content)
+ *     description: |
+ *       **Use on:** Generic CMS pages (About, Privacy, etc.) — not marketing Customers/Traders pages.
+ *
+ *       **Marketing pages:** Use `GET /pages/customers` or `GET /pages/traders` instead.
  *     tags: ['Website / Content']
  *     parameters:
  *       - in: path
  *         name: slug
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, example: about-us }
+ *         description: |
+ *           **Purpose:** Page URL slug from nav or sitemap (`GET /cms/pages`).
+ *           **Example:** `GET /cms/pages/about-us`
  *       - in: query
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
+ *         description: |
+ *           **Purpose:** Verify page is published for this audience (returns 404 if audience mismatch).
  *     responses:
  *       200:
- *         description: Published page retrieved.
+ *         description: Full published page body and metadata.
  *       404:
- *         description: Page not found or not published.
+ *         description: Page not found or not published for this audience.
  */
 router.get('/pages/:slug', cmsController.getPageBySlug);
 
@@ -100,11 +131,14 @@ router.get('/knowledge-hub', cmsController.getKnowledgeHub);
  *         name: slug
  *         required: true
  *         schema: { type: string }
+ *         description: |
+ *           **Purpose:** Load full guide/article after user clicks a Knowledge Hub card.
+ *           **How to use:** Pass `slug` from `GET /cms/knowledge-hub` list response.
  *     responses:
  *       200:
- *         description: Section detail with content_blocks.
+ *         description: Section detail with `content_blocks` array.
  *       404:
- *         description: Section not found.
+ *         description: Section not found or not published.
  */
 router.get('/knowledge-hub/:slug', cmsController.getKnowledgeBySlug);
 
@@ -141,25 +175,43 @@ router.get('/blog/featured', cmsController.getFeaturedBlogPost);
  *     parameters:
  *       - in: query
  *         name: page
- *         schema: { type: integer, default: 1 }
+ *         schema: { type: integer, default: 1, minimum: 1 }
+ *         description: |
+ *           **Purpose:** Page number for blog listing grid.
+ *           **Example:** `page=2` for second page of results.
  *       - in: query
  *         name: per_page
- *         schema: { type: integer, default: 12 }
+ *         schema: { type: integer, default: 12, minimum: 1, maximum: 50 }
+ *         description: |
+ *           **Purpose:** Number of post cards per page.
+ *           **Example:** `per_page=6` for a compact homepage widget.
  *       - in: query
  *         name: search
  *         schema: { type: string }
+ *         description: |
+ *           **Purpose:** Full-text search across post titles and excerpts.
+ *           **Example:** `search=plumbing tips`
  *       - in: query
  *         name: category_id
  *         schema: { type: string, format: uuid }
+ *         description: |
+ *           **Purpose:** Filter posts by blog category UUID from `GET /cms/blog/categories`.
+ *           **Use when:** You have the category `id` from the categories list.
  *       - in: query
  *         name: category_slug
  *         schema: { type: string }
+ *         description: |
+ *           **Purpose:** Filter posts by category URL slug (alternative to `category_id`).
+ *           **Use when:** URL is `/blog/category/{slug}` — pass that slug here.
  *       - in: query
  *         name: featured
  *         schema: { type: string, enum: [true, false] }
+ *         description: |
+ *           **Purpose:** Return only featured/spotlight posts.
+ *           **Note:** For single hero post use `GET /cms/blog/featured` instead.
  *     responses:
  *       200:
- *         description: Paginated published blog cards.
+ *         description: Paginated blog cards with `meta` (page, per_page, total).
  */
 router.get('/blog/posts', cmsController.getBlogPosts);
 router.get('/blog/articles', cmsController.getBlogPosts);
@@ -175,9 +227,13 @@ router.get('/blog/articles', cmsController.getBlogPosts);
  *         name: slug
  *         required: true
  *         schema: { type: string }
+ *         description: |
+ *           **Purpose:** Load full article when user opens a blog post URL.
+ *           **How to use:** Pass `slug` from blog list card or featured article response.
+ *           **Alias:** `GET /cms/blog/articles/{slug}` returns the same data.
  *     responses:
  *       200:
- *         description: Published blog post detail.
+ *         description: Full published blog post including HTML `content`.
  *       404:
  *         description: Post not found or not live.
  */
@@ -194,9 +250,12 @@ router.get('/blog/articles/:slug', cmsController.getBlogPostBySlug);
  *       - in: query
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
+ *         description: |
+ *           **Purpose:** Show FAQ category tabs relevant to customer vs trader Help Center.
+ *           **Example:** `GET /cms/faq-categories?audience=customer`
  *     responses:
  *       200:
- *         description: FAQ categories with counts.
+ *         description: FAQ categories with published question counts.
  */
 router.get('/faq-categories', cmsController.getFaqCategories);
 
@@ -210,15 +269,21 @@ router.get('/faq-categories', cmsController.getFaqCategories);
  *       - in: query
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
+ *         description: |
+ *           **Purpose:** Filter FAQs shown on customer vs trader Help Center.
  *       - in: query
  *         name: category_id
  *         schema: { type: string, format: uuid }
+ *         description: |
+ *           **Purpose:** Load questions for one FAQ category tab (UUID from `GET /cms/faq-categories`).
  *       - in: query
  *         name: category_slug
  *         schema: { type: string }
+ *         description: |
+ *           **Purpose:** Same as `category_id` but using URL slug when building slug-based routes.
  *     responses:
  *       200:
- *         description: Published FAQs.
+ *         description: Published FAQ question/answer pairs.
  */
 router.get('/faqs', cmsController.getFaqs);
 
@@ -226,28 +291,37 @@ router.get('/faqs', cmsController.getFaqs);
  * @swagger
  * /cms/testimonials:
  *   get:
- *     summary: List published testimonials (homepage carousel)
+ *     summary: List published testimonials (alias — prefer GET /testimonials)
+ *     description: |
+ *       Same as `GET /testimonials`. Prefer `/testimonials?type=customer` in frontend.
+ *
+ *       See `GET /testimonials` for full parameter documentation.
  *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [customer, trader, home] }
+ *         description: |
+ *           **Purpose:** Primary filter — `customer` for Customers page, `trader` for Traders page, `home` for homepage.
+ *       - in: query
  *         name: featured
  *         schema: { type: string, enum: [true, false] }
+ *         description: Only featured testimonials (spotlight carousel).
  *       - in: query
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
- *       - in: query
- *         name: type
- *         schema: { type: string, enum: [customer, trader, home] }
- *         description: Filter by page type (customer page, trader page, homepage)
+ *         description: Legacy audience filter — prefer `type` for page-specific reviews.
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [published, draft] }
+ *         description: Publish filter; public site uses published only.
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20 }
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *         description: Max testimonials returned (e.g. `limit=5` for carousel).
  *     responses:
  *       200:
- *         description: Published testimonials.
+ *         description: `data.items[]` testimonial cards (snake_case fields).
  */
 router.get('/testimonials', cmsController.getTestimonials);
 
@@ -273,10 +347,13 @@ router.get('/legal', cmsController.listLegalPolicies);
  *       - in: path
  *         name: slug
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, example: privacy-policy }
+ *         description: |
+ *           **Purpose:** Load full legal text for footer links (Privacy, Terms, etc.).
+ *           **How to use:** Pass `slug` from `GET /cms/legal` list.
  *     responses:
  *       200:
- *         description: Latest published legal version.
+ *         description: Latest published legal version with HTML content.
  *       404:
  *         description: Policy or published version not found.
  */
@@ -298,16 +375,22 @@ router.get('/seo', cmsController.getSeo);
  * @swagger
  * /cms/marketing-pages/{pageSlug}:
  *   get:
- *     summary: Get full marketing page (Customers / Traders) with all published sections + items
+ *     summary: Get full marketing page (CMS path — prefer GET /pages/{pageSlug})
+ *     description: |
+ *       Same data as `GET /pages/customers` or `GET /pages/traders`. Use `/pages/...` in frontend.
+ *
+ *       See `GET /pages/{pageSlug}` for full parameter and section_key documentation.
  *     tags: ['Website / Content']
  *     parameters:
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, example: customers }
+ *         schema: { type: string, enum: [customers, traders], example: customers }
+ *         description: |
+ *           **Purpose:** `customers` = For Customers page; `traders` = For Traders page.
  *     responses:
  *       200:
- *         description: Page with sections array (hero, why-customers, journey, etc.).
+ *         description: Page with ordered `sections[]` and nested `items[]`.
  */
 router.get(
   '/marketing-pages/:pageSlug',
@@ -319,8 +402,20 @@ router.get(
  * @swagger
  * /cms/marketing-pages/{pageSlug}/sections/{sectionKey}:
  *   get:
- *     summary: Get one marketing page section with items (e.g. hero, why-customers, journey)
+ *     summary: Get one marketing page section (CMS path — prefer GET /pages/{pageSlug}/sections/{sectionKey})
+ *     description: Same as `GET /pages/{pageSlug}/sections/{sectionKey}`. See that endpoint for parameter docs.
  *     tags: ['Website / Content']
+ *     parameters:
+ *       - in: path
+ *         name: pageSlug
+ *         required: true
+ *         schema: { type: string, enum: [customers, traders] }
+ *         description: Parent page — `customers` or `traders`.
+ *       - in: path
+ *         name: sectionKey
+ *         required: true
+ *         schema: { type: string, example: hero }
+ *         description: Section key from full page response — e.g. `hero`, `why-customers`, `trader_hero`.
  */
 router.get(
   '/marketing-pages/:pageSlug/sections/:sectionKey',
@@ -333,7 +428,19 @@ router.get(
  * /cms/sections/{sectionId}/items:
  *   get:
  *     summary: List published items for a section (feature cards, journey steps, etc.)
+ *     description: |
+ *       **Use on:** Optional lazy-load when you have a section UUID but need only its items.
+ *
+ *       **Usually not needed:** Full page/section responses already include `items[]`.
  *     tags: ['Website / Content']
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: |
+ *           **Purpose:** Section UUID from `sections[].id` in page response.
+ *           **Example:** `GET /cms/sections/{sectionId}/items`
  */
 router.get(
   '/sections/:sectionId/items',

@@ -21,8 +21,16 @@ const options: swaggerJSDoc.Options = {
     info: {
       title: 'BRISK API',
       version: '1.0.0',
-      description:
+      description: [
         'Filter by tag: **Admin** · **Website** · **Mobile** · **Customer** · **Trader** · **System**',
+        '',
+        '**Frontend quick reference**',
+        '- **Customers page:** GET /pages/customers · GET /testimonials?type=customer · GET /cms/bootstrap?audience=customer',
+        '- **Traders page:** GET /pages/traders · GET /testimonials?type=trader · GET /cms/bootstrap?audience=trader',
+        '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
+        '',
+        'Each endpoint documents **parameter purpose**, **when to use**, and **examples** in the description.',
+      ].join('\n'),
     },
     servers,
     tags: [
@@ -43,10 +51,10 @@ const options: swaggerJSDoc.Options = {
       { name: 'Admin / Website / Legal', description: 'Legal policies' },
       { name: 'Admin / Website / SEO', description: 'SEO settings' },
       { name: 'Admin / Surveys', description: 'View & manage website survey signups (consumer CS-#### and trader TS-####). Admin login required.' },
-      { name: 'Website / Content', description: 'Public /cms reads' },
+      { name: 'Website / Content', description: 'Public website reads — Customers/Traders pages, testimonials, bootstrap, blog, FAQ. Parameters explain which page/screen each filter is for.' },
       { name: 'Website / Surveys', description: 'Website survey forms — consumer-survey & trader-survey pages. No login needed.' },
       { name: 'Mobile / Auth', description: 'Customer & Trader auth' },
-      { name: 'Mobile / Categories', description: 'Service categories & sub-categories for apps (site visit, price flags, Q&A form)' },
+      { name: 'Mobile / Categories', description: 'Service categories & sub-categories for Customer/Trader apps. No pagination. Each query param documents purpose (featured, categoryId, includeSubcategories) and job-post flags (siteVisitEnabled, priceEnabled, qaFormSchema).' },
       { name: 'Customer / Profile', description: 'Customer profile' },
       { name: 'Trader / Profile', description: 'Trader profile' },
       { name: 'System / Health', description: 'Health check' },
