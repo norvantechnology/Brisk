@@ -242,6 +242,8 @@ export const getTestimonials = async (
     const data = await cmsService.listPublishedTestimonials({
       featured: q(req.query.featured),
       audience: q(req.query.audience),
+      type: q(req.query.type),
+      status: q(req.query.status),
       limit: q(req.query.limit),
     });
     sendResponse({

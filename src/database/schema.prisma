@@ -169,6 +169,12 @@ enum CmsKnowledgeBlockType {
   CTA_BANNER
 }
 
+enum CmsTestimonialPageType {
+  CUSTOMER
+  TRADER
+  HOME
+}
+
 enum SurveyRegistrationStatus {
   NEW
   PENDING
@@ -945,6 +951,66 @@ model CmsStaticPage {
   @@map("cms_static_pages")
 }
 
+model CmsMarketingPage {
+  id        String           @id @default(uuid()) @db.Uuid
+  slug      String           @unique
+  title     String
+  status    CmsPublishStatus @default(PUBLISHED)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  sections CmsPageSection[]
+
+  @@map("cms_marketing_pages")
+}
+
+model CmsPageSection {
+  id                  String           @id @default(uuid()) @db.Uuid
+  pageId              String           @map("page_id") @db.Uuid
+  sectionType         String           @map("section_type")
+  sectionKey          String           @map("section_key")
+  title               String?
+  subtitle            String?
+  description         String?          @db.Text
+  primaryButtonText   String?          @map("primary_button_text")
+  primaryButtonUrl    String?          @map("primary_button_url")
+  secondaryButtonText String?          @map("secondary_button_text")
+  secondaryButtonUrl  String?          @map("secondary_button_url")
+  backgroundImage     String?          @map("background_image")
+  backgroundVideo     String?          @map("background_video")
+  appStoreUrl         String?          @map("app_store_url")
+  googlePlayUrl       String?          @map("google_play_url")
+  status              CmsPublishStatus @default(DRAFT)
+  sortOrder           Int              @default(0) @map("sort_order")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  page  CmsMarketingPage     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  items CmsPageSectionItem[]
+
+  @@unique([pageId, sectionKey])
+  @@map("cms_page_sections")
+}
+
+model CmsPageSectionItem {
+  id          String           @id @default(uuid()) @db.Uuid
+  sectionId   String           @map("section_id") @db.Uuid
+  title       String?
+  description String?          @db.Text
+  icon        String?
+  image       String?
+  stepNumber  Int?             @map("step_number")
+  sortOrder   Int              @default(0) @map("sort_order")
+  status      CmsPublishStatus @default(PUBLISHED)
+  metadata    Json?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  section CmsPageSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@map("cms_page_section_items")
+}
+
 model CmsSocialLink {
   id         String          @id @default(uuid()) @db.Uuid
   platform   String
@@ -1072,20 +1138,22 @@ model CmsFaq {
 }
 
 model CmsTestimonial {
-  id             String           @id @default(uuid()) @db.Uuid
-  authorName     String           @map("author_name")
-  authorRole     String?          @map("author_role")
-  companyName    String?          @map("company_name")
-  badgeLabel     String?          @map("badge_label")
-  authorAvatarUrl String?         @map("author_avatar_url")
-  quoteText      String           @map("quote_text") @db.Text
-  rating         Int              @default(5)
-  targetAudience CmsAudience      @default(BOTH) @map("target_audience")
-  status         CmsPublishStatus @default(DRAFT)
-  isFeatured     Boolean          @default(false) @map("is_featured")
-  displayOrder   Int              @default(0) @map("display_order")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
+  id              String                  @id @default(uuid()) @db.Uuid
+  authorName      String                  @map("author_name")
+  authorRole      String?                 @map("author_role")
+  companyName     String?                 @map("company_name")
+  badgeLabel      String?                 @map("badge_label")
+  authorAvatarUrl String?                 @map("author_avatar_url")
+  quoteText       String                  @map("quote_text") @db.Text
+  rating          Float                   @default(5)
+  pageType        CmsTestimonialPageType  @default(CUSTOMER) @map("page_type")
+  isVerified      Boolean                 @default(false) @map("is_verified")
+  targetAudience  CmsAudience             @default(BOTH) @map("target_audience")
+  status          CmsPublishStatus        @default(DRAFT)
+  isFeatured      Boolean                 @default(false) @map("is_featured")
+  displayOrder    Int                     @default(0) @map("display_order")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
 
   @@map("cms_testimonials")
 }

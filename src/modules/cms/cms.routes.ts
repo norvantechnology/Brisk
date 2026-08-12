@@ -1,5 +1,12 @@
 import { Router } from 'express';
 import * as cmsController from './cms.controller';
+import * as pageSectionsController from './page-sections.controller';
+import { validate } from '../../middlewares/validate.middleware';
+import {
+  pageSlugParamSchema,
+  pageSlugSectionKeyParamsSchema,
+  sectionIdParamSchema,
+} from './page-sections.validation';
 
 const router = Router();
 
@@ -229,6 +236,13 @@ router.get('/faqs', cmsController.getFaqs);
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
  *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [customer, trader, home] }
+ *         description: Filter by page type (customer page, trader page, homepage)
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [published, draft] }
+ *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 20 }
  *     responses:
@@ -279,5 +293,52 @@ router.get('/legal/:slug', cmsController.getLegalBySlug);
  *         description: SEO settings for public site head injection.
  */
 router.get('/seo', cmsController.getSeo);
+
+/**
+ * @swagger
+ * /cms/marketing-pages/{pageSlug}:
+ *   get:
+ *     summary: Get full marketing page (Customers / Traders) with all published sections + items
+ *     tags: ['Website / Content']
+ *     parameters:
+ *       - in: path
+ *         name: pageSlug
+ *         required: true
+ *         schema: { type: string, example: customers }
+ *     responses:
+ *       200:
+ *         description: Page with sections array (hero, why-customers, journey, etc.).
+ */
+router.get(
+  '/marketing-pages/:pageSlug',
+  validate(pageSlugParamSchema),
+  pageSectionsController.getMarketingPage
+);
+
+/**
+ * @swagger
+ * /cms/marketing-pages/{pageSlug}/sections/{sectionKey}:
+ *   get:
+ *     summary: Get one marketing page section with items (e.g. hero, why-customers, journey)
+ *     tags: ['Website / Content']
+ */
+router.get(
+  '/marketing-pages/:pageSlug/sections/:sectionKey',
+  validate(pageSlugSectionKeyParamsSchema),
+  pageSectionsController.getPageSection
+);
+
+/**
+ * @swagger
+ * /cms/sections/{sectionId}/items:
+ *   get:
+ *     summary: List published items for a section (feature cards, journey steps, etc.)
+ *     tags: ['Website / Content']
+ */
+router.get(
+  '/sections/:sectionId/items',
+  validate(sectionIdParamSchema),
+  pageSectionsController.getSectionItems
+);
 
 export default router;

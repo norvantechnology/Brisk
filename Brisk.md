@@ -1631,7 +1631,8 @@ S3 uploads still deferred globally — CMS image fields accept **URL strings** u
 | Blog Categories | CRUD `/admin/blog/categories*` · `GET /cms/blog/categories` | Active + posts_count |
 | Blog Posts | CRUD `/admin/blog/articles*` · `GET /cms/blog/posts`, `/cms/blog/articles`, `:slug`, `/cms/blog/featured` | Paginated cards; scheduled goes live when date ≤ now |
 | FAQ | CRUD `/admin/cms/faqs*` · `GET /cms/faq-categories`, `GET /cms/faqs` | Audience + category filters |
-| Testimonials | CRUD `/admin/cms/testimonials*` · `GET /cms/testimonials` | featured / audience / limit |
+| Testimonials | CRUD `/admin/cms/testimonials*` · `GET /cms/testimonials` · `GET /testimonials` (alias) | Filters: `type=customer|trader|home`, `status=published`; FE fields `name`, `role`, `review`, `avatar`, `is_verified`, `sort_order`; PATCH status + sort-order |
+| **Customers marketing page** | Admin `/admin/cms/marketing-pages/:pageSlug/sections/:sectionKey` + items `/admin/cms/sections/:sectionId/items` · Public `GET /pages/:pageSlug` · `GET /pages/:pageSlug/sections/:sectionKey` · `GET /cms/marketing-pages/:pageSlug` | Sections: `hero`, `why-customers`, `journey`, `peace-of-mind`, `app-download`; items for feature cards & journey steps |
 | Legal | versions `/admin/cms/legal-policies*` · `GET /cms/legal`, `GET /cms/legal/:slug` | Footer list + full version |
 | SEO | `GET/PUT /admin/cms/seo` · `GET /cms/seo` | Singleton |
 | Website bootstrap | — · `GET /cms/bootstrap?audience=` | One call: seo + social + featured article + testimonials + page nav |

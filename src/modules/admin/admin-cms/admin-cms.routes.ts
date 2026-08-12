@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as cmsAdminController from './admin-cms.controller';
+import * as pageSectionsAdminController from './page-sections.controller';
 import { validate } from '../../../middlewares/validate.middleware';
 import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware';
 import {
@@ -15,11 +16,23 @@ import {
   reorderFaqsSchema,
   createTestimonialSchema,
   updateTestimonialSchema,
+  testimonialStatusSchema,
+  testimonialSortOrderSchema,
   createLegalPolicySchema,
   publishLegalVersionSchema,
   updateSeoSchema,
   dashboardAuditSchema,
 } from './admin-cms.validation';
+import {
+  upsertPageSectionSchema,
+  updatePageSectionSchema,
+  pageSlugSectionKeyParamsSchema,
+  sectionIdParamSchema,
+  createSectionItemSchema,
+  updateSectionItemSchema,
+  sectionItemIdParamSchema,
+  sectionItemSortOrderSchema,
+} from '../../cms/page-sections.validation';
 
 const router = Router();
 
@@ -745,6 +758,7 @@ router.post('/testimonials', validate(createTestimonialSchema), cmsAdminControll
  *         description: Testimonial not found.
  */
 router.patch('/testimonials/:id', validate(updateTestimonialSchema), cmsAdminController.updateTestimonial);
+router.put('/testimonials/:id', validate(updateTestimonialSchema), cmsAdminController.updateTestimonial);
 
 /**
  * @swagger
@@ -766,6 +780,81 @@ router.patch('/testimonials/:id', validate(updateTestimonialSchema), cmsAdminCon
  *         description: Testimonial not found.
  */
 router.delete('/testimonials/:id', validate(idParamSchema), cmsAdminController.deleteTestimonial);
+
+/**
+ * @swagger
+ * /admin/cms/testimonials/{id}:
+ *   get:
+ *     summary: Get testimonial by ID
+ *     tags: ['Admin / Website / Testimonials']
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/testimonials/:id', validate(idParamSchema), cmsAdminController.getTestimonial);
+
+router.patch(
+  '/testimonials/:id/status',
+  validate(testimonialStatusSchema),
+  cmsAdminController.updateTestimonialStatus
+);
+
+router.patch(
+  '/testimonials/:id/sort-order',
+  validate(testimonialSortOrderSchema),
+  cmsAdminController.updateTestimonialSortOrder
+);
+
+// ==========================================
+// MARKETING PAGE SECTIONS (Customers / Traders pages)
+// ==========================================
+
+router.get(
+  '/marketing-pages/:pageSlug/sections/:sectionKey',
+  validate(pageSlugSectionKeyParamsSchema),
+  pageSectionsAdminController.getAdminPageSection
+);
+
+router.post(
+  '/marketing-pages/:pageSlug/sections/:sectionKey',
+  validate(upsertPageSectionSchema),
+  pageSectionsAdminController.upsertAdminPageSection
+);
+
+router.put(
+  '/marketing-pages/:pageSlug/sections/:sectionKey',
+  validate(updatePageSectionSchema),
+  pageSectionsAdminController.upsertAdminPageSection
+);
+
+router.get(
+  '/sections/:sectionId/items',
+  validate(sectionIdParamSchema),
+  pageSectionsAdminController.listAdminSectionItems
+);
+
+router.post(
+  '/sections/:sectionId/items',
+  validate(createSectionItemSchema),
+  pageSectionsAdminController.createAdminSectionItem
+);
+
+router.put(
+  '/section-items/:itemId',
+  validate(updateSectionItemSchema),
+  pageSectionsAdminController.updateAdminSectionItem
+);
+
+router.delete(
+  '/section-items/:itemId',
+  validate(sectionItemIdParamSchema),
+  pageSectionsAdminController.deleteAdminSectionItem
+);
+
+router.patch(
+  '/section-items/:itemId/sort-order',
+  validate(sectionItemSortOrderSchema),
+  pageSectionsAdminController.updateAdminSectionItemSortOrder
+);
 
 // ==========================================
 // LEGAL & POLICIES

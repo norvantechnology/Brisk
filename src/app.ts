@@ -17,6 +17,8 @@ import adminBlogArticleRoutes from './modules/admin/admin-website/admin-website.
 import adminKnowledgeHubRoutes from './modules/admin/admin-website/admin-website.knowledge-hub.routes';
 import surveysRoutes from './modules/surveys/surveys.routes';
 import cmsRoutes from './modules/cms/cms.routes';
+import marketingPagesPublicRoutes from './modules/cms/marketing-pages-public.routes';
+import testimonialsPublicRoutes from './modules/cms/testimonials-public.routes';
 import {
   categoriesRouter,
   subcategoriesRouter,
@@ -53,6 +55,8 @@ app.use('/admin/knowledge-hub', adminKnowledgeHubRoutes);
 app.use('/admin/surveys', adminSurveyRoutes);
 app.use('/surveys', surveysRoutes);
 app.use('/cms', cmsRoutes);
+app.use('/pages', marketingPagesPublicRoutes);
+app.use('/testimonials', testimonialsPublicRoutes);
 app.use('/categories', categoriesRouter);
 app.use('/sub-categories', subcategoriesRouter);
 

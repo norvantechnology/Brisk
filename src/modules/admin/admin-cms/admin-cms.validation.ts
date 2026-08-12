@@ -3,6 +3,7 @@ import {
   CmsAudience,
   CmsPublishStatus,
   CmsActiveStatus,
+  CmsTestimonialPageType,
   SurveyRegistrationStatus,
 } from '@prisma/client';
 
@@ -120,35 +121,120 @@ export const dashboardAuditSchema = z.object({
 
 export const createTestimonialSchema = z.object({
   body: z.object({
-    authorName: z.string().min(1),
+    authorName: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
     authorRole: z.string().optional(),
+    role: z.string().optional(),
     companyName: z.string().optional(),
     badgeLabel: z.string().optional(),
     authorAvatarUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
-    quoteText: z.string().min(1),
-    rating: z.number().int().min(1).max(5).optional().default(5),
+    avatar: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
+    quoteText: z.string().min(1).optional(),
+    review: z.string().min(1).optional(),
+    rating: z.number().min(1).max(5).optional().default(5),
+    pageType: z.nativeEnum(CmsTestimonialPageType).optional(),
+    type: z.enum(['customer', 'trader', 'home']).optional(),
+    isVerified: z.boolean().optional().default(false),
+    is_verified: z.boolean().optional(),
     targetAudience: z.nativeEnum(CmsAudience).optional().default(CmsAudience.BOTH),
     status: z.nativeEnum(CmsPublishStatus).optional().default(CmsPublishStatus.PUBLISHED),
     isFeatured: z.boolean().optional().default(false),
     displayOrder: z.number().int().optional().default(0),
-  }),
+    sort_order: z.number().int().optional(),
+  }).transform((body) => ({
+    authorName: body.authorName ?? body.name!,
+    authorRole: body.authorRole ?? body.role,
+    authorAvatarUrl: body.authorAvatarUrl ?? body.avatar,
+    quoteText: body.quoteText ?? body.review!,
+    rating: body.rating,
+    pageType: body.pageType ?? (body.type === 'trader' ? CmsTestimonialPageType.TRADER : body.type === 'home' ? CmsTestimonialPageType.HOME : CmsTestimonialPageType.CUSTOMER),
+    isVerified: body.isVerified ?? body.is_verified ?? false,
+    targetAudience: body.targetAudience,
+    status: body.status,
+    isFeatured: body.isFeatured,
+    displayOrder: body.displayOrder ?? body.sort_order ?? 0,
+    companyName: body.companyName,
+    badgeLabel: body.badgeLabel,
+  })),
 });
 
 export const updateTestimonialSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
   body: z.object({
     authorName: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
     authorRole: z.string().optional(),
+    role: z.string().optional(),
     companyName: z.string().optional(),
     badgeLabel: z.string().optional(),
     authorAvatarUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
+    avatar: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
     quoteText: z.string().min(1).optional(),
-    rating: z.number().int().min(1).max(5).optional(),
+    review: z.string().min(1).optional(),
+    rating: z.number().min(1).max(5).optional(),
+    pageType: z.nativeEnum(CmsTestimonialPageType).optional(),
+    type: z.enum(['customer', 'trader', 'home']).optional(),
+    isVerified: z.boolean().optional(),
+    is_verified: z.boolean().optional(),
     targetAudience: z.nativeEnum(CmsAudience).optional(),
     status: z.nativeEnum(CmsPublishStatus).optional(),
     isFeatured: z.boolean().optional(),
     displayOrder: z.number().int().optional(),
+    sort_order: z.number().int().optional(),
+  }).transform((body) => ({
+    ...(body.authorName !== undefined || body.name !== undefined
+      ? { authorName: body.authorName ?? body.name }
+      : {}),
+    ...(body.authorRole !== undefined || body.role !== undefined
+      ? { authorRole: body.authorRole ?? body.role }
+      : {}),
+    ...(body.authorAvatarUrl !== undefined || body.avatar !== undefined
+      ? { authorAvatarUrl: body.authorAvatarUrl ?? body.avatar }
+      : {}),
+    ...(body.quoteText !== undefined || body.review !== undefined
+      ? { quoteText: body.quoteText ?? body.review }
+      : {}),
+    ...(body.rating !== undefined ? { rating: body.rating } : {}),
+    ...(body.pageType !== undefined || body.type !== undefined
+      ? {
+          pageType:
+            body.pageType ??
+            (body.type === 'trader'
+              ? CmsTestimonialPageType.TRADER
+              : body.type === 'home'
+                ? CmsTestimonialPageType.HOME
+                : CmsTestimonialPageType.CUSTOMER),
+        }
+      : {}),
+    ...(body.isVerified !== undefined || body.is_verified !== undefined
+      ? { isVerified: body.isVerified ?? body.is_verified }
+      : {}),
+    ...(body.targetAudience !== undefined ? { targetAudience: body.targetAudience } : {}),
+    ...(body.status !== undefined ? { status: body.status } : {}),
+    ...(body.isFeatured !== undefined ? { isFeatured: body.isFeatured } : {}),
+    ...(body.displayOrder !== undefined || body.sort_order !== undefined
+      ? { displayOrder: body.displayOrder ?? body.sort_order }
+      : {}),
+    ...(body.companyName !== undefined ? { companyName: body.companyName } : {}),
+    ...(body.badgeLabel !== undefined ? { badgeLabel: body.badgeLabel } : {}),
+  })),
+});
+
+export const testimonialStatusSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({
+    status: z.nativeEnum(CmsPublishStatus),
   }),
+});
+
+export const testimonialSortOrderSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({
+    sortOrder: z.number().int().min(0).optional(),
+    sort_order: z.number().int().min(0).optional(),
+  }).transform((body) => ({
+    sortOrder: body.sortOrder ?? body.sort_order ?? 0,
+  })),
 });
 
 export const createLegalPolicySchema = z.object({

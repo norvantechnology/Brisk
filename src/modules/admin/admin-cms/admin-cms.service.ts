@@ -5,6 +5,7 @@ import {
   CmsAudience,
   CmsPublishStatus,
   CmsActiveStatus,
+  CmsTestimonialPageType,
   Prisma,
 } from '@prisma/client';
 
@@ -21,6 +22,7 @@ export type CmsListFilters = {
   categoryId?: string;
   featured?: string | boolean;
   sort?: string;
+  type?: string;
 };
 
 export type CreatePageInput = {
@@ -74,6 +76,8 @@ export type CreateTestimonialInput = {
   authorAvatarUrl?: string;
   quoteText: string;
   rating?: number;
+  pageType?: import('@prisma/client').CmsTestimonialPageType;
+  isVerified?: boolean;
   targetAudience?: CmsAudience;
   status?: CmsPublishStatus;
   isFeatured?: boolean;
@@ -167,6 +171,15 @@ const asAudience = (value?: string): CmsAudience | undefined => {
   if (!value) return undefined;
   if (Object.values(CmsAudience).includes(value as CmsAudience)) {
     return value as CmsAudience;
+  }
+  return undefined;
+};
+
+const asTestimonialPageType = (value?: string): CmsTestimonialPageType | undefined => {
+  if (!value) return undefined;
+  const normalized = value.trim().toUpperCase();
+  if (Object.values(CmsTestimonialPageType).includes(normalized as CmsTestimonialPageType)) {
+    return normalized as CmsTestimonialPageType;
   }
   return undefined;
 };
@@ -890,6 +903,11 @@ export const listTestimonials = async (filters: CmsListFilters = {}) => {
     where.isFeatured = featured;
   }
 
+  const pageType = asTestimonialPageType(filters.type);
+  if (pageType) {
+    where.pageType = pageType;
+  }
+
   const [total, testimonials] = await Promise.all([
     prisma.cmsTestimonial.count({ where }),
     prisma.cmsTestimonial.findMany({
@@ -925,6 +943,8 @@ export const createTestimonial = async (
       authorAvatarUrl: input.authorAvatarUrl,
       quoteText: input.quoteText,
       rating: input.rating ?? 5,
+      pageType: input.pageType ?? CmsTestimonialPageType.CUSTOMER,
+      isVerified: input.isVerified ?? false,
       targetAudience: input.targetAudience ?? CmsAudience.BOTH,
       status: input.status ?? CmsPublishStatus.PUBLISHED,
       isFeatured: input.isFeatured ?? false,
@@ -965,6 +985,8 @@ export const updateTestimonial = async (
       authorAvatarUrl: input.authorAvatarUrl,
       quoteText: input.quoteText,
       rating: input.rating,
+      pageType: input.pageType,
+      isVerified: input.isVerified,
       targetAudience: input.targetAudience,
       status: input.status,
       isFeatured: input.isFeatured,
@@ -979,6 +1001,70 @@ export const updateTestimonial = async (
     'CmsTestimonial',
     testimonial.id,
     `Updated testimonial by "${testimonial.authorName}".`
+  );
+
+  return testimonial;
+};
+
+export const getTestimonialById = async (id: string) => {
+  const testimonial = await prisma.cmsTestimonial.findUnique({ where: { id } });
+  if (!testimonial) {
+    throw new NotFoundError('Testimonial not found.');
+  }
+  return testimonial;
+};
+
+export const updateTestimonialStatus = async (
+  adminId: string,
+  adminLabel: string,
+  id: string,
+  status: CmsPublishStatus
+) => {
+  const existing = await prisma.cmsTestimonial.findUnique({ where: { id } });
+  if (!existing) {
+    throw new NotFoundError('Testimonial not found.');
+  }
+
+  const testimonial = await prisma.cmsTestimonial.update({
+    where: { id },
+    data: { status },
+  });
+
+  await writeAudit(
+    'CMS_TESTIMONIAL_STATUS_UPDATED',
+    adminId,
+    adminLabel,
+    'CmsTestimonial',
+    testimonial.id,
+    `Updated testimonial status to ${status}.`
+  );
+
+  return testimonial;
+};
+
+export const updateTestimonialSortOrder = async (
+  adminId: string,
+  adminLabel: string,
+  id: string,
+  sortOrder: number
+) => {
+  const existing = await prisma.cmsTestimonial.findUnique({ where: { id } });
+  if (!existing) {
+    throw new NotFoundError('Testimonial not found.');
+  }
+
+  const testimonial = await prisma.cmsTestimonial.update({
+    where: { id },
+    data: { displayOrder: sortOrder },
+  });
+
+  await writeAudit(
+    'CMS_TESTIMONIAL_SORT_UPDATED',
+    adminId,
+    adminLabel,
+    'CmsTestimonial',
+    testimonial.id,
+    `Updated testimonial sort order to ${sortOrder}.`
   );
 
   return testimonial;

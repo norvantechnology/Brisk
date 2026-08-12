@@ -456,11 +456,18 @@ export const listPublishedFaqs = async (filters: {
 export const listPublishedTestimonials = async (filters: {
   featured?: string | boolean;
   audience?: string;
+  type?: string;
+  status?: string;
   limit?: string | number;
 }) => {
   const where: Prisma.CmsTestimonialWhereInput = {
     status: CmsPublishStatus.PUBLISHED,
   };
+
+  const statusFilter = filters.status?.trim().toUpperCase();
+  if (statusFilter && Object.values(CmsPublishStatus).includes(statusFilter as CmsPublishStatus)) {
+    where.status = statusFilter as CmsPublishStatus;
+  }
 
   const featuredFlag = parseFeatured(filters.featured);
   if (featuredFlag !== undefined) {
@@ -470,6 +477,11 @@ export const listPublishedTestimonials = async (filters: {
   const targetAudience = audienceFilter(filters.audience);
   if (targetAudience) {
     where.targetAudience = targetAudience;
+  }
+
+  const pageType = filters.type?.trim().toUpperCase();
+  if (pageType && ['CUSTOMER', 'TRADER', 'HOME'].includes(pageType)) {
+    where.pageType = pageType as import('@prisma/client').CmsTestimonialPageType;
   }
 
   const take = Math.min(Math.max(Number(filters.limit) || 20, 1), 50);

@@ -164,13 +164,22 @@ export const serializePublicFaqCategory = (
 
 export const serializePublicTestimonial = (item: CmsTestimonial) => ({
   id: item.id,
+  name: item.authorName,
+  role: item.authorRole,
+  type: item.pageType.toLowerCase(),
+  rating: item.rating,
+  review: item.quoteText,
+  avatar: item.authorAvatarUrl,
+  is_verified: item.isVerified,
+  status: item.status.toLowerCase(),
+  sort_order: item.displayOrder,
+  // legacy keys (still returned for existing website consumers)
   author_name: item.authorName,
   author_role: item.authorRole,
   company_name: item.companyName,
   badge_label: item.badgeLabel,
   author_avatar: item.authorAvatarUrl,
   quote: item.quoteText,
-  rating: item.rating,
   target_audience: toApiAudience(item.targetAudience),
   is_featured: item.isFeatured,
   display_order: item.displayOrder,

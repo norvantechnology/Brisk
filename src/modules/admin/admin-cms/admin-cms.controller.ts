@@ -524,6 +524,74 @@ export const deleteTestimonial = async (
   }
 };
 
+export const getTestimonial = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const testimonial = await cmsService.getTestimonialById(req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Testimonial retrieved successfully.',
+      data: { testimonial },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateTestimonialStatus = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const testimonial = await cmsService.updateTestimonialStatus(
+      adminId,
+      adminLabel,
+      req.params.id,
+      req.body.status
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Testimonial status updated successfully.',
+      data: { testimonial },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateTestimonialSortOrder = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const testimonial = await cmsService.updateTestimonialSortOrder(
+      adminId,
+      adminLabel,
+      req.params.id,
+      req.body.sortOrder
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Testimonial sort order updated successfully.',
+      data: { testimonial },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ==========================================
 // LEGAL & POLICIES
 // ==========================================
