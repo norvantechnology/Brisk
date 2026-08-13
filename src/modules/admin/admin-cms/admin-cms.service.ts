@@ -7,6 +7,7 @@ import {
   CmsActiveStatus,
   CmsTestimonialPageType,
   Prisma,
+  SurveyRegistrationStatus,
 } from '@prisma/client';
 
 // ==========================================
@@ -214,6 +215,8 @@ export const getCmsDashboardStats = async () => {
     legalPoliciesCount,
     faqsPublished,
     testimonialsPublished,
+    contactSubmissionsCount,
+    contactSubmissionsNewCount,
   ] = await Promise.all([
     prisma.cmsStaticPage.count({ where: { status: CmsPublishStatus.PUBLISHED } }),
     prisma.cmsBlogPost.count({ where: { status: CmsPublishStatus.PUBLISHED, deletedAt: null } }),
@@ -225,6 +228,8 @@ export const getCmsDashboardStats = async () => {
     prisma.cmsLegalPolicy.count(),
     prisma.cmsFaq.count({ where: { status: CmsPublishStatus.PUBLISHED } }),
     prisma.cmsTestimonial.count({ where: { status: CmsPublishStatus.PUBLISHED } }),
+    prisma.contactSubmission.count(),
+    prisma.contactSubmission.count({ where: { status: SurveyRegistrationStatus.NEW } }),
   ]);
 
   return {
@@ -237,6 +242,8 @@ export const getCmsDashboardStats = async () => {
     legalPoliciesCount,
     faqsPublished,
     testimonialsPublished,
+    contactSubmissionsTotal: contactSubmissionsCount,
+    contactSubmissionsNew: contactSubmissionsNewCount,
     // Placeholders until Header/Footer/Media/Email modules ship
     mediaFilesCount: 0,
     emailTemplatesCount: 0,
@@ -257,6 +264,7 @@ export const getCmsDashboardAudit = async (limitRaw?: string | number) => {
     'CmsTestimonial',
     'CmsLegalPolicy',
     'CmsSeoSettings',
+    'ContactSubmission',
   ];
 
   const items = await prisma.auditLog.findMany({

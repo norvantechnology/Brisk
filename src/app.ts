@@ -23,6 +23,8 @@ import {
   categoriesRouter,
   subcategoriesRouter,
 } from './modules/categories/categories.routes';
+import contactRoutes from './modules/contact/contact.routes';
+import adminContactRoutes from './modules/admin/admin-contact/admin-contact.routes';
 
 const app = express();
 
@@ -49,6 +51,7 @@ app.use('/admin/auth', adminAuthRoutes);
 app.use('/admin', adminCategoryRoutes);
 app.use('/admin', adminCustomerRoutes);
 app.use('/admin/cms', adminCmsRoutes);
+app.use('/admin/cms', adminContactRoutes);
 app.use('/admin/blog/categories', adminBlogCategoryRoutes);
 app.use('/admin/blog/articles', adminBlogArticleRoutes);
 app.use('/admin/knowledge-hub', adminKnowledgeHubRoutes);
@@ -59,6 +62,7 @@ app.use('/pages', marketingPagesPublicRoutes);
 app.use('/testimonials', testimonialsPublicRoutes);
 app.use('/categories', categoriesRouter);
 app.use('/sub-categories', subcategoriesRouter);
+app.use('/contact', contactRoutes);
 
 /**
  * @swagger

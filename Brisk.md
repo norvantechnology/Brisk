@@ -1554,6 +1554,44 @@ submitted_at, reviewed_by_admin_id?, notes?, created_at, updated_at
 
 **Survey Analytics & Opt-Ins tab:** still pending screenshots — no API yet.
 
+#### 14.9.3 Contact Us — website `/contact-us`
+
+> **Implementation status (Aug 2026):** **SHIPPED** — public `POST /contact`; admin CRM at `/admin/cms/contact-submissions*`. Saves to `contact_submissions` table. Confirmation email to user + notification to admin via mock logger until SMTP/SES is wired (submission always saves even if email log fails).
+
+**Website page (public, no login):**
+- Contact Us form → `POST /contact`
+
+**Form fields:**
+| Field | Required | Notes |
+|-------|----------|-------|
+| Full Name | Yes | |
+| Email | Yes | |
+| Contact Number | Yes | E.164 e.g. `+353871234567` |
+| Subject | Yes | |
+| Message | Yes | min 10 characters |
+| Privacy/Terms checkbox | Yes | `agreementAccepted: true` |
+
+**Table `contact_submissions`:**
+```
+id, reference_code (CNT-####), full_name, email, phone, subject, message,
+agreement_accepted, status [NEW|PENDING|REVIEWED|CONTACTED|REJECTED],
+notes, submitted_at, reviewed_by_admin_id FK, user_email_sent, admin_email_sent,
+created_at, updated_at
+```
+
+| Method | Endpoint | Who uses it |
+|--------|----------|-------------|
+| `POST` | `/contact` | **Website** — submit Contact Us form; flat `data` response with `referenceCode` |
+| `GET` | `/admin/cms/contact-submissions/stats` | **Admin panel** — KPI cards |
+| `GET` | `/admin/cms/contact-submissions` | **Admin panel** — paginated list (`search`, `status`, `dateFilter`, sort) |
+| `GET` | `/admin/cms/contact-submissions/:id` | **Admin panel** — view one submission |
+| `PATCH` | `/admin/cms/contact-submissions/:id` | **Admin panel** — update status / notes |
+| `GET` | `/admin/cms/contact-submissions/export` | **Admin panel** — CSV export |
+
+**Email (v1 mock):** logs to server console. Set `CONTACT_ADMIN_EMAIL` and `CONTACT_FROM_EMAIL` in env for future SMTP/SES wiring.
+
+**Swagger tags:** `Website / Contact` · `Admin / Website / Contact`
+
 ---
 
 ### 14.10 New / Updated Admin Entities Summary (v7)
@@ -1571,6 +1609,7 @@ submitted_at, reviewed_by_admin_id?, notes?, created_at, updated_at
 | `cms_seo_settings` | Singleton global SEO |
 | `survey_consumer_registrations` | Launch / consumer interest list (website form) |
 | `survey_trader_registrations` | Trader interest list (website form) |
+| `contact_submissions` | Contact Us form messages (website + admin CRM) |
 | `document_rules` | Trader doc compliance *(pending Document Rules page)* |
 | `trader_documents` | Uploaded KYC docs *(pending detail screen)* |
 

@@ -28,6 +28,7 @@ const options: swaggerJSDoc.Options = {
         '- **Customers page:** GET /pages/customers · GET /testimonials?type=customer · GET /cms/bootstrap?audience=customer',
         '- **Traders page:** GET /pages/traders · GET /testimonials?type=trader · GET /cms/bootstrap?audience=trader',
         '- **Admin CMS (Customers/Traders content):** Admin / Website / Marketing Pages — /admin/cms/marketing-pages/{customers|traders}/...',
+        '- **Contact Us:** POST /contact · Admin / Website / Contact — /admin/cms/contact-submissions',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
         '',
         'Each endpoint documents **parameter purpose**, **when to use**, and **examples** in the description.',
@@ -54,11 +55,17 @@ const options: swaggerJSDoc.Options = {
         description:
           'Admin add/update for For Customers & For Traders pages. pageSlug=customers|traders. Auth: admin Bearer token.',
       },
+      {
+        name: 'Admin / Website / Contact',
+        description:
+          'Contact Us submissions CRM — list, view, update status/notes, export CSV. Auth: admin Bearer token.',
+      },
       { name: 'Admin / Website / Legal', description: 'Legal policies' },
       { name: 'Admin / Website / SEO', description: 'SEO settings' },
       { name: 'Admin / Surveys', description: 'View & manage website survey signups (consumer CS-#### and trader TS-####). Admin login required.' },
       { name: 'Website / Content', description: 'Public website reads — Customers/Traders pages, testimonials, bootstrap, blog, FAQ. Parameters explain which page/screen each filter is for.' },
       { name: 'Website / Surveys', description: 'Website survey forms — consumer-survey & trader-survey pages. No login needed.' },
+      { name: 'Website / Contact', description: 'Website Contact Us form — public submit, no login. Saves to DB + sends confirmation/notification emails (mock until SMTP/SES).' },
       { name: 'Mobile / Auth', description: 'Customer & Trader auth' },
       { name: 'Mobile / Categories', description: 'Service categories & sub-categories for Customer/Trader apps. No pagination. Each query param documents purpose (featured, categoryId, includeSubcategories) and job-post flags (siteVisitEnabled, priceEnabled, qaFormSchema).' },
       { name: 'Customer / Profile', description: 'Customer profile' },

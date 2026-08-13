@@ -262,6 +262,7 @@ model AdminUser {
   updatedSeoSettings      CmsSeoSettings[]         @relation("CmsSeoUpdatedBy")
   reviewedSurveyConsumers SurveyConsumerRegistration[] @relation("SurveyConsumerReviewedBy")
   reviewedSurveyTraders   SurveyTraderRegistration[]   @relation("SurveyTraderReviewedBy")
+  reviewedContactSubmissions ContactSubmission[]       @relation("ContactSubmissionReviewedBy")
 
   @@map("admin_users")
 }
@@ -1259,4 +1260,31 @@ model SurveyTraderRegistration {
   reviewedBy AdminUser? @relation("SurveyTraderReviewedBy", fields: [reviewedById], references: [id])
 
   @@map("survey_trader_registrations")
+}
+
+// ==========================================
+// WEBSITE MANAGEMENT — CONTACT US
+// ==========================================
+
+model ContactSubmission {
+  id                String                   @id @default(uuid()) @db.Uuid
+  referenceCode     String                   @unique @map("reference_code")
+  fullName          String                   @map("full_name")
+  email             String
+  phone             String?
+  subject           String
+  message           String                   @db.Text
+  agreementAccepted Boolean                  @default(false) @map("agreement_accepted")
+  status            SurveyRegistrationStatus @default(NEW)
+  notes             String?                  @db.Text
+  submittedAt       DateTime                 @default(now()) @map("submitted_at")
+  reviewedById      String?                  @map("reviewed_by_id") @db.Uuid
+  userEmailSent     Boolean                  @default(false) @map("user_email_sent")
+  adminEmailSent    Boolean                  @default(false) @map("admin_email_sent")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+
+  reviewedBy AdminUser? @relation("ContactSubmissionReviewedBy", fields: [reviewedById], references: [id])
+
+  @@map("contact_submissions")
 }
