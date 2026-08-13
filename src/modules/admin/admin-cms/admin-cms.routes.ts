@@ -813,14 +813,150 @@ router.patch(
 // MARKETING PAGE SECTIONS (Customers / Traders pages)
 // ==========================================
 
+/**
+ * @swagger
+ * /admin/cms/marketing-pages:
+ *   get:
+ *     summary: List marketing pages (Customers + Traders)
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns both For Customers and For Traders pages.
+ *       Use `pageSlug` = `customers` or `traders` on other admin endpoints.
+ *     responses:
+ *       200:
+ *         description: Marketing pages list.
+ */
 router.get('/marketing-pages', pageSectionsAdminController.listAdminMarketingPages);
 
+/**
+ * @swagger
+ * /admin/cms/marketing-pages/{pageSlug}/sections:
+ *   get:
+ *     summary: List all sections for Customers or Traders page
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pageSlug
+ *         required: true
+ *         schema: { type: string, enum: [customers, traders] }
+ *         description: customers = For Customers page · traders = For Traders page
+ *     responses:
+ *       200:
+ *         description: Sections with items for that page.
+ */
 router.get(
   '/marketing-pages/:pageSlug/sections',
   validate(pageSlugParamSchema),
   pageSectionsAdminController.listAdminPageSections
 );
 
+/**
+ * @swagger
+ * /admin/cms/marketing-pages/{pageSlug}/sections/{sectionKey}:
+ *   get:
+ *     summary: Get one page section by key
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pageSlug
+ *         required: true
+ *         schema: { type: string, enum: [customers, traders] }
+ *         description: customers or traders
+ *       - in: path
+ *         name: sectionKey
+ *         required: true
+ *         schema: { type: string, example: hero }
+ *         description: |
+ *           Customers — hero, why-customers, journey, peace-of-mind, app-download
+ *           Traders — trader_hero, trader_benefits, trader_workflow, professional_potential, trader_cta
+ *     responses:
+ *       200:
+ *         description: Section with items.
+ *       404:
+ *         description: Section not found.
+ *   post:
+ *     summary: Add / create section (upsert by sectionKey)
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pageSlug
+ *         required: true
+ *         schema: { type: string, enum: [customers, traders] }
+ *       - in: path
+ *         name: sectionKey
+ *         required: true
+ *         schema: { type: string, example: hero }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sectionType]
+ *             properties:
+ *               sectionType: { type: string, example: hero }
+ *               title: { type: string }
+ *               subtitle: { type: string }
+ *               description: { type: string }
+ *               primaryButtonText: { type: string }
+ *               primaryButtonUrl: { type: string }
+ *               secondaryButtonText: { type: string }
+ *               secondaryButtonUrl: { type: string }
+ *               backgroundImage: { type: string }
+ *               backgroundVideo: { type: string }
+ *               appStoreUrl: { type: string }
+ *               googlePlayUrl: { type: string }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *               sortOrder: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Section created or updated.
+ *   put:
+ *     summary: Update section content by pageSlug + sectionKey
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pageSlug
+ *         required: true
+ *         schema: { type: string, enum: [customers, traders] }
+ *       - in: path
+ *         name: sectionKey
+ *         required: true
+ *         schema: { type: string, example: hero }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               subtitle: { type: string }
+ *               description: { type: string }
+ *               primaryButtonText: { type: string }
+ *               primaryButtonUrl: { type: string }
+ *               secondaryButtonText: { type: string }
+ *               secondaryButtonUrl: { type: string }
+ *               backgroundImage: { type: string }
+ *               backgroundVideo: { type: string }
+ *               appStoreUrl: { type: string }
+ *               googlePlayUrl: { type: string }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *               sortOrder: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Section updated.
+ */
 router.get(
   '/marketing-pages/:pageSlug/sections/:sectionKey',
   validate(pageSlugSectionKeyParamsSchema),
@@ -839,6 +975,63 @@ router.put(
   pageSectionsAdminController.upsertAdminPageSection
 );
 
+/**
+ * @swagger
+ * /admin/cms/sections/{sectionId}:
+ *   get:
+ *     summary: Get section by ID
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Section retrieved.
+ *   put:
+ *     summary: Update section by ID
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               subtitle: { type: string }
+ *               description: { type: string }
+ *               primaryButtonText: { type: string }
+ *               primaryButtonUrl: { type: string }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *               sortOrder: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Section updated.
+ *   delete:
+ *     summary: Delete section by ID
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Section deleted.
+ */
 router.get(
   '/sections/:sectionId',
   validate(sectionIdParamSchema),
@@ -857,18 +1050,114 @@ router.delete(
   pageSectionsAdminController.deleteAdminSectionById
 );
 
+/**
+ * @swagger
+ * /admin/cms/sections/{sectionId}/status:
+ *   patch:
+ *     summary: Publish / draft / archive a section
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *     responses:
+ *       200:
+ *         description: Status updated.
+ */
 router.patch(
   '/sections/:sectionId/status',
   validate(sectionStatusSchema),
   pageSectionsAdminController.updateAdminSectionStatus
 );
 
+/**
+ * @swagger
+ * /admin/cms/sections/{sectionId}/sort-order:
+ *   patch:
+ *     summary: Reorder section on the page
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sortOrder]
+ *             properties:
+ *               sortOrder: { type: integer, example: 1 }
+ *     responses:
+ *       200:
+ *         description: Sort order updated.
+ */
 router.patch(
   '/sections/:sectionId/sort-order',
   validate(sectionSortOrderSchema),
   pageSectionsAdminController.updateAdminSectionSortOrder
 );
 
+/**
+ * @swagger
+ * /admin/cms/sections/{sectionId}/items:
+ *   get:
+ *     summary: List cards/steps under a section
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Section items list.
+ *   post:
+ *     summary: Add card/step item to a section
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string, example: Post a Job }
+ *               description: { type: string }
+ *               icon: { type: string }
+ *               image: { type: string }
+ *               stepNumber: { type: integer, example: 1 }
+ *               sortOrder: { type: integer }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *     responses:
+ *       201:
+ *         description: Item created.
+ */
 router.get(
   '/sections/:sectionId/items',
   validate(sectionIdParamSchema),
@@ -881,6 +1170,63 @@ router.post(
   pageSectionsAdminController.createAdminSectionItem
 );
 
+/**
+ * @swagger
+ * /admin/cms/section-items/{itemId}:
+ *   get:
+ *     summary: Get one section item
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Item retrieved.
+ *   put:
+ *     summary: Update section item (card/step)
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               icon: { type: string }
+ *               image: { type: string }
+ *               stepNumber: { type: integer }
+ *               sortOrder: { type: integer }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *     responses:
+ *       200:
+ *         description: Item updated.
+ *   delete:
+ *     summary: Delete section item
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Item deleted.
+ */
 router.get(
   '/section-items/:itemId',
   validate(sectionItemIdParamSchema),
@@ -899,12 +1245,64 @@ router.delete(
   pageSectionsAdminController.deleteAdminSectionItem
 );
 
+/**
+ * @swagger
+ * /admin/cms/section-items/{itemId}/sort-order:
+ *   patch:
+ *     summary: Reorder section item
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sortOrder]
+ *             properties:
+ *               sortOrder: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Sort order updated.
+ */
 router.patch(
   '/section-items/:itemId/sort-order',
   validate(sectionItemSortOrderSchema),
   pageSectionsAdminController.updateAdminSectionItemSortOrder
 );
 
+/**
+ * @swagger
+ * /admin/cms/section-items/{itemId}/status:
+ *   patch:
+ *     summary: Publish / draft / archive a section item
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *     responses:
+ *       200:
+ *         description: Status updated.
+ */
 router.patch(
   '/section-items/:itemId/status',
   validate(sectionItemStatusSchema),

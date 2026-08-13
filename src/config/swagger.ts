@@ -27,6 +27,7 @@ const options: swaggerJSDoc.Options = {
         '**Frontend quick reference**',
         '- **Customers page:** GET /pages/customers · GET /testimonials?type=customer · GET /cms/bootstrap?audience=customer',
         '- **Traders page:** GET /pages/traders · GET /testimonials?type=trader · GET /cms/bootstrap?audience=trader',
+        '- **Admin CMS (Customers/Traders content):** Admin / Website / Marketing Pages — /admin/cms/marketing-pages/{customers|traders}/...',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
         '',
         'Each endpoint documents **parameter purpose**, **when to use**, and **examples** in the description.',
@@ -48,6 +49,11 @@ const options: swaggerJSDoc.Options = {
       { name: 'Admin / Website / Knowledge Hub', description: 'Knowledge Hub' },
       { name: 'Admin / Website / FAQ', description: 'FAQs' },
       { name: 'Admin / Website / Testimonials', description: 'Testimonials' },
+      {
+        name: 'Admin / Website / Marketing Pages',
+        description:
+          'Admin add/update for For Customers & For Traders pages. pageSlug=customers|traders. Auth: admin Bearer token.',
+      },
       { name: 'Admin / Website / Legal', description: 'Legal policies' },
       { name: 'Admin / Website / SEO', description: 'SEO settings' },
       { name: 'Admin / Surveys', description: 'View & manage website survey signups (consumer CS-#### and trader TS-####). Admin login required.' },
