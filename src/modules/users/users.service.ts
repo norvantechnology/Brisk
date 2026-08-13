@@ -1,7 +1,18 @@
+import { DeletionRequestStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { ConflictError, NotFoundError } from '../../utils/errors';
 import type { DeactivateAccountInput, UpdateProfileInput } from './users.validation';
 import { createAccountDeletionRequest } from './account-deletion.service';
+import { withSplitMobileFields } from '../../utils/phone';
+
+const IN_PROGRESS_DELETION_STATUSES: DeletionRequestStatus[] = [
+  DeletionRequestStatus.PENDING,
+  DeletionRequestStatus.UNDER_REVIEW,
+  DeletionRequestStatus.APPROVED,
+];
+
+const DEACTIVATION_IN_PROGRESS_MESSAGE =
+  'Your account deactivation request is in progress.';
 
 export const getUserProfile = async (userId: string) => {
   const user = await prisma.user.findUnique({
@@ -42,10 +53,22 @@ export const getUserProfile = async (userId: string) => {
     throw new NotFoundError('User not found.');
   }
 
-  return {
-    ...user,
+  const { accountDeletionRequest, ...profile } = user;
+  const isDeactivationInProgress = accountDeletionRequest
+    ? IN_PROGRESS_DELETION_STATUSES.includes(accountDeletionRequest.status)
+    : false;
+
+  return withSplitMobileFields({
+    ...profile,
     emailLocked: true,
-  };
+    isDeactivationInProgress,
+    deactivationMessage: isDeactivationInProgress ? DEACTIVATION_IN_PROGRESS_MESSAGE : null,
+    deactivationRequestRef: isDeactivationInProgress ? accountDeletionRequest!.requestRef : null,
+    deactivationStatus: isDeactivationInProgress ? accountDeletionRequest!.status : null,
+    deactivationRequestedAt: isDeactivationInProgress
+      ? accountDeletionRequest!.requestedAt
+      : null,
+  });
 };
 
 export const getUserStats = async (userId: string) => {
@@ -116,12 +139,12 @@ export const updateUserProfile = async (userId: string, input: UpdateProfileInpu
     },
   });
 
-  return {
+  return withSplitMobileFields({
     ...updatedUser,
     emailLocked: true,
     mobileReverificationRequired:
       input.mobileNumber !== undefined && input.mobileNumber !== user.mobileNumber,
-  };
+  });
 };
 
 export const deactivateUserAccount = async (userId: string, input: DeactivateAccountInput) => {

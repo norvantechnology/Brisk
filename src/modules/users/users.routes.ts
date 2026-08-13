@@ -18,11 +18,18 @@ router.use(authMiddleware);
  *       - bearerAuth: []
  *     description: |
  *       `data` is a flat profile object (not nested under `profile`).
+ *
+ *       **Deactivation:** when `isDeactivationInProgress` is `true`, disable the Deactivate Account button
+ *       and show `deactivationMessage` (e.g. "Your account deactivation request is in progress.").
  *     responses:
  *       200:
  *         description: |
- *           Flat profile in `data`: id, fullName, email, mobileNumber, profilePhotoUrl, city, country,
- *           preferredLanguage, preferredTimeSlot, emailNotifications, smsAlerts, promoNotifications, etc.
+ *           Flat profile in `data`: id, fullName, email, mobileCountryCode (+353), mobileNumber (local digits only),
+ *           profilePhotoUrl, city, country, preferredLanguage, preferredTimeSlot, emailNotifications, smsAlerts,
+ *           promoNotifications, isDeactivationInProgress, deactivationMessage, etc.
+ *
+ *           **Mobile:** stored as E.164 in DB; response splits into `mobileCountryCode` + `mobileNumber` (no + prefix on local part).
+ *           **Update:** PATCH still sends full E.164 in `mobileNumber` body field (e.g. +353871234567).
  */
 router.get('/me', usersController.getProfile);
 
@@ -71,7 +78,7 @@ router.get('/me/stats', usersController.getStats);
  *               promoNotifications: { type: boolean, example: false }
  *     responses:
  *       200:
- *         description: Profile updated successfully.
+ *         description: Profile updated. Same flat shape as GET /users/me (mobileCountryCode + local mobileNumber).
  */
 router.patch('/me', validate(updateProfileSchema), usersController.updateProfile);
 
