@@ -16,9 +16,13 @@ router.use(authMiddleware);
  *     tags: ['Customer / Profile']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       `data` is a flat profile object (not nested under `profile`).
  *     responses:
  *       200:
- *         description: Profile retrieved successfully.
+ *         description: |
+ *           Flat profile in `data`: id, fullName, email, mobileNumber, profilePhotoUrl, city, country,
+ *           preferredLanguage, preferredTimeSlot, emailNotifications, smsAlerts, promoNotifications, etc.
  */
 router.get('/me', usersController.getProfile);
 
@@ -30,9 +34,12 @@ router.get('/me', usersController.getProfile);
  *     tags: ['Customer / Profile']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       `data` is a flat stats object (not nested under `stats`).
  *     responses:
  *       200:
- *         description: Profile stats retrieved successfully.
+ *         description: |
+ *           Flat stats in `data`: jobsPosted, savedTradersCount, reviewsGivenCount, avgRating.
  */
 router.get('/me/stats', usersController.getStats);
 

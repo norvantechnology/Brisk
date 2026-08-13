@@ -14,7 +14,7 @@ export const getProfile = async (
       res,
       statusCode: 200,
       message: 'Profile retrieved successfully.',
-      data: { profile },
+      data: profile,
     });
   } catch (error) {
     next(error);
@@ -32,7 +32,7 @@ export const getStats = async (
       res,
       statusCode: 200,
       message: 'Profile stats retrieved successfully.',
-      data: { stats },
+      data: stats,
     });
   } catch (error) {
     next(error);
