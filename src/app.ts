@@ -25,6 +25,7 @@ import {
 } from './modules/categories/categories.routes';
 import contactRoutes from './modules/contact/contact.routes';
 import adminContactRoutes from './modules/admin/admin-contact/admin-contact.routes';
+import homePublicRoutes from './modules/cms/home-public.routes';
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use('/admin/knowledge-hub', adminKnowledgeHubRoutes);
 app.use('/admin/surveys', adminSurveyRoutes);
 app.use('/surveys', surveysRoutes);
 app.use('/cms', cmsRoutes);
+app.use('/cms/home', homePublicRoutes);
 app.use('/pages', marketingPagesPublicRoutes);
 app.use('/testimonials', testimonialsPublicRoutes);
 app.use('/categories', categoriesRouter);

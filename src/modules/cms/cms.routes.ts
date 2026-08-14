@@ -321,7 +321,7 @@ router.get('/faqs', cmsController.getFaqs);
  *         description: Max testimonials returned (e.g. `limit=5` for carousel).
  *     responses:
  *       200:
- *         description: `data.items[]` testimonial cards (snake_case fields).
+ *         description: data.items[] testimonial cards (snake_case fields).
  */
 router.get('/testimonials', cmsController.getTestimonials);
 

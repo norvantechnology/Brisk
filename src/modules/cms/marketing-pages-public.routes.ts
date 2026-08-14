@@ -20,22 +20,23 @@ const router = Router();
  *       **Preferred over:** `GET /cms/marketing-pages/{pageSlug}` — same data; use `/pages/...` in frontend.
  *
  *       **pageSlug values:**
- *       - `customers` — hero, why-customers, journey, peace-of-mind, app-download
- *       - `traders` — trader_hero, trader_benefits, trader_workflow, professional_potential, trader_cta
+ *       - `customers` — For Customers page sections
+ *       - `traders` — For Traders page sections
+ *       - `home` — Homepage (same as `GET /cms/home` — see **Website / Home** tag)
  *
- *       **Reviews:** Not in this response — use `GET /testimonials?type=customer` or `type=trader`.
+ *       **Reviews:** Customers/Traders — `GET /testimonials?type=customer|trader`. Homepage — `GET /cms/home/reviews`.
  *
  *       **Header/footer:** Use `GET /cms/bootstrap?audience=customer` or `audience=trader`.
  *     parameters:
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, enum: [customers, traders], example: customers }
+ *         schema: { type: string, enum: [customers, traders, home], example: customers }
  *         description: |
- *           **Purpose:** Select which marketing landing page to load.
- *           **customers** — For Customers website page.
- *           **traders** — For Traders website page.
- *           **Example:** `GET /pages/customers`
+ *           **Purpose:** Select which page to load.
+ *           **customers** — For Customers landing page.
+ *           **traders** — For Traders landing page.
+ *           **home** — Website homepage (prefer `GET /cms/home` for section routes).
  *     responses:
  *       200:
  *         description: |

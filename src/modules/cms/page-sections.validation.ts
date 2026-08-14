@@ -137,3 +137,52 @@ export const updateSectionByIdSchema = z.object({
   }),
   body: sectionBodySchema,
 });
+
+export const homeSectionRouteParamSchema = z.object({
+  params: z.object({
+    sectionRoute: z.string().min(1),
+  }),
+});
+
+export const bulkItemSortSchema = z.object({
+  body: z.object({
+    items: z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          sortOrder: z.number().int().min(0),
+        })
+      )
+      .min(1),
+  }),
+});
+
+export const homePageUpdateSchema = z.object({
+  body: z.object({
+    title: z.string().min(1).optional(),
+    status: publishStatusSchema,
+  }),
+});
+
+export const homeUpdateSectionSchema = z.object({
+  params: z.object({
+    sectionRoute: z.string().min(1),
+  }),
+  body: sectionBodySchema,
+});
+
+export const homeCreateItemSchema = z.object({
+  params: z.object({
+    sectionRoute: z.string().min(1),
+  }),
+  body: z.object({
+    title: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    icon: z.string().nullable().optional(),
+    image: z.string().nullable().optional(),
+    stepNumber: z.number().int().min(1).nullable().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+    status: publishStatusSchema,
+    metadata: z.record(z.unknown()).nullable().optional(),
+  }),
+});

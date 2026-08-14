@@ -27,6 +27,8 @@ const options: swaggerJSDoc.Options = {
         '**Frontend quick reference**',
         '- **Customers page:** GET /pages/customers · GET /testimonials?type=customer · GET /cms/bootstrap?audience=customer',
         '- **Traders page:** GET /pages/traders · GET /testimonials?type=trader · GET /cms/bootstrap?audience=trader',
+        '- **Homepage:** GET /cms/home · GET /cms/home/reviews · GET /pages/home',
+        '- **Admin CMS (Homepage):** Admin / Website / Home — /admin/cms/home/...',
         '- **Admin CMS (Customers/Traders content):** Admin / Website / Marketing Pages — /admin/cms/marketing-pages/{customers|traders}/...',
         '- **Contact Us:** POST /contact · Admin / Website / Contact — /admin/cms/contact-submissions',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
@@ -56,6 +58,16 @@ const options: swaggerJSDoc.Options = {
           'Admin add/update for For Customers & For Traders pages. pageSlug=customers|traders. Auth: admin Bearer token.',
       },
       {
+        name: 'Admin / Website / Home',
+        description:
+          'Admin CMS for website homepage. Base: /admin/cms/home. Auth: admin Bearer token. Edit hero, badges, workflows, categories, stats, reviews, app CTA. Images/icons = URL strings in request body.',
+      },
+      {
+        name: 'Website / Home',
+        description:
+          'Public homepage CMS. Base: /cms/home. No auth. Full page GET /cms/home or alias GET /pages/home. Reviews: GET /cms/home/reviews. Icons/images returned as URL strings.',
+      },
+      {
         name: 'Admin / Website / Contact',
         description:
           'Contact Us submissions CRM — list, view, update status/notes, export CSV. Auth: admin Bearer token.',
@@ -83,7 +95,7 @@ const options: swaggerJSDoc.Options = {
       },
     },
   },
-  apis: ['./src/modules/**/*.routes.ts', './src/app.ts', './src/server.ts'],
+  apis: ['./src/modules/**/*.routes.ts', './src/modules/**/*.swagger.ts', './src/app.ts', './src/server.ts'],
 };
 
 const swaggerSpec = swaggerJSDoc(options);
@@ -437,6 +449,61 @@ const SWAGGER_CSS = `
   .swagger-ui .model-toggle:after { background: var(--brisk-muted) !important; }
   .swagger-ui .model { color: var(--brisk-text) !important; }
   .swagger-ui .prop-name { color: var(--brisk-text) !important; }
+
+  /* Filter bar */
+  .swagger-ui .filter-container,
+  .swagger-ui .filter .operation-filter-input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Responsive layout */
+  @media (max-width: 768px) {
+    .swagger-ui .wrapper { padding: 0 12px !important; }
+    .swagger-ui .info .title { font-size: 22px !important; }
+    .swagger-ui .opblock-tag { flex-wrap: wrap !important; font-size: 14px !important; }
+    .swagger-ui .opblock .opblock-summary {
+      flex-wrap: wrap !important;
+      gap: 8px !important;
+    }
+    .swagger-ui .opblock .opblock-summary-path {
+      max-width: 100% !important;
+      word-break: break-all !important;
+      font-size: 13px !important;
+    }
+    .swagger-ui table thead { display: none !important; }
+    .swagger-ui table tbody tr {
+      display: block !important;
+      margin-bottom: 12px !important;
+      border: 1px solid var(--brisk-border) !important;
+      border-radius: 6px !important;
+      padding: 8px !important;
+    }
+    .swagger-ui table tbody tr td {
+      display: block !important;
+      width: 100% !important;
+      border: 0 !important;
+      padding: 4px 0 !important;
+    }
+    .swagger-ui .parameters-col_description,
+    .swagger-ui .response-col_description {
+      font-size: 13px !important;
+    }
+  }
+
+  /* Strong emphasis in descriptions stays readable */
+  .swagger-ui .renderedMarkdown strong,
+  .swagger-ui .markdown strong {
+    color: #0f172a !important;
+    font-weight: 650 !important;
+  }
+
+  /* Links in descriptions */
+  .swagger-ui .renderedMarkdown a,
+  .swagger-ui .markdown a {
+    color: #0369a1 !important;
+    text-decoration: underline !important;
+  }
 `;
 
 export const setupSwagger = (app: Express): void => {

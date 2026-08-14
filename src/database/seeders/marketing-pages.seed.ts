@@ -440,7 +440,10 @@ const seedTradersPage = async (prisma: PrismaClient) => {
   });
 };
 
+import { seedHomePage } from './home.seed';
+
 export const seedMarketingPages = async (prisma: PrismaClient) => {
   await seedCustomersPage(prisma);
   await seedTradersPage(prisma);
+  await seedHomePage(prisma);
 };

@@ -39,6 +39,8 @@ import {
   updateSectionByIdSchema,
 } from '../../cms/page-sections.validation';
 
+import homeAdminRoutes from './home-admin.routes';
+
 const router = Router();
 
 // Apply Admin Auth Middleware across all CMS admin routes
@@ -1482,5 +1484,7 @@ router.get('/seo', cmsAdminController.getSeoSettings);
  *         description: Validation error.
  */
 router.put('/seo', validate(updateSeoSchema), cmsAdminController.upsertSeoSettings);
+
+router.use('/home', homeAdminRoutes);
 
 export default router;
