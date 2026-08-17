@@ -324,7 +324,10 @@ export const seedHomePage = async (prisma: PrismaClient) => {
 
   await prisma.cmsPageSection.upsert({
     where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'app_download' } },
-    update: {},
+    update: {
+      foregroundImage: `${PLACEHOLDER}/assets/images/app-download-phone-foreground.png`,
+      backgroundImage: `${PLACEHOLDER}/assets/images/app-download-background.png`,
+    },
     create: {
       pageId: page.id,
       sectionType: 'app_cta',
@@ -334,7 +337,8 @@ export const seedHomePage = async (prisma: PrismaClient) => {
         'Post jobs, receive offers, negotiate with trusted traders, track progress and complete work directly from your mobile device.',
       appStoreUrl: 'https://apps.apple.com/app/brisk',
       googlePlayUrl: 'https://play.google.com/store/apps/details?id=com.brisk',
-      backgroundImage: `${PLACEHOLDER}/assets/images/app-download-phones.png`,
+      backgroundImage: `${PLACEHOLDER}/assets/images/app-download-background.png`,
+      foregroundImage: `${PLACEHOLDER}/assets/images/app-download-phone-foreground.png`,
       status: CmsPublishStatus.PUBLISHED,
       sortOrder: 12,
     },

@@ -978,6 +978,7 @@ model CmsPageSection {
   secondaryButtonText String?          @map("secondary_button_text")
   secondaryButtonUrl  String?          @map("secondary_button_url")
   backgroundImage     String?          @map("background_image")
+  foregroundImage     String?          @map("foreground_image")
   backgroundVideo     String?          @map("background_video")
   appStoreUrl         String?          @map("app_store_url")
   googlePlayUrl       String?          @map("google_play_url")

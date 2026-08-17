@@ -107,7 +107,7 @@
  *           - `customer` — "For Customers" promo block + feature bullet items
  *           - `trader` — "For Traders" promo block + feature bullet items
  *           - `statistics` — "Built For Confidence" stat cards (100%, 4.7, 100K+, etc.)
- *           - `app-download` — "Everything You Need In One App" CTA + store links
+ *           - `app-download` — "Everything You Need In One App" CTA + store links + background_image + foreground_image
  *
  *           **Example:** `GET /cms/home/hero`
  *     responses:

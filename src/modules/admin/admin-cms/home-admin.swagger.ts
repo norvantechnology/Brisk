@@ -798,7 +798,21 @@
  *     tags: ['Admin / Website / Home']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       **Fields:** title, description, appStoreUrl, googlePlayUrl, backgroundImage (phone mockup URL), primaryButtonText, status
+ *       **Fields:** title, description, appStoreUrl, googlePlayUrl, backgroundImage (green panel / backdrop URL), foregroundImage (phone mockup URL), primaryButtonText, status
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               appStoreUrl: { type: string }
+ *               googlePlayUrl: { type: string }
+ *               backgroundImage: { type: string, description: 'Backdrop / green panel image URL' }
+ *               foregroundImage: { type: string, description: 'Phone mockup image URL' }
+ *               primaryButtonText: { type: string }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
  *     responses:
  *       200:
  *         description: Section updated.

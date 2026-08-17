@@ -145,6 +145,7 @@ export const updateAdminSectionById = async (sectionId: string, input: UpsertSec
       secondaryButtonText: input.secondaryButtonText ?? undefined,
       secondaryButtonUrl: input.secondaryButtonUrl ?? undefined,
       backgroundImage: input.backgroundImage ?? undefined,
+      foregroundImage: input.foregroundImage ?? undefined,
       backgroundVideo: input.backgroundVideo ?? undefined,
       appStoreUrl: input.appStoreUrl ?? undefined,
       googlePlayUrl: input.googlePlayUrl ?? undefined,
@@ -253,6 +254,7 @@ export type UpsertSectionInput = {
   secondaryButtonText?: string | null;
   secondaryButtonUrl?: string | null;
   backgroundImage?: string | null;
+  foregroundImage?: string | null;
   backgroundVideo?: string | null;
   appStoreUrl?: string | null;
   googlePlayUrl?: string | null;
@@ -290,6 +292,7 @@ export const upsertAdminPageSection = async (
       secondaryButtonText: input.secondaryButtonText ?? undefined,
       secondaryButtonUrl: input.secondaryButtonUrl ?? undefined,
       backgroundImage: input.backgroundImage ?? undefined,
+      foregroundImage: input.foregroundImage ?? undefined,
       backgroundVideo: input.backgroundVideo ?? undefined,
       appStoreUrl: input.appStoreUrl ?? undefined,
       googlePlayUrl: input.googlePlayUrl ?? undefined,
@@ -306,6 +309,7 @@ export const upsertAdminPageSection = async (
       secondaryButtonText: input.secondaryButtonText ?? undefined,
       secondaryButtonUrl: input.secondaryButtonUrl ?? undefined,
       backgroundImage: input.backgroundImage ?? undefined,
+      foregroundImage: input.foregroundImage ?? undefined,
       backgroundVideo: input.backgroundVideo ?? undefined,
       appStoreUrl: input.appStoreUrl ?? undefined,
       googlePlayUrl: input.googlePlayUrl ?? undefined,

@@ -13,6 +13,7 @@ const sectionBodySchema = z.object({
   secondaryButtonText: z.string().nullable().optional(),
   secondaryButtonUrl: z.string().nullable().optional(),
   backgroundImage: z.string().nullable().optional(),
+  foregroundImage: z.string().nullable().optional(),
   backgroundVideo: z.string().nullable().optional(),
   appStoreUrl: z.string().nullable().optional(),
   googlePlayUrl: z.string().nullable().optional(),
