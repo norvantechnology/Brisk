@@ -2,11 +2,15 @@
 
 > **Purpose of this document:** This is the master planning file to hand to Cursor so we can build the BRISK Node.js backend step-by-step. It consolidates everything from the process docs (Consumer App Journey, Direct Traders Offer Flow, Quote-wise Offer Flow, Brisk Offer Flow, Loyalty Flow) and the Microservices vs Monolith decision doc.
 >
-> **Status: WORK IN PROGRESS.** This is not the final/complete requirement set. Several flows (Trader App side, admin panel, disputes, refunds edge-cases, exact commission model, KYC/verification of traders, subscription "Premium Utility Pack", exact push/SMS providers, utility-provider integrations) are still under discussion and will be added incrementally. Treat every section below as "current best understanding" — we will revise this file as decisions are confirmed, not throw it away and start over.
+> **Status: WORK IN PROGRESS.** This is not the final/complete requirement set. Several flows (Trader App **post-onboarding** ops — quotes, jobs, chat, payouts; full admin traders directory; disputes; refunds edge-cases; subscription "Premium Utility Pack"; exact push/SMS providers; utility-provider integrations) are still under discussion and will be added incrementally. Treat every section below as "current best understanding" — we will revise this file as decisions are confirmed, not throw it away and start over.
+>
+> **Repo scope:** This repository is the **Node.js/Express backend API only**. There is **no mobile app or admin panel frontend code here**. Clients are: **Customer/Trader mobile apps** (iOS/Android), **Admin panel** (separate frontend), and **Marketing website** (`brisk-next.netlify.app`). All API contracts live in Swagger at `/api-docs` on the deployed API (`https://brisk-aclm.onrender.com`).
 >
 > Build approach: **step by step, module by module**, starting with backend core (auth → users/traders → categories → jobs → quotes/offers → payments → loyalty → chat/notifications), each shipped and tested before moving to the next.
 >
 > **v2 update:** Actual Figma screenshots of the Customer App (Onboarding, My Property, My Address, Profile, Notifications, Offers, Post-a-Job) have now been reviewed directly (not just the process docs). This revealed a **module the process docs never mentioned at all**: **Property & Utilities Management** — a "My Property" tab where customers submit electricity/gas meter readings (MPRN/GPRN) and manage utility subscriptions (Bins, Electricity, Gas, Home Insurance). This is added as new §4A (property model), §5 (folder structure), and §6.2A (module logic) below. The architecture decision (modular monolith, no microservices) is unchanged and reconfirmed.
+>
+> **v8 update (Aug 2026):** **Trader mobile onboarding + KYC document APIs SHIPPED** — see **§6.2B** and **§14.15**. Includes separate Sole Trader (`SOLO`) vs Company Trader (`COMPANY`) wizard, admin document rules, admin verification queue. **Homepage CMS** shipped with slug `home` (not `home-v2`); App Download section has `background_image` + `foreground_image`. Live-tested on production.
 
 ---
 
@@ -22,7 +26,7 @@
 | `BRISK_Microservices_vs_Monolith_Simple_Comparison.pdf` | Architecture decision input — see §1 |
 | `BRISK_Logo.pdf` | Brand only (BRISK — "Making Things Quicker") — no functional content |
 | **35 screenshots — BRISK Admin Panel** (live build, Aug 2026) | Highest-fidelity admin source for this update. Covers: Dashboard KPIs + activity chart + audit log; Category Master; Customers Directory; Traders Management + Verification queue; Jobs & Services status tabs; Marketplace Offer Management; Reports (Revenue with **10% platform fee**, Offers performance, Category performance, Reviews, Platform Activity/compliance); **Website Management → CMS** (Dashboard, Website Pages, Social Links, Knowledge Hub, Blog Posts + Create Article modal, Blog Categories + Create Category modal, FAQ + Add FAQ modal, Testimonials + Add Testimonial modal, Legal & Policies versioning, Global SEO & robots.txt); **Survey Management** (Consumer Launch Party Registrations CRM). Full breakdown in **§14**. |
-| Figma proto links (Customer App UI, Trader UI App) | Still **could not be auto-fetched** — Figma proto links require an authenticated session and are blocked for automated tools. The 19 screenshots above cover a meaningful chunk of the Customer app directly; the Trader UI App proto link is still unreviewed. See §12. |
+| Figma proto links (Customer App UI, Trader UI App) | Still **could not be auto-fetched** — Figma proto links require an authenticated session and are blocked for automated tools. The 19 Customer app screenshots cover a meaningful chunk directly. **Trader onboarding Figma screens (Aug 2026)** — Sign-up, Email verify, Business type, Sole/Company documents, Category selection, Category docs, Personal/Company info, Bank details, Service radius — implemented in **§6.2B**. Trader **post-onboarding** screens (quotes, jobs, chat, earnings) still pending. See §12. |
 
 ---
 
@@ -507,9 +511,17 @@ brisk-backend/
 │   │   ├── traders/
 │   │   │   ├── traders.routes.ts
 │   │   │   ├── traders.controller.ts
-│   │   │   ├── traders.service.ts    # profile, stats, verification status
-│   │   │   └── traders.validation.ts
+│   │   │   ├── traders.service.ts    # profile GET/PATCH /traders/me
+│   │   │   ├── traders.validation.ts
+│   │   │   └── onboarding/           # ✅ SHIPPED — step-by-step trader KYC wizard
+│   │   │       ├── onboarding.routes.ts
+│   │   │       ├── onboarding.controller.ts
+│   │   │       ├── onboarding.service.ts
+│   │   │       ├── onboarding.validation.ts
+│   │   │       └── onboarding.constants.ts
 │   │   │
+│   │   ├── document-rules/           # ✅ shared service (admin + onboarding)
+│   │   │   └── document-rules.service.ts
 │   │   ├── property/
 │   │   │   ├── addresses/
 │   │   │   │   ├── addresses.routes.ts
@@ -650,23 +662,81 @@ brisk-backend/
 ## 6. Module-by-Module Logic (mapped to the process docs)
 
 ### 6.1 Auth Module
-- `POST /auth/register` — full name (photo optional via `Add Photo`), email, phone number (with country dial code, e.g. `+353`), password → creates unverified user, triggers OTP. Password rules confirmed on-screen: **min 8 characters, one uppercase letter, one number/special character** (live checklist UI) — enforce the same rules server-side in `auth.validation.ts`, don't trust client-side checks alone. Terms & Privacy checkbox required before submit.
-- `POST /auth/verify-otp` — verifies OTP, activates account.
-- `POST /auth/login` — email + password → JWT access + refresh token.
-- `POST /auth/forgot-password` — email → sends **password-reset SMS OTP** to the user's registered mobile (same mock `123456` until SNS/Twilio ships). Always returns the same generic message whether or not the email exists; when the account is found, response includes `data.mobileNumber`, `data.requiresPasswordReset=true`, and `data.otpSent`. Works for **Customer and Trader** roles. Blocked/suspended/inactive accounts return `403`.
-- `POST /auth/verify-reset-otp` — `{ mobileNumber, code }` → verifies password-reset OTP only, returns short-lived `resetToken` (15 min). **Do not use** `POST /auth/verify-otp` for forgot-password (that endpoint is signup activation only).
-- `POST /auth/reset-password` — preferred `{ resetToken, newPassword }` (no OTP again). Legacy one-shot `{ mobileNumber, code, newPassword }` still works. If mobile already verified → returns tokens (auto-login). If mobile still pending → returns `requiresOtpVerification`. Password rules same as register.
-- **Biometric ("Face ID") login** — screens show a dedicated in-app Face ID screen ("Biometric system active" / "Sign in with Face ID" / "Use Password Instead"), separate from the login screen's own "Face ID" shortcut button. This is standard **local-biometric-unlocks-stored-refresh-token** UX: the phone's OS biometric API unlocks a refresh token the app already stored in secure device storage after a prior password login; the app then just calls `POST /auth/refresh` as normal. **No biometric data is ever sent to or processed by the backend.** No new endpoint is strictly required beyond refresh — flag if BRISK instead wants server-side "device trust" tracking (e.g. `POST /auth/devices/register` to list/revoke trusted devices from Security settings).
-- `POST /auth/apple-signin` — verifies Apple identity token, only if native Sign in with Apple is also wanted as a separate path (to confirm — see Open Items).
-- `POST /auth/refresh`, `POST /auth/logout`.
-- Same module serves both Customer app and Trader app; a `role` field (`customer` / `trader`) on the user record plus a `traders` profile record when role = trader.
+
+**Shared by Customer and Trader mobile apps** — role chosen at register via `role: "CUSTOMER" | "TRADER"`.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /auth/register` | Create account. Required: `fullName`, `email`, `mobileNumber` (E.164 e.g. `+353871234567`), `password`, `role`, `acceptedTerms: true`. Optional: `profilePhotoUrl` (URL string). Password rules: min 8 chars, one uppercase, one number/special char. Creates user with `status: PENDING`, sends mobile OTP. **Trader only:** also sends email OTP; `emailVerified` stays `false` until `/auth/verify-email`. **Customer:** `emailVerified` set `true` on register (no email OTP step). |
+| `POST /auth/verify-otp` | Verify **mobile** OTP → activates account, returns JWT tokens. Creates empty `traders` row when `role=TRADER`. Response includes `requiresEmailVerification: true` for traders. **Not** for forgot-password — use `/auth/verify-reset-otp`. |
+| `POST /auth/resend-otp` | Resend mobile OTP (60s cooldown). |
+| `POST /auth/verify-email` | **Trader only** — verify email OTP after mobile verify. Required before `/traders/onboarding/start`. |
+| `POST /auth/resend-email-otp` | **Trader only** — resend email OTP. |
+| `POST /auth/login` | Email + password. If mobile unverified → soft success with OTP payload (no tokens). |
+| `POST /auth/forgot-password` | Email → password-reset SMS OTP to registered mobile. Generic response always (security). |
+| `POST /auth/verify-reset-otp` | Verify reset OTP → returns `resetToken` (15 min). |
+| `POST /auth/reset-password` | `{ resetToken, newPassword }` preferred. |
+| `POST /auth/refresh` | Refresh access token. |
+| `GET /auth/me` | Authenticated user profile. |
+| `POST /auth/logout` | Client discards tokens. |
+
+**v1 OTP mock:** All OTPs accept test code `123456` until SNS/Twilio/SES ship (`otp.service.ts`).
+
+**Customer vs Trader after auth:**
+- **Customer:** register → verify mobile OTP → use app (`/users/me` for profile).
+- **Trader:** register → verify mobile OTP → **verify email** → **onboarding wizard** (`/traders/onboarding/*`) → admin verification → then operational app.
+
+**Do not confuse three "trader registration" concepts:**
+
+| Concept | API / Table | Use case |
+|---------|-------------|----------|
+| App signup | `POST /auth/register` + `users` + `traders` | Mobile app account creation |
+| App onboarding/KYC | `/traders/onboarding/*` + `trader_registrations`, `trader_documents` | Post-signup Sole/Company wizard |
+| Website interest form | `POST /surveys/trader` + `survey_trader_registrations` | Pre-launch marketing CRM only |
+
+- **Biometric ("Face ID") login** — local OS unlocks stored refresh token → `POST /auth/refresh`. No biometric data sent to backend.
+- `POST /auth/apple-signin` — **not implemented yet** (open item).
 
 ### 6.2 Users & Traders Modules
 - Users: profile CRUD (Display Name, Email — shown **read-only/locked** with a padlock icon once set, Phone with country code), preferences (Notifications on/off toggle).
 - Profile screen shows three **derived stats**: Jobs Posted, Avg Rating (as a customer, if BRISK collects ratings both ways — to confirm), Saved Traders (count from the new `SAVED_TRADERS` table — a "favorite trader" feature not previously documented; needs a `POST /traders/:id/save` / `DELETE /traders/:id/save` pair).
 - **Account deactivation** (confirmed via 3-dot menu → "Deactivate Account"): `POST /users/deactivate` creates a deletion request in `pending_review` status, does **not** delete data immediately. Response screen explicitly states: processing window **24–48 hours**, data is "permanently purged following GDPR compliance protocols" once approved, and "an admin might reach out via chat if any active subscriptions need manual closure" — meaning deactivation must check for `SUBSCRIPTIONS` rows in `active` status on the user's properties and flag them for manual admin closure before final purge. Model this as a real workflow, not a soft-delete flag: `ACCOUNT_DELETION_REQUESTS(id, user_id, status[pending_review|admin_contacted|approved|purged|cancelled], requested_at, processed_at)`.
-- Traders: profile (photo, bio, years of experience, jobs-done counter, avg rating, "Top Rated" badge, verification status), category specialization.
+- Traders: profile via `GET/PATCH /traders/me` (photo, bio, years of experience, jobs-done counter, avg rating, verification status, single `categoryId`). **Multi-category selection** during onboarding stored in `trader_categories` (M2M); `traders.categoryId` is set to the **first** selected category for backward compatibility.
 - `jobs_done_count` and `avg_rating` are **derived/denormalized** fields, recalculated whenever a booking completes or a rating is submitted (via a service method, not client-writable).
+
+### 6.2B Trader Onboarding Module (✅ SHIPPED — Aug 2026)
+
+> **Swagger tag:** `Trader / Onboarding` · **Auth:** Bearer JWT + `role=TRADER` · **Prerequisite:** `emailVerified=true` (call `/auth/verify-email` first).
+
+Implements the **Trader mobile app onboarding Figma flow** — separate from Customer registration. Sole Trader (`SOLO`) and Company Trader (`COMPANY`) share the same 7-step structure; step 5 fields differ.
+
+**7 steps (backend `currentStep` 1–7):**
+
+| Step | Figma screen | API |
+|------|--------------|-----|
+| 1 | Business Verification | `PUT /traders/onboarding/business-type` `{ entityType: "SOLO" \| "COMPANY" }` |
+| 2 | Sole/Company Documents | `GET /traders/onboarding/document-requirements` · `PUT /traders/onboarding/documents` · `DELETE /traders/onboarding/documents/:documentRuleId` |
+| 3 | Select Trade Skills | `PUT /traders/onboarding/categories` `{ categoryIds: [uuid, ...] }` · list from `GET /categories` |
+| 4 | Category-wise Documents | Same document APIs — rules filtered by selected categories |
+| 5a | Sole Trader Information | `PUT /traders/onboarding/personal-info` — `fullLegalName`, `ppsNumber`, `bio` (max 300), `yearsExperience`, address fields |
+| 5b | Company Information | `PUT /traders/onboarding/company-info` — `companyName`, `croNumber` (8 digits), `vatNumber`, `directorFullName`, `bio`, `yearsExperience`, address |
+| 6 | Bank Information | `PUT /traders/onboarding/bank-details` — bank fields **or** `{ skip: true }` |
+| 7 | Service Radius | `PUT /traders/onboarding/service-radius` — `serviceRadiusKm`, `serviceCenterLat`, `serviceCenterLng`, `serviceCenterLabel` |
+| — | Submit for verification | `POST /traders/onboarding/submit` |
+| — | Save Progress | `POST /traders/onboarding/save-progress` |
+| — | Start / status | `POST /traders/onboarding/start` · `GET /traders/onboarding` |
+
+**Document upload:** `{ documentRuleId, fileUrl, fileName? }` — **URL strings only** (no S3 presign yet). Mobile uploads file to storage first, then sends URL.
+
+**Document requirements (admin-configurable):**
+- **Entity-level** docs per trader type (e.g. Sole: Passport required; Company: Garda Vetting required) — seeded in `document-rules.seed.ts`.
+- **Category-level** docs per trade (e.g. Electricians: Registered with body, Insurance) — admin manages via `PUT /admin/categories/:categoryId/document-rules`.
+
+**State after submit:** `traders.onboardingStatus = SUBMITTED`, `verificationStatus = PENDING`. Admin approves/rejects via `PATCH /admin/trader-verification/:traderId`.
+
+**DB tables:** `trader_registrations` (wizard progress + `stepData` JSON), `document_rules`, `trader_documents`, `trader_categories`, extended `traders` columns (PPS, CRO, bank, service radius, etc.).
+
+**Not implemented yet:** S3 presign uploads, automated document OCR, `GOLD` trader badge (UI-only in admin mockups), full `/admin/traders` directory CRUD.
 
 ### 6.2A Property & Utilities Module (new — see §4A)
 - `GET /properties` / `GET /properties/:id` — property = an address the user manages utilities for.
@@ -930,7 +1000,7 @@ Payment methods (all via Stripe): Apple Pay, Google Pay, Credit/Debit Card.
 Build and ship in this order — each phase should be runnable/testable before starting the next.
 
 1. **Phase 0 — Foundation**: repo scaffold, TypeScript config, Express app skeleton, Docker Compose (local Postgres), env config, health-check route, error middleware, logger, Swagger scaffold.
-2. **Phase 1 — Auth & Users**: register/OTP/login/refresh, Apple Sign-In, JWT middleware, role guard, Users module (profile, stats, deactivation workflow), Traders module (profile).
+2. **Phase 1 — Auth & Users**: register/OTP/login/refresh, JWT middleware, role guard, Users module (profile, stats, deactivation workflow), Traders module (profile), **Trader onboarding wizard (v8)**.
 3. **Phase 1B — Property & Utilities**: Addresses (My Address tab, Add Address modal), Meters (MPRN/GPRN registration + reading submission), Subscriptions (utility provider checklist). Independent of Jobs/Payments — can be built in parallel with Phase 2.
 4. **Phase 2 — Categories & Jobs**: category/subcategory seed + endpoints, Jobs module full CRUD + publish + reschedule + cancel, S3 pre-signed upload for job photos.
 5. **Phase 3 — Quotes & Offers**: Quotes module (submit/compare/accept), Trader Offers (+ filters), Brisk Offers, Promo Codes.
@@ -939,7 +1009,7 @@ Build and ship in this order — each phase should be runnable/testable before s
 8. **Phase 6 — Loyalty**: points balance, offers, redemption with transactional safety.
 9. **Phase 7 — Chat & Notifications**: Socket.IO gateway, push notification worker, in-app notification feed (typed per §6.12).
 10. **Phase 8 — Ratings & Booking History polish**: ratings/reviews, saved traders, booking history filters, booking details screen endpoint.
-11. **Phase 9 — Admin/Ops** (as scope firms up): trader verification/KYC review, account-deletion approval queue, dispute handling, manual refunds.
+11. **Phase 9 — Admin/Ops** (as scope firms up): ~~trader verification/KYC review~~ ✅ onboarding + verification queue shipped; account-deletion approval queue, dispute handling, manual refunds, full admin traders directory.
 12. **Phase 10 — Hardening**: rate limiting, load testing against the concurrency table in the architecture doc, CloudWatch alarms, backups.
 
 ---
@@ -948,13 +1018,14 @@ Build and ship in this order — each phase should be runnable/testable before s
 
 Explicitly tracking these so nothing is assumed silently — please confirm each as we get to it:
 
-- [ ] **Trader verification/KYC** — what documents, who reviews, manual vs automated.
+- [x] ~~**Trader verification/KYC (onboarding wizard)**~~ — **SHIPPED (v8):** Sole + Company 7-step onboarding, document rules, admin verification queue. Manual admin review (approve/reject). Automated audit/OCR still pending.
+- [ ] **Trader verification automation** — OCR, expiry tracking, automated "Mandatory Missing" alerts (admin UI shows this in reports mockups).
 - [x] ~~**Platform fee & commission model**~~ — **RESOLVED (v7 screenshots):** Admin Reports → Revenue shows **Platform Fees (10%)** as an explicit KPI. Still confirm whether fee is charged to customer vs deducted from trader payout before Payments module ships.
 - [ ] **Cancellation policy specifics** — refund percentages by time-to-service, who defines this (currently just "per platform's cancellation policy"). Legal CMS has a Refund & Cancellation Policy document — use that as source of truth once content is locked.
 - [ ] **"Premium Utility Pack - Annual Subscription"** mentioned in Order Summary — is this a real subscription product needing its own billing module, or a placeholder in the mock data?
-- [ ] **Trader-side app requirements** — this doc leans Customer-app-flow-heavy since that's what the process docs covered in depth; Trader app functional flow doc wasn't provided yet (quote submission, job acceptance, chat, payout/earnings, availability calendar all need their own pass).
+- [ ] **Trader-side app requirements (post-onboarding)** — quote submission, job acceptance, chat, payout/earnings, availability calendar still need backend modules (onboarding/KYC is done — see §6.2B).
 - [ ] **Payouts to traders** — Stripe Connect (recommended) vs manual payout — not covered in docs yet.
-- [ ] **Geolocation / job matching radius** — how traders are matched to a published job (category only, or distance-based).
+- [x] ~~**Geolocation / job matching radius**~~ — **PARTIALLY RESOLVED (v8):** Traders set `serviceRadiusKm` + map center during onboarding (`§6.2B`). Job-matching algorithm (category + distance filter) still pending in Jobs module.
 - [ ] **Promo code reuse rules** — one-time per user, per code, or unlimited.
 - [ ] **Target countries/currencies** — docs mix € (Dublin, Berlin) and $ (US categories) — affects Stripe account setup, tax handling, SMS provider choice.
 - [ ] **Figma specs** — need actual access (see below) to lock exact field validations, error states, empty states not covered in the process docs.
@@ -973,8 +1044,8 @@ Explicitly tracking these so nothing is assumed silently — please confirm each
    - Share more screenshots the same way you just did (works well — this update was built entirely from what you pasted in), or
    - Share Figma "Dev Mode" exports/specs (CSS/tokens/inspect JSON), or
    - Invite view access to an account usable via browser tooling in a future session.
-2. **Trader App screenshots/process doc** — still the biggest gap. Everything trader-side (submit quote, accept job, chat, payout/earnings, availability, KYC upload) is inferred only from mentions inside the customer-facing material.
-3. **Remaining Admin Panel screens** (see checklist in §14.12) — most urgently: Document Rules, Sub Categories detail forms, Transactions page, Survey Trader + Analytics tabs, CMS Header/Footer/Media/Email/Banner editors, Admin Users & Roles, Settings, Create Website Page / Knowledge Guide / Legal version modals.
+2. **Trader App post-onboarding** — onboarding/KYC APIs shipped (§6.2B). Still needed: quote submission, job acceptance, chat, payout/earnings, availability screens + backend modules.
+3. **Remaining Admin Panel screens** (see checklist in §14.12) — **Document Rules admin UI** still pending (APIs shipped); Sub Categories detail forms, full Traders directory, Transactions page, Survey Analytics, CMS Header/Footer/Media/Email/Banner editors, Admin Users & Roles, Settings.
 4. Answers to the Open Items checklist above, as they get decided — I'll fold each into this file as an update rather than a rewrite.
 
 ---
@@ -1069,7 +1140,9 @@ Already partially implemented. Screenshot confirms:
 - Actions: Refresh, + Add New Category
 - Codes e.g. `CAT-PLUMB`, `CAT-ELECT`, `CAT-CARP`…
 
-**Sub Categories** and **Document Rules** pages: labeled in sidebar — full field specs pending next screenshot batch.
+**Sub Categories** page: full field specs pending next screenshot batch.
+
+**Document Rules** — ✅ **APIs shipped (v8):** Backend supports entity-level rules (`/admin/document-rules/entity/SOLO|COMPANY`) and category-level rules (`/admin/categories/:id/document-rules`). Admin UI "shield" action on category list still needs to wire to these APIs. See **§14.15**.
 
 ### 14.3 Customers Directory (`/admin/customers`)
 
@@ -1083,17 +1156,27 @@ Actions: Refresh, + Add Customer.
 
 ### 14.4 Traders Management (`/admin/traders`)
 
+> **Implementation status (Aug 2026):** **Verification queue SHIPPED** — `admin-trader-verification/` module. **Full traders directory** (`GET /admin/traders`, KPIs, suspend, etc.) **NOT implemented yet** — UI mockups exist, backend pending.
+
 KPIs: Total Traders, Active, Suspended, Pending Verification, Total Revenue, Avg Rating.
 
 Filters: search name/business/email/code, All Statuses, All Categories, All Verifications, All Countries.
 
 Columns: Trader (`TRD-####`), Business (name + Individual/Business), Contact, Listings, Revenue, Rating (stars + count), Status, Verified (`Verified`/`Pending`), Joined.
 
-**Trader Verification Queue** (`/admin/trader-verification`):
+**Trader Verification Queue** — ✅ **APIs shipped:**
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/admin/trader-verification/stats` | KPI counts (pending, verified, rejected, submitted) |
+| `GET` | `/admin/trader-verification/queue` | Paginated list of submitted onboarding applications |
+| `GET` | `/admin/trader-verification/:traderId` | Full detail: profile, documents, requirements, registration |
+| `PATCH` | `/admin/trader-verification/:traderId` | Approve (`verificationStatus: VERIFIED`) or reject (`REJECTED` + `rejectionReason`) |
+
 - Filters: search, All Trader Types, All Statuses
 - Columns: Trader Name & Entity, TYPE (`SOLO`/`COMPANY`/`GOLD` badge), Trade Category, Document Docs (file count), Status, Audit → “Audit & Verify”
-- Side panel: Automated Audit Logs
-- Actions: Refresh Queue, + Launch Onboarding Wizard
+- Side panel: Automated Audit Logs — **UI mockup only; no automated audit API yet**
+- Actions: Refresh Queue, + Launch Onboarding Wizard — **admin UI only**
 
 ### 14.5 Jobs & Services — Admin (`/admin/jobs`)
 
@@ -1610,8 +1693,10 @@ created_at, updated_at
 | `survey_consumer_registrations` | Launch / consumer interest list (website form) |
 | `survey_trader_registrations` | Trader interest list (website form) |
 | `contact_submissions` | Contact Us form messages (website + admin CRM) |
-| `document_rules` | Trader doc compliance *(pending Document Rules page)* |
-| `trader_documents` | Uploaded KYC docs *(pending detail screen)* |
+| `document_rules` | ✅ Trader doc requirements (entity + category scope) — admin CRUD + onboarding reads |
+| `trader_documents` | ✅ Uploaded KYC docs per trader (URL strings, status pending/approved/rejected) |
+| `trader_registrations` | ✅ Onboarding wizard progress (`currentStep`, `stepData`, `entityType`) |
+| `trader_categories` | ✅ M2M — trader can select multiple trade categories during onboarding |
 
 Also reuse existing: `admin_users`, `audit_logs`, `categories`, `subcategories`, `users`, `traders`, `jobs`, `offers`, `payments`, `refunds`, `payouts`, `account_deletion_requests`.
 
@@ -1621,14 +1706,22 @@ Also reuse existing: `admin_users`, `audit_logs`, `categories`, `subcategories`,
 src/modules/admin/
   admin-cms/
     pages / social-links / knowledge-hub / blog / faq /
-    testimonials / legal / seo / dashboard
+    testimonials / legal / seo / dashboard / home
   admin-surveys/
     consumer / trader / analytics
-  admin-reports/
-  admin-dashboard/
-  admin-traders/   (+ verification)
-  admin-jobs/
-  admin-offers/
+  admin-document-rules/     # ✅ SHIPPED — entity + category document rules
+  admin-trader-verification/ # ✅ SHIPPED — verification queue approve/reject
+  admin-reports/            # pending
+  admin-dashboard/          # pending
+  admin-traders/            # pending — full directory (verification is separate)
+  admin-jobs/               # pending
+  admin-offers/             # pending
+
+src/modules/traders/
+  onboarding/               # ✅ SHIPPED — mobile trader onboarding wizard
+
+src/modules/document-rules/
+  document-rules.service.ts   # shared by admin + onboarding
 ```
 
 ### 14.12 Screenshot Coverage Gaps (awaiting next batch)
@@ -1637,7 +1730,7 @@ Explicitly **not** fully field-specified yet (sidebar/tabs visible only):
 
 - [ ] CMS: Header Navigation editor, Footer Links editor, Media Library, Email Templates, Notification Templates, Banners
 - [ ] Survey: Survey Analytics & Opt-Ins tab
-- [ ] Masters: Sub Categories full page, Document Rules full page
+- [ ] Masters: Sub Categories full page, **Document Rules admin UI** (APIs ✅ shipped — see §14.15)
 - [ ] Customers: Account Verification detail, Payment Methods tab
 - [ ] Operations: Transactions page
 - [ ] Reports: Analytics Dashboard, Customer Reports, Trader Reports, Jobs & Services report pages
@@ -1651,13 +1744,13 @@ When the next screenshots arrive, fold them into this section without rewriting 
 
 Recommended order once Auth/Users/Property are solid:
 
-1. Finish remaining Admin core that unblocks ops: Dashboard stats, Traders directory, Jobs oversight, Offers CRUD  
-2. **CMS Management** — ✅ **done** (all §14.8 tabs + public `/cms` reads)  
+1. Finish remaining Admin core that unblocks ops: Dashboard stats, **Traders directory** (verification queue ✅ done), Jobs oversight, Offers CRUD  
+2. **CMS Management** — ✅ **done** (all §14.8 tabs + public `/cms` reads + **Homepage** slug `home`)  
 3. Survey Management CRM — ✅ **consumer + trader done**; analytics pending screenshots  
 4. Reports aggregations  
-5. Document Rules + Trader Verification detail  
-
-S3 uploads still deferred globally — CMS image fields accept **URL strings** until Uploads module (§6.13) ships.
+5. ~~Document Rules + Trader Verification detail~~ — ✅ **APIs shipped (v8)**; admin UI screens + automated audit still pending  
+6. **Trader onboarding (mobile)** — ✅ **done** (§6.2B, §14.15)  
+7. S3 presign uploads module (global — affects job photos, trader docs, CMS images)
 
 ### 14.14 Website Management — Implemented API Ledger (v7)
 
@@ -1680,6 +1773,72 @@ S3 uploads still deferred globally — CMS image fields accept **URL strings** u
 | Survey Consumer | `/admin/surveys/consumer*` · `POST /surveys/consumer` | Codes `CS-####` · Swagger **Admin / Surveys** + **Website / Surveys** |
 | Survey Trader | `/admin/surveys/trader*` · `POST /surveys/trader` | Codes `TS-####` · Swagger **Admin / Surveys** + **Website / Surveys** |
 | Survey Analytics | *(pending)* | No API yet — awaiting admin screenshots (§14.9) |
-| Mobile forgot password | `POST /auth/forgot-password` · `POST /auth/reset-password` | Swagger **Mobile / Auth** · SMS OTP v1 (SES email reset deferred) |
+| Mobile forgot password | `POST /auth/forgot-password` · `POST /auth/verify-reset-otp` · `POST /auth/reset-password` | Swagger **Mobile / Auth** · SMS OTP v1 (SES email reset deferred) |
+| Mobile trader email verify | `POST /auth/verify-email` · `POST /auth/resend-email-otp` | Trader only · after mobile OTP |
+| **Homepage CMS** | Public `GET /cms/home`, `/cms/home/{section}`, `/cms/home/reviews`, `/pages/home` · Admin `/admin/cms/home/*` | Slug **`home`** (not `home-v2`). App Download: `background_image` + `foreground_image`. Swagger **Website / Home** + **Admin / Website / Home** |
+| Contact Us | `POST /contact` · Admin `/admin/cms/contact-submissions` | ✅ SHIPPED |
 
 **Public website contract:** `/cms/*` GETs use **snake_case**, published/active-only data from Website Management DB. List endpoints omit heavy HTML bodies; detail-by-slug returns full content. No auth.
+
+---
+
+### 14.15 Mobile Trader Onboarding — Implemented API Ledger (v8 — Aug 2026)
+
+> **Live base URL:** `https://brisk-aclm.onrender.com` · **Swagger tags:** `Mobile / Auth`, `Trader / Onboarding`, `Admin / Document Rules`, `Admin / Trader Verification` · **Test OTP:** `123456`
+
+#### Auth (Trader-specific steps)
+
+| Screen | Method | Endpoint | Body highlights |
+|--------|--------|----------|-----------------|
+| Sign-up | `POST` | `/auth/register` | `role:"TRADER"`, `acceptedTerms:true`, optional `profilePhotoUrl` |
+| Verify Phone | `POST` | `/auth/verify-otp` | `{ mobileNumber, code }` → tokens |
+| Verify Email | `POST` | `/auth/verify-email` | `{ email, code }` |
+| Resend Email OTP | `POST` | `/auth/resend-email-otp` | `{ email }` |
+
+#### Onboarding wizard (Bearer + TRADER)
+
+| Screen | Method | Endpoint |
+|--------|--------|----------|
+| Start | `POST` | `/traders/onboarding/start` |
+| Status | `GET` | `/traders/onboarding` |
+| Business Type | `PUT` | `/traders/onboarding/business-type` |
+| Document requirements | `GET` | `/traders/onboarding/document-requirements` |
+| Upload document | `PUT` | `/traders/onboarding/documents` |
+| Delete document | `DELETE` | `/traders/onboarding/documents/:documentRuleId` |
+| Select categories | `PUT` | `/traders/onboarding/categories` |
+| Personal info (Sole) | `PUT` | `/traders/onboarding/personal-info` |
+| Company info | `PUT` | `/traders/onboarding/company-info` |
+| Bank details / skip | `PUT` | `/traders/onboarding/bank-details` |
+| Service radius | `PUT` | `/traders/onboarding/service-radius` |
+| Save progress | `POST` | `/traders/onboarding/save-progress` |
+| Submit | `POST` | `/traders/onboarding/submit` |
+
+#### Admin — Document Rules
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET/PUT` | `/admin/document-rules/entity/SOLO` | Sole trader general documents |
+| `GET/PUT` | `/admin/document-rules/entity/COMPANY` | Company trader general documents |
+| `GET/PUT` | `/admin/categories/:categoryId/document-rules` | Category-specific documents |
+
+**Default seeded rules:** Sole entity (Passport required + 4 optional); Company entity (Garda Vetting required + 9 optional); Plumbing (3 rules); Electrical (5 rules).
+
+#### Admin — Verification
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/admin/trader-verification/stats` | KPIs |
+| `GET` | `/admin/trader-verification/queue` | Pending applications |
+| `GET` | `/admin/trader-verification/:traderId` | Full review detail |
+| `PATCH` | `/admin/trader-verification/:traderId` | `{ verificationStatus: "VERIFIED"\|"REJECTED", rejectionReason? }` |
+
+#### Response enums (trader onboarding)
+
+| Field | Values |
+|-------|--------|
+| `entityType` / `traderType` | `SOLO`, `COMPANY` |
+| `onboardingStatus` | `NOT_STARTED`, `IN_PROGRESS`, `SUBMITTED`, `APPROVED`, `REJECTED` |
+| `verificationStatus` | `PENDING`, `VERIFIED`, `REJECTED`, `SUSPENDED` |
+| `traderDocument.status` | `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED` |
+
+**Production test status (Aug 2026):** Full Sole + Company onboarding flows tested live — 26/26 API checks passed.
