@@ -11,6 +11,8 @@ import {
   forgotPasswordSchema,
   verifyResetOtpSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
+  resendEmailOtpSchema,
 } from './auth.validation';
 
 const router = Router();
@@ -266,6 +268,49 @@ router.post('/verify-reset-otp', validate(verifyResetOtpSchema), authController.
  *         description: User not found.
  */
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
+
+/**
+ * @swagger
+ * /auth/verify-email:
+ *   post:
+ *     summary: Verify trader email with 6-digit OTP (after mobile OTP verification)
+ *     tags: ['Mobile / Auth']
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, code]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               code: { type: string, example: "123456" }
+ *     responses:
+ *       200:
+ *         description: Email verified. Trader can start onboarding.
+ */
+router.post('/verify-email', validate(verifyEmailSchema), authController.verifyEmail);
+
+/**
+ * @swagger
+ * /auth/resend-email-otp:
+ *   post:
+ *     summary: Resend 6-digit email OTP for trader email verification
+ *     tags: ['Mobile / Auth']
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email: { type: string, format: email }
+ *     responses:
+ *       200:
+ *         description: Email OTP resent.
+ */
+router.post('/resend-email-otp', validate(resendEmailOtpSchema), authController.resendEmailOtp);
 
 /**
  * @swagger

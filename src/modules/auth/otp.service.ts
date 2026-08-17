@@ -6,7 +6,7 @@ interface OtpData {
   expiresAt: Date;
 }
 
-export type OtpPurpose = 'mobile_verification' | 'password_reset';
+export type OtpPurpose = 'mobile_verification' | 'password_reset' | 'email_verification';
 
 const OTP_EXPIRY_MINUTES = 10;
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -15,7 +15,7 @@ const RESEND_COOLDOWN_SECONDS = 60;
 const otpStore = new Map<string, OtpData>();
 const lastSentAt = new Map<string, number>();
 
-const otpStoreKey = (purpose: OtpPurpose, mobileNumber: string) => `${purpose}:${mobileNumber}`;
+const otpStoreKey = (purpose: OtpPurpose, identifier: string) => `${purpose}:${identifier}`;
 
 export const getOtpExpiryMinutes = (): number => OTP_EXPIRY_MINUTES;
 
@@ -27,9 +27,10 @@ export const getOtpMeta = () => ({
 });
 
 export const canResendOtp = (
-  mobileNumber: string
+  identifier: string,
+  purpose: OtpPurpose = 'mobile_verification'
 ): { allowed: boolean; retryAfterSeconds?: number } => {
-  const lastSent = lastSentAt.get(mobileNumber);
+  const lastSent = lastSentAt.get(otpStoreKey(purpose, identifier));
   if (!lastSent) {
     return { allowed: true };
   }
@@ -47,46 +48,41 @@ export const canResendOtp = (
   };
 };
 
-const persistAndMockSendOtp = (mobileNumber: string, purpose: OtpPurpose): string => {
-  // Static test OTP until SNS/Twilio is wired.
+const persistAndMockSendOtp = (identifier: string, purpose: OtpPurpose): string => {
+  // Static test OTP until SNS/Twilio/SES is wired.
   const code = '123456';
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-  otpStore.set(otpStoreKey(purpose, mobileNumber), { code, expiresAt });
-  lastSentAt.set(mobileNumber, Date.now());
+  otpStore.set(otpStoreKey(purpose, identifier), { code, expiresAt });
+  lastSentAt.set(otpStoreKey(purpose, identifier), Date.now());
 
   logger.info(
-    `[SMS OTP MOCK] ${purpose} sent to ${mobileNumber}: Code = ${code} (Expires in ${OTP_EXPIRY_MINUTES} mins)`
+    `[OTP MOCK] ${purpose} sent to ${identifier}: Code = ${code} (Expires in ${OTP_EXPIRY_MINUTES} mins)`
   );
 
   return code;
 };
 
-/** Send OTP or throw 429 when cooldown is active (register / resend / forgot password). */
+/** Send OTP or throw 429 when cooldown is active. */
 export const generateOtp = async (
-  mobileNumber: string,
+  identifier: string,
   purpose: OtpPurpose = 'mobile_verification'
 ): Promise<string> => {
-  const cooldown = canResendOtp(mobileNumber);
+  const cooldown = canResendOtp(identifier, purpose);
   if (!cooldown.allowed) {
     throw new TooManyRequestsError(
       `Please wait ${cooldown.retryAfterSeconds} seconds before requesting a new verification code.`
     );
   }
 
-  return persistAndMockSendOtp(mobileNumber, purpose);
+  return persistAndMockSendOtp(identifier, purpose);
 };
 
-/**
- * Soft send used by login when mobile is unverified:
- * - sends OTP if cooldown allows
- * - otherwise returns retryAfterSeconds (does not throw)
- */
 export const trySendOtp = async (
-  mobileNumber: string,
+  identifier: string,
   purpose: OtpPurpose = 'mobile_verification'
 ): Promise<{ sent: true } | { sent: false; retryAfterSeconds: number }> => {
-  const cooldown = canResendOtp(mobileNumber);
+  const cooldown = canResendOtp(identifier, purpose);
   if (!cooldown.allowed) {
     return {
       sent: false,
@@ -94,16 +90,16 @@ export const trySendOtp = async (
     };
   }
 
-  persistAndMockSendOtp(mobileNumber, purpose);
+  persistAndMockSendOtp(identifier, purpose);
   return { sent: true };
 };
 
 export const verifyOtp = async (
-  mobileNumber: string,
+  identifier: string,
   code: string,
   purpose: OtpPurpose = 'mobile_verification'
 ): Promise<boolean> => {
-  const key = otpStoreKey(purpose, mobileNumber);
+  const key = otpStoreKey(purpose, identifier);
 
   // Static test OTP always accepted in staging/dev builds.
   if (code === '123456') {

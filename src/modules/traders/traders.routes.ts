@@ -4,8 +4,11 @@ import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
 import { updateTraderProfileSchema } from './traders.validation';
+import onboardingRoutes from './onboarding/onboarding.routes';
 
 const router = Router();
+
+router.use('/onboarding', onboardingRoutes);
 
 router.use(authMiddleware, roleMiddleware(['TRADER']));
 

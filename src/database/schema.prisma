@@ -189,6 +189,26 @@ enum SubcategoryPriceEnteredBy {
   TRADER
 }
 
+enum DocumentRuleScope {
+  ENTITY
+  CATEGORY
+}
+
+enum TraderOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum TraderDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
 // ==========================================
 // CORE AUTH & USERS
 // ==========================================
@@ -286,12 +306,36 @@ model Trader {
   serviceRadius      String?            @map("service_radius")
   bankAccountRef     String?            @map("bank_account_ref")
   categoryId         String?            @map("category_id") @db.Uuid
+  fullLegalName      String?            @map("full_legal_name")
+  ppsNumber          String?            @map("pps_number")
+  croNumber          String?            @map("cro_number")
+  vatNumber          String?            @map("vat_number")
+  directorFullName   String?            @map("director_full_name")
+  addressLine1       String?            @map("address_line_1")
+  addressLine2       String?            @map("address_line_2")
+  city               String?
+  postcode           String?
+  country            String?            @default("Ireland")
+  bankHolderName     String?            @map("bank_holder_name")
+  bankName           String?            @map("bank_name")
+  accountNumber      String?            @map("account_number")
+  ifscCode           String?            @map("ifsc_code")
+  bankDetailsSkipped Boolean            @default(false) @map("bank_details_skipped")
+  serviceRadiusKm    Int?               @map("service_radius_km")
+  serviceCenterLat   Decimal?           @map("service_center_lat") @db.Decimal(10, 7)
+  serviceCenterLng   Decimal?           @map("service_center_lng") @db.Decimal(10, 7)
+  serviceCenterLabel String?            @map("service_center_label")
+  onboardingStatus   TraderOnboardingStatus @default(NOT_STARTED) @map("onboarding_status")
+  onboardingSubmittedAt DateTime?       @map("onboarding_submitted_at")
+  rejectionReason    String?            @map("rejection_reason") @db.Text
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
   // Relationships
   user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   category        Category?            @relation(fields: [categoryId], references: [id])
+  categories      TraderCategory[]
+  documents       TraderDocument[]
   quotes          Quote[]
   bookings        Booking[]
   payouts         Payout[]
@@ -435,6 +479,8 @@ model Category {
   // Relationships
   subcategories Subcategory[]
   traders       Trader[]
+  traderCategories TraderCategory[]
+  documentRules DocumentRule[]
   jobs          Job[]
   offers        OfferCategory[]
 
@@ -917,18 +963,74 @@ model AuditLog {
 
 model TraderRegistration {
   id          String     @id @default(uuid()) @db.Uuid
+  userId      String     @unique @map("user_id") @db.Uuid
   entityType  TraderType @default(SOLO) @map("entity_type")
   currentStep Int        @default(1) @map("current_step")
   status      String     @default("in_progress") // in_progress | submitted | approved | rejected
   stepData    Json?      @map("step_data")
-  traderId    String?    @map("trader_id") @db.Uuid
+  traderId    String     @map("trader_id") @db.Uuid
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
   // Relationships
-  trader Trader? @relation(fields: [traderId], references: [id])
+  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
 
   @@map("trader_registrations")
+}
+
+model TraderCategory {
+  traderId   String @map("trader_id") @db.Uuid
+  categoryId String @map("category_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  trader   Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([traderId, categoryId])
+  @@map("trader_categories")
+}
+
+model DocumentRule {
+  id              String            @id @default(uuid()) @db.Uuid
+  scope           DocumentRuleScope
+  traderType      TraderType?       @map("trader_type")
+  categoryId      String?           @map("category_id") @db.Uuid
+  documentKey     String            @map("document_key")
+  name            String
+  description     String?           @db.Text
+  required        Boolean           @default(true)
+  acceptedFormats String?           @default("pdf,image") @map("accepted_formats")
+  sortOrder       Int               @default(0) @map("sort_order")
+  status          String            @default("active")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  category  Category?        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  documents TraderDocument[]
+
+  @@unique([scope, traderType, categoryId, documentKey])
+  @@map("document_rules")
+}
+
+model TraderDocument {
+  id              String               @id @default(uuid()) @db.Uuid
+  traderId        String               @map("trader_id") @db.Uuid
+  documentRuleId  String               @map("document_rule_id") @db.Uuid
+  fileUrl         String               @map("file_url")
+  fileName        String?              @map("file_name")
+  status          TraderDocumentStatus @default(PENDING)
+  rejectionReason String?              @map("rejection_reason") @db.Text
+  uploadedAt      DateTime             @default(now()) @map("uploaded_at")
+  reviewedAt      DateTime?            @map("reviewed_at")
+  reviewedById    String?              @map("reviewed_by_id") @db.Uuid
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  trader       Trader       @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  documentRule DocumentRule @relation(fields: [documentRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([traderId, documentRuleId])
+  @@map("trader_documents")
 }
 
 // ==========================================

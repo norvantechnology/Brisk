@@ -26,6 +26,8 @@ import type {
   ForgotPasswordInput,
   VerifyResetOtpInput,
   ResetPasswordInput,
+  VerifyEmailInput,
+  ResendEmailOtpInput,
 } from './auth.validation';
 
 type AuthUser = Pick<
@@ -164,7 +166,7 @@ const ensureTraderProfile = async (
 // ==========================================
 
 export const registerUser = async (input: RegisterInput) => {
-  const { fullName, email, mobileNumber, password, role } = input;
+  const { fullName, email, mobileNumber, password, role, profilePhotoUrl } = input;
 
   const [existingEmail, existingMobile] = await Promise.all([
     prisma.user.findUnique({ where: { email }, select: { id: true } }),
@@ -187,22 +189,33 @@ export const registerUser = async (input: RegisterInput) => {
       mobileNumber,
       passwordHash,
       role,
+      profilePhotoUrl: profilePhotoUrl ?? null,
       mobileVerified: false,
+      emailVerified: role === UserRole.CUSTOMER,
       status: UserStatus.PENDING,
     },
   });
 
-  await generateOtp(mobileNumber);
+  await generateOtp(mobileNumber, 'mobile_verification');
+
+  if (role === UserRole.TRADER) {
+    await generateOtp(email, 'email_verification');
+  }
 
   return {
-    message: 'Registration successful. Verification code has been sent to your mobile number.',
+    message:
+      role === UserRole.TRADER
+        ? 'Registration successful. Verification codes have been sent to your mobile number and email.'
+        : 'Registration successful. Verification code has been sent to your mobile number.',
     data: {
       userId: user.id,
       mobileNumber: user.mobileNumber,
       email: user.email,
       role: user.role,
       mobileVerified: false,
+      emailVerified: user.emailVerified,
       requiresOtpVerification: true,
+      requiresEmailVerification: role === UserRole.TRADER,
       ...getOtpMeta(),
     },
   };
@@ -236,7 +249,17 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
 
   return {
     message: 'Mobile number verified successfully. Your account is now active.',
-    data: buildSessionPayload({ ...verifiedUser, mobileVerified: true }),
+    data: {
+      ...buildSessionPayload({ ...verifiedUser, mobileVerified: true }),
+      emailVerified: user.emailVerified,
+      requiresEmailVerification: user.role === UserRole.TRADER && !user.emailVerified,
+      nextStep:
+        user.role === UserRole.TRADER && !user.emailVerified
+          ? 'POST /auth/verify-email'
+          : user.role === UserRole.TRADER
+            ? 'POST /traders/onboarding/start'
+            : undefined,
+    },
   };
 };
 
@@ -563,4 +586,76 @@ export const resetPassword = async (input: ResetPasswordInput) => {
   }
 
   return applyNewPassword(user.id, newPassword);
+};
+
+export const verifyTraderEmail = async (input: VerifyEmailInput) => {
+  const { email, code } = input;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    throw new NotFoundError('User with this email does not exist.');
+  }
+
+  if (user.role !== UserRole.TRADER) {
+    throw new BadRequestError('Email verification is only required for trader accounts.');
+  }
+
+  if (user.emailVerified) {
+    throw new BadRequestError('Email address is already verified.');
+  }
+
+  assertAccountCanAuthenticate(user);
+
+  const isValid = await verifyOtp(email, code, 'email_verification');
+  if (!isValid) {
+    throw new BadRequestError('Invalid or expired verification code.');
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { emailVerified: true },
+    select: PUBLIC_USER_SELECT,
+  });
+
+  return {
+    message: 'Email address verified successfully.',
+    data: {
+      user: { ...toPublicUser(updatedUser), emailVerified: true },
+      emailVerified: true,
+      requiresEmailVerification: false,
+      nextStep: 'POST /traders/onboarding/start',
+    },
+  };
+};
+
+export const resendTraderEmailOtp = async (input: ResendEmailOtpInput) => {
+  const { email } = input;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    throw new NotFoundError('User with this email does not exist.');
+  }
+
+  if (user.role !== UserRole.TRADER) {
+    throw new BadRequestError('Email verification is only required for trader accounts.');
+  }
+
+  if (user.emailVerified) {
+    throw new BadRequestError('Email address is already verified.');
+  }
+
+  assertAccountCanAuthenticate(user);
+
+  await generateOtp(email, 'email_verification');
+
+  return {
+    message: 'A new verification code has been sent to your email address.',
+    data: {
+      email: user.email,
+      emailVerified: false,
+      requiresEmailVerification: true,
+      otpSent: true,
+      ...getOtpMeta(),
+    },
+  };
 };

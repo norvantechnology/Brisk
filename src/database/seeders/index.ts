@@ -6,6 +6,7 @@ import { seedCategories } from './categories.seed';
 import { seedCustomers } from './customers.seed';
 import { seedPayments } from './payments.seed';
 import { seedMarketingPages } from './marketing-pages.seed';
+import { seedDocumentRules } from './document-rules.seed';
 
 const prisma = new PrismaClient();
 
@@ -17,6 +18,7 @@ async function main() {
   await seedCustomers(prisma);
   await seedPayments(prisma);
   await seedMarketingPages(prisma);
+  await seedDocumentRules(prisma);
   logger.info('✅ Database seeding completed successfully.');
 }
 

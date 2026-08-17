@@ -25,6 +25,8 @@ import {
 } from './modules/categories/categories.routes';
 import contactRoutes from './modules/contact/contact.routes';
 import adminContactRoutes from './modules/admin/admin-contact/admin-contact.routes';
+import adminDocumentRulesRoutes from './modules/admin/admin-document-rules/admin-document-rules.routes';
+import adminTraderVerificationRoutes from './modules/admin/admin-trader-verification/admin-trader-verification.routes';
 import homePublicRoutes from './modules/cms/home-public.routes';
 
 const app = express();
@@ -51,6 +53,8 @@ app.use('/traders', tradersRoutes);
 app.use('/admin/auth', adminAuthRoutes);
 app.use('/admin', adminCategoryRoutes);
 app.use('/admin', adminCustomerRoutes);
+app.use('/admin', adminDocumentRulesRoutes);
+app.use('/admin', adminTraderVerificationRoutes);
 app.use('/admin/cms', adminCmsRoutes);
 app.use('/admin/cms', adminContactRoutes);
 app.use('/admin/blog/categories', adminBlogCategoryRoutes);

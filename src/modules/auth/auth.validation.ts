@@ -27,6 +27,7 @@ const registerBodySchema = z.object({
   acceptedTerms: z.literal(true, {
     errorMap: () => ({ message: 'You must accept the Terms & Privacy Policy.' }),
   }),
+  profilePhotoUrl: z.string().trim().url('Invalid profile photo URL').optional(),
 });
 
 export const registerSchema = z.object({
@@ -114,6 +115,23 @@ export const resetPasswordSchema = z.object({
   body: resetPasswordBodySchema,
 });
 
+const verifyEmailBodySchema = z.object({
+  email: z.string().trim().email('Invalid email format').toLowerCase(),
+  code: otpCodeSchema,
+});
+
+export const verifyEmailSchema = z.object({
+  body: verifyEmailBodySchema,
+});
+
+const resendEmailOtpBodySchema = z.object({
+  email: z.string().trim().email('Invalid email format').toLowerCase(),
+});
+
+export const resendEmailOtpSchema = z.object({
+  body: resendEmailOtpBodySchema,
+});
+
 export type RegisterInput = z.infer<typeof registerBodySchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpBodySchema>;
 export type ResendOtpInput = z.infer<typeof resendOtpBodySchema>;
@@ -121,3 +139,5 @@ export type LoginInput = z.infer<typeof loginBodySchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordBodySchema>;
 export type VerifyResetOtpInput = z.infer<typeof verifyResetOtpBodySchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordBodySchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailBodySchema>;
+export type ResendEmailOtpInput = z.infer<typeof resendEmailOtpBodySchema>;

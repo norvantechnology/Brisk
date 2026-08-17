@@ -161,3 +161,39 @@ export const resetPassword = async (
     next(error);
   }
 };
+
+export const verifyEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await authService.verifyTraderEmail(req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resendEmailOtp = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await authService.resendTraderEmailOtp(req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
