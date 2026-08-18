@@ -1,6 +1,6 @@
 import { DocumentRuleScope, TraderType } from '@prisma/client';
 import { prisma } from '../../config/database';
-import { NotFoundError } from '../../utils/errors';
+import { ConflictError, NotFoundError } from '../../utils/errors';
 
 export type DocumentRuleInput = {
   documentKey: string;
@@ -86,6 +86,98 @@ export const listCategoryDocumentRules = async (
     ...serializeRule(rule),
     category: rule.category,
   }));
+};
+
+const nextSortOrder = async (
+  where: { scope: DocumentRuleScope; traderType?: TraderType; categoryId?: string }
+) => {
+  const last = await prisma.documentRule.findFirst({
+    where,
+    orderBy: { sortOrder: 'desc' },
+    select: { sortOrder: true },
+  });
+  return (last?.sortOrder ?? -1) + 1;
+};
+
+export const createEntityDocumentRule = async (
+  traderType: TraderType,
+  input: DocumentRuleInput
+) => {
+  const existing = await prisma.documentRule.findFirst({
+    where: {
+      scope: DocumentRuleScope.ENTITY,
+      traderType,
+      categoryId: null,
+      documentKey: input.documentKey,
+    },
+  });
+  if (existing) {
+    throw new ConflictError(`Document rule "${input.documentKey}" already exists for this trader type.`);
+  }
+
+  const created = await prisma.documentRule.create({
+    data: {
+      scope: DocumentRuleScope.ENTITY,
+      traderType,
+      documentKey: input.documentKey,
+      name: input.name,
+      description: input.description ?? null,
+      required: input.required ?? true,
+      acceptedFormats: input.acceptedFormats ?? 'pdf,image',
+      sortOrder: input.sortOrder ?? (await nextSortOrder({ scope: DocumentRuleScope.ENTITY, traderType })),
+      status: input.status ?? 'active',
+    },
+  });
+
+  return serializeRule(created);
+};
+
+export const createCategoryDocumentRule = async (
+  categoryId: string,
+  input: DocumentRuleInput
+) => {
+  const category = await prisma.category.findUnique({ where: { id: categoryId } });
+  if (!category) {
+    throw new NotFoundError('Category not found.');
+  }
+
+  const existing = await prisma.documentRule.findFirst({
+    where: {
+      scope: DocumentRuleScope.CATEGORY,
+      categoryId,
+      documentKey: input.documentKey,
+    },
+  });
+  if (existing) {
+    throw new ConflictError(`Document rule "${input.documentKey}" already exists for this category.`);
+  }
+
+  const created = await prisma.documentRule.create({
+    data: {
+      scope: DocumentRuleScope.CATEGORY,
+      categoryId,
+      traderType: null,
+      documentKey: input.documentKey,
+      name: input.name,
+      description: input.description ?? null,
+      required: input.required ?? true,
+      acceptedFormats: input.acceptedFormats ?? 'pdf,image',
+      sortOrder: input.sortOrder ?? (await nextSortOrder({ scope: DocumentRuleScope.CATEGORY, categoryId })),
+      status: input.status ?? 'active',
+    },
+  });
+
+  return serializeRule(created);
+};
+
+export const deleteDocumentRule = async (id: string) => {
+  const rule = await prisma.documentRule.findUnique({ where: { id } });
+  if (!rule) {
+    throw new NotFoundError('Document rule not found.');
+  }
+
+  await prisma.documentRule.delete({ where: { id } });
+  return serializeRule(rule);
 };
 
 export const replaceEntityDocumentRules = async (

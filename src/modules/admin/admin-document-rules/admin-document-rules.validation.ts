@@ -20,6 +20,26 @@ export const entityDocumentRulesSchema = z.object({
   }),
 });
 
+export const createEntityDocumentRuleSchema = z.object({
+  params: z.object({
+    traderType: z.enum(['SOLO', 'COMPANY']),
+  }),
+  body: documentRuleItemSchema,
+});
+
+export const createCategoryDocumentRuleSchema = z.object({
+  params: z.object({
+    categoryId: z.string().uuid(),
+  }),
+  body: documentRuleItemSchema,
+});
+
+export const documentRuleIdParamSchema = z.object({
+  params: z.object({
+    id: z.string().uuid(),
+  }),
+});
+
 export const categoryDocumentRulesSchema = z.object({
   params: z.object({
     categoryId: z.string().uuid(),
