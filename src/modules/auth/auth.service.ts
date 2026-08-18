@@ -18,7 +18,7 @@ import {
   trySendOtp,
   verifyOtp,
 } from './otp.service';
-import { APP_NEXT_STEP, resolveAppNextStep } from '../navigation/app-next-step';
+import { APP_NEXT_STEP, resolveSessionExtras } from '../navigation/app-next-step';
 import type {
   RegisterInput,
   VerifyOtpInput,
@@ -77,7 +77,7 @@ const buildSessionPayload = async (
   user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'>
 ) => {
   const tokens = createAuthTokens(user);
-  const nextStep = await resolveAppNextStep(user);
+  const { nextStep, onboarding } = await resolveSessionExtras(user);
 
   return {
     requiresOtpVerification: false as const,
@@ -85,6 +85,7 @@ const buildSessionPayload = async (
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     nextStep,
+    onboarding,
   };
 };
 
