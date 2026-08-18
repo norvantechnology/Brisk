@@ -15,7 +15,7 @@ export const getMyTraderProfile = async (
       res,
       statusCode: 200,
       message: 'Trader profile retrieved successfully.',
-      data: { trader: profile },
+      data: profile,
     });
   } catch (error) {
     next(error);
@@ -34,7 +34,7 @@ export const updateMyTraderProfile = async (
       res,
       statusCode: 200,
       message: 'Trader profile updated successfully.',
-      data: { trader },
+      data: trader,
     });
   } catch (error) {
     next(error);
