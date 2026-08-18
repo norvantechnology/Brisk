@@ -22,6 +22,12 @@ export const ONBOARDING_STEP_KEYS = {
 
 export const TOTAL_ONBOARDING_STEPS = 7;
 
+/** Entity document keys shown on the Sole/Company Verification screen (not Document Verification). */
+export const VERIFICATION_SCREEN_DOCUMENT_KEYS: Record<TraderType, string> = {
+  [TraderType.SOLO]: 'driving_license',
+  [TraderType.COMPANY]: 'director_photo_id',
+};
+
 export const getStepKey = (step: number, entityType: TraderType): string => {
   if (step === ONBOARDING_STEPS.PROFILE_INFO) {
     return entityType === TraderType.COMPANY ? 'company_info' : 'personal_info';

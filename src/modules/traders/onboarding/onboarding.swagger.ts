@@ -1,9 +1,12 @@
 /**
  * Trader onboarding Swagger — see onboarding.routes.ts for route handlers.
  *
- * Figma flow order (Trader app):
- * Sign-up → Verify Phone → Verify Email → Business Type → Entity Documents →
- * Select Categories → Category Documents → Personal/Company Info → Bank Info → Service Radius → Submit
+ * Figma flow (Trader app — branches after Business Verification):
+ * Sign-up → Verify Phone → Start onboarding →
+ * Business Verification → Sole/Company Verification → Sole/Company Document Verification → Submit
+ *
+ * Navigation: use `nextStep` from login/verify-otp to choose the app flow.
+ * When `nextStep` is `TRADER_ONBOARDING`, call GET /traders/onboarding for saved data and `onboardingScreen`.
  */
 
 /**
@@ -35,7 +38,22 @@
  *           example: 7
  *         currentStepKey:
  *           type: string
- *           example: categories
+ *           example: sole_trader_verification
+ *         nextStep:
+ *           type: string
+ *           enum: [TRADER_ONBOARDING, TRADER_PENDING_APPROVAL, TRADER_HOME]
+ *           description: App-level navigation key (same values as login response).
+ *         onboardingScreen:
+ *           type: string
+ *           enum:
+ *             - business_verification
+ *             - sole_trader_verification
+ *             - company_verification
+ *             - sole_trader_document_verification
+ *             - company_document_verification
+ *             - submitted
+ *             - approved
+ *           description: Which screen to show inside the trader onboarding flow.
  *         steps:
  *           type: array
  *           items:
@@ -56,7 +74,10 @@
  *           properties:
  *             entityRules:
  *               type: array
- *               description: General docs for SOLO or COMPANY (Passport, Garda Vetting, etc.).
+ *               description: |
+ *                 Entity docs for current trader type. Filter by `documentKey`:
+ *                 - Verification screen — `driving_license` (SOLO) or `director_photo_id` (COMPANY)
+ *                 - Document Verification screen — all other entity rules (Passport, Garda Vetting, etc.)
  *             categoryRules:
  *               type: array
  *               description: Per-trade docs after categories selected (Electrician, Plumbing, etc.).
@@ -73,28 +94,28 @@
  * @swagger
  * /traders/onboarding:
  *   get:
- *     summary: Get onboarding status — resume wizard on any screen
+ *     summary: Get onboarding status — load saved data and resume screen
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screen:** Use on **every onboarding screen** when app opens or user returns later.
+ *       **Purpose:** Load full onboarding state when user enters the `TRADER_ONBOARDING` flow.
+ *
+ *       **When to call:**
+ *       - After login when `nextStep` is `TRADER_ONBOARDING` — to know which onboarding screen to open and pre-fill forms
+ *       - On app resume — restore uploaded docs, saved profile, document checklist
+ *       - After any PUT/POST step — optional refresh
+ *
+ *       **Do not use for routing after login alone** — login already returns `nextStep`.
+ *       Use this API only after deciding the user should enter onboarding.
  *
  *       **Auth:** Bearer token from login/register. Role must be `TRADER`.
  *
- *       **When to call:**
- *       - After login — check if onboarding already started or submitted
- *       - On app resume — restore `currentStep`, uploaded docs, selected categories
- *       - After any PUT/POST step — alternative to using that response (optional refresh)
- *
- *       **No query parameters.**
- *
- *       **If not started:** `data.started = false` → call `POST /traders/onboarding/start`.
- *
  *       **Key response fields:**
- *       - `data.currentStep` / `data.currentStepKey` — which screen to show next
- *       - `data.documentRequirements` — which upload slots to render
- *       - `data.uploadedDocuments` — already filled slots (show filename + delete)
+ *       - `data.nextStep` — same key as login (`TRADER_ONBOARDING`, `TRADER_PENDING_APPROVAL`, `TRADER_HOME`)
+ *       - `data.onboardingScreen` — which screen inside onboarding (Business Verification, Sole Trader Verification, etc.)
+ *       - `data.documentRequirements` / `data.uploadedDocuments` — document upload UI
+ *       - `data.profile` / `data.bankDetails` — pre-filled form values
  *
- *       **Example:** `GET /traders/onboarding` with header `Authorization: Bearer {accessToken}`
+ *       **If not started:** `data.started = false`, `onboardingScreen = business_verification` → call `POST /traders/onboarding/start` on first entry.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -116,34 +137,30 @@
  *       401:
  *         description: Missing or expired Bearer token — user must login again.
  *       403:
- *         description: Not a trader account, or email not verified yet (`EMAIL_NOT_VERIFIED`).
+ *         description: Not a trader account.
  */
 
 /**
  * @swagger
  * /traders/onboarding/start:
  *   post:
- *     summary: Start onboarding wizard (first time after email verified)
+ *     summary: Start onboarding wizard (first time after phone verified)
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screen:** Call once when user enters onboarding flow after **Verify Email** screen.
+ *       **When to call:** First time user enters onboarding after `nextStep` is `TRADER_ONBOARDING` and `started` is false.
  *
- *       **Prerequisites:** `POST /auth/verify-otp` (mobile) + `POST /auth/verify-email` (trader email).
+ *       **Prerequisites:** `POST /auth/verify-otp` (mobile verified).
  *
  *       **Auth:** Bearer token, role `TRADER`.
  *
- *       **When to call:** First tap into onboarding — before Business Verification screen.
- *
  *       **No request body.**
  *
- *       **Returns:** Full onboarding state starting at step 1 (`business_type`).
+ *       **Returns:** Full onboarding state starting at Business Verification (`onboardingScreen: business_verification`).
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Wizard initialized; `currentStep = 1`.
- *       403:
- *         description: Email not verified — complete Verify Email screen first.
+ *         description: Wizard initialized.
  */
 
 /**
@@ -157,10 +174,11 @@
  *       - Sole Trader card → send `SOLO`
  *       - Company Trader card → send `COMPANY`
  *
- *       **When to call:** User taps **Save & Continue** on Business Verification screen.
+ *       **When to call:** User taps **Submit** on Business Verification screen (Sole Trader or Company Trader card).
  *
- *       **Effect:** Loads different document lists for step 2 (Sole Trader Document vs Company Trader Document).
- *       Changing type clears previously selected categories and uploaded docs.
+ *       **Do not** call `POST /submit` here — that is only for final document verification submit.
+ *
+ *       **Effect:** Sets branch for Sole Trader vs Company Trader paths. Clears categories and uploads if type changes.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -194,8 +212,9 @@
  *     tags: ['Trader / Onboarding']
  *     description: |
  *       **Figma screens:**
- *       - **Sole Trader Document** / **Company Trader Document** (step 2 — general docs)
- *       - **Category Wise Documents** (step 4 — after trade skills selected)
+ *       - **Sole Trader Verification** / **Company Verification** — ID upload rows only (`driving_license`, `director_photo_id`)
+ *       - **Sole Trader Document Verification** / **Company Document Verification** — remaining entity docs
+ *       - **Category Wise Documents** (optional later flow — after trade skills selected)
  *
  *       **When to call:**
  *       - On document upload screens to build the list (REQUIRED / OPTIONAL badges)
@@ -220,9 +239,10 @@
  *     summary: Upload or replace one document (PDF/image URL)
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screens:** Any document row with "Tap to upload PDF or Image".
- *       - Sole/Company general documents (step 2)
- *       - Category-wise documents (step 4)
+ *       **Figma screens:**
+ *       - **Sole Trader Verification** — Driving License upload (`documentKey: driving_license`)
+ *       - **Company Verification** — Director Photo ID upload (`documentKey: director_photo_id`)
+ *       - **Sole/Company Document Verification** — Passport, Garda Vetting, certificates, etc.
  *
  *       **When to call:** After user picks a file — upload file to your storage first, then send the **URL** here.
  *
@@ -292,16 +312,12 @@
  * @swagger
  * /traders/onboarding/categories:
  *   put:
- *     summary: 'Step 3 — Select Your Trade Skills (multi-select categories)'
+ *     summary: 'Optional — Select Your Trade Skills (multi-select categories)'
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screen:** **Select Your Trade Skills** — grid of Plumbing, Electricians, Carpentry, etc.
+ *       **Figma screen:** **Select Your Trade Skills** — not in current trader onboarding UI batch.
  *
- *       **When to call:** User taps **Save & Continue** after selecting one or more trades.
- *
- *       **Load category list from:** `GET /categories` (public, no auth) — use `id` as `categoryIds[]`.
- *
- *       **Effect:** Enables step 4 category-wise document requirements for each selected trade.
+ *       **Optional.** When categories are selected, category-wise documents become required on submit.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -332,21 +348,23 @@
  * @swagger
  * /traders/onboarding/personal-info:
  *   put:
- *     summary: 'Step 5 (Sole Trader) — Sole Trader Information'
+ *     summary: 'Step 5 (Sole Trader) — Sole Trader Verification'
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screen:** **Sole Trader Information** — Personal Info + Business Address sections.
+ *       **Figma screen:** **Sole Trader Verification** — Personal Info + Business Address + Bank Details + Driving License.
  *
  *       **Use only when:** `entityType = SOLO` (Sole Trader path).
  *
- *       **When to call:** User taps **Save & Continue** on Sole Trader Information screen.
+ *       **One screen = multiple API calls on Save & Continue:**
+ *       1. `PUT /personal-info` — text fields below
+ *       2. `PUT /bank-details` — bank fields from same screen
+ *       3. `PUT /documents` — Driving License file (`documentKey: driving_license`)
  *
- *       **Field mapping:**
+ *       **Field mapping (personal-info):**
  *       - Full Legal Name → `fullLegalName`
  *       - PPS Number → `ppsNumber`
- *       - Professional Bio (max 300 chars) → `bio`
- *       - Work Experience → `yearsExperience`
  *       - Street / City / Postcode → address fields
+ *       - Professional Bio / Work Experience → optional (`bio`, `yearsExperience`)
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -355,7 +373,7 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fullLegalName, ppsNumber, yearsExperience, addressLine1, city, postcode]
+ *             required: [fullLegalName, ppsNumber, addressLine1, city, postcode]
  *             properties:
  *               fullLegalName:
  *                 type: string
@@ -374,6 +392,7 @@
  *                 minimum: 0
  *                 maximum: 80
  *                 example: 8
+ *                 description: Optional on verification screen; defaults to 0 if omitted.
  *               addressLine1:
  *                 type: string
  *                 example: 45 Oak Road
@@ -401,22 +420,23 @@
  * @swagger
  * /traders/onboarding/company-info:
  *   put:
- *     summary: 'Step 5 (Company Trader) — Company Information'
+ *     summary: 'Step 5 (Company Trader) — Company Verification'
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screen:** **Company Information** — Company Details + Director + Address.
+ *       **Figma screen:** **Company Verification** — Company Details + Director + Address + Bank + Photo ID.
  *
  *       **Use only when:** `entityType = COMPANY`.
  *
- *       **When to call:** User taps **Save & Continue** on Company Information screen.
+ *       **One screen = multiple API calls on Save & Continue:**
+ *       1. `PUT /company-info` — text fields below
+ *       2. `PUT /bank-details` — bank fields from same screen
+ *       3. `PUT /documents` — Director Photo ID (`documentKey: director_photo_id`)
  *
- *       **Field mapping:**
+ *       **Field mapping (company-info):**
  *       - Company Name → `companyName`
  *       - Registration (CRO) 8-digit → `croNumber`
  *       - VAT Number → `vatNumber` (optional)
  *       - Director Full Legal Name → `directorFullName`
- *       - Professional Bio → `bio`
- *       - Company Experience → `yearsExperience`
  *       - Registered address → address fields
  *     security:
  *       - bearerAuth: []
@@ -426,7 +446,7 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required: [companyName, croNumber, directorFullName, yearsExperience, addressLine1, city, postcode]
+ *             required: [companyName, croNumber, directorFullName, addressLine1, city, postcode]
  *             properties:
  *               companyName:
  *                 type: string
@@ -475,8 +495,8 @@
  *     tags: ['Trader / Onboarding']
  *     description: |
  *       **Figma screens:**
- *       - **Bank Info Alert** modal — "Add Bank Details" or "Skip for now"
- *       - **Bank Information** form — holder name, bank name, account, IFSC
+ *       - **Sole Trader Verification** / **Company Verification** — bank section on same screen as profile
+ *       - Optional **Bank Info Alert** modal in other builds — "Add Bank Details" or "Skip for now"
  *
  *       **When to call:**
  *       - User fills bank form → send all four bank fields
@@ -534,14 +554,12 @@
  * @swagger
  * /traders/onboarding/service-radius:
  *   put:
- *     summary: 'Step 7 — Service Radius (map + km slider)'
+ *     summary: 'Optional — Service Radius (map + km slider)'
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screen:** **Service Radius** — map with circle, radius km, centre location label.
+ *       **Figma screen:** **Service Radius** — not in current trader onboarding UI batch; optional for later.
  *
- *       **When to call:** User confirms service area before final submit.
- *
- *       **Map integration:** Pass map centre coordinates from picker; `serviceCenterLabel` is display text (e.g. "Dublin, Ireland").
+ *       **Not required for submit** in the current flow. Can be set after approval or in a future release.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -605,16 +623,17 @@
  *     summary: Submit for verification — final step
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screen:** **Submit** button (Sole/Company document verification or Service Radius screen).
+ *       **Figma screen:** **Submit** button on **Sole Trader Document Verification** or **Company Document Verification**.
  *
- *       **When to call:** User completes all required steps and taps **Submit for verification**.
+ *       **When to call:** User completes required documents and taps **Submit**.
  *
  *       **No request body.** Server validates:
- *       - All required entity + category documents uploaded
- *       - Categories selected
- *       - Step 5 profile complete
- *       - Service radius set
+ *       - All required entity documents uploaded (including Driving License / Director Photo ID from verification screen)
+ *       - Category documents — only if trade categories were selected (optional step)
+ *       - Profile + address complete for chosen entity type
  *       - Bank details added OR skipped
+ *
+ *       **Not required for current UI:** trade categories, service radius.
  *
  *       **After success:** `onboardingStatus = SUBMITTED`, `verificationStatus = PENDING` — show "awaiting admin review" UI.
  *
@@ -625,7 +644,7 @@
  *       200:
  *         description: Application submitted for admin review.
  *       400:
- *         description: Validation failed — missing required docs, categories, profile, or service radius.
+ *         description: Validation failed — missing required docs, profile, or bank details.
  *       403:
  *         description: Already submitted — cannot edit.
  */

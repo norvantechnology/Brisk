@@ -18,6 +18,7 @@ import {
   trySendOtp,
   verifyOtp,
 } from './otp.service';
+import { APP_NEXT_STEP, resolveAppNextStep } from '../navigation/app-next-step';
 import type {
   RegisterInput,
   VerifyOtpInput,
@@ -72,15 +73,18 @@ const createAuthTokens = (user: { id: string; email: string; role: string }) => 
   return { accessToken, refreshToken };
 };
 
-const buildSessionPayload = (
+const buildSessionPayload = async (
   user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'>
 ) => {
   const tokens = createAuthTokens(user);
+  const nextStep = await resolveAppNextStep(user);
+
   return {
     requiresOtpVerification: false as const,
     user: toPublicUser(user),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
+    nextStep,
   };
 };
 
@@ -92,6 +96,7 @@ const buildOtpRequiredPayload = async (user: AuthUser) => {
     return {
       requiresOtpVerification: true as const,
       code: 'MOBILE_NOT_VERIFIED' as const,
+      nextStep: APP_NEXT_STEP.VERIFY_PHONE,
       userId: user.id,
       email: user.email,
       mobileNumber: user.mobileNumber,
@@ -107,6 +112,7 @@ const buildOtpRequiredPayload = async (user: AuthUser) => {
   return {
     requiresOtpVerification: true as const,
     code: 'MOBILE_NOT_VERIFIED' as const,
+    nextStep: APP_NEXT_STEP.VERIFY_PHONE,
     userId: user.id,
     email: user.email,
     mobileNumber: user.mobileNumber,
@@ -191,31 +197,23 @@ export const registerUser = async (input: RegisterInput) => {
       role,
       profilePhotoUrl: profilePhotoUrl ?? null,
       mobileVerified: false,
-      emailVerified: role === UserRole.CUSTOMER,
+      emailVerified: true,
       status: UserStatus.PENDING,
     },
   });
 
   await generateOtp(mobileNumber, 'mobile_verification');
 
-  if (role === UserRole.TRADER) {
-    await generateOtp(email, 'email_verification');
-  }
-
   return {
-    message:
-      role === UserRole.TRADER
-        ? 'Registration successful. Verification codes have been sent to your mobile number and email.'
-        : 'Registration successful. Verification code has been sent to your mobile number.',
+    message: 'Registration successful. Verification code has been sent to your mobile number.',
     data: {
       userId: user.id,
       mobileNumber: user.mobileNumber,
       email: user.email,
       role: user.role,
       mobileVerified: false,
-      emailVerified: user.emailVerified,
       requiresOtpVerification: true,
-      requiresEmailVerification: role === UserRole.TRADER,
+      nextStep: APP_NEXT_STEP.VERIFY_PHONE,
       ...getOtpMeta(),
     },
   };
@@ -238,6 +236,7 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
       where: { id: user.id },
       data: {
         mobileVerified: true,
+        emailVerified: user.role === UserRole.TRADER ? true : user.emailVerified,
         status: UserStatus.ACTIVE,
       },
       select: PUBLIC_USER_SELECT,
@@ -247,19 +246,11 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
     return updated;
   });
 
+  const session = await buildSessionPayload({ ...verifiedUser, mobileVerified: true });
+
   return {
     message: 'Mobile number verified successfully. Your account is now active.',
-    data: {
-      ...buildSessionPayload({ ...verifiedUser, mobileVerified: true }),
-      emailVerified: user.emailVerified,
-      requiresEmailVerification: user.role === UserRole.TRADER && !user.emailVerified,
-      nextStep:
-        user.role === UserRole.TRADER && !user.emailVerified
-          ? 'POST /auth/verify-email'
-          : user.role === UserRole.TRADER
-            ? 'POST /traders/onboarding/start'
-            : undefined,
-    },
+    data: session,
   };
 };
 
@@ -309,7 +300,7 @@ export const loginUser = async (input: LoginInput) => {
 
   return {
     message: 'Logged in successfully.',
-    data: buildSessionPayload(user),
+    data: await buildSessionPayload(user),
   };
 };
 
@@ -523,7 +514,7 @@ const applyNewPassword = async (userId: string, newPassword: string) => {
   if (fullUser.mobileVerified) {
     return {
       message: 'Password reset successfully. You are now logged in.',
-      data: buildSessionPayload(updatedUser),
+      data: await buildSessionPayload(updatedUser),
     };
   }
 

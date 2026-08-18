@@ -2,6 +2,7 @@ import { PrismaClient, DocumentRuleScope, TraderType } from '@prisma/client';
 import { logger } from '../../utils/logger';
 
 const soloEntityRules = [
+  { documentKey: 'driving_license', name: 'Driving License', required: true, sortOrder: 0 },
   { documentKey: 'passport', name: 'Passport', required: true, sortOrder: 1 },
   { documentKey: 'bank_statement', name: 'Bank Statement (last 3 Months)', required: false, sortOrder: 2 },
   { documentKey: 'address_proof', name: 'Address Proof', required: false, sortOrder: 3 },
@@ -10,6 +11,7 @@ const soloEntityRules = [
 ];
 
 const companyEntityRules = [
+  { documentKey: 'director_photo_id', name: 'Director Photo ID', required: true, sortOrder: 0 },
   { documentKey: 'garda_vetting', name: 'Garda Vetting disclosure (where appropriate)', required: true, sortOrder: 1 },
   { documentKey: 'trade_certificates', name: 'Trade Certificates', required: false, sortOrder: 2 },
   { documentKey: 'apprenticeship_completion', name: 'Apprenticeship completion certificates', required: false, sortOrder: 3 },
@@ -38,32 +40,59 @@ const categoryRulesBySlug: Record<string, Array<{ documentKey: string; name: str
 };
 
 export async function seedDocumentRules(prisma: PrismaClient): Promise<void> {
-  const existing = await prisma.documentRule.count();
-  if (existing > 0) {
-    logger.info('Document rules already seeded — skipping.');
-    return;
+  const upsertEntityRule = async (
+    traderType: TraderType,
+    rule: { documentKey: string; name: string; required: boolean; sortOrder: number }
+  ) => {
+    const existing = await prisma.documentRule.findFirst({
+      where: {
+        scope: DocumentRuleScope.ENTITY,
+        traderType,
+        categoryId: null,
+        documentKey: rule.documentKey,
+      },
+    });
+
+    if (existing) {
+      await prisma.documentRule.update({
+        where: { id: existing.id },
+        data: {
+          name: rule.name,
+          required: rule.required,
+          sortOrder: rule.sortOrder,
+          status: 'active',
+        },
+      });
+      return;
+    }
+
+    await prisma.documentRule.create({
+      data: {
+        scope: DocumentRuleScope.ENTITY,
+        traderType,
+        documentKey: rule.documentKey,
+        name: rule.name,
+        required: rule.required,
+        sortOrder: rule.sortOrder,
+      },
+    });
+  };
+
+  for (const rule of soloEntityRules) {
+    await upsertEntityRule(TraderType.SOLO, rule);
+  }
+  for (const rule of companyEntityRules) {
+    await upsertEntityRule(TraderType.COMPANY, rule);
   }
 
-  await prisma.documentRule.createMany({
-    data: [
-      ...soloEntityRules.map((rule) => ({
-        scope: DocumentRuleScope.ENTITY,
-        traderType: TraderType.SOLO,
-        documentKey: rule.documentKey,
-        name: rule.name,
-        required: rule.required,
-        sortOrder: rule.sortOrder,
-      })),
-      ...companyEntityRules.map((rule) => ({
-        scope: DocumentRuleScope.ENTITY,
-        traderType: TraderType.COMPANY,
-        documentKey: rule.documentKey,
-        name: rule.name,
-        required: rule.required,
-        sortOrder: rule.sortOrder,
-      })),
-    ],
+  const existingCategoryRules = await prisma.documentRule.count({
+    where: { scope: DocumentRuleScope.CATEGORY },
   });
+  if (existingCategoryRules > 0) {
+    logger.info('Category document rules already seeded — skipping category upsert.');
+    logger.info(`Ensured ${soloEntityRules.length + companyEntityRules.length} entity document rules.`);
+    return;
+  }
 
   const categories = await prisma.category.findMany({
     where: { urlSlug: { in: Object.keys(categoryRulesBySlug) } },

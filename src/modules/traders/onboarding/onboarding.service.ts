@@ -18,7 +18,9 @@ import {
   getStepKey,
   ONBOARDING_STEPS,
   TOTAL_ONBOARDING_STEPS,
+  VERIFICATION_SCREEN_DOCUMENT_KEYS,
 } from './onboarding.constants';
+import { resolveAppNextStep } from '../../navigation/app-next-step';
 import type {
   BankDetailsInput,
   BusinessTypeInput,
@@ -69,6 +71,7 @@ const ensureTraderForUser = async (userId: string) => {
     select: {
       id: true,
       role: true,
+      mobileVerified: true,
       emailVerified: true,
       fullName: true,
       email: true,
@@ -79,12 +82,6 @@ const ensureTraderForUser = async (userId: string) => {
 
   if (!user || user.role !== 'TRADER') {
     throw new ForbiddenError('Trader onboarding is only available for trader accounts.');
-  }
-
-  if (!user.emailVerified) {
-    throw new ForbiddenError('Please verify your email address before starting trader onboarding.', {
-      code: 'EMAIL_NOT_VERIFIED',
-    });
   }
 
   let trader = await prisma.trader.findUnique({
@@ -132,6 +129,69 @@ const mergeStepData = (
   return { ...base, [stepKey]: payload } as Prisma.InputJsonValue;
 };
 
+const isBankComplete = (trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader']) =>
+  trader.bankDetailsSkipped ||
+  Boolean(
+    trader.bankHolderName && trader.bankName && trader.accountNumber && trader.ifscCode
+  );
+
+const hasUploadedDocumentKey = (
+  trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader'],
+  documentKey: string
+) => trader.documents.some((doc) => doc.documentRule.documentKey === documentKey);
+
+const resolveOnboardingScreen = async (
+  trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader'],
+  registration: { entityType: TraderType; stepData: Prisma.JsonValue | null },
+  onboardingStatus: TraderOnboardingStatus
+) => {
+  if (
+    onboardingStatus === TraderOnboardingStatus.SUBMITTED ||
+    onboardingStatus === TraderOnboardingStatus.APPROVED
+  ) {
+    return onboardingStatus === TraderOnboardingStatus.APPROVED ? 'approved' : 'submitted';
+  }
+
+  const stepData =
+    registration.stepData && typeof registration.stepData === 'object' && !Array.isArray(registration.stepData)
+      ? (registration.stepData as Record<string, unknown>)
+      : {};
+
+  if (!stepData.business_type) {
+    return 'business_verification';
+  }
+
+  const verificationDocKey = VERIFICATION_SCREEN_DOCUMENT_KEYS[registration.entityType];
+  const profileMissing = validateProfileComplete(trader, registration.entityType);
+
+  if (
+    profileMissing.length ||
+    !isBankComplete(trader) ||
+    !hasUploadedDocumentKey(trader, verificationDocKey)
+  ) {
+    return registration.entityType === TraderType.COMPANY
+      ? 'company_verification'
+      : 'sole_trader_verification';
+  }
+
+  const categoryIds = trader.categories.map((item) => item.categoryId);
+  const { complete } = await validateRequiredDocumentsUploaded(
+    trader.id,
+    registration.entityType,
+    categoryIds
+  );
+
+  if (!complete) {
+    return registration.entityType === TraderType.COMPANY
+      ? 'company_document_verification'
+      : 'sole_trader_document_verification';
+  }
+
+  return registration.entityType === TraderType.COMPANY
+    ? 'company_document_verification'
+    : 'sole_trader_document_verification';
+};
+
 const serializeOnboardingStatus = async (
   _userId: string,
   trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader'],
@@ -139,6 +199,12 @@ const serializeOnboardingStatus = async (
 ) => {
   const categoryIds = trader.categories.map((item) => item.categoryId);
   const requirements = await getDocumentRequirementsForTrader(registration.entityType, categoryIds);
+  const nextScreen = await resolveOnboardingScreen(trader, registration, trader.onboardingStatus);
+  const nextStep = await resolveAppNextStep({
+    id: _userId,
+    role: 'TRADER',
+    mobileVerified: true,
+  });
 
   const steps = Array.from({ length: TOTAL_ONBOARDING_STEPS }, (_, index) => {
     const stepNumber = index + 1;
@@ -158,6 +224,8 @@ const serializeOnboardingStatus = async (
     currentStep: registration.currentStep,
     totalSteps: TOTAL_ONBOARDING_STEPS,
     currentStepKey: getStepKey(registration.currentStep, registration.entityType),
+    nextStep,
+    onboardingScreen: nextScreen,
     steps,
     stepData: registration.stepData ?? {},
     selectedCategories: trader.categories.map((item) => item.category),
@@ -219,15 +287,18 @@ const serializeOnboardingStatus = async (
 };
 
 export const getOnboardingStatus = async (userId: string) => {
-  const { trader } = await ensureTraderForUser(userId);
+  const { trader, user } = await ensureTraderForUser(userId);
 
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
   if (!registration) {
+    const nextStep = await resolveAppNextStep(user);
     return {
       started: false,
+      nextStep,
+      onboardingScreen: 'business_verification',
       onboardingStatus: trader.onboardingStatus,
       verificationStatus: trader.verificationStatus,
-      message: 'Trader onboarding not started. Call POST /traders/onboarding/start.',
+      message: 'Trader onboarding not started. Call POST /traders/onboarding/start when entering onboarding.',
     };
   }
 
@@ -483,7 +554,7 @@ export const saveSoloProfile = async (userId: string, input: SoloProfileInput) =
         fullLegalName: input.fullLegalName,
         ppsNumber: input.ppsNumber,
         bio: input.bio,
-        yearsExperience: input.yearsExperience,
+        yearsExperience: input.yearsExperience ?? 0,
         addressLine1: input.addressLine1,
         addressLine2: input.addressLine2,
         city: input.city,
@@ -521,7 +592,7 @@ export const saveCompanyProfile = async (userId: string, input: CompanyProfileIn
         vatNumber: input.vatNumber,
         directorFullName: input.directorFullName,
         bio: input.bio,
-        yearsExperience: input.yearsExperience,
+        yearsExperience: input.yearsExperience ?? 0,
         addressLine1: input.addressLine1,
         addressLine2: input.addressLine2,
         city: input.city,
@@ -646,10 +717,6 @@ export const submitOnboarding = async (userId: string) => {
     throw new BadRequestError('Start onboarding first via POST /traders/onboarding/start.');
   }
 
-  if (!trader.categories.length) {
-    throw new BadRequestError('Select at least one trade category before submitting.');
-  }
-
   const profileMissing = validateProfileComplete(trader, registration.entityType);
   if (profileMissing.length) {
     throw new BadRequestError(`Complete your profile information. Missing: ${profileMissing.join(', ')}`);
@@ -659,10 +726,6 @@ export const submitOnboarding = async (userId: string) => {
     if (!trader.bankHolderName || !trader.bankName || !trader.accountNumber || !trader.ifscCode) {
       throw new BadRequestError('Add bank details or choose "Skip for now" before submitting.');
     }
-  }
-
-  if (!trader.serviceRadiusKm || trader.serviceCenterLat == null || trader.serviceCenterLng == null) {
-    throw new BadRequestError('Set your service radius before submitting.');
   }
 
   const categoryIds = trader.categories.map((item) => item.categoryId);

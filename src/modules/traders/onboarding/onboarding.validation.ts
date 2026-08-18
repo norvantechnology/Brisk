@@ -41,7 +41,7 @@ export const soloProfileSchema = z.object({
     fullLegalName: z.string().trim().min(2).max(255),
     ppsNumber: z.string().trim().min(1).max(20),
     bio: z.string().trim().max(300).optional(),
-    yearsExperience: z.number().int().min(0).max(80),
+    yearsExperience: z.number().int().min(0).max(80).optional(),
     ...addressFields,
   }),
 });
@@ -53,7 +53,7 @@ export const companyProfileSchema = z.object({
     vatNumber: z.string().trim().min(1).max(20).optional(),
     directorFullName: z.string().trim().min(2).max(255),
     bio: z.string().trim().max(300).optional(),
-    yearsExperience: z.number().int().min(0).max(80),
+    yearsExperience: z.number().int().min(0).max(80).optional(),
     ...addressFields,
   }),
 });
