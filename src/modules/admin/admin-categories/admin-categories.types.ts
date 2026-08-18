@@ -6,6 +6,8 @@ export interface CategoryQueryFilters {
   search?: string;
   status?: string;
   featured?: boolean;
+  sortBy?: string;
+  sortOrder?: string;
 }
 
 export interface SubcategoryQueryFilters {
@@ -15,6 +17,8 @@ export interface SubcategoryQueryFilters {
   categoryId?: string;
   status?: string;
   featured?: boolean;
+  sortBy?: string;
+  sortOrder?: string;
 }
 
 export interface CreateCategoryInput {

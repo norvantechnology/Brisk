@@ -15,6 +15,24 @@ import { serializeCategory, serializeSubcategory } from '../../categories/catego
 // CATEGORY MASTER SERVICES
 // ==========================================
 
+const CATEGORY_SORT_FIELDS: Record<string, string> = {
+  name: 'name',
+  categoryCode: 'categoryCode',
+  displayOrder: 'displayOrder',
+  status: 'status',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+};
+
+const SUBCATEGORY_SORT_FIELDS: Record<string, string> = {
+  name: 'name',
+  code: 'code',
+  urlSlug: 'urlSlug',
+  status: 'status',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+};
+
 export const listCategories = async (filters: CategoryQueryFilters) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
@@ -39,13 +57,17 @@ export const listCategories = async (filters: CategoryQueryFilters) => {
     where.featured = String(filters.featured) === 'true';
   }
 
+  const sortField = CATEGORY_SORT_FIELDS[filters.sortBy ?? ''] ?? 'createdAt';
+  const sortDir: 'asc' | 'desc' = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+  const orderBy = { [sortField]: sortDir } as Prisma.CategoryOrderByWithRelationInput;
+
   const [total, categories] = await Promise.all([
     prisma.category.count({ where }),
     prisma.category.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { displayOrder: 'asc' },
+      orderBy,
       include: {
         _count: {
           select: {
@@ -261,13 +283,17 @@ export const listSubcategories = async (filters: SubcategoryQueryFilters) => {
     where.featured = String(filters.featured) === 'true';
   }
 
+  const subSortField = SUBCATEGORY_SORT_FIELDS[filters.sortBy ?? ''] ?? 'createdAt';
+  const subSortDir: 'asc' | 'desc' = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+  const subOrderBy = { [subSortField]: subSortDir } as Prisma.SubcategoryOrderByWithRelationInput;
+
   const [total, subcategories] = await Promise.all([
     prisma.subcategory.count({ where }),
     prisma.subcategory.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { name: 'asc' },
+      orderBy: subOrderBy,
       include: {
         category: {
           select: {
@@ -433,6 +459,41 @@ export const updateSubcategory = async (
       categoryCode: updatedSubcategory.category.categoryCode,
     },
   });
+};
+
+// ==========================================
+// DROPDOWN HELPERS (no pagination, alphabetic)
+// ==========================================
+
+export const listCategoriesDropdown = async () => {
+  const categories = await prisma.category.findMany({
+    orderBy: { name: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      categoryCode: true,
+      status: true,
+    },
+  });
+  return categories;
+};
+
+export const listSubcategoriesDropdown = async (categoryId?: string) => {
+  const subcategories = await prisma.subcategory.findMany({
+    where: categoryId ? { categoryId } : undefined,
+    orderBy: { name: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      status: true,
+      categoryId: true,
+      category: {
+        select: { id: true, name: true, categoryCode: true },
+      },
+    },
+  });
+  return subcategories;
 };
 
 export const deleteSubcategory = async (adminId: string, adminLabel: string, id: string) => {

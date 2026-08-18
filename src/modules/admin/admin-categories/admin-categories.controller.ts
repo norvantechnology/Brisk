@@ -182,6 +182,33 @@ export const updateSubcategory = async (
   }
 };
 
+export const listCategoriesDropdown = async (
+  _req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await categoryAdminService.listCategoriesDropdown();
+    sendResponse({ res, statusCode: 200, message: 'Categories dropdown retrieved.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listSubcategoriesDropdown = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const categoryId = typeof req.query.categoryId === 'string' ? req.query.categoryId : undefined;
+    const data = await categoryAdminService.listSubcategoriesDropdown(categoryId);
+    sendResponse({ res, statusCode: 200, message: 'Sub-categories dropdown retrieved.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const deleteSubcategory = async (
   req: AuthenticatedAdminRequest,
   res: Response,

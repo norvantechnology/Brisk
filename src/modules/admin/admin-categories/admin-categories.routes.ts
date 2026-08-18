@@ -50,6 +50,14 @@ router.use(adminAuthMiddleware);
  *         name: featured
  *         schema: { type: boolean }
  *         description: Filter featured categories.
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [name, categoryCode, displayOrder, status, createdAt, updatedAt] }
+ *         description: Column to sort by. Defaults to `createdAt`.
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc] }
+ *         description: Sort direction. Defaults to `desc` (newest first).
  *     responses:
  *       200:
  *         description: Master Categories retrieved successfully.
@@ -57,6 +65,23 @@ router.use(adminAuthMiddleware);
  *         description: Missing or invalid Admin JWT token.
  */
 router.get('/categories', validate(categoryFilterSchema), categoryAdminController.listCategories);
+
+/**
+ * @swagger
+ * /admin/categories/dropdown:
+ *   get:
+ *     summary: All categories for dropdown (no pagination, alphabetic order)
+ *     tags: ['Admin / Categories']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns **all** categories (active + inactive) sorted A–Z by name. No `page`/`limit`.
+ *       Use this to populate select/dropdown inputs in the admin UI (e.g. when creating a sub-category).
+ *     responses:
+ *       200:
+ *         description: Flat array of `{ id, name, categoryCode, status }` objects.
+ */
+router.get('/categories/dropdown', categoryAdminController.listCategoriesDropdown);
 
 /**
  * @swagger
@@ -211,11 +236,42 @@ router.delete('/categories/:id', validate(idParamSchema), categoryAdminControlle
  *       - in: query
  *         name: featured
  *         schema: { type: boolean }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [name, code, urlSlug, status, createdAt, updatedAt] }
+ *         description: Column to sort by. Defaults to `createdAt`.
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc] }
+ *         description: Sort direction. Defaults to `desc` (newest first).
  *     responses:
  *       200:
  *         description: Sub-Categories retrieved successfully matching Screenshot 4 format.
  */
 router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminController.listSubcategories);
+
+/**
+ * @swagger
+ * /admin/sub-categories/dropdown:
+ *   get:
+ *     summary: All sub-categories for dropdown (no pagination, alphabetic order)
+ *     tags: ['Admin / Sub-Categories']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns **all** sub-categories sorted A–Z by name. No `page`/`limit`.
+ *       Optionally filter by `categoryId` to get sub-categories for one parent category.
+ *       Use to populate sub-category select inputs in the admin UI.
+ *     parameters:
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string, format: uuid }
+ *         description: Optional. Filter by parent category UUID.
+ *     responses:
+ *       200:
+ *         description: Flat array of `{ id, name, code, status, categoryId, category }` objects.
+ */
+router.get('/sub-categories/dropdown', categoryAdminController.listSubcategoriesDropdown);
 
 /**
  * @swagger

@@ -127,6 +127,8 @@ export const categoryFilterSchema = z.object({
     search: z.string().optional(),
     status: z.string().optional(),
     featured: z.string().optional(),
+    sortBy: z.enum(['name', 'categoryCode', 'displayOrder', 'status', 'createdAt', 'updatedAt']).optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional(),
   }),
 });
 
@@ -139,6 +141,8 @@ export const subcategoryFilterSchema = z.object({
     category_id: z.string().optional(),
     status: z.string().optional(),
     featured: z.string().optional(),
+    sortBy: z.enum(['name', 'code', 'urlSlug', 'status', 'createdAt', 'updatedAt']).optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional(),
   }).transform((query) => ({
     ...query,
     categoryId: query.categoryId ?? query.category_id,
