@@ -25,6 +25,13 @@ export const ONBOARDING_SCREEN = {
 
 export type OnboardingScreen = (typeof ONBOARDING_SCREEN)[keyof typeof ONBOARDING_SCREEN];
 
+export type SessionExtras = {
+  nextStep: AppNextStep;
+  /** true only when trader is fully approved and can use all app features */
+  traderAccountActive: boolean;
+  onboarding: TraderOnboardingSnapshot | null;
+};
+
 export type TraderOnboardingSnapshot = {
   onboardingScreen: OnboardingScreen;
   entityType: string | null;
@@ -134,13 +141,10 @@ const buildTraderOnboardingSnapshot = async (userId: string): Promise<TraderOnbo
   };
 };
 
-const resolveTraderNextStep = async (userId: string): Promise<{
-  nextStep: AppNextStep;
-  onboarding: TraderOnboardingSnapshot | null;
-}> => {
+const resolveTraderNextStep = async (userId: string): Promise<SessionExtras> => {
   const trader = await prisma.trader.findUnique({
     where: { userId },
-    select: { onboardingStatus: true },
+    select: { onboardingStatus: true, verificationStatus: true },
   });
 
   if (
@@ -150,14 +154,15 @@ const resolveTraderNextStep = async (userId: string): Promise<{
     trader.onboardingStatus === TraderOnboardingStatus.REJECTED
   ) {
     const onboarding = await buildTraderOnboardingSnapshot(userId);
-    return { nextStep: APP_NEXT_STEP.TRADER_ONBOARDING, onboarding };
+    return { nextStep: APP_NEXT_STEP.TRADER_ONBOARDING, traderAccountActive: false, onboarding };
   }
 
   if (trader.onboardingStatus === TraderOnboardingStatus.SUBMITTED) {
-    return { nextStep: APP_NEXT_STEP.TRADER_PENDING_APPROVAL, onboarding: null };
+    return { nextStep: APP_NEXT_STEP.TRADER_PENDING_APPROVAL, traderAccountActive: false, onboarding: null };
   }
 
-  return { nextStep: APP_NEXT_STEP.TRADER_HOME, onboarding: null };
+  // APPROVED
+  return { nextStep: APP_NEXT_STEP.TRADER_HOME, traderAccountActive: true, onboarding: null };
 };
 
 export const resolveAppNextStep = async (user: {
@@ -177,12 +182,12 @@ export const resolveSessionExtras = async (user: {
   id: string;
   role: UserRole | string;
   mobileVerified: boolean;
-}): Promise<{ nextStep: AppNextStep; onboarding: TraderOnboardingSnapshot | null }> => {
+}): Promise<SessionExtras> => {
   if (!user.mobileVerified) {
-    return { nextStep: APP_NEXT_STEP.VERIFY_PHONE, onboarding: null };
+    return { nextStep: APP_NEXT_STEP.VERIFY_PHONE, traderAccountActive: false, onboarding: null };
   }
   if (user.role === UserRole.TRADER) {
     return resolveTraderNextStep(user.id);
   }
-  return { nextStep: APP_NEXT_STEP.CUSTOMER_HOME, onboarding: null };
+  return { nextStep: APP_NEXT_STEP.CUSTOMER_HOME, traderAccountActive: false, onboarding: null };
 };

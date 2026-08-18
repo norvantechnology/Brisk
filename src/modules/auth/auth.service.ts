@@ -77,7 +77,7 @@ const buildSessionPayload = async (
   user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'>
 ) => {
   const tokens = createAuthTokens(user);
-  const { nextStep, onboarding } = await resolveSessionExtras(user);
+  const { nextStep, traderAccountActive, onboarding } = await resolveSessionExtras(user);
 
   return {
     requiresOtpVerification: false as const,
@@ -85,6 +85,7 @@ const buildSessionPayload = async (
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     nextStep,
+    traderAccountActive,
     onboarding,
   };
 };
