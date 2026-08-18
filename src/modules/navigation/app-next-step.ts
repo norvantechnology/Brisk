@@ -77,7 +77,9 @@ const resolveOnboardingScreen = async (
 
   const uploadedKeys = trader.documents.map((d) => d.documentRule.documentKey);
   const verificationDocKey = entityType === 'COMPANY' ? 'director_photo_id' : 'driving_license';
-  const hasVerificationDoc = uploadedKeys.includes(verificationDocKey);
+  // Driving license is optional for now (no upload field on Sole Trader Verification).
+  const needsVerificationDoc =
+    entityType === 'COMPANY' && !uploadedKeys.includes(verificationDocKey);
 
   const profileMissing =
     entityType === 'SOLO'
@@ -88,7 +90,7 @@ const resolveOnboardingScreen = async (
     trader.bankDetailsSkipped ||
     Boolean(trader.bankHolderName && trader.bankName && trader.accountNumber && trader.ifscCode);
 
-  if (profileMissing || !bankDone || !hasVerificationDoc) {
+  if (profileMissing || !bankDone || needsVerificationDoc) {
     return entityType === 'COMPANY'
       ? ONBOARDING_SCREEN.COMPANY_VERIFICATION
       : ONBOARDING_SCREEN.SOLE_TRADER_VERIFICATION;

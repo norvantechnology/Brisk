@@ -2,7 +2,7 @@ import { PrismaClient, DocumentRuleScope, TraderType } from '@prisma/client';
 import { logger } from '../../utils/logger';
 
 const soloEntityRules = [
-  { documentKey: 'driving_license', name: 'Driving License', required: true, sortOrder: 0 },
+  { documentKey: 'driving_license', name: 'Driving License', required: false, sortOrder: 0 },
   { documentKey: 'passport', name: 'Passport', required: true, sortOrder: 1 },
   { documentKey: 'bank_statement', name: 'Bank Statement (last 3 Months)', required: false, sortOrder: 2 },
   { documentKey: 'address_proof', name: 'Address Proof', required: false, sortOrder: 3 },

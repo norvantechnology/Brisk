@@ -163,12 +163,12 @@ const resolveOnboardingScreen = async (
 
   const verificationDocKey = VERIFICATION_SCREEN_DOCUMENT_KEYS[registration.entityType];
   const profileMissing = validateProfileComplete(trader, registration.entityType);
+  // Driving license is optional for now (no upload field on Sole Trader Verification).
+  const needsVerificationDoc =
+    registration.entityType === TraderType.COMPANY &&
+    !hasUploadedDocumentKey(trader, verificationDocKey);
 
-  if (
-    profileMissing.length ||
-    !isBankComplete(trader) ||
-    !hasUploadedDocumentKey(trader, verificationDocKey)
-  ) {
+  if (profileMissing.length || !isBankComplete(trader) || needsVerificationDoc) {
     return registration.entityType === TraderType.COMPANY
       ? 'company_verification'
       : 'sole_trader_verification';
