@@ -28,16 +28,23 @@ export const authMiddleware = async (
       id: string;
       email: string;
       role: 'CUSTOMER' | 'TRADER';
+      tv?: number;
     };
 
-    // Verify user still exists in database
+    // Verify user still exists and this token has not been revoked (e.g. trader approved).
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, role: true },
+      select: { id: true, email: true, role: true, tokenVersion: true },
     });
 
     if (!user) {
       throw new UnauthorizedError('User session no longer valid.');
+    }
+
+    if ((decoded.tv ?? 0) !== user.tokenVersion) {
+      throw new UnauthorizedError('Session expired. Please log in again.', {
+        code: 'SESSION_INVALIDATED',
+      });
     }
 
     req.user = {

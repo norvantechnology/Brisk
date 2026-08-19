@@ -334,7 +334,9 @@ router.post('/resend-email-otp', validate(resendEmailOtpSchema), authController.
  *       200:
  *         description: Access token refreshed successfully.
  *       401:
- *         description: Invalid or expired refresh token.
+ *         description: |
+ *           Invalid, expired, or revoked token. After admin approves a trader,
+ *           existing tokens return `data.code = SESSION_INVALIDATED` — send the user to login.
  */
 router.post('/refresh', validate(refreshSchema), authController.refresh);
 

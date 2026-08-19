@@ -70,9 +70,15 @@ router.get(
  *     tags: ['Admin / Trader Verification']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Approve (`VERIFIED`) or reject (`REJECTED`) a submitted trader application.
+ *
+ *       On **approve**, the trader's existing access and refresh tokens are revoked immediately
+ *       so the app logs them out. They must log in again to receive `nextStep: TRADER_HOME`.
+ *       Mobile should treat `401` with `data.code = SESSION_INVALIDATED` as a forced logout.
  *     responses:
  *       200:
- *         description: Verification updated.
+ *         description: Verification updated. Approved traders are logged out of existing sessions.
  */
 router.patch(
   '/trader-verification/:traderId',

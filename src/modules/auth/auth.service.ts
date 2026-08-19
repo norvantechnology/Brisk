@@ -57,15 +57,16 @@ const toPublicUser = (
   mobileVerified: mobileVerifiedOverride ?? user.mobileVerified,
 });
 
-const createAuthTokens = (user: { id: string; email: string; role: string }) => {
+const createAuthTokens = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
+  const tokenVersion = user.tokenVersion ?? 0;
   const accessToken = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, type: 'user_access' },
+    { id: user.id, email: user.email, role: user.role, type: 'user_access', tv: tokenVersion },
     env.JWT_SECRET,
     { expiresIn: '15m' }
   );
 
   const refreshToken = jwt.sign(
-    { id: user.id, type: 'user_refresh' },
+    { id: user.id, type: 'user_refresh', tv: tokenVersion },
     env.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -73,8 +74,13 @@ const createAuthTokens = (user: { id: string; email: string; role: string }) => 
   return { accessToken, refreshToken };
 };
 
+export const isTokenVersionValid = (tokenVersion: number | undefined, currentVersion: number) =>
+  (tokenVersion ?? 0) === currentVersion;
+
 const buildSessionPayload = async (
-  user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'>
+  user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'> & {
+    tokenVersion?: number;
+  }
 ) => {
   const tokens = createAuthTokens(user);
   const { nextStep, traderAccountActive, onboarding } = await resolveSessionExtras(user);
@@ -308,7 +314,7 @@ export const loginUser = async (input: LoginInput) => {
 
 export const refreshUserSession = async (token: string) => {
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as { id: string; type?: string };
+    const decoded = jwt.verify(token, env.JWT_SECRET) as { id: string; type?: string; tv?: number };
 
     if (decoded.type && decoded.type !== 'user_refresh') {
       throw new UnauthorizedError('Invalid or expired refresh token.');
@@ -316,11 +322,17 @@ export const refreshUserSession = async (token: string) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, role: true, status: true, mobileVerified: true },
+      select: { id: true, email: true, role: true, status: true, mobileVerified: true, tokenVersion: true },
     });
 
     if (!user) {
       throw new UnauthorizedError('User session no longer exists.');
+    }
+
+    if (!isTokenVersionValid(decoded.tv, user.tokenVersion)) {
+      throw new UnauthorizedError('Session expired. Please log in again.', {
+        code: 'SESSION_INVALIDATED',
+      });
     }
 
     assertAccountCanAuthenticate(user);

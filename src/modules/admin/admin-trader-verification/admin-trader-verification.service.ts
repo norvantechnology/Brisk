@@ -170,7 +170,7 @@ export const reviewTraderVerification = async (
       ? TraderOnboardingStatus.APPROVED
       : TraderOnboardingStatus.REJECTED;
 
-  await prisma.$transaction([
+  const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.trader.update({
       where: { id: traderId },
       data: {
@@ -185,7 +185,18 @@ export const reviewTraderVerification = async (
         status: input.verificationStatus === 'VERIFIED' ? 'approved' : 'rejected',
       },
     }),
-  ]);
+  ];
+
+  if (input.verificationStatus === 'VERIFIED') {
+    ops.push(
+      prisma.user.update({
+        where: { id: trader.userId },
+        data: { tokenVersion: { increment: 1 } },
+      })
+    );
+  }
+
+  await prisma.$transaction(ops);
 
   return getTraderVerificationDetail(traderId);
 };

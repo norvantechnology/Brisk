@@ -246,6 +246,8 @@ model User {
   emailNotifications Boolean    @default(true) @map("email_notifications")
   smsAlerts          Boolean    @default(true) @map("sms_alerts")
   promoNotifications Boolean    @default(false) @map("promo_notifications")
+  /// Bumped to revoke all issued JWTs (access + refresh). Missing `tv` on old tokens is treated as 0.
+  tokenVersion       Int        @default(0) @map("token_version")
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
 

@@ -18,13 +18,28 @@ router.use('/offers', traderOffersRoutes);
  * @swagger
  * /traders/me:
  *   get:
- *     summary: Get authenticated Trader business profile and stats
+ *     summary: Get authenticated Trader profile (Profile screen)
  *     tags: ['Trader / Profile']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       **Use on:** Trader app Profile tab.
+ *
+ *       `data` is a flat object (plus nested `user`, `bankDetails`, `certifications`, `offers`, `notifications`).
+ *
+ *       **Header card:** `fullName`, `profilePhotoUrl`, `email`, `mobileCountryCode` + `mobileNumber`
+ *       **Completion card:** `profileCompletionPercent`, `profileCompletionHint`, `missingProfileItems`
+ *       **Verification badge:** `verificationStatus` (`VERIFIED` / `PENDING` / `REJECTED`)
+ *       **Bank Details badge:** `bankDetails.status` (`VERIFIED` or `MISSING`)
+ *       **Certifications row:** `certifications.activeDocumentsCount` ("4 Active Documents")
+ *       **Categories row:** `selectedCategories` / `categoriesCount`
+ *       **Offers row:** `offers.activeCount` — list via `GET /traders/offers`
+ *
+ *       Menu rows (Personal Information, Payouts, Tax, Earnings, Help, TOS, Privacy) are navigation only.
+ *       Notification toggles live in `notifications` and can be updated with `PATCH /users/me`.
  *     responses:
  *       200:
- *         description: Trader profile retrieved successfully.
+ *         description: Profile payload for the Profile screen.
  *       403:
  *         description: User is not a trader.
  */
