@@ -50,12 +50,42 @@ export const listEntityDocumentRules = async (traderType: TraderType) => {
   return rules.map(serializeRule);
 };
 
+export const listAdminEntityDocumentRules = async (
+  traderType: TraderType,
+  status?: string
+) => {
+  const rules = await prisma.documentRule.findMany({
+    where: {
+      scope: DocumentRuleScope.ENTITY,
+      traderType,
+      ...(status ? { status } : {}),
+    },
+    orderBy: { sortOrder: 'asc' },
+  });
+  return rules.map(serializeRule);
+};
+
 export const listCategoryDocumentRulesByCategoryId = async (categoryId: string) => {
   const rules = await prisma.documentRule.findMany({
     where: {
       scope: DocumentRuleScope.CATEGORY,
       categoryId,
       status: 'active',
+    },
+    orderBy: { sortOrder: 'asc' },
+  });
+  return rules.map(serializeRule);
+};
+
+export const listAdminCategoryDocumentRules = async (
+  categoryId: string,
+  status?: string
+) => {
+  const rules = await prisma.documentRule.findMany({
+    where: {
+      scope: DocumentRuleScope.CATEGORY,
+      categoryId,
+      ...(status ? { status } : {}),
     },
     orderBy: { sortOrder: 'asc' },
   });
@@ -206,7 +236,7 @@ export const replaceEntityDocumentRules = async (
     }
   });
 
-  return listEntityDocumentRules(traderType);
+  return listAdminEntityDocumentRules(traderType);
 };
 
 export const replaceCategoryDocumentRules = async (

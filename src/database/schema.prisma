@@ -114,6 +114,18 @@ enum DiscountType {
   FREE_SERVICE
 }
 
+enum OfferClaimStatus {
+  CLAIMED
+  USED
+  EXPIRED
+  CANCELLED
+}
+
+enum OfferCtaAction {
+  CLAIM
+  BOOK_INSPECTION
+}
+
 enum UserStatus {
   ACTIVE
   INACTIVE
@@ -252,6 +264,7 @@ model User {
   chatMessages           ChatMessage[]
   notifications          Notification[]
   accountDeletionRequest AccountDeletionRequest?
+  offerClaims            OfferClaim[]
 
   @@map("users")
 }
@@ -725,6 +738,8 @@ model Offer {
   claimsCount      Int          @default(0) @map("claims_count")
   revenueGenerated Decimal      @default(0.0) @map("revenue_generated") @db.Decimal(10, 2)
   viewsCount       Int          @default(0) @map("views_count")
+  ctaLabel         String?      @map("cta_label")
+  ctaAction        OfferCtaAction @default(CLAIM) @map("cta_action")
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
@@ -735,6 +750,7 @@ model Offer {
   subcategories OfferSubcategory[]
   jobsApplied   Job[]
   promoCodes    PromoCode[]
+  claims        OfferClaim[]
 
   @@map("offers")
 }
@@ -773,6 +789,25 @@ model OfferSubcategory {
 
   @@id([offerId, subcategoryId])
   @@map("offer_subcategories")
+}
+
+model OfferClaim {
+  id        String           @id @default(uuid()) @db.Uuid
+  offerId   String           @map("offer_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  jobId     String?          @map("job_id") @db.Uuid
+  status    OfferClaimStatus @default(CLAIMED)
+  claimedAt DateTime         @default(now()) @map("claimed_at")
+  usedAt    DateTime?        @map("used_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, userId])
+  @@index([userId, status])
+  @@map("offer_claims")
 }
 
 model PromoCode {

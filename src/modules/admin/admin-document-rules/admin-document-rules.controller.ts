@@ -2,8 +2,8 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
 import {
-  listEntityDocumentRules,
-  listCategoryDocumentRulesByCategoryId,
+  listAdminEntityDocumentRules,
+  listAdminCategoryDocumentRules,
   replaceEntityDocumentRules,
   replaceCategoryDocumentRules,
   createEntityDocumentRule,
@@ -19,7 +19,8 @@ export const getEntityRules = async (
 ): Promise<void> => {
   try {
     const traderType = traderTypeFromParam(req.params.traderType);
-    const rules = await listEntityDocumentRules(traderType);
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const rules = await listAdminEntityDocumentRules(traderType, status);
     sendResponse({
       res,
       statusCode: 200,
@@ -111,7 +112,8 @@ export const getCategoryRules = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const rules = await listCategoryDocumentRulesByCategoryId(req.params.categoryId);
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const rules = await listAdminCategoryDocumentRules(req.params.categoryId, status);
     sendResponse({
       res,
       statusCode: 200,

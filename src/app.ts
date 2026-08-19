@@ -28,6 +28,8 @@ import adminContactRoutes from './modules/admin/admin-contact/admin-contact.rout
 import adminDocumentRulesRoutes from './modules/admin/admin-document-rules/admin-document-rules.routes';
 import adminTraderVerificationRoutes from './modules/admin/admin-trader-verification/admin-trader-verification.routes';
 import homePublicRoutes from './modules/cms/home-public.routes';
+import adminOffersRoutes from './modules/admin/admin-offers/admin-offers.routes';
+import publicOffersRoutes from './modules/offers/public-offers.routes';
 
 const app = express();
 
@@ -55,6 +57,7 @@ app.use('/admin', adminCategoryRoutes);
 app.use('/admin', adminCustomerRoutes);
 app.use('/admin', adminDocumentRulesRoutes);
 app.use('/admin', adminTraderVerificationRoutes);
+app.use('/admin', adminOffersRoutes);
 app.use('/admin/cms', adminCmsRoutes);
 app.use('/admin/cms', adminContactRoutes);
 app.use('/admin/blog/categories', adminBlogCategoryRoutes);
@@ -69,6 +72,7 @@ app.use('/testimonials', testimonialsPublicRoutes);
 app.use('/categories', categoriesRouter);
 app.use('/sub-categories', subcategoriesRouter);
 app.use('/contact', contactRoutes);
+app.use('/', publicOffersRoutes);
 
 /**
  * @swagger

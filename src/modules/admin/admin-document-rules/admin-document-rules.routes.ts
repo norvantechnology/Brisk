@@ -4,11 +4,12 @@ import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-document-rules.controller';
 import {
   categoryDocumentRulesSchema,
-  categoryIdParamSchema,
+  categoryDocumentRuleListSchema,
   createCategoryDocumentRuleSchema,
   createEntityDocumentRuleSchema,
   documentRuleIdParamSchema,
   entityDocumentRulesSchema,
+  entityDocumentRuleListSchema,
 } from './admin-document-rules.validation';
 
 const router = Router();
@@ -54,9 +55,14 @@ router.use(adminAuthMiddleware);
  *         name: traderType
  *         required: true
  *         schema: { type: string, enum: [SOLO, COMPANY] }
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema: { type: string, enum: [active, inactive] }
+ *         description: Optional. Omit to return all records (active + inactive). Pass `active` or `inactive` to filter.
  *     responses:
  *       200:
- *         description: Entity document rules retrieved.
+ *         description: Entity document rules retrieved (all statuses unless `status` query is passed).
  *   post:
  *     summary: Add one entity document rule (SOLO or COMPANY)
  *     tags: ['Admin / Document Rules']
@@ -126,7 +132,11 @@ router.use(adminAuthMiddleware);
  *       200:
  *         description: Entity document rules replaced.
  */
-router.get('/document-rules/entity/:traderType', controller.getEntityRules);
+router.get(
+  '/document-rules/entity/:traderType',
+  validate(entityDocumentRuleListSchema),
+  controller.getEntityRules
+);
 router.post(
   '/document-rules/entity/:traderType',
   validate(createEntityDocumentRuleSchema),
@@ -177,9 +187,14 @@ router.delete(
  *         name: categoryId
  *         required: true
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema: { type: string, enum: [active, inactive] }
+ *         description: Optional. Omit to return all records (active + inactive). Pass `active` or `inactive` to filter.
  *     responses:
  *       200:
- *         description: Category document rules retrieved.
+ *         description: Category document rules retrieved (all statuses unless `status` query is passed).
  *   post:
  *     summary: Add one category document rule
  *     tags: ['Admin / Document Rules']
@@ -244,7 +259,7 @@ router.delete(
  */
 router.get(
   '/categories/:categoryId/document-rules',
-  validate(categoryIdParamSchema),
+  validate(categoryDocumentRuleListSchema),
   controller.getCategoryRules
 );
 router.post(

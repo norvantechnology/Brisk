@@ -5,12 +5,14 @@ import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
 import { updateTraderProfileSchema } from './traders.validation';
 import onboardingRoutes from './onboarding/onboarding.routes';
+import traderOffersRoutes from './offers/trader-offers.routes';
 
 const router = Router();
 
 router.use('/onboarding', onboardingRoutes);
 
 router.use(authMiddleware, roleMiddleware(['TRADER']));
+router.use('/offers', traderOffersRoutes);
 
 /**
  * @swagger

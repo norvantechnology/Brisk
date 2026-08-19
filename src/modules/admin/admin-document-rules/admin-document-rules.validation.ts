@@ -55,6 +55,24 @@ export const categoryIdParamSchema = z.object({
   }),
 });
 
+export const entityDocumentRuleListSchema = z.object({
+  params: z.object({
+    traderType: z.enum(['SOLO', 'COMPANY']),
+  }),
+  query: z.object({
+    status: z.enum(['active', 'inactive']).optional(),
+  }),
+});
+
+export const categoryDocumentRuleListSchema = z.object({
+  params: z.object({
+    categoryId: z.string().uuid(),
+  }),
+  query: z.object({
+    status: z.enum(['active', 'inactive']).optional(),
+  }),
+});
+
 export type EntityDocumentRulesInput = z.infer<typeof entityDocumentRulesSchema>['body'];
 export type CategoryDocumentRulesInput = z.infer<typeof categoryDocumentRulesSchema>['body'];
 

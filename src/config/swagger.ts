@@ -95,6 +95,20 @@ const options: swaggerJSDoc.Options = {
       },
       { name: 'Admin / Document Rules', description: 'Admin-configured entity and category document requirements for trader onboarding' },
       { name: 'Admin / Trader Verification', description: 'Admin review queue for submitted trader onboarding applications' },
+      {
+        name: 'Admin / Offers',
+        description:
+          'Offers & Promotions: Offer List & Management + Analytics. Create platform offers (OFF-####). Auth: admin Bearer token.',
+      },
+      {
+        name: 'Customer / Offers',
+        description:
+          'Mobile Offers tab: GET /trader-offers, GET /brisk-offers, POST .../claim, promo codes. Auth: customer Bearer token. Filter params map 1:1 to the filter modal.',
+      },
+      {
+        name: 'Trader / Offers',
+        description: 'Trader-authored offers CRUD under /traders/offers. Auth: trader Bearer token.',
+      },
       { name: 'Mobile / Categories', description: 'Service categories & sub-categories for Customer/Trader apps. No pagination. Each query param documents purpose (featured, categoryId, includeSubcategories) and job-post flags (siteVisitEnabled, priceEnabled, qaFormSchema).' },
       { name: 'Customer / Profile', description: 'Customer profile' },
       { name: 'Trader / Profile', description: 'Trader profile' },
