@@ -2,7 +2,7 @@ import { OfferStatus, OfferType, TraderDocumentStatus, VerificationStatus } from
 import { prisma } from '../../config/database';
 import { ForbiddenError, NotFoundError, BadRequestError } from '../../utils/errors';
 import { splitE164Mobile } from '../../utils/phone';
-import type { UpdateTraderProfileInput } from './traders.validation';
+import type { UpdateTraderBankDetailsInput, UpdateTraderProfileInput } from './traders.validation';
 
 const COMPLETION_HINTS: Record<string, string> = {
   profile_photo: 'Add a profile photo to rank higher in search.',
@@ -221,6 +221,27 @@ export const updateTraderProfile = async (userId: string, input: UpdateTraderPro
   });
 
   return updatedTrader;
+};
+
+/** Profile → Bank Details update (works after onboarding is submitted/approved). */
+export const updateTraderBankDetails = async (userId: string, input: UpdateTraderBankDetailsInput) => {
+  const trader = await prisma.trader.findUnique({ where: { userId } });
+  if (!trader) {
+    throw new NotFoundError('Trader profile not found.');
+  }
+
+  await prisma.trader.update({
+    where: { userId },
+    data: {
+      bankDetailsSkipped: false,
+      bankHolderName: input.bankHolderName,
+      bankName: input.bankName,
+      accountNumber: input.accountNumber,
+      ifscCode: input.ifscCode,
+    },
+  });
+
+  return getTraderProfile(userId);
 };
 
 export const ensureTraderProfile = async (userId: string) => {

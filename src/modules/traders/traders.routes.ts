@@ -3,7 +3,7 @@ import * as tradersController from './traders.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
-import { updateTraderProfileSchema } from './traders.validation';
+import { updateTraderBankDetailsSchema, updateTraderProfileSchema } from './traders.validation';
 import onboardingRoutes from './onboarding/onboarding.routes';
 import traderOffersRoutes from './offers/trader-offers.routes';
 
@@ -74,5 +74,43 @@ router.get('/me', tradersController.getMyTraderProfile);
  *         description: Trader profile updated successfully.
  */
 router.patch('/me', validate(updateTraderProfileSchema), tradersController.updateMyTraderProfile);
+
+/**
+ * @swagger
+ * /traders/me/bank-details:
+ *   put:
+ *     summary: Update bank details from Profile (after onboarding)
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Use on:** Profile → Bank Details (edit/save).
+ *
+ *       Do **not** use `PUT /traders/onboarding/bank-details` after submit — that returns 403
+ *       (`Onboarding has already been submitted and cannot be edited.`).
+ *
+ *       This endpoint works for submitted / pending / approved traders.
+ *       Response is the full profile (`data.bankDetails` refreshed).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [bankHolderName, bankName, accountNumber, ifscCode]
+ *             properties:
+ *               bankHolderName: { type: string, example: Brisk Trader Holder }
+ *               bankName: { type: string, example: BRISK BANK }
+ *               accountNumber: { type: string, example: AC123456789011 }
+ *               ifscCode: { type: string, example: IFSC1234 }
+ *     responses:
+ *       200:
+ *         description: Bank details updated. Full profile in `data`.
+ */
+router.put(
+  '/me/bank-details',
+  validate(updateTraderBankDetailsSchema),
+  tradersController.updateMyBankDetails
+);
 
 export default router;

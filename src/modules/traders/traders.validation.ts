@@ -14,4 +14,14 @@ export const updateTraderProfileSchema = z.object({
   }),
 });
 
+export const updateTraderBankDetailsSchema = z.object({
+  body: z.object({
+    bankHolderName: z.string().trim().min(2).max(255),
+    bankName: z.string().trim().min(2).max(255),
+    accountNumber: z.string().trim().min(4).max(34),
+    ifscCode: z.string().trim().min(4).max(20),
+  }),
+});
+
 export type UpdateTraderProfileInput = z.infer<typeof updateTraderProfileSchema>['body'];
+export type UpdateTraderBankDetailsInput = z.infer<typeof updateTraderBankDetailsSchema>['body'];

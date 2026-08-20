@@ -40,3 +40,22 @@ export const updateMyTraderProfile = async (
     next(error);
   }
 };
+
+export const updateMyBankDetails = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const profile = await tradersService.updateTraderBankDetails(req.user!.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Bank details updated successfully.',
+      data: profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
