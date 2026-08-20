@@ -66,21 +66,19 @@
  *         selectedCategories:
  *           type: array
  *           description: Trade categories chosen on "Select Your Trade Skills" screen.
- *         uploadedDocuments:
- *           type: array
- *           description: Files already uploaded (match by documentRuleId).
  *         documentRequirements:
  *           type: object
  *           properties:
  *             entityRules:
  *               type: array
  *               description: |
- *                 Entity docs for current trader type. Filter by `documentKey`:
- *                 - Verification screen — `driving_license` (SOLO) or `director_photo_id` (COMPANY)
- *                 - Document Verification screen — all other entity rules (Passport, Garda Vetting, etc.)
+ *                 Entity docs for current trader type. Each item includes upload state:
+ *                 - `uploadStatus`: `UPLOADED` | `NOT_UPLOADED`
+ *                 - `uploadedDocument`: null or `{ id, fileUrl, fileName, status, uploadedAt }`
+ *                   where `status` is admin review (`PENDING` / `APPROVED` / `REJECTED` / `EXPIRED`).
  *             categoryRules:
  *               type: array
- *               description: Per-trade docs after categories selected (Electrician, Plumbing, etc.).
+ *               description: Per-trade docs after categories selected (same upload fields as entityRules).
  *         profile:
  *           type: object
  *           description: Saved personal or company info from step 5.
@@ -112,7 +110,10 @@
  *       **Key response fields:**
  *       - `data.nextStep` — same key as login (`TRADER_ONBOARDING`, `TRADER_PENDING_APPROVAL`, `TRADER_HOME`)
  *       - `data.onboardingScreen` — which screen inside onboarding (Business Verification, Sole Trader Verification, etc.)
- *       - `data.documentRequirements` / `data.uploadedDocuments` — document upload UI
+ *       - `data.documentRequirements.entityRules` / `categoryRules` — each rule includes
+ *         `uploadStatus` (`UPLOADED` | `NOT_UPLOADED`) and nested `uploadedDocument`
+ *         (`null` if not uploaded; else `id`, `fileUrl`, `fileName`, `status`, `uploadedAt`).
+ *         Admin review state is `uploadedDocument.status` (`PENDING` | `APPROVED` | `REJECTED` | `EXPIRED`).
  *       - `data.profile` / `data.bankDetails` — pre-filled form values
  *
  *       **If not started:** `data.started = false`, `onboardingScreen = business_verification` → call `POST /traders/onboarding/start` on first entry.
@@ -222,15 +223,14 @@
  *
  *       **No parameters.** Rules depend on saved `entityType` and `categoryIds`.
  *
- *       **Each rule object includes:** `id` (use as `documentRuleId` on upload), `name`, `documentKey`, `required`, `scope` (`ENTITY` or `CATEGORY`).
+ *       **Each rule object includes:** `id` (use as `documentRuleId` on upload), `name`, `documentKey`,
+ *       `required`, `scope`, plus `uploadStatus` and nested `uploadedDocument` (same shape as GET /traders/onboarding).
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: |
- *           `data.entityRules[]` — Passport (SOLO), Garda Vetting (COMPANY), etc.
- *           `data.categoryRules[]` — Electrician/Plumbing certs (empty until categories saved).
- */
+ *           `data.entityRules[]` / `data.categoryRules[]` — each row is requirement + upload state. */
 
 /**
  * @swagger

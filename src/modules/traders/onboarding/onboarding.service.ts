@@ -31,6 +31,63 @@ import type {
   UploadDocumentInput,
 } from './onboarding.validation';
 
+type UploadedDocRecord = {
+  id: string;
+  documentRuleId: string;
+  fileUrl: string;
+  fileName: string | null;
+  status: string;
+  uploadedAt: Date;
+  documentRule?: {
+    id: string;
+    documentKey: string;
+    name: string;
+    scope: string;
+    categoryId: string | null;
+    required: boolean;
+  };
+};
+
+/** Merge requirement rows with the trader's upload (one object per doc — no client-side join). */
+const enrichRulesWithUploads = <T extends { id: string }>(
+  rules: T[],
+  documents: UploadedDocRecord[]
+) => {
+  const byRuleId = new Map(documents.map((doc) => [doc.documentRuleId, doc]));
+
+  return rules.map((rule) => {
+    const doc = byRuleId.get(rule.id);
+    return {
+      ...rule,
+      uploadStatus: doc ? ('UPLOADED' as const) : ('NOT_UPLOADED' as const),
+      uploadedDocument: doc
+        ? {
+            id: doc.id,
+            fileUrl: doc.fileUrl,
+            fileName: doc.fileName,
+            status: doc.status,
+            uploadedAt: doc.uploadedAt,
+          }
+        : null,
+    };
+  });
+};
+
+const buildDocumentRequirementsWithUploads = async (
+  traderType: TraderType,
+  categoryIds: string[],
+  documents: UploadedDocRecord[]
+) => {
+  const { entityRules, categoryRules } = await getDocumentRequirementsForTrader(
+    traderType,
+    categoryIds
+  );
+
+  return {
+    entityRules: enrichRulesWithUploads(entityRules, documents),
+    categoryRules: enrichRulesWithUploads(categoryRules, documents),
+  };
+};
 const traderInclude = {
   categories: {
     include: {
@@ -198,7 +255,11 @@ const serializeOnboardingStatus = async (
   registration: { currentStep: number; entityType: TraderType; status: string; stepData: Prisma.JsonValue | null }
 ) => {
   const categoryIds = trader.categories.map((item) => item.categoryId);
-  const requirements = await getDocumentRequirementsForTrader(registration.entityType, categoryIds);
+  const documentRequirements = await buildDocumentRequirementsWithUploads(
+    registration.entityType,
+    categoryIds,
+    trader.documents
+  );
   const nextScreen = await resolveOnboardingScreen(trader, registration, trader.onboardingStatus);
   const nextStep = await resolveAppNextStep({
     id: _userId,
@@ -229,20 +290,7 @@ const serializeOnboardingStatus = async (
     steps,
     stepData: registration.stepData ?? {},
     selectedCategories: trader.categories.map((item) => item.category),
-    uploadedDocuments: trader.documents.map((doc) => ({
-      id: doc.id,
-      documentRuleId: doc.documentRuleId,
-      documentKey: doc.documentRule.documentKey,
-      name: doc.documentRule.name,
-      scope: doc.documentRule.scope,
-      categoryId: doc.documentRule.categoryId,
-      required: doc.documentRule.required,
-      fileUrl: doc.fileUrl,
-      fileName: doc.fileName,
-      status: doc.status,
-      uploadedAt: doc.uploadedAt,
-    })),
-    documentRequirements: requirements,
+    documentRequirements,
     profile: {
       fullLegalName: trader.fullLegalName,
       businessName: trader.businessName,
@@ -393,7 +441,19 @@ export const getDocumentRequirements = async (userId: string) => {
   }
 
   const categoryIds = trader.categories.map((item) => item.categoryId);
-  return getDocumentRequirementsForTrader(registration.entityType, categoryIds);
+  const documents = await prisma.traderDocument.findMany({
+    where: { traderId: trader.id },
+    select: {
+      id: true,
+      documentRuleId: true,
+      fileUrl: true,
+      fileName: true,
+      status: true,
+      uploadedAt: true,
+    },
+  });
+
+  return buildDocumentRequirementsWithUploads(registration.entityType, categoryIds, documents);
 };
 
 export const uploadDocument = async (userId: string, input: UploadDocumentInput) => {
