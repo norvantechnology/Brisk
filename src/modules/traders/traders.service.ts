@@ -13,6 +13,14 @@ const COMPLETION_HINTS: Record<string, string> = {
   verification: 'Your account is pending admin verification.',
 };
 
+/** Mask account number for profile display — keep last 4 digits visible. */
+const maskAccountNumber = (accountNumber: string | null | undefined) => {
+  if (!accountNumber) return null;
+  const digits = accountNumber.replace(/\s+/g, '');
+  if (digits.length <= 4) return '****';
+  return `${'*'.repeat(Math.min(digits.length - 4, 8))}${digits.slice(-4)}`;
+};
+
 const buildProfileCompletion = (input: {
   hasPhoto: boolean;
   hasIdentity: boolean;
@@ -142,11 +150,27 @@ export const getTraderProfile = async (userId: string) => {
     selectedCategories,
     categoriesCount: selectedCategories.length,
     ...completion,
-    bankDetails: {
-      skipped: trader.bankDetailsSkipped,
-      status: hasBank ? 'VERIFIED' : 'MISSING',
-      verified: hasBank,
-    },
+    bankDetails: trader.bankDetailsSkipped
+      ? {
+          skipped: true,
+          status: 'SKIPPED' as const,
+          verified: false,
+          bankHolderName: null,
+          bankName: null,
+          accountNumber: null,
+          accountNumberMasked: null,
+          ifscCode: null,
+        }
+      : {
+          skipped: false,
+          status: hasBank ? ('VERIFIED' as const) : ('MISSING' as const),
+          verified: hasBank,
+          bankHolderName: trader.bankHolderName,
+          bankName: trader.bankName,
+          accountNumber: trader.accountNumber,
+          accountNumberMasked: maskAccountNumber(trader.accountNumber),
+          ifscCode: trader.ifscCode,
+        },
     certifications: {
       activeDocumentsCount,
       totalDocumentsCount: trader.documents.length,

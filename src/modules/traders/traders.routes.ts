@@ -30,7 +30,8 @@ router.use('/offers', traderOffersRoutes);
  *       **Header card:** `fullName`, `profilePhotoUrl`, `email`, `mobileCountryCode` + `mobileNumber`
  *       **Completion card:** `profileCompletionPercent`, `profileCompletionHint`, `missingProfileItems`
  *       **Verification badge:** `verificationStatus` (`VERIFIED` / `PENDING` / `REJECTED`)
- *       **Bank Details badge:** `bankDetails.status` (`VERIFIED` or `MISSING`)
+ *       **Bank Details:** `bankDetails` — `status` (`VERIFIED` / `MISSING` / `SKIPPED`), `bankHolderName`,
+ *       `bankName`, `accountNumber` (full), `accountNumberMasked` (e.g. `****1234` for display), `ifscCode`
  *       **Certifications row:** `certifications.activeDocumentsCount` ("4 Active Documents")
  *       **Categories row:** `selectedCategories` / `categoriesCount`
  *       **Offers row:** `offers.activeCount` — list via `GET /traders/offers`
