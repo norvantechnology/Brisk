@@ -89,6 +89,8 @@ export const serializeOffer = (offer: OfferRecord) => {
     couponCode: offer.couponCode,
     shortDescription: offer.shortDescription,
     fullDescription: offer.fullDescription,
+    /** Same as fullDescription — use for "Description & Terms" on mobile. */
+    description: offer.fullDescription,
     bannerImageUrl: offer.bannerImageUrl,
     discountType: offer.discountType,
     discountValue: value,

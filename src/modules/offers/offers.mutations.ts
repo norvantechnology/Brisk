@@ -8,6 +8,8 @@ export type OfferWriteInput = {
   title: string;
   couponCode?: string | null;
   shortDescription?: string | null;
+  /** Alias for fullDescription — mobile "Description & Terms" field. */
+  description?: string | null;
   fullDescription?: string | null;
   bannerImageUrl?: string | null;
   badgeTag?: string | null;
@@ -23,6 +25,11 @@ export type OfferWriteInput = {
   ctaAction?: 'CLAIM' | 'BOOK_INSPECTION';
   status?: OfferStatus | 'ACTIVE' | 'DISABLED' | 'EXPIRED';
 };
+
+const resolveFullDescription = (body: {
+  description?: string | null;
+  fullDescription?: string | null;
+}) => body.fullDescription ?? body.description ?? null;
 
 const asDiscountType = (value: OfferWriteInput['discountType']): DiscountType =>
   value as DiscountType;
@@ -118,7 +125,7 @@ export const createOfferRecord = async (input: {
       title: input.body.title.trim(),
       couponCode: input.body.couponCode?.trim() || null,
       shortDescription: input.body.shortDescription ?? null,
-      fullDescription: input.body.fullDescription ?? null,
+      fullDescription: resolveFullDescription(input.body),
       bannerImageUrl: input.body.bannerImageUrl ?? null,
       badgeTag: input.body.badgeTag ?? null,
       discountType: asDiscountType(input.body.discountType),
@@ -181,7 +188,10 @@ export const updateOfferRecord = async (id: string, body: Partial<OfferWriteInpu
       title: body.title?.trim(),
       couponCode: body.couponCode === undefined ? undefined : body.couponCode?.trim() || null,
       shortDescription: body.shortDescription,
-      fullDescription: body.fullDescription,
+      fullDescription:
+        body.fullDescription !== undefined || body.description !== undefined
+          ? resolveFullDescription(body)
+          : undefined,
       bannerImageUrl: body.bannerImageUrl,
       badgeTag: body.badgeTag,
       discountType: body.discountType ? asDiscountType(body.discountType) : undefined,

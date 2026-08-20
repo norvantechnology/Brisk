@@ -30,6 +30,8 @@ const offerBodyBase = {
   title: z.string().trim().min(2).max(255),
   couponCode: z.string().trim().min(3).max(40).optional().nullable(),
   shortDescription: z.string().trim().max(300).optional().nullable(),
+  /** Description & Terms — preferred key for mobile. Stored as fullDescription. */
+  description: z.string().trim().max(4000).optional().nullable(),
   fullDescription: z.string().trim().max(4000).optional().nullable(),
   bannerImageUrl: z.string().trim().url().optional().nullable(),
   badgeTag: z.string().trim().max(80).optional().nullable(),
@@ -71,6 +73,7 @@ export const updateOfferSchema = z.object({
     title: z.string().trim().min(2).max(255).optional(),
     couponCode: z.string().trim().min(3).max(40).optional().nullable(),
     shortDescription: z.string().trim().max(300).optional().nullable(),
+    description: z.string().trim().max(4000).optional().nullable(),
     fullDescription: z.string().trim().max(4000).optional().nullable(),
     bannerImageUrl: z.string().trim().url().optional().nullable(),
     badgeTag: z.string().trim().max(80).optional().nullable(),

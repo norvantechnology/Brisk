@@ -68,8 +68,17 @@ const router = Router();
  *             properties:
  *               title: { type: string, example: €5 off first job }
  *               couponCode: { type: string, example: FIRST5 }
- *               shortDescription: { type: string }
- *               fullDescription: { type: string }
+ *               shortDescription:
+ *                 type: string
+ *                 description: Optional short card blurb (max 300). Not the Description & Terms field.
+ *               description:
+ *                 type: string
+ *                 description: |
+ *                   **Description & Terms** (mobile). Stored as `fullDescription`.
+ *                   Send this key from the app. Response also returns `description`.
+ *               fullDescription:
+ *                 type: string
+ *                 description: Same as `description` (alias). Prefer `description` from mobile.
  *               bannerImageUrl: { type: string, format: uri }
  *               discountType: { type: string, enum: [FLAT, PERCENTAGE, FREE_SERVICE] }
  *               discountValue: { type: number, example: 5 }
