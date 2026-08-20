@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import * as tradersService from './traders.service';
+import * as onboardingService from './onboarding/onboarding.service';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 
@@ -54,6 +55,69 @@ export const updateMyBankDetails = async (
       statusCode: 200,
       message: 'Bank details updated successfully.',
       data: profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMyDocuments = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await onboardingService.uploadDocument(req.user!.id, req.body, {
+      allowAfterSubmit: true,
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Document uploaded successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeMyDocument = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await onboardingService.removeDocument(req.user!.id, req.params.documentRuleId, {
+      allowAfterSubmit: true,
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Document removed successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMyCategories = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await onboardingService.saveCategories(req.user!.id, req.body, {
+      allowAfterSubmit: true,
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Categories updated successfully.',
+      data,
     });
   } catch (error) {
     next(error);

@@ -456,9 +456,15 @@ export const getDocumentRequirements = async (userId: string) => {
   return buildDocumentRequirementsWithUploads(registration.entityType, categoryIds, documents);
 };
 
-export const uploadDocument = async (userId: string, input: UploadDocumentInput) => {
+export const uploadDocument = async (
+  userId: string,
+  input: UploadDocumentInput,
+  options?: { allowAfterSubmit?: boolean }
+) => {
   const { trader } = await ensureTraderForUser(userId);
-  assertOnboardingEditable(trader);
+  if (!options?.allowAfterSubmit) {
+    assertOnboardingEditable(trader);
+  }
 
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
   if (!registration) {
@@ -499,39 +505,47 @@ export const uploadDocument = async (userId: string, input: UploadDocumentInput)
     },
   });
 
-  if (registration.currentStep === ONBOARDING_STEPS.ENTITY_DOCUMENTS) {
-    const { complete } = await validateRequiredDocumentsUploaded(
-      trader.id,
-      registration.entityType,
-      []
-    );
-    if (complete) {
-      await prisma.traderRegistration.update({
-        where: { userId },
-        data: { currentStep: ONBOARDING_STEPS.CATEGORIES },
-      });
-    }
-  } else if (registration.currentStep === ONBOARDING_STEPS.CATEGORY_DOCUMENTS) {
-    const categoryIds = trader.categories.map((item) => item.categoryId);
-    const { complete } = await validateRequiredDocumentsUploaded(
-      trader.id,
-      registration.entityType,
-      categoryIds
-    );
-    if (complete) {
-      await prisma.traderRegistration.update({
-        where: { userId },
-        data: { currentStep: ONBOARDING_STEPS.PROFILE_INFO },
-      });
+  if (!options?.allowAfterSubmit) {
+    if (registration.currentStep === ONBOARDING_STEPS.ENTITY_DOCUMENTS) {
+      const { complete } = await validateRequiredDocumentsUploaded(
+        trader.id,
+        registration.entityType,
+        []
+      );
+      if (complete) {
+        await prisma.traderRegistration.update({
+          where: { userId },
+          data: { currentStep: ONBOARDING_STEPS.CATEGORIES },
+        });
+      }
+    } else if (registration.currentStep === ONBOARDING_STEPS.CATEGORY_DOCUMENTS) {
+      const categoryIds = trader.categories.map((item) => item.categoryId);
+      const { complete } = await validateRequiredDocumentsUploaded(
+        trader.id,
+        registration.entityType,
+        categoryIds
+      );
+      if (complete) {
+        await prisma.traderRegistration.update({
+          where: { userId },
+          data: { currentStep: ONBOARDING_STEPS.PROFILE_INFO },
+        });
+      }
     }
   }
 
   return getOnboardingStatus(userId);
 };
 
-export const removeDocument = async (userId: string, documentRuleId: string) => {
+export const removeDocument = async (
+  userId: string,
+  documentRuleId: string,
+  options?: { allowAfterSubmit?: boolean }
+) => {
   const { trader } = await ensureTraderForUser(userId);
-  assertOnboardingEditable(trader);
+  if (!options?.allowAfterSubmit) {
+    assertOnboardingEditable(trader);
+  }
 
   await prisma.traderDocument.deleteMany({
     where: { traderId: trader.id, documentRuleId },
@@ -540,9 +554,15 @@ export const removeDocument = async (userId: string, documentRuleId: string) => 
   return getOnboardingStatus(userId);
 };
 
-export const saveCategories = async (userId: string, input: CategoriesInput) => {
+export const saveCategories = async (
+  userId: string,
+  input: CategoriesInput,
+  options?: { allowAfterSubmit?: boolean }
+) => {
   const { trader } = await ensureTraderForUser(userId);
-  assertOnboardingEditable(trader);
+  if (!options?.allowAfterSubmit) {
+    assertOnboardingEditable(trader);
+  }
 
   const registration = await ensureRegistration(userId, trader.id, trader.traderType);
 
@@ -586,13 +606,15 @@ export const saveCategories = async (userId: string, input: CategoriesInput) => 
       data: { categoryId: input.categoryIds[0] },
     });
 
-    await tx.traderRegistration.update({
-      where: { userId },
-      data: {
-        currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.CATEGORY_DOCUMENTS),
-        stepData: mergeStepData(registration.stepData, 'categories', input),
-      },
-    });
+    if (!options?.allowAfterSubmit) {
+      await tx.traderRegistration.update({
+        where: { userId },
+        data: {
+          currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.CATEGORY_DOCUMENTS),
+          stepData: mergeStepData(registration.stepData, 'categories', input),
+        },
+      });
+    }
   });
 
   return getOnboardingStatus(userId);

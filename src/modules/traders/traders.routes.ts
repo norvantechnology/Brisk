@@ -4,6 +4,11 @@ import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
 import { updateTraderBankDetailsSchema, updateTraderProfileSchema } from './traders.validation';
+import {
+  categoriesSchema,
+  documentRuleIdParamSchema,
+  uploadDocumentSchema,
+} from './onboarding/onboarding.validation';
 import onboardingRoutes from './onboarding/onboarding.routes';
 import traderOffersRoutes from './offers/trader-offers.routes';
 
@@ -112,5 +117,88 @@ router.put(
   validate(updateTraderBankDetailsSchema),
   tradersController.updateMyBankDetails
 );
+
+/**
+ * @swagger
+ * /traders/me/documents:
+ *   put:
+ *     summary: Upload/replace a document from Profile (after onboarding)
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Use on:** Profile → Certifications / Documents (after submit/approval).
+ *
+ *       Do **not** use `PUT /traders/onboarding/documents` after submit — that returns 403.
+ *       List docs with `GET /traders/onboarding` (`documentRequirements.*.uploadStatus`).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [documentRuleId, fileUrl]
+ *             properties:
+ *               documentRuleId: { type: string, format: uuid }
+ *               fileUrl: { type: string, format: uri }
+ *               fileName: { type: string }
+ *     responses:
+ *       200:
+ *         description: Document saved. Same onboarding snapshot shape in `data`.
+ */
+router.put('/me/documents', validate(uploadDocumentSchema), tradersController.updateMyDocuments);
+
+/**
+ * @swagger
+ * /traders/me/documents/{documentRuleId}:
+ *   delete:
+ *     summary: Remove a document from Profile (after onboarding)
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentRuleId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Document removed.
+ */
+router.delete(
+  '/me/documents/:documentRuleId',
+  validate(documentRuleIdParamSchema),
+  tradersController.removeMyDocument
+);
+
+/**
+ * @swagger
+ * /traders/me/categories:
+ *   put:
+ *     summary: Update trade categories from Profile (after onboarding)
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Use on:** Profile → Categories.
+ *
+ *       Do **not** use `PUT /traders/onboarding/categories` after submit — that returns 403.
+ *       Removing a category also drops its category-scoped uploaded docs.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [categoryIds]
+ *             properties:
+ *               categoryIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Categories updated. Onboarding snapshot in `data` (includes documentRequirements).
+ */
+router.put('/me/categories', validate(categoriesSchema), tradersController.updateMyCategories);
 
 export default router;
