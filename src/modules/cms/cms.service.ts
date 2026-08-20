@@ -542,6 +542,65 @@ export const getPublishedLegalBySlug = async (slug: string) => {
   return serializePublicLegalDetail(policy, policy.versions[0]);
 };
 
+const wrapHtmlPage = (title: string, bodyHtml: string) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; color: #0f172a; line-height: 1.55; }
+    h1, h2, h3 { color: #0f172a; }
+    .card { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+    .q { font-weight: 600; margin-bottom: 6px; }
+    .a { color: #334155; }
+  </style>
+</head>
+<body>${bodyHtml}</body>
+</html>`;
+
+/** HTML for in-app WebView (Terms / Privacy). Ensures defaults exist on first hit. */
+export const getLegalHtmlBySlug = async (slug: string) => {
+  const { ensureLegalPoliciesPublished } = await import('../../database/seeders/legal.seed');
+  await ensureLegalPoliciesPublished(prisma);
+
+  const policy = await getPublishedLegalBySlug(slug);
+  const title = policy.name;
+  const content = policy.version?.content || '<p>Content unavailable.</p>';
+  return wrapHtmlPage(title, content);
+};
+
+/** HTML Help Center for in-app WebView — published FAQs. */
+export const getHelpCenterHtml = async () => {
+  const faqs = await prisma.cmsFaq.findMany({
+    where: { status: CmsPublishStatus.PUBLISHED },
+    orderBy: [{ displayOrder: 'asc' }, { createdAt: 'desc' }],
+    take: 50,
+    include: { category: { select: { name: true } } },
+  });
+
+  const items =
+    faqs.length > 0
+      ? faqs
+          .map(
+            (faq) =>
+              `<div class="card"><div class="q">${escapeHtml(faq.question)}</div><div class="a">${faq.answer}</div></div>`
+          )
+          .join('')
+      : `<p>Help articles will appear here soon. Contact support if you need assistance.</p>
+         <div class="card"><div class="q">How do I update my profile?</div><div class="a">Open Profile and edit Personal Information, Bank Details, or Documents.</div></div>
+         <div class="card"><div class="q">How do offers work?</div><div class="a">Create offers from Profile → Offers. Customers can claim active offers from the Offers tab.</div></div>`;
+
+  return wrapHtmlPage('Help Center', `<h1>Help Center</h1>${items}`);
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
 // ==========================================
 // SEO
 // ==========================================

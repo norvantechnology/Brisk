@@ -293,6 +293,32 @@ export const getLegalBySlug = async (
   }
 };
 
+export const getLegalHtmlBySlug = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const html = await cmsService.getLegalHtmlBySlug(req.params.slug);
+    res.status(200).type('html').send(html);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getHelpCenterHtml = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const html = await cmsService.getHelpCenterHtml();
+    res.status(200).type('html').send(html);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getSeo = async (
   _req: Request,
   res: Response,

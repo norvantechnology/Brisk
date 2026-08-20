@@ -2,6 +2,7 @@ import { OfferStatus, OfferType, TraderDocumentStatus, VerificationStatus } from
 import { prisma } from '../../config/database';
 import { ForbiddenError, NotFoundError, BadRequestError } from '../../utils/errors';
 import { splitE164Mobile } from '../../utils/phone';
+import { getSupportWebviewLinks } from '../../utils/public-urls';
 import type { UpdateTraderBankDetailsInput, UpdateTraderProfileInput } from './traders.validation';
 
 const COMPLETION_HINTS: Record<string, string> = {
@@ -61,6 +62,8 @@ export const getTraderProfile = async (userId: string) => {
           email: true,
           mobileNumber: true,
           profilePhotoUrl: true,
+          mobileVerified: true,
+          emailVerified: true,
           emailNotifications: true,
           smsAlerts: true,
           promoNotifications: true,
@@ -134,6 +137,8 @@ export const getTraderProfile = async (userId: string) => {
     bio: trader.bio,
     fullName: trader.user.fullName,
     email: trader.user.email,
+    mobileVerified: trader.user.mobileVerified,
+    emailVerified: trader.user.emailVerified,
     mobileCountryCode: mobile.mobileCountryCode,
     mobileNumber: mobile.mobileNumber,
     mobileNumberE164: trader.user.mobileNumber,
@@ -184,7 +189,19 @@ export const getTraderProfile = async (userId: string) => {
       smsAlerts: trader.user.smsAlerts,
       promoNotifications: trader.user.promoNotifications,
     },
-    user: trader.user,
+    supportLinks: getSupportWebviewLinks(),
+    user: {
+      id: trader.user.id,
+      fullName: trader.user.fullName,
+      email: trader.user.email,
+      mobileNumber: trader.user.mobileNumber,
+      profilePhotoUrl: trader.user.profilePhotoUrl,
+      mobileVerified: trader.user.mobileVerified,
+      emailVerified: trader.user.emailVerified,
+      emailNotifications: trader.user.emailNotifications,
+      smsAlerts: trader.user.smsAlerts,
+      promoNotifications: trader.user.promoNotifications,
+    },
   };
 };
 

@@ -35,14 +35,16 @@ router.use('/offers', traderOffersRoutes);
  *       **Header card:** `fullName`, `profilePhotoUrl`, `email`, `mobileCountryCode` + `mobileNumber`
  *       **Completion card:** `profileCompletionPercent`, `profileCompletionHint`, `missingProfileItems`
  *       **Verification badge:** `verificationStatus` (`VERIFIED` / `PENDING` / `REJECTED`)
+ *       **Email / phone verify flags:** `emailVerified`, `mobileVerified` (booleans)
+ *       **Support WebViews:** `supportLinks[]` with `key`, `title`, `url` for Help Center, Terms, Privacy
  *       **Bank Details:** `bankDetails` — `status` (`VERIFIED` / `MISSING` / `SKIPPED`), `bankHolderName`,
  *       `bankName`, `accountNumber` (full), `accountNumberMasked` (e.g. `****1234` for display), `ifscCode`
  *       **Certifications row:** `certifications.activeDocumentsCount` ("4 Active Documents")
  *       **Categories row:** `selectedCategories` / `categoriesCount`
  *       **Offers row:** `offers.activeCount` — list via `GET /traders/offers`
  *
- *       Menu rows (Personal Information, Payouts, Tax, Earnings, Help, TOS, Privacy) are navigation only.
- *       Notification toggles live in `notifications` and can be updated with `PATCH /users/me`.
+ *       Menu rows (Personal Information, Payouts, Tax, Earnings) are navigation only.
+ *       Help / Terms / Privacy → open `supportLinks[].url` in WebView.
  *     responses:
  *       200:
  *         description: Profile payload for the Profile screen.

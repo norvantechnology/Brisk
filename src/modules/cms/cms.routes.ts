@@ -327,6 +327,18 @@ router.get('/testimonials', cmsController.getTestimonials);
 
 /**
  * @swagger
+ * /cms/help/html:
+ *   get:
+ *     summary: Help Center HTML page for mobile WebView
+ *     tags: ['Website / Content']
+ *     responses:
+ *       200:
+ *         description: HTML document (open this URL in WebView).
+ */
+router.get('/help/html', cmsController.getHelpCenterHtml);
+
+/**
+ * @swagger
  * /cms/legal:
  *   get:
  *     summary: List published legal policies (footer links)
@@ -336,6 +348,24 @@ router.get('/testimonials', cmsController.getTestimonials);
  *         description: Legal policy summaries with current version.
  */
 router.get('/legal', cmsController.listLegalPolicies);
+
+/**
+ * @swagger
+ * /cms/legal/{slug}/html:
+ *   get:
+ *     summary: Legal policy HTML for mobile WebView
+ *     tags: ['Website / Content']
+ *     parameters:
+ *       - in: path
+ *         name: slug
+ *         required: true
+ *         schema: { type: string, example: privacy-policy }
+ *         description: `terms-and-conditions` or `privacy-policy`
+ *     responses:
+ *       200:
+ *         description: HTML document for WebView.
+ */
+router.get('/legal/:slug/html', cmsController.getLegalHtmlBySlug);
 
 /**
  * @swagger
