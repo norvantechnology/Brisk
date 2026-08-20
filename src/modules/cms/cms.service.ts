@@ -542,21 +542,110 @@ export const getPublishedLegalBySlug = async (slug: string) => {
   return serializePublicLegalDetail(policy, policy.versions[0]);
 };
 
+/** Same BRISK light theme tokens as Swagger — readable mobile WebView layout. */
 const wrapHtmlPage = (title: string, bodyHtml: string) => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>${title}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; color: #0f172a; line-height: 1.55; }
-    h1, h2, h3 { color: #0f172a; }
-    .card { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
-    .q { font-weight: 600; margin-bottom: 6px; }
-    .a { color: #334155; }
+    :root {
+      --brisk-text: #0f172a;
+      --brisk-muted: #475569;
+      --brisk-border: #e2e8f0;
+      --brisk-surface: #ffffff;
+      --brisk-soft: #f8fafc;
+      --brisk-accent: #1e293b;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--brisk-soft);
+      color: var(--brisk-text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 17px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 28px 20px 48px;
+    }
+    .sheet {
+      background: var(--brisk-surface);
+      border: 1px solid var(--brisk-border);
+      border-radius: 16px;
+      padding: 28px 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.25;
+      font-weight: 700;
+      color: var(--brisk-accent);
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      margin: 0 0 24px;
+      font-size: 15px;
+      color: var(--brisk-muted);
+    }
+    h2 {
+      margin: 28px 0 10px;
+      font-size: 20px;
+      line-height: 1.3;
+      font-weight: 650;
+      color: var(--brisk-accent);
+    }
+    h3 {
+      margin: 20px 0 8px;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--brisk-text);
+    }
+    p { margin: 0 0 14px; color: var(--brisk-text); }
+    ul, ol { margin: 0 0 16px; padding-left: 1.25em; color: var(--brisk-text); }
+    li { margin-bottom: 8px; }
+    a { color: var(--brisk-accent); font-weight: 600; }
+    .card {
+      display: block;
+      width: 100%;
+      margin: 0 0 14px;
+      padding: 16px 16px;
+      background: var(--brisk-soft);
+      border: 1px solid var(--brisk-border);
+      border-radius: 12px;
+    }
+    .card:last-child { margin-bottom: 0; }
+    .q {
+      margin: 0 0 8px;
+      font-size: 16px;
+      font-weight: 650;
+      color: var(--brisk-accent);
+      line-height: 1.35;
+    }
+    .a {
+      margin: 0;
+      font-size: 15px;
+      color: var(--brisk-muted);
+      line-height: 1.55;
+    }
+    @media (min-width: 480px) {
+      .page { padding: 36px 28px 64px; }
+      .sheet { padding: 36px 32px; }
+      h1 { font-size: 32px; }
+      body { font-size: 18px; }
+    }
   </style>
 </head>
-<body>${bodyHtml}</body>
+<body>
+  <main class="page"><article class="sheet">${bodyHtml}</article></main>
+</body>
 </html>`;
 
 /** HTML for in-app WebView (Terms / Privacy). Ensures defaults exist on first hit. */
@@ -579,6 +668,21 @@ export const getHelpCenterHtml = async () => {
     include: { category: { select: { name: true } } },
   });
 
+  const defaultCards = [
+    {
+      q: 'How do I update my profile?',
+      a: 'Open Profile and edit Personal Information, Bank Details, Categories, or Documents.',
+    },
+    {
+      q: 'How do offers work?',
+      a: 'Create offers from Profile → Offers. Customers can claim active offers from the Offers tab.',
+    },
+    {
+      q: 'How do I verify my email or mobile?',
+      a: 'Use the verify options on your profile. Status is shown as emailVerified / mobileVerified.',
+    },
+  ];
+
   const items =
     faqs.length > 0
       ? faqs
@@ -587,11 +691,17 @@ export const getHelpCenterHtml = async () => {
               `<div class="card"><div class="q">${escapeHtml(faq.question)}</div><div class="a">${faq.answer}</div></div>`
           )
           .join('')
-      : `<p>Help articles will appear here soon. Contact support if you need assistance.</p>
-         <div class="card"><div class="q">How do I update my profile?</div><div class="a">Open Profile and edit Personal Information, Bank Details, or Documents.</div></div>
-         <div class="card"><div class="q">How do offers work?</div><div class="a">Create offers from Profile → Offers. Customers can claim active offers from the Offers tab.</div></div>`;
+      : defaultCards
+          .map(
+            (item) =>
+              `<div class="card"><div class="q">${escapeHtml(item.q)}</div><div class="a">${escapeHtml(item.a)}</div></div>`
+          )
+          .join('');
 
-  return wrapHtmlPage('Help Center', `<h1>Help Center</h1>${items}`);
+  return wrapHtmlPage(
+    'Help Center',
+    `<h1>Help Center</h1><p class="subtitle">Answers to common questions about BRISK.</p>${items}`
+  );
 };
 
 const escapeHtml = (value: string) =>
