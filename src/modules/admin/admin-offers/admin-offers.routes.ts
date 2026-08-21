@@ -158,9 +158,11 @@ router.get('/offers/analytics', controller.getAnalytics);
  *               validUntil: { type: string, format: date-time }
  *               categoryIds:
  *                 type: array
+ *                 description: Multi-select category UUIDs. Example `["uuid1"]` or `["uuid1","uuid2"]`.
  *                 items: { type: string, format: uuid }
  *               subcategoryIds:
  *                 type: array
+ *                 description: Multi-select sub-category UUIDs. Example `["uuid1","uuid2"]`.
  *                 items: { type: string, format: uuid }
  *               traderId: { type: string, format: uuid, nullable: true }
  *               ctaLabel: { type: string, example: Claim Offer }
@@ -174,7 +176,10 @@ router.get('/offers/analytics', controller.getAnalytics);
  *             discountValue: 10
  *             validFrom: '2026-08-01T00:00:00.000Z'
  *             validUntil: '2026-09-30T23:59:59.000Z'
- *             categoryIds: []
+ *             categoryIds:
+ *               - e076d231-b0da-46cb-b60d-8aa9fbb8ce26
+ *             subcategoryIds:
+ *               - 8a44f8fb-1598-40c9-a658-7f3db5748f14
  *             ctaAction: CLAIM
  *     responses:
  *       201:

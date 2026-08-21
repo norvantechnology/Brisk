@@ -78,9 +78,20 @@ const router = Router();
  *               validUntil: { type: string, format: date-time }
  *               categoryIds:
  *                 type: array
+ *                 description: |
+ *                   Multi-select categories. UUID array.
+ *                   One: `["e076d231-b0da-46cb-b60d-8aa9fbb8ce26"]`
+ *                   Many: `["uuid1","uuid2"]`
+ *                   Empty `[]` = no category link.
  *                 items: { type: string, format: uuid }
  *               subcategoryIds:
  *                 type: array
+ *                 description: |
+ *                   Multi-select sub-categories. UUID array (same style as categoryIds).
+ *                   Pass IDs that belong to the selected categories.
+ *                   One: `["8a44f8fb-1598-40c9-a658-7f3db5748f14"]`
+ *                   Many: `["uuid1","uuid2"]`
+ *                   Empty `[]` or omit = no subcategory link.
  *                 items: { type: string, format: uuid }
  *               ctaLabel: { type: string, example: Claim now }
  *               ctaAction: { type: string, enum: [CLAIM, BOOK_INSPECTION] }
@@ -90,10 +101,14 @@ const router = Router();
  *             discountValue: 5
  *             validFrom: '2026-08-01T00:00:00.000Z'
  *             validUntil: '2026-12-31T23:59:59.000Z'
- *             categoryIds: []
+ *             categoryIds:
+ *               - e076d231-b0da-46cb-b60d-8aa9fbb8ce26
+ *             subcategoryIds:
+ *               - 8a44f8fb-1598-40c9-a658-7f3db5748f14
+ *               - 769c87fc-f67f-4a8f-b25c-9fadd1aaab90
  *     responses:
  *       201:
- *         description: Offer created. Response is the offer object in `data`.
+ *         description: Offer created. Response is the offer object in `data` (includes `categories` + `subcategories`).
  */
 router.get('/', validate(offerFilterSchema), controller.listMyOffers);
 router.post('/', validate(createOfferSchema), controller.createMyOffer);
@@ -138,6 +153,14 @@ router.post('/', validate(createOfferSchema), controller.createMyOffer);
  *               discountValue: { type: number }
  *               validFrom: { type: string, format: date-time }
  *               validUntil: { type: string, format: date-time }
+ *               categoryIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Multi-select category UUIDs.
+ *               subcategoryIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Multi-select sub-category UUIDs.
  *               status: { type: string, enum: [ACTIVE, DISABLED, EXPIRED] }
  *     responses:
  *       200:
