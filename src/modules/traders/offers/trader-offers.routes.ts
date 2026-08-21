@@ -64,7 +64,7 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [title, discountType, discountValue, validFrom, validUntil]
+ *             required: [title, discountType, discountValue, validUntil]
  *             properties:
  *               title: { type: string, example: €5 off first job }
  *               couponCode: { type: string, example: FIRST5 }
@@ -74,8 +74,14 @@ const router = Router();
  *               discountType: { type: string, enum: [FLAT, PERCENTAGE, FREE_SERVICE] }
  *               discountValue: { type: number, example: 5 }
  *               discountLabel: { type: string, example: Fixed €5 }
- *               validFrom: { type: string, format: date-time }
- *               validUntil: { type: string, format: date-time }
+ *               validFrom:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Optional. Omit / empty — server sets start to now. App UI can collect only expiry.
+ *               validUntil:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Required expiry date from the date picker (ISO). Example `2026-08-21T23:59:59.000Z` or `2026-08-21`.
  *               categoryIds:
  *                 type: array
  *                 description: |
@@ -99,7 +105,6 @@ const router = Router();
  *             title: €5 off first job
  *             discountType: FLAT
  *             discountValue: 5
- *             validFrom: '2026-08-01T00:00:00.000Z'
  *             validUntil: '2026-12-31T23:59:59.000Z'
  *             categoryIds:
  *               - e076d231-b0da-46cb-b60d-8aa9fbb8ce26

@@ -14,7 +14,7 @@ export type OfferWriteInput = {
   discountType: DiscountType | 'FLAT' | 'PERCENTAGE' | 'FREE_SERVICE';
   discountValue: number;
   discountLabel?: string | null;
-  validFrom: string | Date;
+  validFrom?: string | Date;
   validUntil: string | Date;
   categoryIds?: string[];
   subcategoryIds?: string[];
@@ -89,13 +89,13 @@ export const createOfferRecord = async (input: {
   traderId?: string | null;
   body: OfferWriteInput;
 }) => {
-  const validFrom = new Date(input.body.validFrom);
+  const validFrom = input.body.validFrom ? new Date(input.body.validFrom) : new Date();
   const validUntil = new Date(input.body.validUntil);
   if (Number.isNaN(validFrom.getTime()) || Number.isNaN(validUntil.getTime())) {
     throw new BadRequestError('validFrom and validUntil must be valid dates.');
   }
   if (validUntil <= validFrom) {
-    throw new BadRequestError('validUntil must be after validFrom.');
+    throw new BadRequestError('validUntil (expiry) must be after validFrom (start).');
   }
 
   if (input.offerType === OfferType.TRADER && !input.traderId) {

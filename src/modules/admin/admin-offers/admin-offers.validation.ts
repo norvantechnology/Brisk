@@ -36,7 +36,12 @@ const offerBodyBase = {
   discountType: z.enum(['FLAT', 'PERCENTAGE', 'FREE_SERVICE']),
   discountValue: z.number().min(0),
   discountLabel: z.string().trim().max(80).optional().nullable(),
-  validFrom: z.string().min(1),
+  /** Optional — if omitted/empty, server sets start = now. UI can collect only expiry. */
+  validFrom: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined ? undefined : val),
+    z.string().min(1).optional()
+  ),
+  /** Required expiry date (ISO datetime or date `YYYY-MM-DD`). */
   validUntil: z.string().min(1),
   categoryIds: z.array(z.string().uuid()).optional(),
   subcategoryIds: z.array(z.string().uuid()).optional(),
@@ -72,7 +77,10 @@ export const updateOfferSchema = z.object({
     discountType: z.enum(['FLAT', 'PERCENTAGE', 'FREE_SERVICE']).optional(),
     discountValue: z.number().min(0).optional(),
     discountLabel: z.string().trim().max(80).optional().nullable(),
-    validFrom: z.string().min(1).optional(),
+    validFrom: z.preprocess(
+      (val) => (val === '' || val === null || val === undefined ? undefined : val),
+      z.string().min(1).optional()
+    ),
     validUntil: z.string().min(1).optional(),
     categoryIds: z.array(z.string().uuid()).optional(),
     subcategoryIds: z.array(z.string().uuid()).optional(),
