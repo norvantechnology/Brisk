@@ -211,4 +211,30 @@ router.patch('/:id', validate(updateOfferSchema), controller.updateMyOffer);
  */
 router.patch('/:id/status', validate(offerStatusSchema), controller.updateMyOfferStatus);
 
+/**
+ * @swagger
+ * /traders/offers/{id}:
+ *   delete:
+ *     summary: Delete the trader's own offer
+ *     tags: ['Trader / Offers']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Permanently deletes a trader-authored offer (`offerType=TRADER`).
+ *       Claims are removed with the offer. Linked jobs/promo codes are unlinked (not deleted).
+ *
+ *       **Disable without delete:** `PATCH /traders/offers/{id}/status` with `{ "status": "DISABLED" }`.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Offer deleted.
+ *       404:
+ *         description: Offer not found or not owned by this trader.
+ */
+router.delete('/:id', validate(offerIdParamSchema), controller.deleteMyOffer);
+
 export default router;

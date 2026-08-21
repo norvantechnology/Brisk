@@ -87,3 +87,23 @@ export const updateMyOfferStatus = async (userId: string, id: string, status: Of
   await prisma.offer.update({ where: { id }, data: { status } });
   return loadOffer(id);
 };
+
+/** Permanently delete a trader-owned offer. Claims cascade; jobs/promos are unlinked. */
+export const deleteMyOffer = async (userId: string, id: string) => {
+  const trader = await requireTrader(userId);
+  const existing = await prisma.offer.findFirst({
+    where: { id, traderId: trader.id, offerType: OfferType.TRADER },
+    select: { id: true, offerCode: true },
+  });
+  if (!existing) {
+    throw new NotFoundError('Offer not found.');
+  }
+
+  await prisma.$transaction([
+    prisma.job.updateMany({ where: { offerId: id }, data: { offerId: null } }),
+    prisma.promoCode.updateMany({ where: { offerId: id }, data: { offerId: null, active: false } }),
+    prisma.offer.delete({ where: { id } }),
+  ]);
+
+  return { id: existing.id, offerCode: existing.offerCode, deleted: true };
+};

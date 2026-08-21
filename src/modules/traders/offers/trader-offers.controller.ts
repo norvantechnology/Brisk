@@ -97,3 +97,21 @@ export const updateMyOfferStatus = async (
     next(error);
   }
 };
+
+export const deleteMyOffer = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await traderOffersService.deleteMyOffer(req.user!.id, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Offer deleted successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
