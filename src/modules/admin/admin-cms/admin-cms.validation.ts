@@ -117,6 +117,7 @@ export const reorderFaqsSchema = z.object({
 
 export const dashboardAuditSchema = z.object({
   query: z.object({
+    page: z.string().optional(),
     limit: z.string().optional(),
   }),
 });

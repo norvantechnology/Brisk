@@ -31,7 +31,7 @@ export const getCmsDashboardAudit = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await cmsService.getCmsDashboardAudit(req.query.limit as string | undefined);
+    const result = await cmsService.getCmsDashboardAudit(req.query as { page?: string; limit?: string });
     sendResponse({
       res,
       statusCode: 200,

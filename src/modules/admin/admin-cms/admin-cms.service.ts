@@ -251,8 +251,14 @@ export const getCmsDashboardStats = async () => {
   };
 };
 
-export const getCmsDashboardAudit = async (limitRaw?: string | number) => {
-  const limit = Math.min(Math.max(Number(limitRaw) || 20, 1), 100);
+export const getCmsDashboardAudit = async (filters: {
+  page?: string | number;
+  limit?: string | number;
+} = {}) => {
+  const page = Math.max(1, Number(filters.page) || 1);
+  // Keep previous default of 20 (other CMS lists default to 10).
+  const limit = Math.min(Math.max(Number(filters.limit) || 20, 1), 100);
+  const skip = (page - 1) * limit;
   const cmsSubjectTypes = [
     'CmsStaticPage',
     'CmsSocialLink',
@@ -267,18 +273,32 @@ export const getCmsDashboardAudit = async (limitRaw?: string | number) => {
     'ContactSubmission',
   ];
 
-  const items = await prisma.auditLog.findMany({
-    where: {
-      OR: [
-        { subjectType: { in: cmsSubjectTypes } },
-        { eventType: { startsWith: 'CMS_' } },
-      ],
-    },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  });
+  const where: Prisma.AuditLogWhereInput = {
+    OR: [
+      { subjectType: { in: cmsSubjectTypes } },
+      { eventType: { startsWith: 'CMS_' } },
+    ],
+  };
 
-  return { items };
+  const [total, items] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 0,
+    },
+  };
 };
 
 // ==========================================

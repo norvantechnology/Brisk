@@ -76,12 +76,18 @@ router.get('/dashboard/stats', cmsAdminController.getCmsDashboardStats);
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *         description: Page number (1-based).
+ *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 20 }
- *         description: Number of recent audit log entries to return (max 100).
+ *         description: Rows per page (max 100). Default 20.
  *     responses:
  *       200:
- *         description: CMS dashboard audit activity retrieved successfully.
+ *         description: |
+ *           CMS dashboard audit activity retrieved successfully.
+ *           `data.items` shape is unchanged; `data.meta` adds `{ total, page, limit, totalPages }`.
  *       401:
  *         description: Missing or invalid Admin JWT token.
  */
