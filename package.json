@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "render-build": "npm install && npm run db:generate && npm run db:push && npm run build",
+    "render-build": "npm install && npm run db:generate && npm run db:push:deploy && npm run build",
     "start": "node dist/server.js",
     "db:generate": "prisma generate --schema=src/database/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=src/database/schema.prisma",
     "db:migrate:deploy": "prisma migrate deploy --schema=src/database/schema.prisma",
     "db:push": "prisma db push --schema=src/database/schema.prisma",
+    "db:push:deploy": "prisma db push --schema=src/database/schema.prisma --accept-data-loss",
     "db:seed": "prisma db seed --schema=src/database/schema.prisma",
     "db:studio": "prisma studio --schema=src/database/schema.prisma"
   },

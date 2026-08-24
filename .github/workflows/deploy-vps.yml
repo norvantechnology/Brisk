@@ -39,7 +39,7 @@ jobs:
             npx prisma generate --schema=src/database/schema.prisma
 
             echo "=== Syncing DB schema (same as Render: db push) ==="
-            npx prisma db push --schema=src/database/schema.prisma --accept-data-loss=false
+            npx prisma db push --schema=src/database/schema.prisma --accept-data-loss
 
             echo "=== Building TypeScript ==="
             npm run build
