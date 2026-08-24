@@ -27,7 +27,10 @@ jobs:
             echo "=== Pulling latest code ==="
             git config --global --add safe.directory "$APP_DIR"
             cd $APP_DIR
-            git pull origin main
+            # Always match GitHub main exactly (ignore any local hotfix leftovers)
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
 
             echo "=== Installing dependencies ==="
             npm ci
