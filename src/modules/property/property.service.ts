@@ -6,28 +6,26 @@ import type { CreateAddressInput, SubmitReadingInput, UpdateAddressInput } from 
 const PLACEHOLDER = 'https://cdn.brisk.ie/assets/placeholders';
 
 /** Dynamic MPRN / GPRN popup content for My Property help icons. */
-export const getMeterHelpTips = () => ({
-  items: [
-    {
-      key: 'mprn',
-      title: 'MPRN',
-      heading: 'Meter Point Reference Number',
-      description:
-        'Your Meter Point Reference Number (MPRN) is an 11-digit code usually found on your electricity meter display or bill. It is unique to your property.',
-      imageUrl: `${PLACEHOLDER}/meters/mprn-guide.png`,
-      meterType: 'electricity',
-    },
-    {
-      key: 'gprn',
-      title: 'GPRN',
-      heading: 'Gas Point Registration Number',
-      description:
-        'Your Gas Point Registration Number (GPRN) is a 7 or 8-digit code usually found on your gas meter display or bill. It is unique to your property.',
-      imageUrl: `${PLACEHOLDER}/meters/gprn-guide.png`,
-      meterType: 'gas',
-    },
-  ],
-});
+export const getMeterHelpTips = () => [
+  {
+    key: 'mprn',
+    title: 'MPRN',
+    heading: 'Meter Point Reference Number',
+    description:
+      'Your Meter Point Reference Number (MPRN) is an 11-digit code usually found on your electricity meter display or bill. It is unique to your property.',
+    imageUrl: `${PLACEHOLDER}/meters/mprn-guide.png`,
+    meterType: 'electricity',
+  },
+  {
+    key: 'gprn',
+    title: 'GPRN',
+    heading: 'Gas Point Registration Number',
+    description:
+      'Your Gas Point Registration Number (GPRN) is a 7 or 8-digit code usually found on your gas meter display or bill. It is unique to your property.',
+    imageUrl: `${PLACEHOLDER}/meters/gprn-guide.png`,
+    meterType: 'gas',
+  },
+];
 
 const formatAddressLine = (input: {
   houseNumber?: string | null;
@@ -242,7 +240,7 @@ export const listAddresses = async (userId: string) => {
     include: { property: { select: { id: true } } },
     orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
   });
-  return { items: addresses.map(serializeAddress) };
+  return addresses.map(serializeAddress);
 };
 
 export const getAddress = async (userId: string, id: string) => {
@@ -402,20 +400,18 @@ export const listProperties = async (userId: string) => {
     orderBy: { createdAt: 'asc' },
   });
 
-  return {
-    items: properties.map((property) => ({
-      id: property.id,
-      propertyName: property.propertyName,
-      addressId: property.addressId,
-      addressLine1: property.addressLine1,
-      city: property.city,
-      county: property.county,
-      eircode: property.eircode,
-      fullAddress: formatAddressLine(property),
-      isPrimary: property.address?.isDefault ?? false,
-      label: property.address?.label ?? property.propertyName,
-    })),
-  };
+  return properties.map((property) => ({
+    id: property.id,
+    propertyName: property.propertyName,
+    addressId: property.addressId,
+    addressLine1: property.addressLine1,
+    city: property.city,
+    county: property.county,
+    eircode: property.eircode,
+    fullAddress: formatAddressLine(property),
+    isPrimary: property.address?.isDefault ?? false,
+    label: property.address?.label ?? property.propertyName,
+  }));
 };
 
 export const getPropertyDetail = async (userId: string, id: string) => {
@@ -483,18 +479,16 @@ export const listUtilityProviders = async () => {
     orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
   });
 
-  return {
-    items: providers.map((provider) => ({
-      id: provider.id,
-      name: provider.name,
-      serviceType: provider.serviceType,
-      serviceLabel: provider.serviceLabel ?? provider.serviceType,
-      description: provider.description,
-      logoUrl: provider.logoUrl,
-      iconUrl: provider.iconUrl ?? provider.logoUrl,
-      displayOrder: provider.displayOrder,
-    })),
-  };
+  return providers.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    serviceType: provider.serviceType,
+    serviceLabel: provider.serviceLabel ?? provider.serviceType,
+    description: provider.description,
+    logoUrl: provider.logoUrl,
+    iconUrl: provider.iconUrl ?? provider.logoUrl,
+    displayOrder: provider.displayOrder,
+  }));
 };
 
 export const savePropertySubscriptions = async (

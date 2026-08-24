@@ -26,9 +26,10 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *     description: |
  *       Use for the info (i) icons on My Property meter cards.
  *       Each item includes `title`, `heading`, `description`, and `imageUrl` (dummy CDN URL for image helper testing).
+ *       `data` is a **list** (not `{ items: [] }`).
  *     responses:
  *       200:
- *         description: Help tip items for MPRN and GPRN popups.
+ *         description: Help tip array in `data`.
  */
 router.get('/property/help-tips', ...customerOnly, controller.getMeterHelpTips);
 
@@ -41,10 +42,11 @@ router.get('/property/help-tips', ...customerOnly, controller.getMeterHelpTips);
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Returns Bins / Electricity / Gas / Home Insurance options with `iconUrl` / `logoUrl` for the checklist UI.
+ *       Returns Bins / Electricity / Gas / Home Insurance options with `iconUrl` / `logoUrl`.
+ *       `data` is a **list** (not `{ items: [] }`).
  *     responses:
  *       200:
- *         description: Active utility providers.
+ *         description: Provider array in `data`.
  */
 router.get('/utility-providers', ...customerOnly, controller.listUtilityProviders);
 
@@ -56,9 +58,11 @@ router.get('/utility-providers', ...customerOnly, controller.listUtilityProvider
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       `data` is a **list** of address objects (not `{ items: [] }`).
  *     responses:
  *       200:
- *         description: Address list with primary flag, mapImageUrl, propertyId.
+ *         description: Address array in `data`.
  *   post:
  *     summary: Add address (Add Address modal)
  *     tags: ['Customer / Property']
@@ -149,9 +153,11 @@ router.delete('/addresses/:id', ...customerOnly, validate(addressIdParamSchema),
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       `data` is a **list** of property objects (not `{ items: [] }`).
  *     responses:
  *       200:
- *         description: Properties with fullAddress for Select Address dropdown.
+ *         description: Property array in `data`.
  */
 router.get('/properties', ...customerOnly, controller.listProperties);
 
