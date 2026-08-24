@@ -370,19 +370,29 @@ model Trader {
 model Address {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @map("user_id") @db.Uuid
-  label        String?  // e.g. Home, Work
+  /// Home | Work | Custom (Figma address type pills)
+  label        String?  // e.g. Home, Work, Custom
+  addressType  String   @default("Home") @map("address_type")
+  houseNumber  String?  @map("house_number")
   addressLine1 String   @map("address_line_1")
   addressLine2 String?  @map("address_line_2")
   city         String
   county       String?
   eircode      String?
   country      String   @default("Ireland")
+  mprnNumber   String?  @map("mprn_number")
+  gprnNumber   String?  @map("gprn_number")
+  utnNumber    String?  @map("utn_number")
+  latitude     Float?
+  longitude    Float?
+  mapImageUrl  String?  @map("map_image_url")
   isDefault    Boolean  @default(false) @map("is_default")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property Property?
 
   @@map("addresses")
 }
@@ -390,6 +400,7 @@ model Address {
 model Property {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @map("user_id") @db.Uuid
+  addressId    String?  @unique @map("address_id") @db.Uuid
   propertyName String   @map("property_name")
   addressLine1 String   @map("address_line_1")
   addressLine2 String?  @map("address_line_2")
@@ -402,6 +413,7 @@ model Property {
 
   // Relationships
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address       Address?       @relation(fields: [addressId], references: [id], onDelete: SetNull)
   meters        Meter[]
   subscriptions Subscription[]
 
@@ -411,9 +423,11 @@ model Property {
 model Meter {
   id            String   @id @default(uuid()) @db.Uuid
   propertyId    String   @map("property_id") @db.Uuid
-  meterType     String   // electricity | gas
+  /// electricity | gas
+  meterType     String   @map("meter_type")
   mprnGprn      String   @map("mprn_gprn")
   serialNumber  String?  @map("serial_number")
+  unitLabel     String?  @map("unit_label") // kWh | m³
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -444,9 +458,15 @@ model MeterReading {
 model UtilityProvider {
   id           String   @id @default(uuid()) @db.Uuid
   name         String
-  serviceType  String   @map("service_type") // bins | electricity | gas | insurance
+  /// bins | electricity | gas | insurance
+  serviceType  String   @map("service_type")
+  serviceLabel String?  @map("service_label") // Bins, Electricity, GAS, Home Insurance
+  description  String?  // e.g. Building & Contents cover
   logoUrl      String?  @map("logo_url")
+  iconUrl      String?  @map("icon_url")
   contactPhone String?  @map("contact_phone")
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
 
   // Relationships
@@ -469,6 +489,7 @@ model Subscription {
   property        Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   utilityProvider UtilityProvider @relation(fields: [utilityProviderId], references: [id], onDelete: Cascade)
 
+  @@unique([propertyId, utilityProviderId])
   @@map("subscriptions")
 }
 

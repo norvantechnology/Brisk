@@ -30,6 +30,7 @@ import adminTraderVerificationRoutes from './modules/admin/admin-trader-verifica
 import homePublicRoutes from './modules/cms/home-public.routes';
 import adminOffersRoutes from './modules/admin/admin-offers/admin-offers.routes';
 import publicOffersRoutes from './modules/offers/public-offers.routes';
+import propertyRoutes from './modules/property/property.routes';
 
 const app = express();
 
@@ -85,6 +86,7 @@ app.use('/categories', categoriesRouter);
 app.use('/sub-categories', subcategoriesRouter);
 app.use('/contact', contactRoutes);
 app.use('/', publicOffersRoutes);
+app.use('/', propertyRoutes);
 
 /**
  * @swagger

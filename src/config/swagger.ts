@@ -110,6 +110,11 @@ const options: swaggerJSDoc.Options = {
         description: 'Trader-authored offers CRUD under /traders/offers. Auth: trader Bearer token.',
       },
       { name: 'Mobile / Categories', description: 'Service categories & sub-categories for Customer/Trader apps. No pagination. Each query param documents purpose (featured, categoryId, includeSubcategories) and job-post flags (siteVisitEnabled, priceEnabled, qaFormSchema).' },
+      {
+        name: 'Customer / Property',
+        description:
+          'My Property + My Address tabs. Addresses CRUD, property meters/readings, utility subscriptions, MPRN/GPRN help tips with imageUrl. Auth: customer Bearer token.',
+      },
       { name: 'Customer / Profile', description: 'Customer profile' },
       { name: 'Trader / Profile', description: 'Trader profile' },
       { name: 'System / Health', description: 'Health check' },
