@@ -59,6 +59,7 @@ if [ ! -d "$APP_DIR/.git" ]; then
 else
   echo "Repo already cloned — skipping."
 fi
+git config --global --add safe.directory "$APP_DIR"
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 
 # ---- 7. PostgreSQL via Docker ----

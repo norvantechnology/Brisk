@@ -34,7 +34,19 @@ import publicOffersRoutes from './modules/offers/public-offers.routes';
 const app = express();
 
 // Set security HTTP headers
-app.use(helmet());
+// Disable HSTS / upgrade-insecure-requests until SSL (HTTPS) is configured on the VPS,
+// otherwise browsers upgrade Swagger asset requests to https:// and they fail on :3000.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        upgradeInsecureRequests: null,
+      },
+    },
+    hsts: false,
+  })
+);
 
 // Enable CORS
 app.use(cors());
