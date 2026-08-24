@@ -29,13 +29,13 @@ jobs:
             git pull origin main
 
             echo "=== Installing dependencies ==="
-            npm ci --omit=dev
+            npm ci
 
             echo "=== Generating Prisma client ==="
             npx prisma generate --schema=src/database/schema.prisma
 
-            echo "=== Running DB migrations ==="
-            npx prisma migrate deploy --schema=src/database/schema.prisma
+            echo "=== Syncing DB schema (same as Render: db push) ==="
+            npx prisma db push --schema=src/database/schema.prisma --accept-data-loss=false
 
             echo "=== Building TypeScript ==="
             npm run build
