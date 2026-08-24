@@ -1,0 +1,51 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: SSH Deploy to Brisk VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+
+            APP_DIR=/opt/brisk
+
+            echo "=== Pulling latest code ==="
+            cd $APP_DIR
+            git pull origin main
+
+            echo "=== Installing dependencies ==="
+            npm ci --omit=dev
+
+            echo "=== Generating Prisma client ==="
+            npx prisma generate --schema=src/database/schema.prisma
+
+            echo "=== Running DB migrations ==="
+            npx prisma migrate deploy --schema=src/database/schema.prisma
+
+            echo "=== Building TypeScript ==="
+            npm run build
+
+            echo "=== Restarting app ==="
+            pm2 restart brisk-backend --update-env
+
+            echo "=== Saving PM2 process list ==="
+            pm2 save
+
+            echo "=== Health check ==="
+            sleep 3
+            curl -sf http://localhost:3000/health && echo "Health OK" || echo "Health check failed"
