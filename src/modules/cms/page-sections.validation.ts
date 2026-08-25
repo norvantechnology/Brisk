@@ -34,6 +34,19 @@ export const pageSlugParamSchema = z.object({
   }),
 });
 
+export const createMarketingPageSchema = z.object({
+  body: z.object({
+    slug: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug must be lowercase kebab-case (e.g. about-brisk).'),
+    title: z.string().trim().min(1).max(255),
+    status: z.nativeEnum(CmsPublishStatus).optional(),
+  }),
+});
+
 export const sectionIdParamSchema = z.object({
   params: z.object({
     sectionId: z.string().uuid(),

@@ -99,6 +99,36 @@ export const listAdminMarketingPages = async () => {
   }));
 };
 
+export const createAdminMarketingPage = async (input: {
+  slug: string;
+  title: string;
+  status?: CmsPublishStatus;
+}) => {
+  const slug = input.slug.trim().toLowerCase();
+  const existing = await prisma.cmsMarketingPage.findUnique({ where: { slug } });
+  if (existing) {
+    throw new BadRequestError(`Page slug "${slug}" already exists.`);
+  }
+
+  const page = await prisma.cmsMarketingPage.create({
+    data: {
+      slug,
+      title: input.title.trim(),
+      status: input.status ?? PUBLISHED,
+    },
+  });
+
+  return {
+    id: page.id,
+    slug: page.slug,
+    title: page.title,
+    status: page.status,
+    sectionsCount: 0,
+    createdAt: page.createdAt,
+    updatedAt: page.updatedAt,
+  };
+};
+
 export const listAdminPageSections = async (pageSlug: string) => {
   const page = await getPageBySlug(pageSlug);
   const sections = await prisma.cmsPageSection.findMany({

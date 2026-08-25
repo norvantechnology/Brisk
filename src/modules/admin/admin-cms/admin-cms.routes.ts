@@ -28,6 +28,7 @@ import {
   updatePageSectionSchema,
   pageSlugSectionKeyParamsSchema,
   pageSlugParamSchema,
+  createMarketingPageSchema,
   sectionIdParamSchema,
   createSectionItemSchema,
   updateSectionItemSchema,
@@ -818,43 +819,147 @@ router.patch(
 );
 
 // ==========================================
-// MARKETING PAGE SECTIONS (Customers / Traders pages)
+// MARKETING PAGE SECTIONS
+// (customers | traders | home | about-brisk | contact-brisk)
 // ==========================================
 
 /**
  * @swagger
  * /admin/cms/marketing-pages:
  *   get:
- *     summary: List marketing pages (Customers + Traders)
+ *     summary: List all CMS marketing pages
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Returns both For Customers and For Traders pages.
- *       Use `pageSlug` = `customers` or `traders` on other admin endpoints.
+ *       Returns every marketing page row (slug + sectionsCount).
+ *
+ *       **Exact pageSlug values for FE:**
+ *       - `customers` — For Customers
+ *       - `traders` — For Traders
+ *       - `home` — Homepage (admin also has `/admin/cms/home`)
+ *       - `about-brisk` — **About Us**
+ *       - `contact-brisk` — **Contact Us**
+ *
+ *       Public website reads: `GET /pages/{pageSlug}` (snake_case fields).
  *     responses:
  *       200:
  *         description: Marketing pages list.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Marketing pages retrieved successfully.
+ *               data:
+ *                 - id: 57ee285a-6fa2-4087-a54c-ebce2aab6c34
+ *                   slug: about-brisk
+ *                   title: About Us
+ *                   status: PUBLISHED
+ *                   sectionsCount: 4
+ *                 - id: aa11bb22-cc33-4455-6677-889900aabbcc
+ *                   slug: contact-brisk
+ *                   title: Contact Us
+ *                   status: PUBLISHED
+ *                   sectionsCount: 4
+ *       401:
+ *         description: Unauthorized.
+ *   post:
+ *     summary: Create a marketing page (by slug)
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Creates an empty page shell. Then add sections via
+ *       `POST /admin/cms/marketing-pages/{pageSlug}/sections/{sectionKey}`.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [slug, title]
+ *             properties:
+ *               slug: { type: string, example: about-brisk }
+ *               title: { type: string, example: About Us }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED], example: PUBLISHED }
+ *           example:
+ *             slug: about-brisk
+ *             title: About Us
+ *             status: PUBLISHED
+ *     responses:
+ *       201:
+ *         description: Page created.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Marketing page created successfully.
+ *               data:
+ *                 id: 57ee285a-6fa2-4087-a54c-ebce2aab6c34
+ *                 slug: about-brisk
+ *                 title: About Us
+ *                 status: PUBLISHED
+ *                 sectionsCount: 0
+ *       400:
+ *         description: Validation error or slug already exists.
+ *       401:
+ *         description: Unauthorized.
  */
 router.get('/marketing-pages', pageSectionsAdminController.listAdminMarketingPages);
+router.post(
+  '/marketing-pages',
+  validate(createMarketingPageSchema),
+  pageSectionsAdminController.createAdminMarketingPage
+);
 
 /**
  * @swagger
  * /admin/cms/marketing-pages/{pageSlug}/sections:
  *   get:
- *     summary: List all sections for Customers or Traders page
+ *     summary: List all sections for a page
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       **About Us:** `pageSlug=about-brisk`  
+ *       **Contact Us:** `pageSlug=contact-brisk`
+ *
+ *       Seeded About sections: `hero`, `mission`, `vision`, `core_values`  
+ *       Seeded Contact sections: `hero`, `contact_info`, `help_desks`, `map`
  *     parameters:
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, enum: [customers, traders] }
- *         description: customers = For Customers page · traders = For Traders page
+ *         schema:
+ *           type: string
+ *           enum: [customers, traders, home, about-brisk, contact-brisk]
+ *           example: about-brisk
+ *         description: Exact slug — About Us = about-brisk · Contact Us = contact-brisk
  *     responses:
  *       200:
- *         description: Sections with items for that page.
+ *         description: Sections with nested items (admin camelCase).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Page sections retrieved successfully.
+ *               data:
+ *                 - id: 11111111-1111-1111-1111-111111111111
+ *                   pageId: 22222222-2222-2222-2222-222222222222
+ *                   sectionType: hero
+ *                   sectionKey: hero
+ *                   title: About BRISK
+ *                   subtitle: Making Things Quicker
+ *                   description: BRISK connects customers with verified local traders across Ireland.
+ *                   primaryButtonText: Get Started
+ *                   primaryButtonUrl: /customers
+ *                   status: PUBLISHED
+ *                   sortOrder: 1
+ *                   items: []
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Page slug not found.
  */
 router.get(
   '/marketing-pages/:pageSlug/sections',
@@ -874,22 +979,38 @@ router.get(
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, enum: [customers, traders] }
- *         description: customers or traders
+ *         schema:
+ *           type: string
+ *           enum: [customers, traders, home, about-brisk, contact-brisk]
+ *           example: about-brisk
  *       - in: path
  *         name: sectionKey
  *         required: true
  *         schema: { type: string, example: hero }
  *         description: |
- *           Customers — hero, why-customers, journey, peace-of-mind, app-download
- *           Traders — trader_hero, trader_benefits, trader_workflow, professional_potential, trader_cta
+ *           About — hero, mission, vision, core_values  
+ *           Contact — hero, contact_info, help_desks, map
  *     responses:
  *       200:
  *         description: Section with items.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Page section retrieved successfully.
+ *               data:
+ *                 id: 11111111-1111-1111-1111-111111111111
+ *                 sectionKey: mission
+ *                 sectionType: content
+ *                 title: Our Mission
+ *                 description: To make hiring trusted trade professionals simple...
+ *                 status: PUBLISHED
+ *                 sortOrder: 2
+ *                 items: []
  *       404:
  *         description: Section not found.
  *   post:
- *     summary: Add / create section (upsert by sectionKey)
+ *     summary: Create / upsert section by sectionKey
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
@@ -897,11 +1018,11 @@ router.get(
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, enum: [customers, traders] }
+ *         schema: { type: string, example: about-brisk }
  *       - in: path
  *         name: sectionKey
  *         required: true
- *         schema: { type: string, example: hero }
+ *         schema: { type: string, example: mission }
  *     requestBody:
  *       required: true
  *       content:
@@ -910,23 +1031,34 @@ router.get(
  *             type: object
  *             required: [sectionType]
  *             properties:
- *               sectionType: { type: string, example: hero }
- *               title: { type: string }
- *               subtitle: { type: string }
- *               description: { type: string }
+ *               sectionType: { type: string, example: content }
+ *               title: { type: string, example: Our Mission }
+ *               subtitle: { type: string, example: null }
+ *               description: { type: string, example: To make hiring trusted professionals simple. }
  *               primaryButtonText: { type: string }
  *               primaryButtonUrl: { type: string }
  *               secondaryButtonText: { type: string }
  *               secondaryButtonUrl: { type: string }
  *               backgroundImage: { type: string }
+ *               foregroundImage: { type: string }
  *               backgroundVideo: { type: string }
  *               appStoreUrl: { type: string }
  *               googlePlayUrl: { type: string }
- *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
- *               sortOrder: { type: integer }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED], example: PUBLISHED }
+ *               sortOrder: { type: integer, example: 2 }
+ *           example:
+ *             sectionType: content
+ *             title: Our Mission
+ *             description: To make hiring trusted trade professionals simple, transparent, and fast.
+ *             status: PUBLISHED
+ *             sortOrder: 2
  *     responses:
  *       200:
  *         description: Section created or updated.
+ *       400:
+ *         description: Validation error (sectionType required on create).
+ *       404:
+ *         description: Page not found.
  *   put:
  *     summary: Update section content by pageSlug + sectionKey
  *     tags: ['Admin / Website / Marketing Pages']
@@ -936,7 +1068,7 @@ router.get(
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, enum: [customers, traders] }
+ *         schema: { type: string, example: contact-brisk }
  *       - in: path
  *         name: sectionKey
  *         required: true
@@ -948,8 +1080,8 @@ router.get(
  *           schema:
  *             type: object
  *             properties:
- *               title: { type: string }
- *               subtitle: { type: string }
+ *               title: { type: string, example: Contact Us }
+ *               subtitle: { type: string, example: We are here to help }
  *               description: { type: string }
  *               primaryButtonText: { type: string }
  *               primaryButtonUrl: { type: string }
@@ -957,13 +1089,18 @@ router.get(
  *               secondaryButtonUrl: { type: string }
  *               backgroundImage: { type: string }
  *               backgroundVideo: { type: string }
- *               appStoreUrl: { type: string }
- *               googlePlayUrl: { type: string }
  *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
  *               sortOrder: { type: integer }
+ *           example:
+ *             title: Contact Us
+ *             subtitle: We are here to help
+ *             description: Reach the BRISK team for support or partnerships.
+ *             status: PUBLISHED
  *     responses:
  *       200:
  *         description: Section updated.
+ *       404:
+ *         description: Page or section not found.
  */
 router.get(
   '/marketing-pages/:pageSlug/sections/:sectionKey',
@@ -1066,6 +1203,9 @@ router.delete(
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Works for any marketing page section (including `about-brisk` and `contact-brisk`).
+ *       Get `sectionId` from `GET /admin/cms/marketing-pages/{pageSlug}/sections`.
  *     parameters:
  *       - in: path
  *         name: sectionId
@@ -1079,10 +1219,27 @@ router.delete(
  *             type: object
  *             required: [status]
  *             properties:
- *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED], example: PUBLISHED }
+ *           example:
+ *             status: PUBLISHED
  *     responses:
  *       200:
  *         description: Status updated.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Section status updated.
+ *               data:
+ *                 id: 11111111-1111-1111-1111-111111111111
+ *                 sectionKey: hero
+ *                 status: PUBLISHED
+ *       400:
+ *         description: Validation error.
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Section not found.
  */
 router.patch(
   '/sections/:sectionId/status',
@@ -1098,6 +1255,7 @@ router.patch(
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
+ *     description: Lower `sortOrder` appears first on About/Contact/Customers/Traders pages.
  *     parameters:
  *       - in: path
  *         name: sectionId
@@ -1112,9 +1270,24 @@ router.patch(
  *             required: [sortOrder]
  *             properties:
  *               sortOrder: { type: integer, example: 1 }
+ *           example:
+ *             sortOrder: 1
  *     responses:
  *       200:
  *         description: Sort order updated.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Section sort order updated.
+ *               data:
+ *                 id: 11111111-1111-1111-1111-111111111111
+ *                 sectionKey: mission
+ *                 sortOrder: 1
+ *       400:
+ *         description: Validation error.
+ *       404:
+ *         description: Section not found.
  */
 router.patch(
   '/sections/:sectionId/sort-order',
@@ -1130,6 +1303,9 @@ router.patch(
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Example: Core Values cards on About (`about-brisk` / `core_values`),
+ *       or Help Desks cards on Contact (`contact-brisk` / `help_desks`).
  *     parameters:
  *       - in: path
  *         name: sectionId
@@ -1138,6 +1314,21 @@ router.patch(
  *     responses:
  *       200:
  *         description: Section items list.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Section items retrieved successfully.
+ *               data:
+ *                 - id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+ *                   sectionId: 11111111-1111-1111-1111-111111111111
+ *                   title: Trust
+ *                   description: Verified traders and transparent workflows.
+ *                   icon: null
+ *                   image: null
+ *                   stepNumber: null
+ *                   sortOrder: 1
+ *                   status: PUBLISHED
  *   post:
  *     summary: Add card/step item to a section
  *     tags: ['Admin / Website / Marketing Pages']
@@ -1155,16 +1346,39 @@ router.patch(
  *           schema:
  *             type: object
  *             properties:
- *               title: { type: string, example: Post a Job }
- *               description: { type: string }
- *               icon: { type: string }
- *               image: { type: string }
- *               stepNumber: { type: integer, example: 1 }
- *               sortOrder: { type: integer }
- *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *               title: { type: string, example: Trust }
+ *               description: { type: string, example: Verified traders and transparent workflows. }
+ *               icon: { type: string, nullable: true }
+ *               image: { type: string, nullable: true }
+ *               stepNumber: { type: integer, example: 1, nullable: true }
+ *               sortOrder: { type: integer, example: 1 }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED], example: PUBLISHED }
+ *               metadata: { type: object, nullable: true }
+ *           example:
+ *             title: Trust
+ *             description: Verified traders and transparent workflows.
+ *             icon: null
+ *             image: null
+ *             stepNumber: 1
+ *             sortOrder: 1
+ *             status: PUBLISHED
  *     responses:
  *       201:
  *         description: Item created.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Section item created successfully.
+ *               data:
+ *                 id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+ *                 title: Trust
+ *                 status: PUBLISHED
+ *                 sortOrder: 1
+ *       400:
+ *         description: Validation error.
+ *       404:
+ *         description: Section not found.
  */
 router.get(
   '/sections/:sectionId/items',

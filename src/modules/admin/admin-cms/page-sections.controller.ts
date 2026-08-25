@@ -117,6 +117,19 @@ export const listAdminMarketingPages = async (
   }
 };
 
+export const createAdminMarketingPage = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await pageSectionsService.createAdminMarketingPage(req.body);
+    sendResponse({ res, statusCode: 201, message: 'Marketing page created successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const listAdminPageSections = async (
   req: AuthenticatedAdminRequest,
   res: Response,

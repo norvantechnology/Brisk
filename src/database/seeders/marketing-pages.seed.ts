@@ -1,4 +1,5 @@
 import { CmsPublishStatus, PrismaClient } from '@prisma/client';
+import { seedHomePage } from './home.seed';
 
 const seedCustomersPage = async (prisma: PrismaClient) => {
   const page = await prisma.cmsMarketingPage.upsert({
@@ -440,10 +441,243 @@ const seedTradersPage = async (prisma: PrismaClient) => {
   });
 };
 
-import { seedHomePage } from './home.seed';
+const seedAboutBriskPage = async (prisma: PrismaClient) => {
+  const page = await prisma.cmsMarketingPage.upsert({
+    where: { slug: 'about-brisk' },
+    update: { title: 'About Us', status: CmsPublishStatus.PUBLISHED },
+    create: {
+      slug: 'about-brisk',
+      title: 'About Us',
+      status: CmsPublishStatus.PUBLISHED,
+    },
+  });
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'hero' } },
+    update: {
+      title: 'About BRISK',
+      subtitle: 'Making Things Quicker',
+      description: 'BRISK connects customers with verified local traders across Ireland.',
+      primaryButtonText: 'Get Started',
+      primaryButtonUrl: '/customers',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 1,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'hero',
+      sectionKey: 'hero',
+      title: 'About BRISK',
+      subtitle: 'Making Things Quicker',
+      description: 'BRISK connects customers with verified local traders across Ireland.',
+      primaryButtonText: 'Get Started',
+      primaryButtonUrl: '/customers',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 1,
+    },
+  });
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'mission' } },
+    update: {
+      title: 'Our Mission',
+      description:
+        'To make hiring trusted trade professionals simple, transparent, and fast for every household and business.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 2,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'content',
+      sectionKey: 'mission',
+      title: 'Our Mission',
+      description:
+        'To make hiring trusted trade professionals simple, transparent, and fast for every household and business.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 2,
+    },
+  });
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'vision' } },
+    update: {
+      title: 'Our Vision',
+      description:
+        'A marketplace where quality work, fair pricing, and verified professionals are the standard.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 3,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'content',
+      sectionKey: 'vision',
+      title: 'Our Vision',
+      description:
+        'A marketplace where quality work, fair pricing, and verified professionals are the standard.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 3,
+    },
+  });
+
+  const core = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'core_values' } },
+    update: {
+      title: 'Core Values',
+      description: 'The principles that guide BRISK every day.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'feature_grid',
+      sectionKey: 'core_values',
+      title: 'Core Values',
+      description: 'The principles that guide BRISK every day.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
+  });
+
+  const values = [
+    { title: 'Trust', description: 'Verified traders and transparent workflows.', sortOrder: 1 },
+    { title: 'Speed', description: 'Faster hiring and clearer job progress.', sortOrder: 2 },
+    { title: 'Quality', description: 'Ratings and reviews that keep standards high.', sortOrder: 3 },
+    { title: 'Fairness', description: 'Competitive offers that work for both sides.', sortOrder: 4 },
+  ];
+  for (const item of values) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: core.id, title: item.title },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: {
+          sectionId: core.id,
+          title: item.title,
+          description: item.description,
+          sortOrder: item.sortOrder,
+          status: CmsPublishStatus.PUBLISHED,
+        },
+      });
+    }
+  }
+};
+
+const seedContactBriskPage = async (prisma: PrismaClient) => {
+  const page = await prisma.cmsMarketingPage.upsert({
+    where: { slug: 'contact-brisk' },
+    update: { title: 'Contact Us', status: CmsPublishStatus.PUBLISHED },
+    create: {
+      slug: 'contact-brisk',
+      title: 'Contact Us',
+      status: CmsPublishStatus.PUBLISHED,
+    },
+  });
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'hero' } },
+    update: {
+      title: 'Contact Us',
+      subtitle: 'We are here to help',
+      description: 'Reach the BRISK team for support, partnerships, or general enquiries.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 1,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'hero',
+      sectionKey: 'hero',
+      title: 'Contact Us',
+      subtitle: 'We are here to help',
+      description: 'Reach the BRISK team for support, partnerships, or general enquiries.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 1,
+    },
+  });
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'contact_info' } },
+    update: {
+      title: 'Get in Touch',
+      description: 'Send a message and our team will respond as soon as possible.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 2,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'contact_info',
+      sectionKey: 'contact_info',
+      title: 'Get in Touch',
+      description: 'Send a message and our team will respond as soon as possible.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 2,
+    },
+  });
+
+  const help = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'help_desks' } },
+    update: {
+      title: 'Help Desks',
+      description: 'Choose the right channel for your question.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 3,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'feature_grid',
+      sectionKey: 'help_desks',
+      title: 'Help Desks',
+      description: 'Choose the right channel for your question.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 3,
+    },
+  });
+
+  await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'map' } },
+    update: {
+      title: 'Find Us',
+      description: 'BRISK — Ireland',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'map',
+      sectionKey: 'map',
+      title: 'Find Us',
+      description: 'BRISK — Ireland',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
+  });
+
+  const desks = [
+    { title: 'Customer Support', description: 'Help with jobs, bookings, and payments.', sortOrder: 1 },
+    { title: 'Trader Support', description: 'Onboarding, offers, and account help.', sortOrder: 2 },
+    { title: 'Partnerships', description: 'Business and media enquiries.', sortOrder: 3 },
+  ];
+  for (const item of desks) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: help.id, title: item.title },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: {
+          sectionId: help.id,
+          title: item.title,
+          description: item.description,
+          sortOrder: item.sortOrder,
+          status: CmsPublishStatus.PUBLISHED,
+        },
+      });
+    }
+  }
+};
 
 export const seedMarketingPages = async (prisma: PrismaClient) => {
   await seedCustomersPage(prisma);
   await seedTradersPage(prisma);
   await seedHomePage(prisma);
+  await seedAboutBriskPage(prisma);
+  await seedContactBriskPage(prisma);
 };

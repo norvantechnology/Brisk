@@ -29,8 +29,8 @@ const options: swaggerJSDoc.Options = {
         '- **Traders page:** GET /pages/traders · GET /testimonials?type=trader · GET /cms/bootstrap?audience=trader',
         '- **Homepage:** GET /cms/home · GET /cms/home/reviews · GET /pages/home',
         '- **Admin CMS (Homepage):** Admin / Website / Home — /admin/cms/home/...',
-        '- **Admin CMS (Customers/Traders content):** Admin / Website / Marketing Pages — /admin/cms/marketing-pages/{customers|traders}/...',
-        '- **Contact Us:** POST /contact · Admin / Website / Contact — /admin/cms/contact-submissions',
+        '- **Admin CMS (page sections):** Admin / Website / Marketing Pages — pageSlug = customers | traders | home | about-brisk | contact-brisk',
+        '- **Contact form submissions CRM:** Admin / Website / Contact — /admin/cms/contact-submissions (separate from contact-brisk page sections)',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
         '',
         'Each endpoint documents **parameter purpose**, **when to use**, and **examples** in the description.',
@@ -42,6 +42,11 @@ const options: swaggerJSDoc.Options = {
       { name: 'Admin / Categories', description: 'Master categories' },
       { name: 'Admin / Sub-Categories', description: 'Sub-categories' },
       { name: 'Admin / Customers', description: 'Customer directory' },
+      {
+        name: 'Admin / Traders',
+        description:
+          'Traders Management (All Traders): KPI stats, list/search/filters, create, view, edit, status, verification, delete. Auth: admin Bearer. Document review queue is under Admin / Trader Verification.',
+      },
       { name: 'Admin / Deletion Requests', description: 'GDPR deletion queue' },
       { name: 'Admin / Payments', description: 'Transactions, invoices, refunds' },
       { name: 'Admin / Website / Dashboard', description: 'CMS dashboard' },
@@ -55,7 +60,7 @@ const options: swaggerJSDoc.Options = {
       {
         name: 'Admin / Website / Marketing Pages',
         description:
-          'Admin add/update for For Customers & For Traders pages. pageSlug=customers|traders. Auth: admin Bearer token.',
+          'Section CMS for website pages. pageSlug values: customers | traders | home | about-brisk (About Us) | contact-brisk (Contact Us). Auth: admin Bearer. Public FE: GET /pages/{pageSlug}.',
       },
       {
         name: 'Admin / Website / Home',
