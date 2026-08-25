@@ -42,12 +42,16 @@ export const getHomeSection = async (
 };
 
 export const getHomeReviews = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await cmsService.listPublishedTestimonials({ type: 'home', limit: 50 });
+    // Deprecated alias — same as GET /cms/testimonials?audience=BOTH
+    const data = await cmsService.listPublishedTestimonials({
+      audience: 'BOTH',
+      limit: typeof req.query.limit === 'string' ? req.query.limit : 50,
+    });
     sendResponse({
       res,
       statusCode: 200,

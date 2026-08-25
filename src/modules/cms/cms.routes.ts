@@ -22,7 +22,7 @@ const router = Router();
  *
  *       **Does not include:** Full Customers/Traders page sections — use `GET /pages/{pageSlug}` for that.
  *
- *       **Typical pair:** `GET /cms/bootstrap?audience=customer` + `GET /pages/customers` + `GET /testimonials?type=customer`
+ *       **Typical pair:** `GET /cms/bootstrap?audience=customer` + `GET /pages/customers` + `GET /cms/testimonials?audience=CUSTOMER`
  *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
@@ -291,37 +291,64 @@ router.get('/faqs', cmsController.getFaqs);
  * @swagger
  * /cms/testimonials:
  *   get:
- *     summary: List published testimonials (alias — prefer GET /testimonials)
+ *     summary: List published testimonials / reviews (standard endpoint)
  *     description: |
- *       Same as `GET /testimonials`. Prefer `/testimonials?type=customer` in frontend.
+ *       **Standard public API for all website testimonial/review sections.**
  *
- *       See `GET /testimonials` for full parameter documentation.
+ *       Use this one endpoint for Customer page, Trader page, Homepage, Testimonials page, and future sections.
+ *
+ *       **Auth:** Not required.
+ *
+ *       **Filter rules (`audience`):**
+ *       - `CUSTOMER` → testimonials with targetAudience **CUSTOMER** or **BOTH**
+ *       - `TRADER` → testimonials with targetAudience **TRADER** or **BOTH**
+ *       - `BOTH` → testimonials with targetAudience **BOTH** only (typical for homepage)
+ *
+ *       **Examples:**
+ *       - Customer page: `GET /cms/testimonials?audience=CUSTOMER&limit=5`
+ *       - Trader page: `GET /cms/testimonials?audience=TRADER&limit=5`
+ *       - Home page: `GET /cms/testimonials?audience=BOTH&limit=10`
+ *
+ *       **Deprecated aliases (same handler):**
+ *       - `GET /testimonials` — do not use for new work
+ *       - `GET /cms/home/reviews` — do not use for new work (equivalent to `audience=BOTH`)
+ *
+ *       **Response:** `data.items[]` snake_case cards (`name`, `role`, `type`, `rating`, `review`, `avatar`, `is_verified`, `target_audience`, `sort_order`, …).
  *     tags: ['Website / Content']
  *     parameters:
  *       - in: query
- *         name: type
- *         schema: { type: string, enum: [customer, trader, home] }
+ *         name: audience
+ *         required: false
+ *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
  *         description: |
- *           **Purpose:** Primary filter — `customer` for Customers page, `trader` for Traders page, `home` for homepage.
+ *           **Purpose:** Scope testimonials to the page/audience.
+ *           **CUSTOMER** — customer + BOTH. **TRADER** — trader + BOTH. **BOTH** — BOTH only.
+ *           **Example:** `audience=TRADER`
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 50 }
+ *         description: |
+ *           **Purpose:** Max number of records returned.
+ *           **Example:** `limit=5`
  *       - in: query
  *         name: featured
  *         schema: { type: string, enum: [true, false] }
- *         description: Only featured testimonials (spotlight carousel).
+ *         description: Optional — only admin-marked featured testimonials.
  *       - in: query
- *         name: audience
- *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
- *         description: Legacy audience filter — prefer `type` for page-specific reviews.
+ *         name: type
+ *         deprecated: true
+ *         schema: { type: string, enum: [customer, trader, home] }
+ *         description: |
+ *           **Deprecated.** Maps to audience when `audience` is omitted (`home` → BOTH). Prefer `audience`.
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [published, draft] }
- *         description: Publish filter; public site uses published only.
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 20, maximum: 100 }
- *         description: Max testimonials returned (e.g. `limit=5` for carousel).
+ *         description: Public default is published-only; rarely needed.
  *     responses:
  *       200:
- *         description: data.items[] testimonial cards (snake_case fields).
+ *         description: |
+ *           `data.items[]` — testimonial cards ordered by `sort_order` / `display_order`.
+ *           Empty array is valid when nothing matches the filter.
  */
 router.get('/testimonials', cmsController.getTestimonials);
 

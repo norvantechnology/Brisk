@@ -26,7 +26,7 @@ const router = Router();
  *       - `about-brisk` — **About Us** page
  *       - `contact-brisk` — **Contact Us** page
  *
- *       **Reviews:** Customers/Traders — `GET /testimonials?type=customer|trader`. Homepage — `GET /cms/home/reviews`.
+ *       **Reviews:** Use standard `GET /cms/testimonials?audience=CUSTOMER|TRADER|BOTH&limit=N` (same API for all pages).
  *
  *       **Header/footer:** Use `GET /cms/bootstrap?audience=customer` or `audience=trader`.
  *     parameters:

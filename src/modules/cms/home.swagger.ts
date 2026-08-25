@@ -13,7 +13,7 @@
  *
  *       **Alias:** Same payload as `GET /pages/home`.
  *
- *       **Not included:** User reviews — fetch separately via `GET /cms/home/reviews`.
+ *       **Not included:** User reviews — fetch via `GET /cms/testimonials?audience=BOTH` (preferred) or deprecated `GET /cms/home/reviews`.
  *
  *       **Response shape (snake_case):**
  *       - `data.page` — `{ slug, title, status }`
@@ -33,32 +33,25 @@
  * @swagger
  * /cms/home/reviews:
  *   get:
- *     summary: Homepage user reviews / testimonials
+ *     deprecated: true
+ *     summary: "[Deprecated] Homepage reviews — use GET /cms/testimonials?audience=BOTH"
  *     tags: ['Website / Home']
  *     description: |
- *       **Use on:** "User Reviews" section on homepage (trader/customer toggle carousel).
+ *       **Deprecated.** Use the standard endpoint:
+ *       `GET /cms/testimonials?audience=BOTH&limit=10`
  *
- *       **Auth:** Not required.
+ *       This path remains as a temporary alias (same data / same item shape).
  *
- *       **When to use:** After loading main page, or in parallel with `GET /cms/home`.
- *
- *       **Alias:** Same data as `GET /testimonials?type=home`.
- *
- *       **Response fields per item (snake_case):**
- *       - `name` — reviewer display name
- *       - `role` — e.g. Trader, Verified Trader
- *       - `rating` — numeric rating (e.g. 4.8)
- *       - `review` — full testimonial text
- *       - `avatar` — profile image URL string
- *       - `is_verified` — verified badge flag
- *       - `sort_order` — display order
- *
- *       **Example:** `GET /cms/home/reviews`
+ *       **Example:** `GET /cms/home/reviews?limit=10`
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 50 }
+ *         description: Max reviews returned.
  *     responses:
  *       200:
  *         description: |
- *           `data.items[]` — published homepage reviews ordered by `sort_order`.
- *           Empty array is valid when no reviews are seeded.
+ *           `data.items[]` — published BOTH-audience reviews ordered by `sort_order`.
  */
 
 /**
@@ -132,7 +125,7 @@
  *
  *       **Preferred:** Either `GET /cms/home` or `GET /pages/home` — identical data.
  *
- *       **Reviews:** Use `GET /cms/home/reviews` separately.
+ *       **Reviews:** Prefer `GET /cms/testimonials?audience=BOTH` (or deprecated `GET /cms/home/reviews`).
  *
  *       **Example:** `GET /pages/home`
  *     responses:

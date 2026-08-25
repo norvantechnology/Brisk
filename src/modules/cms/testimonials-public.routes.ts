@@ -1,67 +1,42 @@
 import { Router } from 'express';
 import * as cmsController from './cms.controller';
 
-/** FE primary path: GET /testimonials?type=customer */
+/** @deprecated Prefer GET /cms/testimonials?audience=CUSTOMER|TRADER|BOTH&limit=N */
 const router = Router();
 
 /**
  * @swagger
  * /testimonials:
  *   get:
- *     summary: List published testimonials (Customers / Traders page reviews)
+ *     deprecated: true
+ *     summary: "[Deprecated] List testimonials — use GET /cms/testimonials"
  *     tags: ['Website / Content']
  *     description: |
- *       **Use on:** Reviews carousel on For Customers page or For Traders page.
+ *       **Deprecated.** Use the standard endpoint:
+ *       `GET /cms/testimonials?audience=CUSTOMER|TRADER|BOTH&limit=N`
  *
- *       **Auth:** Not required.
- *
- *       **Primary filter:** `type=customer` or `type=trader` — matches `pageType`, or legacy rows
- *       where `targetAudience` matches and `pageType` is not `HOME`.
- *
- *       Prefer `?type=trader&limit=4`. `audience` is optional when `type` is omitted.
- *
- *       **Alias:** Same handler as `GET /cms/testimonials` — prefer `/testimonials` in frontend.
- *
- *       **Response fields (snake_case):** `name`, `role`, `type`, `rating`, `review`, `avatar`, `is_verified`, `sort_order`
+ *       This path remains as a temporary alias (same handler / same response).
  *     parameters:
- *       - in: query
- *         name: type
- *         schema: { type: string, enum: [customer, trader, home] }
- *         description: |
- *           **Purpose:** Filter reviews for the page you are rendering.
- *           **customer** — For Customers page reviews section.
- *           **trader** — For Traders page reviews section.
- *           **home** — Homepage featured reviews.
- *           **Example:** `GET /testimonials?type=customer`
  *       - in: query
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER, both, customer, trader] }
- *         description: |
- *           **Purpose:** Optional legacy audience filter (prefer `type` for page-specific reviews).
- *           **When to use:** Bootstrap or mixed layouts that need audience-scoped testimonials.
+ *         description: Same as `/cms/testimonials` — CUSTOMER→customer+BOTH, TRADER→trader+BOTH, BOTH→BOTH only.
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [customer, trader, home] }
+ *         description: Legacy alias for audience (`home` → BOTH). Prefer `audience`.
  *       - in: query
  *         name: featured
  *         schema: { type: string, enum: [true, false] }
- *         description: |
- *           **Purpose:** Return only admin-marked featured testimonials.
- *           **When to use:** Homepage spotlight or "Featured reviews" widget.
- *           **Example:** `GET /testimonials?type=customer&featured=true`
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [published, draft] }
- *         description: |
- *           **Purpose:** Filter by publish status. Public site should use `published` (default behaviour returns published only).
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20, maximum: 100 }
- *         description: |
- *           **Purpose:** Cap number of testimonials returned (e.g. carousel showing top 5).
- *           **Example:** `GET /testimonials?type=trader&limit=5`
+ *         schema: { type: integer, default: 20, maximum: 50 }
  *     responses:
  *       200:
- *         description: |
- *           `data.items[]` — testimonial cards ordered by `sort_order`.
- *           Empty array is valid when no testimonials seeded for that type.
+ *         description: data.items[] testimonial cards.
  */
 router.get('/', cmsController.getTestimonials);
 

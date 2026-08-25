@@ -25,9 +25,10 @@ const options: swaggerJSDoc.Options = {
         'Filter by tag: **Admin** · **Website** · **Mobile** · **Customer** · **Trader** · **System**',
         '',
         '**Frontend quick reference**',
-        '- **Customers page:** GET /pages/customers · GET /testimonials?type=customer · GET /cms/bootstrap?audience=customer',
-        '- **Traders page:** GET /pages/traders · GET /testimonials?type=trader · GET /cms/bootstrap?audience=trader',
-        '- **Homepage:** GET /cms/home · GET /cms/home/reviews · GET /pages/home',
+        '- **Testimonials / reviews (standard):** GET /cms/testimonials?audience=CUSTOMER|TRADER|BOTH&limit=N',
+        '- **Customers page:** GET /pages/customers · GET /cms/testimonials?audience=CUSTOMER&limit=5 · GET /cms/bootstrap?audience=customer',
+        '- **Traders page:** GET /pages/traders · GET /cms/testimonials?audience=TRADER&limit=5 · GET /cms/bootstrap?audience=trader',
+        '- **Homepage:** GET /cms/home · GET /cms/testimonials?audience=BOTH&limit=10 · GET /pages/home',
         '- **Admin CMS (Homepage):** Admin / Website / Home — /admin/cms/home/...',
         '- **Admin CMS (page sections):** Admin / Website / Marketing Pages — pageSlug = customers | traders | home | about-brisk | contact-brisk',
         '- **Contact form submissions CRM:** Admin / Website / Contact — /admin/cms/contact-submissions (separate from contact-brisk page sections)',
@@ -70,7 +71,7 @@ const options: swaggerJSDoc.Options = {
       {
         name: 'Website / Home',
         description:
-          'Public homepage CMS. Base: /cms/home. No auth. Full page GET /cms/home or alias GET /pages/home. Reviews: GET /cms/home/reviews. Icons/images returned as URL strings.',
+          'Public homepage CMS. Base: /cms/home. No auth. Full page GET /cms/home or alias GET /pages/home. Reviews: prefer GET /cms/testimonials?audience=BOTH (GET /cms/home/reviews is deprecated alias). Icons/images returned as URL strings.',
       },
       {
         name: 'Admin / Website / Contact',
