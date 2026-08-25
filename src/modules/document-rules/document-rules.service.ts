@@ -106,7 +106,7 @@ export const listCategoryDocumentRules = async (
       OR: [{ traderType }, { traderType: null }],
       status: 'active',
     },
-    orderBy: [{ categoryId: 'asc' }, { sortOrder: 'asc' }],
+    orderBy: [{ sortOrder: 'asc' }],
     include: {
       category: { select: { id: true, name: true, categoryCode: true } },
     },
@@ -116,6 +116,117 @@ export const listCategoryDocumentRules = async (
     ...serializeRule(rule),
     category: rule.category,
   }));
+};
+
+/** Group category rules for Category Wise Documents screen (one section per selected trade). */
+export const groupCategoryDocumentRules = (
+  flatRules: Array<
+    ReturnType<typeof serializeRule> & {
+      category: { id: string; name: string; categoryCode: string } | null;
+    }
+  >,
+  categoryIds: string[]
+) => {
+  const byCategoryId = new Map<
+    string,
+    {
+      categoryId: string;
+      categoryName: string;
+      categoryCode: string;
+      title: string;
+      subtitle: string;
+      documents: Array<ReturnType<typeof serializeRule> & { category: { id: string; name: string; categoryCode: string } | null }>;
+    }
+  >();
+
+  for (const rule of flatRules) {
+    if (!rule.categoryId || !rule.category) continue;
+    let group = byCategoryId.get(rule.categoryId);
+    if (!group) {
+      group = {
+        categoryId: rule.category.id,
+        categoryName: rule.category.name,
+        categoryCode: rule.category.categoryCode,
+        title: `${rule.category.name} Category`,
+        subtitle: `Upload the required documents for your ${rule.category.name} category.`,
+        documents: [],
+      };
+      byCategoryId.set(rule.categoryId, group);
+    }
+    group.documents.push(rule);
+  }
+
+  // Keep selected category order from onboarding
+  const ordered = categoryIds
+    .map((id) => byCategoryId.get(id))
+    .filter((group): group is NonNullable<typeof group> => Boolean(group));
+
+  // Any leftover (shouldn't happen) append
+  for (const [id, group] of byCategoryId) {
+    if (!categoryIds.includes(id)) ordered.push(group);
+  }
+
+  return ordered;
+};
+
+export const getDocumentRequirementsForTrader = async (
+  traderType: TraderType,
+  categoryIds: string[]
+) => {
+  const [entityRules, flatCategoryRules] = await Promise.all([
+    listEntityDocumentRules(traderType),
+    listCategoryDocumentRules(categoryIds, traderType),
+  ]);
+
+  return {
+    entityRules,
+    /** Category-wise sections for mobile Category Wise Documents screen */
+    categoryRules: groupCategoryDocumentRules(flatCategoryRules, categoryIds),
+    /** Flat list kept for internal validation helpers */
+    categoryRulesFlat: flatCategoryRules,
+  };
+};
+
+export const assertDocumentRuleExists = async (documentRuleId: string) => {
+  const rule = await prisma.documentRule.findUnique({ where: { id: documentRuleId } });
+  if (!rule || rule.status !== 'active') {
+    throw new NotFoundError('Document requirement not found.');
+  }
+  return rule;
+};
+
+export const validateRequiredDocumentsUploaded = async (
+  traderId: string,
+  traderType: TraderType,
+  categoryIds: string[]
+) => {
+  const { entityRules, categoryRulesFlat } = await getDocumentRequirementsForTrader(
+    traderType,
+    categoryIds
+  );
+
+  const requiredRuleIds = [...entityRules, ...categoryRulesFlat]
+    .filter((rule) => rule.required)
+    .map((rule) => rule.id);
+
+  if (!requiredRuleIds.length) {
+    return { complete: true, missing: [] as string[] };
+  }
+
+  const uploads = await prisma.traderDocument.findMany({
+    where: {
+      traderId,
+      documentRuleId: { in: requiredRuleIds },
+    },
+    include: { documentRule: { select: { name: true, documentKey: true } } },
+  });
+
+  const uploadedRuleIds = new Set(uploads.map((doc) => doc.documentRuleId));
+  const missing = [...entityRules, ...categoryRulesFlat]
+    .filter((rule) => rule.required && !uploadedRuleIds.has(rule.id))
+    .map((rule) => rule.name);
+
+  return { complete: missing.length === 0, missing };
 };
 
 const nextSortOrder = async (
@@ -277,58 +388,4 @@ export const replaceCategoryDocumentRules = async (
   });
 
   return stored.map(serializeRule);
-};
-
-export const getDocumentRequirementsForTrader = async (
-  traderType: TraderType,
-  categoryIds: string[]
-) => {
-  const [entityRules, categoryRules] = await Promise.all([
-    listEntityDocumentRules(traderType),
-    listCategoryDocumentRules(categoryIds, traderType),
-  ]);
-
-  return { entityRules, categoryRules };
-};
-
-export const assertDocumentRuleExists = async (documentRuleId: string) => {
-  const rule = await prisma.documentRule.findUnique({ where: { id: documentRuleId } });
-  if (!rule || rule.status !== 'active') {
-    throw new NotFoundError('Document requirement not found.');
-  }
-  return rule;
-};
-
-export const validateRequiredDocumentsUploaded = async (
-  traderId: string,
-  traderType: TraderType,
-  categoryIds: string[]
-) => {
-  const { entityRules, categoryRules } = await getDocumentRequirementsForTrader(
-    traderType,
-    categoryIds
-  );
-
-  const requiredRuleIds = [...entityRules, ...categoryRules]
-    .filter((rule) => rule.required)
-    .map((rule) => rule.id);
-
-  if (!requiredRuleIds.length) {
-    return { complete: true, missing: [] as string[] };
-  }
-
-  const uploads = await prisma.traderDocument.findMany({
-    where: {
-      traderId,
-      documentRuleId: { in: requiredRuleIds },
-    },
-    include: { documentRule: { select: { name: true, documentKey: true } } },
-  });
-
-  const uploadedRuleIds = new Set(uploads.map((doc) => doc.documentRuleId));
-  const missing = [...entityRules, ...categoryRules]
-    .filter((rule) => rule.required && !uploadedRuleIds.has(rule.id))
-    .map((rule) => rule.name);
-
-  return { complete: missing.length === 0, missing };
 };

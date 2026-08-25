@@ -85,7 +85,15 @@ const buildDocumentRequirementsWithUploads = async (
 
   return {
     entityRules: enrichRulesWithUploads(entityRules, documents),
-    categoryRules: enrichRulesWithUploads(categoryRules, documents),
+    // Category Wise Documents screen: one object per selected category + documents[]
+    categoryRules: categoryRules.map((group) => ({
+      categoryId: group.categoryId,
+      categoryName: group.categoryName,
+      categoryCode: group.categoryCode,
+      title: group.title,
+      subtitle: group.subtitle,
+      documents: enrichRulesWithUploads(group.documents, documents),
+    })),
   };
 };
 const traderInclude = {

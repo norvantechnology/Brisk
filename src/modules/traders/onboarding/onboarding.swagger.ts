@@ -78,7 +78,28 @@
  *                   where `status` is admin review (`PENDING` / `APPROVED` / `REJECTED` / `EXPIRED`).
  *             categoryRules:
  *               type: array
- *               description: Per-trade docs after categories selected (same upload fields as entityRules).
+ *               description: |
+ *                 **Category Wise Documents screen** — one object per selected trade category.
+ *                 Each group has `title`, `subtitle`, and `documents[]` (REQUIRED/OPTIONAL rows with upload state).
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   categoryId: { type: string, format: uuid }
+ *                   categoryName: { type: string, example: 'Electrical & Wiring' }
+ *                   categoryCode: { type: string, example: 'CAT-ELECT' }
+ *                   title: { type: string, example: 'Electrical & Wiring Category' }
+ *                   subtitle: { type: string, example: 'Upload the required documents for your Electrical & Wiring category.' }
+ *                   documents:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string, format: uuid }
+ *                         documentKey: { type: string }
+ *                         name: { type: string, example: 'Insurance' }
+ *                         required: { type: boolean, example: true }
+ *                         uploadStatus: { type: string, enum: [UPLOADED, NOT_UPLOADED] }
+ *                         uploadedDocument: { type: object, nullable: true }
  *         profile:
  *           type: object
  *           description: Saved personal or company info from step 5.
@@ -110,10 +131,9 @@
  *       **Key response fields:**
  *       - `data.nextStep` — same key as login (`TRADER_ONBOARDING`, `TRADER_PENDING_APPROVAL`, `TRADER_HOME`)
  *       - `data.onboardingScreen` — which screen inside onboarding (Business Verification, Sole Trader Verification, etc.)
- *       - `data.documentRequirements.entityRules` / `categoryRules` — each rule includes
- *         `uploadStatus` (`UPLOADED` | `NOT_UPLOADED`) and nested `uploadedDocument`
- *         (`null` if not uploaded; else `id`, `fileUrl`, `fileName`, `status`, `uploadedAt`).
- *         Admin review state is `uploadedDocument.status` (`PENDING` | `APPROVED` | `REJECTED` | `EXPIRED`).
+ *       - `data.documentRequirements.entityRules` — entity docs with upload state
+ *       - `data.documentRequirements.categoryRules` — **grouped by category** for Category Wise Documents UI:
+ *         `[{ categoryId, categoryName, title, subtitle, documents: [{ name, required, uploadStatus, uploadedDocument }] }]`
  *       - `data.profile` / `data.bankDetails` — pre-filled form values
  *
  *       **If not started:** `data.started = false`, `onboardingScreen = business_verification` → call `POST /traders/onboarding/start` on first entry.
@@ -212,10 +232,15 @@
  *     summary: Get document checklist for current step (entity + category rules)
  *     tags: ['Trader / Onboarding']
  *     description: |
- *       **Figma screens:**
- *       - **Sole Trader Verification** / **Company Verification** — ID upload rows only (`driving_license`, `director_photo_id`)
- *       - **Sole Trader Document Verification** / **Company Document Verification** — remaining entity docs
- *       - **Category Wise Documents** (optional later flow — after trade skills selected)
+ *       **Category Wise Documents screen:** use `data.categoryRules` — **array of category groups**, not a flat list:
+ *       ```
+ *       categoryRules: [{
+ *         categoryId, categoryName, categoryCode,
+ *         title: "Electrical & Wiring Category",
+ *         subtitle: "Upload the required documents for your Electrical & Wiring category.",
+ *         documents: [{ id, name, required, uploadStatus, uploadedDocument, ... }]
+ *       }]
+ *       ```
  *
  *       **When to call:**
  *       - On document upload screens to build the list (REQUIRED / OPTIONAL badges)
@@ -223,8 +248,7 @@
  *
  *       **No parameters.** Rules depend on saved `entityType` and `categoryIds`.
  *
- *       **Each rule object includes:** `id` (use as `documentRuleId` on upload), `name`, `documentKey`,
- *       `required`, `scope`, plus `uploadStatus` and nested `uploadedDocument` (same shape as GET /traders/onboarding).
+ *       **Upload:** use each document's `id` as `documentRuleId` on `PUT /traders/onboarding/documents`.
  *     security:
  *       - bearerAuth: []
  *     responses:
