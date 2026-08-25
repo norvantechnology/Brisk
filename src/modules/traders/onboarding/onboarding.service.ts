@@ -15,11 +15,9 @@ import {
   ForbiddenError,
 } from '../../../utils/errors';
 import {
-  getStepKey,
   ONBOARDING_STEPS,
-  TOTAL_ONBOARDING_STEPS,
-  VERIFICATION_SCREEN_DOCUMENT_KEYS,
 } from './onboarding.constants';
+import { buildOnboardingProgress } from './onboarding-progress';
 import { resolveAppNextStep } from '../../navigation/app-next-step';
 import type {
   BankDetailsInput,
@@ -194,69 +192,6 @@ const mergeStepData = (
   return { ...base, [stepKey]: payload } as Prisma.InputJsonValue;
 };
 
-const isBankComplete = (trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader']) =>
-  trader.bankDetailsSkipped ||
-  Boolean(
-    trader.bankHolderName && trader.bankName && trader.accountNumber && trader.ifscCode
-  );
-
-const hasUploadedDocumentKey = (
-  trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader'],
-  documentKey: string
-) => trader.documents.some((doc) => doc.documentRule.documentKey === documentKey);
-
-const resolveOnboardingScreen = async (
-  trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader'],
-  registration: { entityType: TraderType; stepData: Prisma.JsonValue | null },
-  onboardingStatus: TraderOnboardingStatus
-) => {
-  if (
-    onboardingStatus === TraderOnboardingStatus.SUBMITTED ||
-    onboardingStatus === TraderOnboardingStatus.APPROVED
-  ) {
-    return onboardingStatus === TraderOnboardingStatus.APPROVED ? 'approved' : 'submitted';
-  }
-
-  const stepData =
-    registration.stepData && typeof registration.stepData === 'object' && !Array.isArray(registration.stepData)
-      ? (registration.stepData as Record<string, unknown>)
-      : {};
-
-  if (!stepData.business_type) {
-    return 'business_verification';
-  }
-
-  const verificationDocKey = VERIFICATION_SCREEN_DOCUMENT_KEYS[registration.entityType];
-  const profileMissing = validateProfileComplete(trader, registration.entityType);
-  // Driving license is optional for now (no upload field on Sole Trader Verification).
-  const needsVerificationDoc =
-    registration.entityType === TraderType.COMPANY &&
-    !hasUploadedDocumentKey(trader, verificationDocKey);
-
-  if (profileMissing.length || !isBankComplete(trader) || needsVerificationDoc) {
-    return registration.entityType === TraderType.COMPANY
-      ? 'company_verification'
-      : 'sole_trader_verification';
-  }
-
-  const categoryIds = trader.categories.map((item) => item.categoryId);
-  const { complete } = await validateRequiredDocumentsUploaded(
-    trader.id,
-    registration.entityType,
-    categoryIds
-  );
-
-  if (!complete) {
-    return registration.entityType === TraderType.COMPANY
-      ? 'company_document_verification'
-      : 'sole_trader_document_verification';
-  }
-
-  return registration.entityType === TraderType.COMPANY
-    ? 'company_document_verification'
-    : 'sole_trader_document_verification';
-};
-
 const serializeOnboardingStatus = async (
   _userId: string,
   trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader'],
@@ -268,34 +203,43 @@ const serializeOnboardingStatus = async (
     categoryIds,
     trader.documents
   );
-  const nextScreen = await resolveOnboardingScreen(trader, registration, trader.onboardingStatus);
   const nextStep = await resolveAppNextStep({
     id: _userId,
     role: 'TRADER',
     mobileVerified: true,
   });
 
-  const steps = Array.from({ length: TOTAL_ONBOARDING_STEPS }, (_, index) => {
-    const stepNumber = index + 1;
-    return {
-      step: stepNumber,
-      key: getStepKey(stepNumber, registration.entityType),
-      completed: stepNumber < registration.currentStep,
-      current: stepNumber === registration.currentStep,
-    };
+  const stepData =
+    registration.stepData && typeof registration.stepData === 'object' && !Array.isArray(registration.stepData)
+      ? (registration.stepData as Record<string, unknown>)
+      : {};
+
+  const progress = await buildOnboardingProgress({
+    trader,
+    entityType: registration.entityType,
+    registrationCurrentStep: registration.currentStep,
+    stepData,
   });
+
+  // Persist advanced step when docs are done so login/status stay in sync.
+  if (progress.currentStep > registration.currentStep) {
+    await prisma.traderRegistration.update({
+      where: { userId: _userId },
+      data: { currentStep: progress.currentStep },
+    });
+  }
 
   return {
     registrationStatus: registration.status,
     onboardingStatus: trader.onboardingStatus,
     verificationStatus: trader.verificationStatus,
     entityType: registration.entityType,
-    currentStep: registration.currentStep,
-    totalSteps: TOTAL_ONBOARDING_STEPS,
-    currentStepKey: getStepKey(registration.currentStep, registration.entityType),
+    currentStep: progress.currentStep,
+    totalSteps: progress.totalSteps,
+    currentStepKey: progress.currentStepKey,
     nextStep,
-    onboardingScreen: nextScreen,
-    steps,
+    onboardingScreen: progress.onboardingScreen,
+    steps: progress.steps,
     stepData: registration.stepData ?? {},
     selectedCategories: trader.categories.map((item) => item.category),
     documentRequirements,

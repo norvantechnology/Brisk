@@ -51,9 +51,12 @@
  *             - company_verification
  *             - sole_trader_document_verification
  *             - company_document_verification
+ *             - service_radius
  *             - submitted
  *             - approved
- *           description: Which screen to show inside the trader onboarding flow.
+ *           description: |
+ *             Which screen to show inside the trader onboarding flow.
+ *             After required documents are uploaded, this becomes `service_radius`.
  *         steps:
  *           type: array
  *           items:
