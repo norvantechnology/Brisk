@@ -134,23 +134,31 @@ export async function seedCustomers(prisma: PrismaClient): Promise<void> {
     let userId = existing?.id;
 
     if (!existing) {
-      const created = await prisma.user.create({
-        data: {
-          customerCode: cust.customerCode,
-          fullName: cust.fullName,
-          email: cust.email,
-          mobileNumber: cust.mobileNumber,
-          passwordHash,
-          role: UserRole.CUSTOMER,
-          status: cust.status,
-          mobileVerified: cust.mobileVerified,
-          emailVerified: cust.emailVerified,
-          city: cust.city,
-          country: cust.country,
-        },
+      const codeTaken = await prisma.user.findUnique({
+        where: { customerCode: cust.customerCode },
       });
-      userId = created.id;
-      logger.info(`✅ Customer seeded: ${cust.fullName} (${cust.customerCode})`);
+      if (codeTaken) {
+        userId = codeTaken.id;
+        logger.info(`ℹ️ Customer code ${cust.customerCode} already exists. Skipping create.`);
+      } else {
+        const created = await prisma.user.create({
+          data: {
+            customerCode: cust.customerCode,
+            fullName: cust.fullName,
+            email: cust.email,
+            mobileNumber: cust.mobileNumber,
+            passwordHash,
+            role: UserRole.CUSTOMER,
+            status: cust.status,
+            mobileVerified: cust.mobileVerified,
+            emailVerified: cust.emailVerified,
+            city: cust.city,
+            country: cust.country,
+          },
+        });
+        userId = created.id;
+        logger.info(`✅ Customer seeded: ${cust.fullName} (${cust.customerCode})`);
+      }
     }
 
     if (userId && cust.deletionRequest) {
