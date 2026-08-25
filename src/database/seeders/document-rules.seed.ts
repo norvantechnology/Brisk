@@ -24,7 +24,16 @@ const companyEntityRules = [
   { documentKey: 'tax_clearance', name: 'Tax Clearance Certificate', required: false, sortOrder: 10 },
 ];
 
-const categoryRulesBySlug: Record<string, Array<{ documentKey: string; name: string; required: boolean; sortOrder: number }>> = {
+const defaultCategoryDocs = [
+  { documentKey: 'trade_qualification', name: 'Trade Qualification / Certificate', required: true, sortOrder: 1 },
+  { documentKey: 'insurance', name: 'Insurance', required: true, sortOrder: 2 },
+  { documentKey: 'work_portfolio', name: 'Work Portfolio / Sample Jobs', required: false, sortOrder: 3 },
+];
+
+const categoryRulesBySlug: Record<
+  string,
+  Array<{ documentKey: string; name: string; required: boolean; sortOrder: number }>
+> = {
   'electrical-wiring': [
     { documentKey: 'registered_with', name: 'Registered with relevant body', required: true, sortOrder: 1 },
     { documentKey: 'electrical_qualifications', name: 'Electrical qualifications', required: true, sortOrder: 2 },
@@ -36,6 +45,19 @@ const categoryRulesBySlug: Record<string, Array<{ documentKey: string; name: str
     { documentKey: 'plumbing_qualifications', name: 'Plumbing qualifications', required: true, sortOrder: 1 },
     { documentKey: 'insurance', name: 'Insurance', required: true, sortOrder: 2 },
     { documentKey: 'rgii_registration', name: 'RGII registration (if working with gas)', required: false, sortOrder: 3 },
+  ],
+  'carpentry-woodwork': defaultCategoryDocs,
+  'painting-decorating': defaultCategoryDocs,
+  'hvac-ac-repair': defaultCategoryDocs,
+  'roofing-guttering': defaultCategoryDocs,
+  'cctv-security-systems': defaultCategoryDocs,
+  'cleaning-sanitation': defaultCategoryDocs,
+  'locksmith-security-keys': defaultCategoryDocs,
+  'interior-design-fitout': defaultCategoryDocs,
+  'solar-energy-ev': [
+    { documentKey: 'solar_pv_certificate', name: 'Solar PV certificate', required: true, sortOrder: 1 },
+    { documentKey: 'insurance', name: 'Insurance', required: true, sortOrder: 2 },
+    { documentKey: 'ev_charger_installation', name: 'EV charger installation certificate', required: false, sortOrder: 3 },
   ],
 };
 
@@ -85,35 +107,50 @@ export async function seedDocumentRules(prisma: PrismaClient): Promise<void> {
     await upsertEntityRule(TraderType.COMPANY, rule);
   }
 
-  const existingCategoryRules = await prisma.documentRule.count({
-    where: { scope: DocumentRuleScope.CATEGORY },
-  });
-  if (existingCategoryRules > 0) {
-    logger.info('Category document rules already seeded — skipping category upsert.');
-    logger.info(`Ensured ${soloEntityRules.length + companyEntityRules.length} entity document rules.`);
-    return;
-  }
-
   const categories = await prisma.category.findMany({
-    where: { urlSlug: { in: Object.keys(categoryRulesBySlug) } },
-    select: { id: true, urlSlug: true },
+    where: { status: 'active' },
+    select: { id: true, urlSlug: true, name: true },
   });
 
-  const categoryRuleRows = categories.flatMap((category) =>
-    (categoryRulesBySlug[category.urlSlug] ?? []).map((rule) => ({
-      scope: DocumentRuleScope.CATEGORY,
-      categoryId: category.id,
-      traderType: null,
-      documentKey: rule.documentKey,
-      name: rule.name,
-      required: rule.required,
-      sortOrder: rule.sortOrder,
-    }))
-  );
-
-  if (categoryRuleRows.length) {
-    await prisma.documentRule.createMany({ data: categoryRuleRows });
+  let categoryRuleCount = 0;
+  for (const category of categories) {
+    const rules = categoryRulesBySlug[category.urlSlug] ?? defaultCategoryDocs;
+    for (const rule of rules) {
+      const existing = await prisma.documentRule.findFirst({
+        where: {
+          scope: DocumentRuleScope.CATEGORY,
+          categoryId: category.id,
+          documentKey: rule.documentKey,
+        },
+      });
+      if (existing) {
+        await prisma.documentRule.update({
+          where: { id: existing.id },
+          data: {
+            name: rule.name,
+            required: rule.required,
+            sortOrder: rule.sortOrder,
+            status: 'active',
+          },
+        });
+      } else {
+        await prisma.documentRule.create({
+          data: {
+            scope: DocumentRuleScope.CATEGORY,
+            categoryId: category.id,
+            documentKey: rule.documentKey,
+            name: rule.name,
+            required: rule.required,
+            sortOrder: rule.sortOrder,
+            status: 'active',
+          },
+        });
+      }
+      categoryRuleCount += 1;
+    }
   }
 
-  logger.info(`Seeded ${soloEntityRules.length + companyEntityRules.length} entity rules and ${categoryRuleRows.length} category rules.`);
+  logger.info(
+    `Ensured ${soloEntityRules.length + companyEntityRules.length} entity rules and ${categoryRuleCount} category document rules.`
+  );
 }
