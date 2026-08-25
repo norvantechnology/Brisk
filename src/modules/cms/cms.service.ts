@@ -474,14 +474,35 @@ export const listPublishedTestimonials = async (filters: {
     where.isFeatured = featuredFlag;
   }
 
-  const targetAudience = audienceFilter(filters.audience);
-  if (targetAudience) {
-    where.targetAudience = targetAudience;
-  }
+  const typeNorm = filters.type?.trim().toLowerCase();
+  const pageTypeFromType =
+    typeNorm === 'trader'
+      ? 'TRADER'
+      : typeNorm === 'customer'
+        ? 'CUSTOMER'
+        : typeNorm === 'home'
+          ? 'HOME'
+          : null;
 
-  const pageType = filters.type?.trim().toUpperCase();
-  if (pageType && ['CUSTOMER', 'TRADER', 'HOME'].includes(pageType)) {
-    where.pageType = pageType as import('@prisma/client').CmsTestimonialPageType;
+  const targetAudience = audienceFilter(filters.audience);
+
+  if (pageTypeFromType === 'HOME') {
+    where.pageType = 'HOME';
+  } else if (pageTypeFromType) {
+    // Match pageType for this website page.
+    // Legacy fallback: admin set targetAudience to TRADER/CUSTOMER but left default pageType=CUSTOMER.
+    // Do NOT include HOME or audience=BOTH here — those belong on homepage / explicit pageType.
+    where.OR = [
+      { pageType: pageTypeFromType as import('@prisma/client').CmsTestimonialPageType },
+      {
+        AND: [
+          { targetAudience: pageTypeFromType as CmsAudience },
+          { pageType: { not: 'HOME' } },
+        ],
+      },
+    ];
+  } else if (targetAudience) {
+    where.targetAudience = targetAudience;
   }
 
   const take = Math.min(Math.max(Number(filters.limit) || 20, 1), 50);

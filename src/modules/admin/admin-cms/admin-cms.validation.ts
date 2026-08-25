@@ -167,7 +167,19 @@ export const createTestimonialSchema = z.object({
     authorAvatarUrl: body.authorAvatarUrl ?? body.avatar,
     quoteText: body.quoteText ?? body.review!,
     rating: body.rating,
-    pageType: body.pageType ?? (body.type === 'trader' ? CmsTestimonialPageType.TRADER : body.type === 'home' ? CmsTestimonialPageType.HOME : CmsTestimonialPageType.CUSTOMER),
+    pageType:
+      body.pageType ??
+      (body.type === 'trader'
+        ? CmsTestimonialPageType.TRADER
+        : body.type === 'home'
+          ? CmsTestimonialPageType.HOME
+          : body.type === 'customer'
+            ? CmsTestimonialPageType.CUSTOMER
+            : body.targetAudience === CmsAudience.TRADER
+              ? CmsTestimonialPageType.TRADER
+              : body.targetAudience === CmsAudience.CUSTOMER
+                ? CmsTestimonialPageType.CUSTOMER
+                : CmsTestimonialPageType.CUSTOMER),
     isVerified: body.isVerified ?? body.is_verified ?? false,
     targetAudience: body.targetAudience,
     status: body.status,

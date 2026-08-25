@@ -976,7 +976,13 @@ export const createTestimonial = async (
       authorAvatarUrl: input.authorAvatarUrl,
       quoteText: input.quoteText,
       rating: input.rating ?? 5,
-      pageType: input.pageType ?? CmsTestimonialPageType.CUSTOMER,
+      pageType:
+        input.pageType ??
+        (input.targetAudience === CmsAudience.TRADER
+          ? CmsTestimonialPageType.TRADER
+          : input.targetAudience === CmsAudience.CUSTOMER
+            ? CmsTestimonialPageType.CUSTOMER
+            : CmsTestimonialPageType.CUSTOMER),
       isVerified: input.isVerified ?? false,
       targetAudience: input.targetAudience ?? CmsAudience.BOTH,
       status: input.status ?? CmsPublishStatus.PUBLISHED,

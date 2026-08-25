@@ -15,7 +15,10 @@ const router = Router();
  *
  *       **Auth:** Not required.
  *
- *       **Primary filter:** `type=customer` or `type=trader` — matches the page you are building.
+ *       **Primary filter:** `type=customer` or `type=trader` — matches `pageType`, or legacy rows
+ *       where `targetAudience` matches and `pageType` is not `HOME`.
+ *
+ *       Prefer `?type=trader&limit=4`. `audience` is optional when `type` is omitted.
  *
  *       **Alias:** Same handler as `GET /cms/testimonials` — prefer `/testimonials` in frontend.
  *
