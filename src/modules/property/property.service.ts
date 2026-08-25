@@ -27,6 +27,18 @@ export const getMeterHelpTips = () => [
   },
 ];
 
+const helpTipByMeterType = (meterType: string) => {
+  const tip = getMeterHelpTips().find((item) => item.meterType === meterType);
+  if (!tip) return null;
+  return {
+    key: tip.key,
+    title: tip.title,
+    heading: tip.heading,
+    description: tip.description,
+    imageUrl: tip.imageUrl,
+  };
+};
+
 const formatAddressLine = (input: {
   houseNumber?: string | null;
   addressLine1: string;
@@ -81,6 +93,10 @@ const serializeAddress = (address: {
   mprnNumber: address.mprnNumber,
   gprnNumber: address.gprnNumber,
   utnNumber: address.utnNumber,
+  /** Tooltip for MPRN (i) icon — no need to call GET /property/help-tips */
+  mprnHelpTip: helpTipByMeterType('electricity'),
+  /** Tooltip for GPRN (i) icon — no need to call GET /property/help-tips */
+  gprnHelpTip: helpTipByMeterType('gas'),
   latitude: address.latitude,
   longitude: address.longitude,
   mapImageUrl: address.mapImageUrl ?? `${PLACEHOLDER}/maps/address-pin.png`,
@@ -354,6 +370,8 @@ const serializeMeter = (meter: {
     submitLabel: isElectricity
       ? 'Submit your electricity reading'
       : 'Submit your gas reading',
+    /** Tooltip for meter (i) icon — embedded so no separate help-tips API call needed */
+    helpTip: helpTipByMeterType(meter.meterType),
     lastReading: last
       ? {
           value: Number(last.readingValue),

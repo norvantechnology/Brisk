@@ -19,14 +19,16 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  * @swagger
  * /property/help-tips:
  *   get:
- *     summary: MPRN / GPRN help popup content (dynamic + image URLs)
+ *     summary: MPRN / GPRN help popup content (optional / legacy)
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Use for the info (i) icons on My Property meter cards.
- *       Each item includes `title`, `heading`, `description`, and `imageUrl` (dummy CDN URL for image helper testing).
- *       `data` is a **list** (not `{ items: [] }`).
+ *       **Preferred:** tooltip is already embedded on list/detail items — no extra call needed.
+ *       - Addresses → `mprnHelpTip` / `gprnHelpTip`
+ *       - Property meters → `meters[].helpTip`
+ *
+ *       This endpoint remains for optional/legacy use only.
  *     responses:
  *       200:
  *         description: Help tip array in `data`.
