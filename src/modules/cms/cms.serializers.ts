@@ -19,6 +19,7 @@ import {
   toApiPublishStatus,
   formatDateOnly,
 } from '../admin/admin-website/admin-website.mappers';
+import { toApiPageType } from './cms-page-type';
 
 const toApiAudience = (audience: CmsAudience): string => audience.toLowerCase();
 
@@ -142,6 +143,7 @@ export const serializePublicFaq = (
   id: faq.id,
   question: faq.question,
   answer: faq.answer,
+  page_type: toApiPageType(faq.pageType),
   category: faq.category
     ? {
         id: faq.category.id,
@@ -166,7 +168,7 @@ export const serializePublicTestimonial = (item: CmsTestimonial) => ({
   id: item.id,
   name: item.authorName,
   role: item.authorRole,
-  type: item.pageType.toLowerCase(),
+  type: toApiPageType(item.pageType),
   rating: item.rating,
   review: item.quoteText,
   avatar: item.authorAvatarUrl,

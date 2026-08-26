@@ -497,6 +497,10 @@ router.post('/faq-categories', validate(createFaqCategorySchema), cmsAdminContro
  *         name: categoryId
  *         schema: { type: string, format: uuid }
  *       - in: query
+ *         name: pageType
+ *         schema: { type: string, enum: [CUSTOMER, TRADER, HOME, ABOUT_US, aboutUs] }
+ *         description: Filter by page. Use `aboutUs` for About Us FAQs.
+ *       - in: query
  *         name: sort
  *         schema: { type: string }
  *     responses:

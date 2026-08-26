@@ -281,6 +281,11 @@ router.get('/faq-categories', cmsController.getFaqCategories);
  *         schema: { type: string }
  *         description: |
  *           **Purpose:** Same as `category_id` but using URL slug when building slug-based routes.
+ *       - in: query
+ *         name: pageType
+ *         schema: { type: string, enum: [CUSTOMER, TRADER, HOME, ABOUT_US, customer, trader, home, aboutUs] }
+ *         description: |
+ *           **Purpose:** Filter FAQs by page (`aboutUs` for About Us page).
  *     responses:
  *       200:
  *         description: Published FAQ question/answer pairs.

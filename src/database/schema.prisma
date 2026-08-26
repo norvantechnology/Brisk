@@ -185,6 +185,7 @@ enum CmsTestimonialPageType {
   CUSTOMER
   TRADER
   HOME
+  ABOUT_US
 }
 
 enum SurveyRegistrationStatus {
@@ -1284,18 +1285,20 @@ model CmsFaqCategory {
 }
 
 model CmsFaq {
-  id             String           @id @default(uuid()) @db.Uuid
+  id             String                 @id @default(uuid()) @db.Uuid
   question       String
-  answer         String           @db.Text
-  categoryId     String?          @map("category_id") @db.Uuid
-  targetAudience CmsAudience      @default(BOTH) @map("target_audience")
-  status         CmsPublishStatus @default(DRAFT)
-  displayOrder   Int              @default(0) @map("display_order")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
+  answer         String                 @db.Text
+  categoryId     String?                @map("category_id") @db.Uuid
+  pageType       CmsTestimonialPageType @default(CUSTOMER) @map("page_type")
+  targetAudience CmsAudience            @default(BOTH) @map("target_audience")
+  status         CmsPublishStatus       @default(DRAFT)
+  displayOrder   Int                    @default(0) @map("display_order")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
 
   category CmsFaqCategory? @relation(fields: [categoryId], references: [id])
 
+  @@index([pageType])
   @@map("cms_faqs")
 }
 

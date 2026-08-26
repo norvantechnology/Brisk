@@ -9,6 +9,7 @@ import {
   Prisma,
   SurveyRegistrationStatus,
 } from '@prisma/client';
+import { parseCmsPageType } from '../../cms/cms-page-type';
 
 // ==========================================
 // TYPES
@@ -56,6 +57,7 @@ export type CreateFaqInput = {
   question: string;
   answer: string;
   categoryId?: string;
+  pageType?: import('@prisma/client').CmsTestimonialPageType;
   targetAudience?: CmsAudience;
   status?: CmsPublishStatus;
   displayOrder?: number;
@@ -65,6 +67,7 @@ export type UpdateFaqInput = {
   question?: string;
   answer?: string;
   categoryId?: string | null;
+  pageType?: import('@prisma/client').CmsTestimonialPageType;
   targetAudience?: CmsAudience;
   status?: CmsPublishStatus;
   displayOrder?: number;
@@ -177,17 +180,14 @@ const asAudience = (value?: string): CmsAudience | undefined => {
   return undefined;
 };
 
-const asTestimonialPageType = (value?: string): CmsTestimonialPageType | undefined => {
+const asTestimonialPageType = (
+  value?: string | CmsTestimonialPageType
+): CmsTestimonialPageType | undefined => {
   if (!value) return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'customer') return CmsTestimonialPageType.CUSTOMER;
-  if (normalized === 'trader') return CmsTestimonialPageType.TRADER;
-  if (normalized === 'home') return CmsTestimonialPageType.HOME;
-  const upper = value.trim().toUpperCase();
-  if (Object.values(CmsTestimonialPageType).includes(upper as CmsTestimonialPageType)) {
-    return upper as CmsTestimonialPageType;
+  if (Object.values(CmsTestimonialPageType).includes(value as CmsTestimonialPageType)) {
+    return value as CmsTestimonialPageType;
   }
-  return undefined;
+  return parseCmsPageType(String(value));
 };
 
 const parseFeatured = (value?: string | boolean): boolean | undefined => {
@@ -728,6 +728,11 @@ export const listFaqs = async (filters: CmsListFilters = {}) => {
   const audience = asAudience(filters.audience);
   if (audience) where.targetAudience = audience;
 
+  const pageType = asTestimonialPageType(filters.type ?? filters.pageType);
+  if (pageType) {
+    where.pageType = pageType;
+  }
+
   if (filters.categoryId) {
     where.categoryId = filters.categoryId;
   }
@@ -778,6 +783,7 @@ export const createFaq = async (adminId: string, adminLabel: string, input: Crea
       question: input.question,
       answer: input.answer,
       categoryId: input.categoryId,
+      pageType: input.pageType ?? CmsTestimonialPageType.CUSTOMER,
       targetAudience: input.targetAudience ?? CmsAudience.BOTH,
       status: input.status ?? CmsPublishStatus.PUBLISHED,
       displayOrder: input.displayOrder ?? 0,
@@ -821,6 +827,7 @@ export const updateFaq = async (
       question: input.question,
       answer: input.answer,
       categoryId: input.categoryId,
+      pageType: input.pageType,
       targetAudience: input.targetAudience,
       status: input.status,
       displayOrder: input.displayOrder,

@@ -22,6 +22,7 @@ import {
   serializePublicSocialLink,
   serializePublicTestimonial,
 } from './cms.serializers';
+import { parseCmsPageType } from './cms-page-type';
 
 // ==========================================
 // HELPERS
@@ -423,12 +424,19 @@ export const listPublishedFaqs = async (filters: {
   audience?: string;
   category_id?: string;
   category_slug?: string;
+  pageType?: string;
+  type?: string;
 }) => {
   const targetAudience = audienceFilter(filters.audience);
   const where: Prisma.CmsFaqWhereInput = {
     status: CmsPublishStatus.PUBLISHED,
     ...(targetAudience ? { targetAudience } : {}),
   };
+
+  const pageType = parseCmsPageType(filters.pageType ?? filters.type);
+  if (pageType) {
+    where.pageType = pageType;
+  }
 
   if (filters.category_id) {
     where.categoryId = filters.category_id;

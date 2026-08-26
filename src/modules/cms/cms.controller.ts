@@ -221,6 +221,8 @@ export const getFaqs = async (
       audience: q(req.query.audience),
       category_id: q(req.query.category_id) ?? q(req.query.categoryId),
       category_slug: q(req.query.category_slug),
+      pageType: q(req.query.pageType) ?? q(req.query.page_type),
+      type: q(req.query.type),
     });
     sendResponse({
       res,

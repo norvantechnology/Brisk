@@ -6,12 +6,39 @@ import {
   CmsTestimonialPageType,
   SurveyRegistrationStatus,
 } from '@prisma/client';
+import { parseCmsPageType } from '../../cms/cms-page-type';
 
 const paginationQuery = {
   page: z.string().optional(),
   limit: z.string().optional(),
   search: z.string().optional(),
 };
+
+const pageTypeAliases = [
+  'customer',
+  'trader',
+  'home',
+  'aboutUs',
+  'about_us',
+  'about-us',
+  'CUSTOMER',
+  'TRADER',
+  'HOME',
+  'ABOUT_US',
+] as const;
+
+const pageTypeInput = z
+  .string()
+  .optional()
+  .refine((v) => v === undefined || parseCmsPageType(v) !== undefined, {
+    message: 'Invalid pageType. Use CUSTOMER, TRADER, HOME, or aboutUs.',
+  })
+  .transform((v) => (v === undefined ? undefined : parseCmsPageType(v)));
+
+const typeQueryInput = z
+  .enum(pageTypeAliases)
+  .optional()
+  .transform((v) => (v === undefined ? undefined : parseCmsPageType(v)));
 
 export const listFilterSchema = z.object({
   query: z.object({
@@ -21,8 +48,8 @@ export const listFilterSchema = z.object({
     categoryId: z.string().optional(),
     featured: z.string().optional(),
     sort: z.string().optional(),
-    type: z.enum(['customer', 'trader', 'home']).optional(),
-    pageType: z.nativeEnum(CmsTestimonialPageType).optional(),
+    type: typeQueryInput,
+    pageType: pageTypeInput,
   }),
 });
 
@@ -86,6 +113,7 @@ export const createFaqSchema = z.object({
     question: z.string().min(1),
     answer: z.string().min(1),
     categoryId: z.string().uuid().optional(),
+    pageType: pageTypeInput,
     targetAudience: z.nativeEnum(CmsAudience).optional().default(CmsAudience.BOTH),
     status: z.nativeEnum(CmsPublishStatus).optional().default(CmsPublishStatus.PUBLISHED),
     displayOrder: z.number().int().optional().default(0),
@@ -98,6 +126,7 @@ export const updateFaqSchema = z.object({
     question: z.string().min(1).optional(),
     answer: z.string().min(1).optional(),
     categoryId: z.string().uuid().nullable().optional(),
+    pageType: pageTypeInput,
     targetAudience: z.nativeEnum(CmsAudience).optional(),
     status: z.nativeEnum(CmsPublishStatus).optional(),
     displayOrder: z.number().int().optional(),
@@ -135,8 +164,8 @@ export const createTestimonialSchema = z.object({
     quoteText: z.string().min(1).optional(),
     review: z.string().min(1).optional(),
     rating: z.number().min(1).max(5).optional().default(5),
-    pageType: z.nativeEnum(CmsTestimonialPageType).optional(),
-    type: z.enum(['customer', 'trader', 'home']).optional(),
+    pageType: pageTypeInput,
+    type: typeQueryInput,
     isVerified: z.boolean().optional().default(false),
     is_verified: z.boolean().optional(),
     targetAudience: z.nativeEnum(CmsAudience).optional().default(CmsAudience.BOTH),
@@ -169,17 +198,12 @@ export const createTestimonialSchema = z.object({
     rating: body.rating,
     pageType:
       body.pageType ??
-      (body.type === 'trader'
+      body.type ??
+      (body.targetAudience === CmsAudience.TRADER
         ? CmsTestimonialPageType.TRADER
-        : body.type === 'home'
-          ? CmsTestimonialPageType.HOME
-          : body.type === 'customer'
-            ? CmsTestimonialPageType.CUSTOMER
-            : body.targetAudience === CmsAudience.TRADER
-              ? CmsTestimonialPageType.TRADER
-              : body.targetAudience === CmsAudience.CUSTOMER
-                ? CmsTestimonialPageType.CUSTOMER
-                : CmsTestimonialPageType.CUSTOMER),
+        : body.targetAudience === CmsAudience.CUSTOMER
+          ? CmsTestimonialPageType.CUSTOMER
+          : CmsTestimonialPageType.CUSTOMER),
     isVerified: body.isVerified ?? body.is_verified ?? false,
     targetAudience: body.targetAudience,
     status: body.status,
@@ -204,8 +228,8 @@ export const updateTestimonialSchema = z.object({
     quoteText: z.string().min(1).optional(),
     review: z.string().min(1).optional(),
     rating: z.number().min(1).max(5).optional(),
-    pageType: z.nativeEnum(CmsTestimonialPageType).optional(),
-    type: z.enum(['customer', 'trader', 'home']).optional(),
+    pageType: pageTypeInput,
+    type: typeQueryInput,
     isVerified: z.boolean().optional(),
     is_verified: z.boolean().optional(),
     targetAudience: z.nativeEnum(CmsAudience).optional(),
@@ -229,13 +253,7 @@ export const updateTestimonialSchema = z.object({
     ...(body.rating !== undefined ? { rating: body.rating } : {}),
     ...(body.pageType !== undefined || body.type !== undefined
       ? {
-          pageType:
-            body.pageType ??
-            (body.type === 'trader'
-              ? CmsTestimonialPageType.TRADER
-              : body.type === 'home'
-                ? CmsTestimonialPageType.HOME
-                : CmsTestimonialPageType.CUSTOMER),
+          pageType: body.pageType ?? body.type,
         }
       : {}),
     ...(body.isVerified !== undefined || body.is_verified !== undefined
