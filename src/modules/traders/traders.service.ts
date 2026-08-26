@@ -1,9 +1,13 @@
 import { OfferStatus, OfferType, TraderDocumentStatus, VerificationStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
-import { ForbiddenError, NotFoundError, BadRequestError } from '../../utils/errors';
+import { ForbiddenError, NotFoundError, BadRequestError, ConflictError } from '../../utils/errors';
 import { splitE164Mobile } from '../../utils/phone';
 import { getSupportWebviewLinks } from '../../utils/public-urls';
-import type { UpdateTraderBankDetailsInput, UpdateTraderProfileInput } from './traders.validation';
+import type {
+  UpdateTraderAccountInput,
+  UpdateTraderBankDetailsInput,
+  UpdateTraderProfileInput,
+} from './traders.validation';
 
 const COMPLETION_HINTS: Record<string, string> = {
   profile_photo: 'Add a profile photo to rank higher in search.',
@@ -180,6 +184,24 @@ export const getTraderProfile = async (userId: string) => {
       activeDocumentsCount,
       totalDocumentsCount: trader.documents.length,
     },
+    /** Sole trader / company fields from onboarding — edit via PUT /traders/me/personal-info or /company-info */
+    businessInfo: {
+      traderType: trader.traderType,
+      fullLegalName: trader.fullLegalName,
+      ppsNumber: trader.ppsNumber,
+      companyName: trader.businessName,
+      croNumber: trader.croNumber,
+      vatNumber: trader.vatNumber,
+      directorFullName: trader.directorFullName,
+      addressLine1: trader.addressLine1,
+      addressLine2: trader.addressLine2,
+      city: trader.city,
+      postcode: trader.postcode,
+      country: trader.country,
+      bio: trader.bio,
+      yearsExperience: trader.yearsExperience,
+    },
+    emailLocked: true,
     offers: {
       activeCount: activeOffersCount,
       totalCount: trader._count.offers,
@@ -238,6 +260,54 @@ export const updateTraderProfile = async (userId: string, input: UpdateTraderPro
   });
 
   return updatedTrader;
+};
+
+/** Profile → Edit account (fullName, phone, photo). Email locked. */
+export const updateTraderAccount = async (userId: string, input: UpdateTraderAccountInput) => {
+  const trader = await prisma.trader.findUnique({
+    where: { userId },
+    include: { user: { select: { id: true, mobileNumber: true } } },
+  });
+  if (!trader) {
+    throw new NotFoundError('Trader profile not found.');
+  }
+
+  if (input.mobileNumber && input.mobileNumber !== trader.user.mobileNumber) {
+    const mobileTaken = await prisma.user.findUnique({
+      where: { mobileNumber: input.mobileNumber },
+    });
+    if (mobileTaken && mobileTaken.id !== userId) {
+      throw new ConflictError('Mobile number is already registered to another account.');
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: {
+        fullName: input.fullName,
+        mobileNumber: input.mobileNumber,
+        profilePhotoUrl: input.profilePhotoUrl,
+        mobileVerified:
+          input.mobileNumber && input.mobileNumber !== trader.user.mobileNumber ? false : undefined,
+      },
+    }),
+    ...(input.profilePhotoUrl !== undefined
+      ? [
+          prisma.trader.update({
+            where: { userId },
+            data: { profilePhotoUrl: input.profilePhotoUrl || null },
+          }),
+        ]
+      : []),
+  ]);
+
+  const profile = await getTraderProfile(userId);
+  return {
+    ...profile,
+    mobileReverificationRequired:
+      input.mobileNumber !== undefined && input.mobileNumber !== trader.user.mobileNumber,
+  };
 };
 
 /** Profile → Bank Details update (works after onboarding is submitted/approved). */

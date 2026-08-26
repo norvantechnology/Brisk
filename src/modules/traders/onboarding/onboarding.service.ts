@@ -572,76 +572,92 @@ export const saveCategories = async (
   return getOnboardingStatus(userId);
 };
 
-export const saveSoloProfile = async (userId: string, input: SoloProfileInput) => {
+export const saveSoloProfile = async (
+  userId: string,
+  input: SoloProfileInput,
+  options?: { allowAfterSubmit?: boolean }
+) => {
   const { trader } = await ensureTraderForUser(userId);
-  assertOnboardingEditable(trader);
+  if (!options?.allowAfterSubmit) {
+    assertOnboardingEditable(trader);
+  }
 
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
-  if (!registration || registration.entityType !== TraderType.SOLO) {
+  const entityType = registration?.entityType ?? trader.traderType;
+  if (entityType !== TraderType.SOLO) {
     throw new BadRequestError('Personal info step is only for Sole Trader accounts.');
   }
 
-  await prisma.$transaction([
-    prisma.trader.update({
-      where: { id: trader.id },
-      data: {
-        fullLegalName: input.fullLegalName,
-        ppsNumber: input.ppsNumber,
-        bio: input.bio,
-        yearsExperience: input.yearsExperience ?? 0,
-        addressLine1: input.addressLine1,
-        addressLine2: input.addressLine2,
-        city: input.city,
-        postcode: input.postcode,
-        country: input.country ?? 'Ireland',
-      },
-    }),
-    prisma.traderRegistration.update({
+  await prisma.trader.update({
+    where: { id: trader.id },
+    data: {
+      fullLegalName: input.fullLegalName,
+      ppsNumber: input.ppsNumber,
+      bio: input.bio,
+      yearsExperience: input.yearsExperience ?? 0,
+      addressLine1: input.addressLine1,
+      addressLine2: input.addressLine2,
+      city: input.city,
+      postcode: input.postcode,
+      country: input.country ?? 'Ireland',
+    },
+  });
+
+  if (registration && !options?.allowAfterSubmit) {
+    await prisma.traderRegistration.update({
       where: { userId },
       data: {
         currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.BANK_DETAILS),
         stepData: mergeStepData(registration.stepData, 'personal_info', input),
       },
-    }),
-  ]);
+    });
+  }
 
   return getOnboardingStatus(userId);
 };
 
-export const saveCompanyProfile = async (userId: string, input: CompanyProfileInput) => {
+export const saveCompanyProfile = async (
+  userId: string,
+  input: CompanyProfileInput,
+  options?: { allowAfterSubmit?: boolean }
+) => {
   const { trader } = await ensureTraderForUser(userId);
-  assertOnboardingEditable(trader);
+  if (!options?.allowAfterSubmit) {
+    assertOnboardingEditable(trader);
+  }
 
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
-  if (!registration || registration.entityType !== TraderType.COMPANY) {
+  const entityType = registration?.entityType ?? trader.traderType;
+  if (entityType !== TraderType.COMPANY) {
     throw new BadRequestError('Company info step is only for Company Trader accounts.');
   }
 
-  await prisma.$transaction([
-    prisma.trader.update({
-      where: { id: trader.id },
-      data: {
-        businessName: input.companyName,
-        croNumber: input.croNumber,
-        vatNumber: input.vatNumber,
-        directorFullName: input.directorFullName,
-        bio: input.bio,
-        yearsExperience: input.yearsExperience ?? 0,
-        addressLine1: input.addressLine1,
-        addressLine2: input.addressLine2,
-        city: input.city,
-        postcode: input.postcode,
-        country: input.country ?? 'Ireland',
-      },
-    }),
-    prisma.traderRegistration.update({
+  await prisma.trader.update({
+    where: { id: trader.id },
+    data: {
+      businessName: input.companyName,
+      croNumber: input.croNumber,
+      vatNumber: input.vatNumber,
+      directorFullName: input.directorFullName,
+      bio: input.bio,
+      yearsExperience: input.yearsExperience ?? 0,
+      addressLine1: input.addressLine1,
+      addressLine2: input.addressLine2,
+      city: input.city,
+      postcode: input.postcode,
+      country: input.country ?? 'Ireland',
+    },
+  });
+
+  if (registration && !options?.allowAfterSubmit) {
+    await prisma.traderRegistration.update({
       where: { userId },
       data: {
         currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.BANK_DETAILS),
         stepData: mergeStepData(registration.stepData, 'company_info', input),
       },
-    }),
-  ]);
+    });
+  }
 
   return getOnboardingStatus(userId);
 };

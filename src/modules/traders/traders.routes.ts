@@ -3,10 +3,12 @@ import * as tradersController from './traders.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
-import { updateTraderBankDetailsSchema, updateTraderProfileSchema } from './traders.validation';
+import { updateTraderAccountSchema, updateTraderBankDetailsSchema, updateTraderProfileSchema } from './traders.validation';
 import {
   categoriesSchema,
+  companyProfileSchema,
   documentRuleIdParamSchema,
+  soloProfileSchema,
   uploadDocumentSchema,
 } from './onboarding/onboarding.validation';
 import onboardingRoutes from './onboarding/onboarding.routes';
@@ -39,6 +41,8 @@ router.use('/offers', traderOffersRoutes);
  *       **Support WebViews:** `supportLinks[]` with `key`, `title`, `url` for Help Center, Terms, Privacy
  *       **Bank Details:** `bankDetails` — `status` (`VERIFIED` / `MISSING` / `SKIPPED`), `bankHolderName`,
  *       `bankName`, `accountNumber` (full), `accountNumberMasked` (e.g. `****1234` for display), `ifscCode`
+ *       **Business info (Sole/Company):** `businessInfo` — fullLegalName, ppsNumber, companyName, croNumber, etc.
+ *       Edit account: `PATCH /traders/me/account`. Edit business: `PUT /traders/me/personal-info` or `/company-info`.
  *       **Certifications row:** `certifications.activeDocumentsCount` ("4 Active Documents")
  *       **Categories row:** `selectedCategories` / `categoriesCount`
  *       **Offers row:** `offers.activeCount` — list via `GET /traders/offers`
@@ -81,6 +85,128 @@ router.get('/me', tradersController.getMyTraderProfile);
  *         description: Trader profile updated successfully.
  */
 router.patch('/me', validate(updateTraderProfileSchema), tradersController.updateMyTraderProfile);
+
+/**
+ * @swagger
+ * /traders/me/account:
+ *   patch:
+ *     summary: Edit account (full name, phone, photo) from Profile
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Use on:** Profile → Edit your account.
+ *
+ *       Editable: `fullName`, `mobileNumber` (E.164 e.g. `+353212121212`), `profilePhotoUrl`.
+ *       **Email is locked** (`emailLocked: true` on GET /traders/me) — do not send `email`.
+ *       Changing phone sets `mobileVerified: false` and `mobileReverificationRequired: true`.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fullName: { type: string, example: Brisk Trader }
+ *               mobileNumber: { type: string, example: "+353212121212" }
+ *               profilePhotoUrl: { type: string, format: uri }
+ *     responses:
+ *       200:
+ *         description: Account updated. Full profile in `data`.
+ *       400:
+ *         description: Validation error (e.g. email change attempted).
+ *       409:
+ *         description: Mobile number already registered.
+ */
+router.patch(
+  '/me/account',
+  validate(updateTraderAccountSchema),
+  tradersController.updateMyAccount
+);
+
+/**
+ * @swagger
+ * /traders/me/personal-info:
+ *   put:
+ *     summary: Edit Sole Trader business/personal info from Profile
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Use on:** Profile → Personal / Sole Trader information (after onboarding).
+ *
+ *       Same body as `PUT /traders/onboarding/personal-info`.
+ *       Do **not** use the onboarding path after submit — that returns 403.
+ *       Only for `traderType: SOLO`.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullLegalName, ppsNumber, addressLine1, city, postcode]
+ *             properties:
+ *               fullLegalName: { type: string }
+ *               ppsNumber: { type: string }
+ *               bio: { type: string }
+ *               yearsExperience: { type: integer }
+ *               addressLine1: { type: string }
+ *               addressLine2: { type: string }
+ *               city: { type: string }
+ *               postcode: { type: string }
+ *               country: { type: string, example: Ireland }
+ *     responses:
+ *       200:
+ *         description: Updated. Full profile in `data` (includes `businessInfo`).
+ */
+router.put(
+  '/me/personal-info',
+  validate(soloProfileSchema),
+  tradersController.updateMyPersonalInfo
+);
+
+/**
+ * @swagger
+ * /traders/me/company-info:
+ *   put:
+ *     summary: Edit Company trader info from Profile
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Use on:** Profile → Company information (after onboarding).
+ *
+ *       Same body as `PUT /traders/onboarding/company-info`.
+ *       Do **not** use the onboarding path after submit — that returns 403.
+ *       Only for `traderType: COMPANY`.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [companyName, croNumber, directorFullName, addressLine1, city, postcode]
+ *             properties:
+ *               companyName: { type: string }
+ *               croNumber: { type: string, example: "12345678" }
+ *               vatNumber: { type: string }
+ *               directorFullName: { type: string }
+ *               bio: { type: string }
+ *               yearsExperience: { type: integer }
+ *               addressLine1: { type: string }
+ *               addressLine2: { type: string }
+ *               city: { type: string }
+ *               postcode: { type: string }
+ *               country: { type: string }
+ *     responses:
+ *       200:
+ *         description: Updated. Full profile in `data` (includes `businessInfo`).
+ */
+router.put(
+  '/me/company-info',
+  validate(companyProfileSchema),
+  tradersController.updateMyCompanyInfo
+);
 
 /**
  * @swagger

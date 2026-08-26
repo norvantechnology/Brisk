@@ -42,6 +42,65 @@ export const updateMyTraderProfile = async (
   }
 };
 
+export const updateMyAccount = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const profile = await tradersService.updateTraderAccount(req.user!.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Account updated successfully.',
+      data: profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMyPersonalInfo = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    await onboardingService.saveSoloProfile(req.user!.id, req.body, { allowAfterSubmit: true });
+    const profile = await tradersService.getTraderProfile(req.user!.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Personal information updated successfully.',
+      data: profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMyCompanyInfo = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    await onboardingService.saveCompanyProfile(req.user!.id, req.body, { allowAfterSubmit: true });
+    const profile = await tradersService.getTraderProfile(req.user!.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Company information updated successfully.',
+      data: profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateMyBankDetails = async (
   req: AuthenticatedRequest,
   res: Response,
