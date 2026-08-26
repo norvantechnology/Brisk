@@ -178,8 +178,9 @@ router.post('/login', validate(loginSchema), authController.login);
  *     description: |
  *       Customer and Trader apps — user enters email on "Forgot Password".
  *       If the account exists, a 6-digit OTP is sent to the registered mobile number.
- *       Response always uses the same message (does not reveal whether the email exists).
- *       When **data.mobileNumber** is present, open the OTP + new-password screen.
+ *       If the email is **not registered**, returns **404** with message:
+ *       `No account found for this email.`
+ *       When **data.otpSent** is true and **data.mobileNumber** is present, open the OTP screen.
  *     requestBody:
  *       required: true
  *       content:
@@ -195,11 +196,18 @@ router.post('/login', validate(loginSchema), authController.login);
  *                 example: jane@example.com
  *     responses:
  *       200:
- *         description: Generic success. Includes mobileNumber + otpSent when account found.
+ *         description: Account found. OTP sent to registered mobile (`otpSent: true`).
  *       403:
  *         description: Account blocked, suspended, or inactive.
+ *       404:
+ *         description: No account found for this email.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: No account found for this email.
  *       429:
- *         description: OTP resend cooldown active (returned as 200 with otpSent=false when applicable).
+ *         description: OTP resend cooldown active (may also return 200 with otpSent=false).
  */
 router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
 

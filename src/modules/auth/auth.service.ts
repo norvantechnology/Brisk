@@ -412,14 +412,7 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
   });
 
   if (!user) {
-    return {
-      message: FORGOT_PASSWORD_GENERIC_MESSAGE,
-      data: {
-        requiresPasswordReset: false as const,
-        otpSent: false as const,
-        ...getOtpMeta(),
-      },
-    };
+    throw new NotFoundError('No account found for this email.');
   }
 
   assertAccountCanAuthenticate(user);
