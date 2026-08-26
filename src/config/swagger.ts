@@ -31,6 +31,7 @@ const options: swaggerJSDoc.Options = {
         '- **Homepage:** GET /cms/home · GET /cms/testimonials?audience=BOTH&limit=10 · GET /pages/home',
         '- **Admin CMS (Homepage):** Admin / Website / Home — /admin/cms/home/...',
         '- **Admin CMS (page sections):** Admin / Website / Marketing Pages — pageSlug = customers | traders | home | about-brisk | contact-brisk',
+        '- **Admin Settings → Contact Info:** GET/PUT /admin/cms/settings/contact — generalInquiryEmail, customerSupportPhone, officeAddress',
         '- **Contact form submissions CRM:** Admin / Website / Contact — /admin/cms/contact-submissions (separate from contact-brisk page sections)',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
         '',
@@ -80,6 +81,11 @@ const options: swaggerJSDoc.Options = {
       },
       { name: 'Admin / Website / Legal', description: 'Legal policies' },
       { name: 'Admin / Website / SEO', description: 'SEO settings' },
+      {
+        name: 'Admin / Settings / Contact',
+        description:
+          'Admin Settings → Contact Info. GET/PUT /admin/cms/settings/contact (generalInquiryEmail, customerSupportPhone, officeAddress).',
+      },
       { name: 'Admin / Surveys', description: 'View & manage website survey signups (consumer CS-#### and trader TS-####). Admin login required.' },
       { name: 'Website / Content', description: 'Public website reads — Customers/Traders pages, testimonials, bootstrap, blog, FAQ. Parameters explain which page/screen each filter is for.' },
       { name: 'Website / Surveys', description: 'Website survey forms — consumer-survey & trader-survey pages. No login needed.' },

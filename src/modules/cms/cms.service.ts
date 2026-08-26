@@ -736,3 +736,28 @@ export const getPublicSeoSettings = async () => {
 
   return { seo: seo ? serializePublicSeo(seo) : null };
 };
+
+export const getPublicContactSettings = async () => {
+  const contact = await prisma.cmsContactSettings.findFirst({
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  const defaults = {
+    general_inquiry_email: 'info@brisk.com',
+    customer_support_phone: '+353 123 456 789',
+    office_address: '14 Kensington High Street, London, W8 4PT, United Kingdom',
+  };
+
+  if (!contact) {
+    return { contact: defaults };
+  }
+
+  return {
+    contact: {
+      general_inquiry_email: contact.generalInquiryEmail,
+      customer_support_phone: contact.customerSupportPhone,
+      office_address: contact.officeAddress,
+      updated_at: contact.updatedAt,
+    },
+  };
+};

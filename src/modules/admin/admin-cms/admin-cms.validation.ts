@@ -317,6 +317,14 @@ export const updateSeoSchema = z.object({
   }),
 });
 
+export const updateContactSettingsSchema = z.object({
+  body: z.object({
+    generalInquiryEmail: z.string().email('generalInquiryEmail must be a valid email.'),
+    customerSupportPhone: z.string().min(5, 'customerSupportPhone is required.'),
+    officeAddress: z.string().min(5, 'officeAddress is required.'),
+  }),
+});
+
 export const surveyFilterSchema = z.object({
   query: z.object({
     ...paginationQuery,

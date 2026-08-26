@@ -338,3 +338,21 @@ export const getSeo = async (
     next(error);
   }
 };
+
+export const getContactSettings = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await cmsService.getPublicContactSettings();
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Contact information retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

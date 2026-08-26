@@ -435,6 +435,31 @@ router.get('/seo', cmsController.getSeo);
 
 /**
  * @swagger
+ * /cms/settings/contact:
+ *   get:
+ *     summary: Get public Contact Information settings
+ *     description: |
+ *       Public contact channels for website footer / Contact page.
+ *       Mirrors Admin Settings → Contact Info (`GET/PUT /admin/cms/settings/contact`).
+ *     tags: ['Website / Content']
+ *     responses:
+ *       200:
+ *         description: Contact information retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Contact information retrieved successfully.
+ *               data:
+ *                 contact:
+ *                   general_inquiry_email: info@brisk.com
+ *                   customer_support_phone: '+353 123 456 789'
+ *                   office_address: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ */
+router.get('/settings/contact', cmsController.getContactSettings);
+
+/**
+ * @swagger
  * /cms/marketing-pages/{pageSlug}:
  *   get:
  *     summary: Get full marketing page (CMS path — prefer GET /pages/{pageSlug})

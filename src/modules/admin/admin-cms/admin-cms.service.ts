@@ -114,6 +114,18 @@ export type UpsertSeoSettingsInput = {
   robotsTxt?: string;
 };
 
+export type UpsertContactSettingsInput = {
+  generalInquiryEmail: string;
+  customerSupportPhone: string;
+  officeAddress: string;
+};
+
+const DEFAULT_CONTACT_SETTINGS = {
+  generalInquiryEmail: 'info@brisk.com',
+  customerSupportPhone: '+353 123 456 789',
+  officeAddress: '14 Kensington High Street, London, W8 4PT, United Kingdom',
+};
+
 // ==========================================
 // HELPERS
 // ==========================================
@@ -270,6 +282,7 @@ export const getCmsDashboardAudit = async (filters: {
     'CmsTestimonial',
     'CmsLegalPolicy',
     'CmsSeoSettings',
+    'CmsContactSettings',
     'ContactSubmission',
   ];
 
@@ -1375,6 +1388,79 @@ export const upsertSeoSettings = async (
     'CmsSeoSettings',
     settings.id,
     'Updated global SEO settings.'
+  );
+
+  return settings;
+};
+
+// ==========================================
+// CONTACT SETTINGS (Admin Settings → Contact Info)
+// ==========================================
+
+export const getContactSettings = async () => {
+  const existing = await prisma.cmsContactSettings.findFirst({
+    include: {
+      updatedBy: {
+        select: { id: true, fullName: true, email: true },
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  if (existing) return existing;
+
+  return {
+    id: null,
+    ...DEFAULT_CONTACT_SETTINGS,
+    updatedById: null,
+    updatedBy: null,
+    createdAt: null,
+    updatedAt: null,
+  };
+};
+
+export const upsertContactSettings = async (
+  adminId: string,
+  adminLabel: string,
+  input: UpsertContactSettingsInput
+) => {
+  const existing = await prisma.cmsContactSettings.findFirst({
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  const data = {
+    generalInquiryEmail: input.generalInquiryEmail.trim(),
+    customerSupportPhone: input.customerSupportPhone.trim(),
+    officeAddress: input.officeAddress.trim(),
+    updatedById: adminId,
+  };
+
+  const settings = existing
+    ? await prisma.cmsContactSettings.update({
+        where: { id: existing.id },
+        data,
+        include: {
+          updatedBy: {
+            select: { id: true, fullName: true, email: true },
+          },
+        },
+      })
+    : await prisma.cmsContactSettings.create({
+        data,
+        include: {
+          updatedBy: {
+            select: { id: true, fullName: true, email: true },
+          },
+        },
+      });
+
+  await writeAudit(
+    'CMS_CONTACT_SETTINGS_UPSERTED',
+    adminId,
+    adminLabel,
+    'CmsContactSettings',
+    settings.id,
+    'Updated contact information settings.'
   );
 
   return settings;

@@ -21,6 +21,7 @@ import {
   createLegalPolicySchema,
   publishLegalVersionSchema,
   updateSeoSchema,
+  updateContactSettingsSchema,
   dashboardAuditSchema,
 } from './admin-cms.validation';
 import {
@@ -1708,6 +1709,109 @@ router.get('/seo', cmsAdminController.getSeoSettings);
  *         description: Validation error.
  */
 router.put('/seo', validate(updateSeoSchema), cmsAdminController.upsertSeoSettings);
+
+// ==========================================
+// CONTACT SETTINGS (Admin Settings → Contact Info)
+// ==========================================
+
+/**
+ * @swagger
+ * /admin/cms/settings/contact:
+ *   get:
+ *     summary: Get Contact Information settings
+ *     description: |
+ *       **Admin Settings → Contact Info**
+ *
+ *       Returns the singleton public contact & support channels used by the website/footer.
+ *       If never saved, returns default seed values (`id: null`).
+ *     tags: ['Admin / Settings / Contact']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Contact information loaded successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Contact information loaded successfully.
+ *               data:
+ *                 contact:
+ *                   id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+ *                   generalInquiryEmail: info@brisk.com
+ *                   customerSupportPhone: '+353 123 456 789'
+ *                   officeAddress: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *                   updatedAt: '2026-08-26T08:00:00.000Z'
+ *       401:
+ *         description: Unauthorized.
+ */
+router.get('/settings/contact', cmsAdminController.getContactSettings);
+
+/**
+ * @swagger
+ * /admin/cms/settings/contact:
+ *   put:
+ *     summary: Update / save Contact Information settings
+ *     description: |
+ *       **Admin Settings → Contact Info → Save Contact Settings**
+ *
+ *       Upserts the singleton contact settings row.
+ *     tags: ['Admin / Settings / Contact']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - generalInquiryEmail
+ *               - customerSupportPhone
+ *               - officeAddress
+ *             properties:
+ *               generalInquiryEmail:
+ *                 type: string
+ *                 format: email
+ *                 example: info@brisk.com
+ *                 description: General inquiry email shown publicly.
+ *               customerSupportPhone:
+ *                 type: string
+ *                 example: '+353 123 456 789'
+ *                 description: Customer support helpline phone.
+ *               officeAddress:
+ *                 type: string
+ *                 example: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *                 description: Official physical office address.
+ *           example:
+ *             generalInquiryEmail: info@brisk.com
+ *             customerSupportPhone: '+353 123 456 789'
+ *             officeAddress: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *     responses:
+ *       200:
+ *         description: Contact information updated successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Contact information updated successfully.
+ *               data:
+ *                 contact:
+ *                   id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+ *                   generalInquiryEmail: info@brisk.com
+ *                   customerSupportPhone: '+353 123 456 789'
+ *                   officeAddress: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *                   updatedAt: '2026-08-26T08:00:00.000Z'
+ *       400:
+ *         description: Validation error.
+ *       401:
+ *         description: Unauthorized.
+ */
+router.put(
+  '/settings/contact',
+  validate(updateContactSettingsSchema),
+  cmsAdminController.upsertContactSettings
+);
 
 router.use('/home', homeAdminRoutes);
 

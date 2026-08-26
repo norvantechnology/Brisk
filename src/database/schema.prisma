@@ -296,6 +296,7 @@ model AdminUser {
   createdBlogPosts        CmsBlogPost[]            @relation("CmsBlogCreatedBy")
   publishedLegalVersions  CmsLegalPolicyVersion[]  @relation("CmsLegalPublishedBy")
   updatedSeoSettings      CmsSeoSettings[]         @relation("CmsSeoUpdatedBy")
+  updatedContactSettings  CmsContactSettings[]     @relation("CmsContactUpdatedBy")
   reviewedSurveyConsumers SurveyConsumerRegistration[] @relation("SurveyConsumerReviewedBy")
   reviewedSurveyTraders   SurveyTraderRegistration[]   @relation("SurveyTraderReviewedBy")
   reviewedContactSubmissions ContactSubmission[]       @relation("ContactSubmissionReviewedBy")
@@ -1370,6 +1371,21 @@ model CmsSeoSettings {
   updatedBy AdminUser? @relation("CmsSeoUpdatedBy", fields: [updatedById], references: [id])
 
   @@map("cms_seo_settings")
+}
+
+/// Singleton row for Admin Settings → Contact Info (public support channels).
+model CmsContactSettings {
+  id                   String   @id @default(uuid()) @db.Uuid
+  generalInquiryEmail  String   @map("general_inquiry_email")
+  customerSupportPhone String   @map("customer_support_phone")
+  officeAddress        String   @map("office_address") @db.Text
+  updatedById          String?  @map("updated_by_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("CmsContactUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("cms_contact_settings")
 }
 
 // ==========================================

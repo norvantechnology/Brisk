@@ -718,3 +718,45 @@ export const upsertSeoSettings = async (
     next(error);
   }
 };
+
+// ==========================================
+// CONTACT SETTINGS
+// ==========================================
+
+export const getContactSettings = async (
+  _req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const contact = await cmsService.getContactSettings();
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Contact information loaded successfully.',
+      data: { contact },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const upsertContactSettings = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const contact = await cmsService.upsertContactSettings(adminId, adminLabel, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Contact information updated successfully.',
+      data: { contact },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
