@@ -341,7 +341,10 @@ export const surveyFilterSchema = z.object({
     /** Admin UI sort: name | status | submittedAt */
     sortBy: z.enum(['name', 'status', 'submittedAt', 'companyName']).optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
-    /** Date filters (ISO date or datetime) */
+    /** Date filters (ISO date YYYY-MM-DD or datetime) — filters submittedAt */
+    dateFrom: z.string().optional(),
+    dateTo: z.string().optional(),
+    /** Legacy aliases for dateFrom / dateTo */
     submittedFrom: z.string().optional(),
     submittedTo: z.string().optional(),
     /**

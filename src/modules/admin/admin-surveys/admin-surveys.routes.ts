@@ -96,11 +96,21 @@ router.get('/consumer/stats', surveyAdminController.getConsumerStats);
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc] }
  *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date, example: '2026-08-28' }
+ *         description: Filter by submission date from (inclusive). Use with dateTo.
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date, example: '2026-09-10' }
+ *         description: Filter by submission date to (inclusive). Use with dateFrom.
+ *       - in: query
  *         name: submittedFrom
  *         schema: { type: string, format: date-time }
+ *         description: Legacy alias for dateFrom (ISO date or datetime)
  *       - in: query
  *         name: submittedTo
  *         schema: { type: string, format: date-time }
+ *         description: Legacy alias for dateTo (ISO date or datetime)
  *     responses:
  *       200:
  *         description: CSV file download.
@@ -190,13 +200,23 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  *         schema: { type: string, enum: [newest, oldest] }
  *         description: Legacy date sort (used only when sortBy is not provided)
  *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date, example: '2026-08-28' }
+ *         description: |
+ *           Custom date range start (filters `submittedAt`, inclusive).
+ *           Example: `/admin/surveys/consumer?dateFrom=2026-08-28&dateTo=2026-09-10`
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date, example: '2026-09-10' }
+ *         description: Custom date range end (filters `submittedAt`, inclusive through end of day)
+ *       - in: query
  *         name: submittedFrom
  *         schema: { type: string, format: date-time }
- *         description: Filter submitted_at from this date (ISO)
+ *         description: Legacy alias for dateFrom (ISO date or datetime)
  *       - in: query
  *         name: submittedTo
  *         schema: { type: string, format: date-time }
- *         description: Filter submitted_at until this date (ISO)
+ *         description: Legacy alias for dateTo (ISO date or datetime)
  *     responses:
  *       200:
  *         description: Paginated list of consumer survey registrations.
@@ -333,6 +353,22 @@ router.get('/trader/stats', surveyAdminController.getTraderStats);
  *       - in: query
  *         name: sort
  *         schema: { type: string, enum: [newest, oldest] }
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date, example: '2026-08-28' }
+ *         description: Filter by submission date from (inclusive). Use with dateTo.
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date, example: '2026-09-10' }
+ *         description: Filter by submission date to (inclusive). Use with dateFrom.
+ *       - in: query
+ *         name: submittedFrom
+ *         schema: { type: string, format: date-time }
+ *         description: Legacy alias for dateFrom
+ *       - in: query
+ *         name: submittedTo
+ *         schema: { type: string, format: date-time }
+ *         description: Legacy alias for dateTo
  *     responses:
  *       200:
  *         description: CSV file download.
@@ -393,11 +429,23 @@ router.get('/trader/export', validate(surveyFilterSchema), surveyAdminController
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc] }
  *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date, example: '2026-08-28' }
+ *         description: |
+ *           Custom date range start (filters `submittedAt`, inclusive).
+ *           Example: `/admin/surveys/trader?dateFrom=2026-08-28&dateTo=2026-09-10`
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date, example: '2026-09-10' }
+ *         description: Custom date range end (filters `submittedAt`, inclusive through end of day)
+ *       - in: query
  *         name: submittedFrom
  *         schema: { type: string, format: date-time }
+ *         description: Legacy alias for dateFrom
  *       - in: query
  *         name: submittedTo
  *         schema: { type: string, format: date-time }
+ *         description: Legacy alias for dateTo
  *     responses:
  *       200:
  *         description: Paginated list of trader survey registrations.

@@ -24,8 +24,14 @@ export type SurveyConsumerFilters = {
   sort?: string;
   sortBy?: string;
   sortOrder?: string;
+  /** ISO date or datetime — submission date from (inclusive). Alias: dateFrom */
   submittedFrom?: string;
+  /** ISO date or datetime — submission date to (inclusive for YYYY-MM-DD). Alias: dateTo */
   submittedTo?: string;
+  /** Admin custom date range start (YYYY-MM-DD). Filters submittedAt. */
+  dateFrom?: string;
+  /** Admin custom date range end (YYYY-MM-DD). Filters submittedAt. */
+  dateTo?: string;
   /** Admin date dropdown: all | today | thisWeek | thisMonth */
   dateFilter?: string;
 };
@@ -132,10 +138,37 @@ const resolveDateFilterRange = (
   return undefined;
 };
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Start of range — date-only YYYY-MM-DD is inclusive from 00:00:00 UTC. */
+const parseSubmittedRangeStart = (value: string): Date | undefined => {
+  const trimmed = value.trim();
+  if (DATE_ONLY.test(trimmed)) {
+    const [y, m, d] = trimmed.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  }
+  const dt = new Date(trimmed);
+  return Number.isNaN(dt.getTime()) ? undefined : dt;
+};
+
+/** End of range — date-only YYYY-MM-DD is inclusive through 23:59:59.999 UTC. */
+const parseSubmittedRangeEnd = (value: string): Date | undefined => {
+  const trimmed = value.trim();
+  if (DATE_ONLY.test(trimmed)) {
+    const [y, m, d] = trimmed.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+  }
+  const dt = new Date(trimmed);
+  return Number.isNaN(dt.getTime()) ? undefined : dt;
+};
+
 const applySubmittedAtFilters = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   where: Record<string, any>,
-  filters: Pick<SurveyConsumerFilters, 'submittedFrom' | 'submittedTo' | 'dateFilter'>
+  filters: Pick<
+    SurveyConsumerFilters,
+    'submittedFrom' | 'submittedTo' | 'dateFrom' | 'dateTo' | 'dateFilter'
+  >
 ) => {
   const existing =
     where.submittedAt && typeof where.submittedAt === 'object' && !(where.submittedAt instanceof Date)
@@ -151,16 +184,19 @@ const applySubmittedAtFilters = (
     submittedAt.lte = preset.lte;
   }
 
-  if (filters.submittedFrom) {
-    const from = new Date(filters.submittedFrom);
-    if (!Number.isNaN(from.getTime())) {
+  const fromRaw = filters.dateFrom ?? filters.submittedFrom;
+  const toRaw = filters.dateTo ?? filters.submittedTo;
+
+  if (fromRaw) {
+    const from = parseSubmittedRangeStart(fromRaw);
+    if (from) {
       submittedAt.gte =
         submittedAt.gte instanceof Date && submittedAt.gte > from ? submittedAt.gte : from;
     }
   }
-  if (filters.submittedTo) {
-    const to = new Date(filters.submittedTo);
-    if (!Number.isNaN(to.getTime())) {
+  if (toRaw) {
+    const to = parseSubmittedRangeEnd(toRaw);
+    if (to) {
       submittedAt.lte =
         submittedAt.lte instanceof Date && submittedAt.lte < to ? submittedAt.lte : to;
     }
