@@ -228,20 +228,21 @@ router.post(
  * @swagger
  * /properties/{id}/subscriptions:
  *   put:
- *     summary: Add New Subscription(s) — merge into existing list
+ *     summary: Save Add New Subscription checklist (sync checked providers)
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Add New Subscription** modal — select providers from `GET /utility-providers`.
+ *       **Add New Subscription** modal — send **all currently checked** `providerIds`
+ *       from `GET /utility-providers` (full desired list).
  *
- *       **Merge behaviour:** existing subscriptions stay. Only new `providerIds` are added.
- *       Example: property already has GAS → send Electricity providerId → result is GAS + Electricity.
+ *       **Sync behaviour (no separate DELETE needed for uncheck):**
+ *       - Checked providers → create or reactivate (`status: active`)
+ *       - Unchecked / omitted providers → soft-cancel (`status: cancelled`, row kept in DB)
  *
- *       To remove one subscription (soft delete → status `cancelled`, row kept in DB):
- *       `DELETE /properties/{id}/subscriptions/{subscriptionId}`
+ *       Example: list has Bins + Electricity + Insurance; user unchecks Electricity and saves
+ *       `{ "providerIds": ["bins-id", "insurance-id"] }` → Electricity removed from active list.
  *
- *       Re-adding the same provider later reactivates that row (`status: active`).
  *       Response includes property `mprnNumber` / `gprnNumber` and per-subscription meter refs.
  *     parameters:
  *       - in: path
@@ -259,10 +260,11 @@ router.post(
  *               providerIds:
  *                 type: array
  *                 items: { type: string, format: uuid }
- *                 example: ['3fa85f64-5717-4562-b3fc-2c963f66afa6']
+ *                 description: Full list of checked provider IDs after Save.
+ *                 example: ['66888097-acca-4e31-bd0c-9ed5e3115c0b', 'aviva-uuid']
  *     responses:
  *       200:
- *         description: Updated property detail including subscriptions + MPRN/GPRN.
+ *         description: Updated property detail; active subscriptions match checked list.
  */
 router.put(
   '/properties/:id/subscriptions',

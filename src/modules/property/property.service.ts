@@ -582,9 +582,11 @@ export const listUtilityProviders = async () => {
 };
 
 /**
- * Add subscriptions (merge). Existing subscriptions are kept.
- * Only new `providerIds` are added — does not remove old ones.
- * To remove one: DELETE /properties/:id/subscriptions/:subscriptionId
+ * Sync subscriptions from the Add New Subscription checklist.
+ * `providerIds` = currently checked providers (full desired set).
+ * - Checked → create/reactivate (status active)
+ * - Unchecked (missing from list) → soft-cancel (status cancelled, row kept)
+ * No separate DELETE needed for uncheck + Save.
  */
 export const savePropertySubscriptions = async (
   userId: string,
@@ -595,19 +597,31 @@ export const savePropertySubscriptions = async (
   await getOwnedProperty(userId, propertyId);
 
   const uniqueIds = [...new Set(providerIds)];
-  if (uniqueIds.length === 0) {
-    return getPropertyDetail(userId, propertyId);
-  }
 
-  const providers = await prisma.utilityProvider.findMany({
-    where: { id: { in: uniqueIds }, isActive: true },
-  });
+  const providers = uniqueIds.length
+    ? await prisma.utilityProvider.findMany({
+        where: { id: { in: uniqueIds }, isActive: true },
+      })
+    : [];
 
   if (providers.length !== uniqueIds.length) {
     throw new BadRequestError('One or more utility providers are invalid.');
   }
 
   await prisma.$transaction(async (tx) => {
+    // Soft-cancel any active subscription whose provider is not in the checked list
+    await tx.subscription.updateMany({
+      where: {
+        propertyId,
+        status: 'active',
+        ...(uniqueIds.length
+          ? { utilityProviderId: { notIn: uniqueIds } }
+          : {}),
+      },
+      data: { status: 'cancelled' },
+    });
+
+    // Activate / create each checked provider
     for (const provider of providers) {
       await tx.subscription.upsert({
         where: {
