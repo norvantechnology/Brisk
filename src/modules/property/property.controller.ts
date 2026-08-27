@@ -218,7 +218,7 @@ export const removePropertySubscription = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Subscription removed successfully.',
+      message: 'Subscription cancelled successfully.',
       data,
     });
   } catch (error) {

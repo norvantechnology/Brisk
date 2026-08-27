@@ -238,9 +238,10 @@ router.post(
  *       **Merge behaviour:** existing subscriptions stay. Only new `providerIds` are added.
  *       Example: property already has GAS → send Electricity providerId → result is GAS + Electricity.
  *
- *       To remove one subscription use:
+ *       To remove one subscription (soft delete → status `cancelled`, row kept in DB):
  *       `DELETE /properties/{id}/subscriptions/{subscriptionId}`
  *
+ *       Re-adding the same provider later reactivates that row (`status: active`).
  *       Response includes property `mprnNumber` / `gprnNumber` and per-subscription meter refs.
  *     parameters:
  *       - in: path
@@ -274,10 +275,13 @@ router.put(
  * @swagger
  * /properties/{id}/subscriptions/{subscriptionId}:
  *   delete:
- *     summary: Remove one subscription from Your Subscriptions
+ *     summary: Remove one subscription from Your Subscriptions (soft delete)
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Soft-deletes the subscription (`status: cancelled`). Row stays in DB for audit/backup.
+ *       Active list (`GET /properties/{id}`) only returns `status: active`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -289,7 +293,7 @@ router.put(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Subscription removed; returns updated property detail.
+ *         description: Subscription soft-deleted (cancelled); returns updated property detail.
  *       404:
  *         description: Subscription not found.
  */

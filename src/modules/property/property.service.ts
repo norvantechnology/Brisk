@@ -627,6 +627,11 @@ export const removePropertySubscription = async (
     throw new NotFoundError('Subscription not found for this property.');
   }
 
-  await prisma.subscription.delete({ where: { id: subscriptionId } });
+  // Soft delete — keep row for audit / future backup; hide from active list via status.
+  await prisma.subscription.update({
+    where: { id: subscriptionId },
+    data: { status: 'cancelled' },
+  });
+
   return getPropertyDetail(userId, propertyId);
 };
