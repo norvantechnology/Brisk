@@ -7,6 +7,7 @@ import {
   addressIdParamSchema,
   createAddressSchema,
   propertyIdParamSchema,
+  removeSubscriptionSchema,
   saveSubscriptionsSchema,
   submitReadingSchema,
   updateAddressSchema,
@@ -178,7 +179,11 @@ router.get('/properties', ...customerOnly, controller.listProperties);
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Property screen payload.
+ *         description: |
+ *           Property screen payload including:
+ *           - `mprnNumber` / `gprnNumber` (from address or meters)
+ *           - `meters[]` with `referenceNumber` (MPRN/GPRN) + `referenceLabel`
+ *           - `subscriptions[]` with `mprnNumber`/`gprnNumber` for electricity/gas rows
  */
 router.get('/properties/:id', ...customerOnly, validate(propertyIdParamSchema), controller.getPropertyDetail);
 
@@ -223,13 +228,20 @@ router.post(
  * @swagger
  * /properties/{id}/subscriptions:
  *   put:
- *     summary: Save Add New Subscription checklist selection
+ *     summary: Add New Subscription(s) — merge into existing list
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Replaces active subscriptions for the property with the selected `providerIds`
- *       from `GET /utility-providers`.
+ *       **Add New Subscription** modal — select providers from `GET /utility-providers`.
+ *
+ *       **Merge behaviour:** existing subscriptions stay. Only new `providerIds` are added.
+ *       Example: property already has GAS → send Electricity providerId → result is GAS + Electricity.
+ *
+ *       To remove one subscription use:
+ *       `DELETE /properties/{id}/subscriptions/{subscriptionId}`
+ *
+ *       Response includes property `mprnNumber` / `gprnNumber` and per-subscription meter refs.
  *     parameters:
  *       - in: path
  *         name: id
@@ -246,15 +258,46 @@ router.post(
  *               providerIds:
  *                 type: array
  *                 items: { type: string, format: uuid }
+ *                 example: ['3fa85f64-5717-4562-b3fc-2c963f66afa6']
  *     responses:
  *       200:
- *         description: Updated property detail including subscriptions.
+ *         description: Updated property detail including subscriptions + MPRN/GPRN.
  */
 router.put(
   '/properties/:id/subscriptions',
   ...customerOnly,
   validate(saveSubscriptionsSchema),
   controller.savePropertySubscriptions
+);
+
+/**
+ * @swagger
+ * /properties/{id}/subscriptions/{subscriptionId}:
+ *   delete:
+ *     summary: Remove one subscription from Your Subscriptions
+ *     tags: ['Customer / Property']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: subscriptionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Subscription removed; returns updated property detail.
+ *       404:
+ *         description: Subscription not found.
+ */
+router.delete(
+  '/properties/:id/subscriptions/:subscriptionId',
+  ...customerOnly,
+  validate(removeSubscriptionSchema),
+  controller.removePropertySubscription
 );
 
 export default router;

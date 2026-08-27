@@ -55,6 +55,13 @@ export const saveSubscriptionsSchema = z.object({
   }),
 });
 
+export const removeSubscriptionSchema = z.object({
+  params: z.object({
+    id: z.string().uuid(),
+    subscriptionId: z.string().uuid(),
+  }),
+});
+
 export type CreateAddressInput = z.infer<typeof createAddressSchema>['body'];
 export type UpdateAddressInput = z.infer<typeof updateAddressSchema>['body'];
 export type SubmitReadingInput = z.infer<typeof submitReadingSchema>['body'];

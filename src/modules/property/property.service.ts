@@ -385,30 +385,68 @@ const serializeMeter = (meter: {
   };
 };
 
-const serializeSubscription = (sub: {
-  id: string;
-  serviceType: string;
-  status: string;
-  utilityProvider: {
+const meterRefForService = (
+  serviceType: string,
+  meters: Array<{ meterType: string; mprnGprn: string }>
+): { mprnNumber: string | null; gprnNumber: string | null; referenceNumber: string | null; referenceLabel: string | null } => {
+  const electricity = meters.find((m) => m.meterType === 'electricity');
+  const gas = meters.find((m) => m.meterType === 'gas');
+  const mprnNumber = electricity?.mprnGprn ?? null;
+  const gprnNumber = gas?.mprnGprn ?? null;
+
+  if (serviceType === 'electricity') {
+    return {
+      mprnNumber,
+      gprnNumber: null,
+      referenceNumber: mprnNumber,
+      referenceLabel: mprnNumber ? 'MPRN' : null,
+    };
+  }
+  if (serviceType === 'gas') {
+    return {
+      mprnNumber: null,
+      gprnNumber,
+      referenceNumber: gprnNumber,
+      referenceLabel: gprnNumber ? 'GPRN' : null,
+    };
+  }
+  return { mprnNumber: null, gprnNumber: null, referenceNumber: null, referenceLabel: null };
+};
+
+const serializeSubscription = (
+  sub: {
     id: string;
-    name: string;
     serviceType: string;
-    serviceLabel: string | null;
-    description: string | null;
-    logoUrl: string | null;
-    iconUrl: string | null;
+    status: string;
+    utilityProvider: {
+      id: string;
+      name: string;
+      serviceType: string;
+      serviceLabel: string | null;
+      description: string | null;
+      logoUrl: string | null;
+      iconUrl: string | null;
+    };
+  },
+  meters: Array<{ meterType: string; mprnGprn: string }> = []
+) => {
+  const refs = meterRefForService(sub.serviceType, meters);
+  return {
+    id: sub.id,
+    serviceType: sub.serviceType,
+    serviceLabel: sub.utilityProvider.serviceLabel ?? sub.serviceType,
+    providerId: sub.utilityProvider.id,
+    providerName: sub.utilityProvider.name,
+    description: sub.utilityProvider.description,
+    logoUrl: sub.utilityProvider.logoUrl,
+    iconUrl: sub.utilityProvider.iconUrl ?? sub.utilityProvider.logoUrl,
+    status: sub.status,
+    mprnNumber: refs.mprnNumber,
+    gprnNumber: refs.gprnNumber,
+    referenceNumber: refs.referenceNumber,
+    referenceLabel: refs.referenceLabel,
   };
-}) => ({
-  id: sub.id,
-  serviceType: sub.serviceType,
-  serviceLabel: sub.utilityProvider.serviceLabel ?? sub.serviceType,
-  providerId: sub.utilityProvider.id,
-  providerName: sub.utilityProvider.name,
-  description: sub.utilityProvider.description,
-  logoUrl: sub.utilityProvider.logoUrl,
-  iconUrl: sub.utilityProvider.iconUrl ?? sub.utilityProvider.logoUrl,
-  status: sub.status,
-});
+};
 
 export const listProperties = async (userId: string) => {
   await ensureCustomer(userId);
@@ -436,6 +474,13 @@ export const getPropertyDetail = async (userId: string, id: string) => {
   await ensureCustomer(userId);
   const property = await getOwnedProperty(userId, id);
 
+  const electricityMeter = property.meters.find((m) => m.meterType === 'electricity');
+  const gasMeter = property.meters.find((m) => m.meterType === 'gas');
+  const mprnNumber =
+    property.address?.mprnNumber ?? electricityMeter?.mprnGprn ?? null;
+  const gprnNumber =
+    property.address?.gprnNumber ?? gasMeter?.mprnGprn ?? null;
+
   return {
     id: property.id,
     propertyName: property.propertyName,
@@ -443,8 +488,14 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     fullAddress: formatAddressLine(property),
     label: property.address?.label ?? property.propertyName,
     isPrimary: property.address?.isDefault ?? false,
+    /** MPRN from address / electricity meter */
+    mprnNumber,
+    /** GPRN from address / gas meter */
+    gprnNumber,
     meters: property.meters.map(serializeMeter),
-    subscriptions: property.subscriptions.map(serializeSubscription),
+    subscriptions: property.subscriptions.map((sub) =>
+      serializeSubscription(sub, property.meters)
+    ),
   };
 };
 
@@ -509,6 +560,11 @@ export const listUtilityProviders = async () => {
   }));
 };
 
+/**
+ * Add subscriptions (merge). Existing subscriptions are kept.
+ * Only new `providerIds` are added — does not remove old ones.
+ * To remove one: DELETE /properties/:id/subscriptions/:subscriptionId
+ */
 export const savePropertySubscriptions = async (
   userId: string,
   propertyId: string,
@@ -518,29 +574,59 @@ export const savePropertySubscriptions = async (
   await getOwnedProperty(userId, propertyId);
 
   const uniqueIds = [...new Set(providerIds)];
-  const providers = uniqueIds.length
-    ? await prisma.utilityProvider.findMany({
-        where: { id: { in: uniqueIds }, isActive: true },
-      })
-    : [];
+  if (uniqueIds.length === 0) {
+    return getPropertyDetail(userId, propertyId);
+  }
+
+  const providers = await prisma.utilityProvider.findMany({
+    where: { id: { in: uniqueIds }, isActive: true },
+  });
 
   if (providers.length !== uniqueIds.length) {
     throw new BadRequestError('One or more utility providers are invalid.');
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.subscription.deleteMany({ where: { propertyId } });
-    if (providers.length) {
-      await tx.subscription.createMany({
-        data: providers.map((provider) => ({
+    for (const provider of providers) {
+      await tx.subscription.upsert({
+        where: {
+          propertyId_utilityProviderId: {
+            propertyId,
+            utilityProviderId: provider.id,
+          },
+        },
+        create: {
           propertyId,
           utilityProviderId: provider.id,
           serviceType: provider.serviceType,
           status: 'active',
-        })),
+        },
+        update: {
+          status: 'active',
+          serviceType: provider.serviceType,
+        },
       });
     }
   });
 
+  return getPropertyDetail(userId, propertyId);
+};
+
+export const removePropertySubscription = async (
+  userId: string,
+  propertyId: string,
+  subscriptionId: string
+) => {
+  await ensureCustomer(userId);
+  await getOwnedProperty(userId, propertyId);
+
+  const existing = await prisma.subscription.findFirst({
+    where: { id: subscriptionId, propertyId },
+  });
+  if (!existing) {
+    throw new NotFoundError('Subscription not found for this property.');
+  }
+
+  await prisma.subscription.delete({ where: { id: subscriptionId } });
   return getPropertyDetail(userId, propertyId);
 };

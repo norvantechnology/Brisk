@@ -203,3 +203,25 @@ export const savePropertySubscriptions = async (
     next(error);
   }
 };
+
+export const removePropertySubscription = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await propertyService.removePropertySubscription(
+      req.user!.id,
+      req.params.id,
+      req.params.subscriptionId
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Subscription removed successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
