@@ -387,12 +387,19 @@ const serializeMeter = (meter: {
 
 const meterRefForService = (
   serviceType: string,
-  meters: Array<{ meterType: string; mprnGprn: string }>
-): { mprnNumber: string | null; gprnNumber: string | null; referenceNumber: string | null; referenceLabel: string | null } => {
+  meters: Array<{ meterType: string; mprnGprn: string }>,
+  addressRefs?: { mprnNumber?: string | null; gprnNumber?: string | null }
+): {
+  mprnNumber: string | null;
+  gprnNumber: string | null;
+  referenceNumber: string | null;
+  referenceLabel: string | null;
+} => {
   const electricity = meters.find((m) => m.meterType === 'electricity');
   const gas = meters.find((m) => m.meterType === 'gas');
-  const mprnNumber = electricity?.mprnGprn ?? null;
-  const gprnNumber = gas?.mprnGprn ?? null;
+  // Prefer meter values; fall back to address/property saved MPRN/GPRN
+  const mprnNumber = electricity?.mprnGprn ?? addressRefs?.mprnNumber ?? null;
+  const gprnNumber = gas?.mprnGprn ?? addressRefs?.gprnNumber ?? null;
 
   if (serviceType === 'electricity') {
     return {
@@ -428,9 +435,10 @@ const serializeSubscription = (
       iconUrl: string | null;
     };
   },
-  meters: Array<{ meterType: string; mprnGprn: string }> = []
+  meters: Array<{ meterType: string; mprnGprn: string }> = [],
+  addressRefs?: { mprnNumber?: string | null; gprnNumber?: string | null }
 ) => {
-  const refs = meterRefForService(sub.serviceType, meters);
+  const refs = meterRefForService(sub.serviceType, meters, addressRefs);
   return {
     id: sub.id,
     serviceType: sub.serviceType,
@@ -472,7 +480,18 @@ export const listProperties = async (userId: string) => {
 
 export const getPropertyDetail = async (userId: string, id: string) => {
   await ensureCustomer(userId);
-  const property = await getOwnedProperty(userId, id);
+  let property = await getOwnedProperty(userId, id);
+
+  // If address has MPRN/GPRN but meters were never created (legacy data), sync now
+  const addressMprn = property.address?.mprnNumber ?? null;
+  const addressGprn = property.address?.gprnNumber ?? null;
+  const needsMeterSync =
+    (addressMprn && !property.meters.some((m) => m.meterType === 'electricity')) ||
+    (addressGprn && !property.meters.some((m) => m.meterType === 'gas'));
+  if (needsMeterSync) {
+    await syncMetersFromAddress(property.id, addressMprn, addressGprn);
+    property = await getOwnedProperty(userId, id);
+  }
 
   const electricityMeter = property.meters.find((m) => m.meterType === 'electricity');
   const gasMeter = property.meters.find((m) => m.meterType === 'gas');
@@ -480,6 +499,8 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     property.address?.mprnNumber ?? electricityMeter?.mprnGprn ?? null;
   const gprnNumber =
     property.address?.gprnNumber ?? gasMeter?.mprnGprn ?? null;
+
+  const addressRefs = { mprnNumber, gprnNumber };
 
   return {
     id: property.id,
@@ -494,7 +515,7 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     gprnNumber,
     meters: property.meters.map(serializeMeter),
     subscriptions: property.subscriptions.map((sub) =>
-      serializeSubscription(sub, property.meters)
+      serializeSubscription(sub, property.meters, addressRefs)
     ),
   };
 };
