@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger';
 
+/** Initial catalog only — activation is controlled in DB via admin (isActive). */
 const DEFAULT_CURRENCIES = [
   { code: 'EUR', name: 'Euro', symbol: '€', sortOrder: 1 },
   { code: 'GBP', name: 'British Pound', symbol: '£', sortOrder: 2 },
@@ -8,7 +9,7 @@ const DEFAULT_CURRENCIES = [
   { code: 'INR', name: 'Indian Rupee', symbol: '₹', sortOrder: 4 },
 ];
 
-/** Default rates: 1 EUR = X (admin can update via panel). */
+/** Initial rates: 1 EUR = X. Admin updates via panel; seed does not overwrite existing rates. */
 const DEFAULT_RATES_FROM_EUR: Record<string, number> = {
   EUR: 1,
   GBP: 0.86,
@@ -27,6 +28,7 @@ export async function seedCurrencies(prisma: PrismaClient): Promise<void> {
         sortOrder: c.sortOrder,
         isActive: true,
       },
+      // Do not touch isActive — runtime enable/disable is DB/admin only.
       update: {
         name: c.name,
         symbol: c.symbol,
@@ -52,7 +54,7 @@ export async function seedCurrencies(prisma: PrismaClient): Promise<void> {
         toCurrency,
         rate,
       },
-      update: { rate },
+      update: {},
     });
   }
 

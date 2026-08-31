@@ -66,8 +66,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve uploaded files (local storage — URLs stay stable when switching to S3/CDN)
-// fallthrough: false → missing files return 404, not fall through to /uploads auth (401)
-app.use('/uploads/files', express.static(getUploadRoot(), { fallthrough: false }));
+app.use('/uploads/files', express.static(getUploadRoot()));
+app.use('/uploads/files', (_req, res) => {
+  res.status(404).json({ success: false, message: 'File not found.' });
+});
 
 // Mount Swagger Documentation UI
 setupSwagger(app);

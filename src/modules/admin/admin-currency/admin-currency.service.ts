@@ -139,8 +139,12 @@ export const upsertExchangeRates = async (
 export const getPublicCurrencySnapshot = async () => {
   const settings = await getPlatformCurrencySettings();
   const currencies = await listActiveCurrencies();
+  const activeCodes = currencies.map((c) => c.code);
   const rates = await prisma.exchangeRate.findMany({
-    where: { fromCurrency: settings.baseCurrency },
+    where: {
+      fromCurrency: settings.baseCurrency,
+      toCurrency: { in: activeCodes.filter((code) => code !== settings.baseCurrency) },
+    },
     select: { toCurrency: true, rate: true, updatedAt: true },
     orderBy: { toCurrency: 'asc' },
   });
