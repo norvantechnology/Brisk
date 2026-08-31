@@ -96,6 +96,7 @@ export type CreateLegalPolicyInput = {
   slug: string;
   content: string;
   showInFooter?: boolean;
+  status?: CmsPublishStatus;
 };
 
 export type UpdateLegalPolicyInput = {
@@ -103,6 +104,7 @@ export type UpdateLegalPolicyInput = {
   slug?: string;
   content?: string;
   showInFooter?: boolean;
+  status?: CmsPublishStatus;
 };
 
 export type PublishLegalVersionInput = {
@@ -189,6 +191,41 @@ const asPublishStatus = (value?: string): CmsPublishStatus | undefined => {
     return value as CmsPublishStatus;
   }
   return undefined;
+};
+
+type LegalPolicyTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+const applyLegalVersionStatus = async (
+  tx: LegalPolicyTx,
+  policyId: string,
+  versionId: string,
+  status: CmsPublishStatus,
+  adminId: string
+) => {
+  if (status === CmsPublishStatus.PUBLISHED) {
+    await tx.cmsLegalPolicyVersion.updateMany({
+      where: { policyId, status: CmsPublishStatus.PUBLISHED, id: { not: versionId } },
+      data: { status: CmsPublishStatus.ARCHIVED },
+    });
+    await tx.cmsLegalPolicyVersion.update({
+      where: { id: versionId },
+      data: {
+        status: CmsPublishStatus.PUBLISHED,
+        publishedById: adminId,
+        publishedAt: new Date(),
+      },
+    });
+    return;
+  }
+
+  await tx.cmsLegalPolicyVersion.update({
+    where: { id: versionId },
+    data: {
+      status,
+      publishedById: null,
+      publishedAt: null,
+    },
+  });
 };
 
 const asActiveStatus = (value?: string): CmsActiveStatus | undefined => {
@@ -1187,8 +1224,7 @@ export const listLegalPolicies = async (filters: CmsListFilters = {}) => {
       orderBy: { name: 'asc' },
       include: {
         versions: {
-          where: { status: CmsPublishStatus.PUBLISHED },
-          orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+          orderBy: [{ createdAt: 'desc' }],
           take: 1,
           include: {
             publishedBy: {
@@ -1202,25 +1238,26 @@ export const listLegalPolicies = async (filters: CmsListFilters = {}) => {
   ]);
 
   const policies = rows.map((policy) => {
-    const latestPublished = policy.versions[0] ?? null;
+    const latestVersion = policy.versions[0] ?? null;
     return {
       id: policy.id,
       name: policy.name,
       slug: policy.slug,
       showInFooter: policy.showInFooter,
-      content: latestPublished?.content ?? null,
+      status: latestVersion?.status ?? CmsPublishStatus.DRAFT,
+      content: latestVersion?.content ?? null,
       createdAt: policy.createdAt,
       updatedAt: policy.updatedAt,
       versionCount: policy._count.versions,
-      latestPublishedVersion: latestPublished
+      latestPublishedVersion: latestVersion
         ? {
-            id: latestPublished.id,
-            versionLabel: latestPublished.versionLabel,
-            content: latestPublished.content,
-            effectiveDate: latestPublished.effectiveDate,
-            status: latestPublished.status,
-            publishedAt: latestPublished.publishedAt,
-            publishedBy: latestPublished.publishedBy,
+            id: latestVersion.id,
+            versionLabel: latestVersion.versionLabel,
+            content: latestVersion.content,
+            effectiveDate: latestVersion.effectiveDate,
+            status: latestVersion.status,
+            publishedAt: latestVersion.publishedAt,
+            publishedBy: latestVersion.publishedBy,
           }
         : null,
     };
@@ -1270,8 +1307,9 @@ export const createLegalPolicy = async (
   }
 
   const showInFooter = input.showInFooter ?? true;
+  const status = input.status ?? CmsPublishStatus.PUBLISHED;
 
-  const policy = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const created = await tx.cmsLegalPolicy.create({
       data: {
         name: input.name.trim(),
@@ -1280,19 +1318,19 @@ export const createLegalPolicy = async (
       },
     });
 
-    await tx.cmsLegalPolicyVersion.create({
+    const version = await tx.cmsLegalPolicyVersion.create({
       data: {
         policyId: created.id,
         versionLabel: 'v1.0',
         content: input.content.trim(),
         effectiveDate: new Date(),
-        status: CmsPublishStatus.PUBLISHED,
-        publishedById: adminId,
-        publishedAt: new Date(),
+        status,
+        publishedById: status === CmsPublishStatus.PUBLISHED ? adminId : null,
+        publishedAt: status === CmsPublishStatus.PUBLISHED ? new Date() : null,
       },
     });
 
-    return created;
+    return { policy: created, version };
   });
 
   await writeAudit(
@@ -1300,18 +1338,19 @@ export const createLegalPolicy = async (
     adminId,
     adminLabel,
     'CmsLegalPolicy',
-    policy.id,
-    `Created legal policy: "${policy.name}".`
+    result.policy.id,
+    `Created legal policy: "${result.policy.name}".`
   );
 
   return {
-    id: policy.id,
-    name: policy.name,
-    slug: policy.slug,
-    showInFooter: policy.showInFooter,
-    content: input.content.trim(),
-    createdAt: policy.createdAt,
-    updatedAt: policy.updatedAt,
+    id: result.policy.id,
+    name: result.policy.name,
+    slug: result.policy.slug,
+    showInFooter: result.policy.showInFooter,
+    status: result.version.status,
+    content: result.version.content,
+    createdAt: result.policy.createdAt,
+    updatedAt: result.policy.updatedAt,
   };
 };
 
@@ -1343,43 +1382,46 @@ export const updateLegalPolicy = async (
       },
     });
 
-    let content: string | null = input.content?.trim() ?? null;
+    let workingVersion = await tx.cmsLegalPolicyVersion.findFirst({
+      where: { policyId },
+      orderBy: [{ createdAt: 'desc' }],
+    });
 
     if (input.content !== undefined) {
       const trimmed = input.content.trim();
-      const published = await tx.cmsLegalPolicyVersion.findFirst({
-        where: { policyId, status: CmsPublishStatus.PUBLISHED },
-        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-      });
-
-      if (published) {
-        await tx.cmsLegalPolicyVersion.update({
-          where: { id: published.id },
+      if (workingVersion) {
+        workingVersion = await tx.cmsLegalPolicyVersion.update({
+          where: { id: workingVersion.id },
           data: { content: trimmed },
         });
       } else {
-        await tx.cmsLegalPolicyVersion.create({
+        workingVersion = await tx.cmsLegalPolicyVersion.create({
           data: {
             policyId,
             versionLabel: 'v1.0',
             content: trimmed,
             effectiveDate: new Date(),
-            status: CmsPublishStatus.PUBLISHED,
-            publishedById: adminId,
-            publishedAt: new Date(),
+            status: input.status ?? CmsPublishStatus.DRAFT,
+            publishedById:
+              input.status === CmsPublishStatus.PUBLISHED ? adminId : null,
+            publishedAt: input.status === CmsPublishStatus.PUBLISHED ? new Date() : null,
           },
         });
       }
-      content = trimmed;
-    } else {
-      const published = await tx.cmsLegalPolicyVersion.findFirst({
-        where: { policyId, status: CmsPublishStatus.PUBLISHED },
-        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-      });
-      content = published?.content ?? null;
     }
 
-    return { policy: nextPolicy, content };
+    if (input.status !== undefined && workingVersion) {
+      await applyLegalVersionStatus(tx, policyId, workingVersion.id, input.status, adminId);
+      workingVersion = await tx.cmsLegalPolicyVersion.findUniqueOrThrow({
+        where: { id: workingVersion.id },
+      });
+    }
+
+    return {
+      policy: nextPolicy,
+      content: workingVersion?.content ?? null,
+      status: workingVersion?.status ?? CmsPublishStatus.DRAFT,
+    };
   });
 
   await writeAudit(
@@ -1396,6 +1438,7 @@ export const updateLegalPolicy = async (
     name: updated.policy.name,
     slug: updated.policy.slug,
     showInFooter: updated.policy.showInFooter,
+    status: updated.status,
     content: updated.content,
     createdAt: updated.policy.createdAt,
     updatedAt: updated.policy.updatedAt,

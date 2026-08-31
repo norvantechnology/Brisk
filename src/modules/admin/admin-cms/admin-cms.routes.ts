@@ -1592,6 +1592,7 @@ router.get('/legal-policies', validate(listFilterSchema), cmsAdminController.lis
  *               slug: { type: string, example: 'terms-and-conditions' }
  *               content: { type: string, example: '<p>Terms & Conditions content...</p>' }
  *               showInFooter: { type: boolean, example: true }
+ *               status: { type: string, enum: [DRAFT, SCHEDULED, PUBLISHED, ARCHIVED], example: PUBLISHED }
  *     responses:
  *       201:
  *         description: Legal policy created successfully.
@@ -1624,11 +1625,13 @@ router.post('/legal-policies', validate(createLegalPolicySchema), cmsAdminContro
  *               slug: { type: string, example: 'terms-and-conditions' }
  *               content: { type: string, example: '<p>Updated policy content...</p>' }
  *               showInFooter: { type: boolean, example: true }
+ *               status: { type: string, enum: [DRAFT, SCHEDULED, PUBLISHED, ARCHIVED], example: PUBLISHED }
  *           example:
  *             name: Terms & Conditions
  *             slug: terms-and-conditions
  *             content: '<p>Terms & Conditions content...</p>'
  *             showInFooter: true
+ *             status: PUBLISHED
  *     responses:
  *       200:
  *         description: Legal policy updated successfully.

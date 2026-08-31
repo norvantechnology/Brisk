@@ -293,6 +293,7 @@ export const createLegalPolicySchema = z.object({
     slug: z.string().min(1),
     content: z.string().min(1),
     showInFooter: z.boolean().optional().default(true),
+    status: z.nativeEnum(CmsPublishStatus).optional().default(CmsPublishStatus.PUBLISHED),
   }),
 });
 
@@ -304,6 +305,7 @@ export const updateLegalPolicySchema = z.object({
       slug: z.string().min(1).optional(),
       content: z.string().min(1).optional(),
       showInFooter: z.boolean().optional(),
+      status: z.nativeEnum(CmsPublishStatus).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
       message: 'At least one field is required.',
