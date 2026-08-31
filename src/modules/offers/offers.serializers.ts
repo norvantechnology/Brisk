@@ -7,7 +7,8 @@ export const offerInclude = {
       id: true,
       businessName: true,
       traderType: true,
-      user: { select: { id: true, fullName: true } },
+      profilePhotoUrl: true,
+      user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
     },
   },
   categories: {
@@ -68,7 +69,8 @@ type OfferRecord = {
     id: string;
     businessName: string | null;
     traderType: string;
-    user: { id: string; fullName: string };
+    profilePhotoUrl: string | null;
+    user: { id: string; fullName: string; profilePhotoUrl: string | null };
   } | null;
   categories: Array<{ category: { id: string; name: string; categoryCode: string; iconName: string | null } }>;
   subcategories: Array<{ subcategory: { id: string; name: string; categoryId: string } }>;
@@ -115,6 +117,10 @@ export const serializeOffer = (offer: OfferRecord) => {
           businessName: offer.trader.businessName,
           traderType: offer.trader.traderType,
           fullName: offer.trader.user.fullName,
+          /** Trader avatar for customer offer cards (trader photo, else user photo). */
+          profilePhotoUrl:
+            offer.trader.profilePhotoUrl ?? offer.trader.user.profilePhotoUrl ?? null,
+          imageUrl: offer.trader.profilePhotoUrl ?? offer.trader.user.profilePhotoUrl ?? null,
         }
       : null,
     categories: offer.categories.map((item) => item.category),

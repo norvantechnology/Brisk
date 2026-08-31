@@ -95,7 +95,8 @@ const router = Router();
  *       **Mobile screen:** Offers → Traders Offers.
  *
  *       Returns active, currently valid offers with `offerType=TRADER`.
- *       Each card includes `discountType` for the type icon, `claimed`, and trader info.
+ *       Each card includes `discountType` for the type icon, `claimed`, and trader info
+ *       (`trader.fullName`, `trader.profilePhotoUrl` / `trader.imageUrl` for avatar).
  *       Query params map 1:1 to the confirmed filter modal (not a single opaque filter blob).
  *     parameters:
  *       - $ref: '#/components/parameters/OfferDateRange'
@@ -212,6 +213,7 @@ router.post(
  *
  *       Active `offerType=PLATFORM` offers. Each row has `badgeTag` (e.g. `special_local_promo`,
  *       `limited_availability`) and `ctaLabel` / `ctaAction` (`CLAIM` vs `BOOK_INSPECTION`).
+ *       When a trader is linked, `trader.profilePhotoUrl` / `trader.imageUrl` is included for the avatar.
  *       `data.pointsBalance` is the customer's BRP header (display only — not used to redeem here).
  *     parameters:
  *       - $ref: '#/components/parameters/OfferDateRange'
