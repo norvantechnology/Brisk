@@ -652,6 +652,31 @@ export const createLegalPolicy = async (
   }
 };
 
+export const updateLegalPolicy = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const policy = await cmsService.updateLegalPolicy(
+      adminId,
+      adminLabel,
+      req.params.id,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Legal policy updated successfully.',
+      data: { policy },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const publishLegalVersion = async (
   req: AuthenticatedAdminRequest,
   res: Response,

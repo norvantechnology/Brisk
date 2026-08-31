@@ -455,6 +455,9 @@ router.get('/seo', cmsController.getSeo);
  *                   general_inquiry_email: info@brisk.com
  *                   customer_support_phone: '+353 123 456 789'
  *                   office_address: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *                   show_general_inquiry_email: true
+ *                   show_customer_support_phone: true
+ *                   show_office_address: true
  */
 router.get('/settings/contact', cmsController.getContactSettings);
 

@@ -94,6 +94,15 @@ export type UpdateTestimonialInput = Partial<CreateTestimonialInput>;
 export type CreateLegalPolicyInput = {
   name: string;
   slug: string;
+  content: string;
+  showInFooter?: boolean;
+};
+
+export type UpdateLegalPolicyInput = {
+  name?: string;
+  slug?: string;
+  content?: string;
+  showInFooter?: boolean;
 };
 
 export type PublishLegalVersionInput = {
@@ -118,12 +127,18 @@ export type UpsertContactSettingsInput = {
   generalInquiryEmail: string;
   customerSupportPhone: string;
   officeAddress: string;
+  showGeneralInquiryEmail?: boolean;
+  showCustomerSupportPhone?: boolean;
+  showOfficeAddress?: boolean;
 };
 
 const DEFAULT_CONTACT_SETTINGS = {
   generalInquiryEmail: 'info@brisk.com',
   customerSupportPhone: '+353 123 456 789',
   officeAddress: '14 Kensington High Street, London, W8 4PT, United Kingdom',
+  showGeneralInquiryEmail: true,
+  showCustomerSupportPhone: true,
+  showOfficeAddress: true,
 };
 
 // ==========================================
@@ -1192,6 +1207,8 @@ export const listLegalPolicies = async (filters: CmsListFilters = {}) => {
       id: policy.id,
       name: policy.name,
       slug: policy.slug,
+      showInFooter: policy.showInFooter,
+      content: latestPublished?.content ?? null,
       createdAt: policy.createdAt,
       updatedAt: policy.updatedAt,
       versionCount: policy._count.versions,
@@ -1199,6 +1216,7 @@ export const listLegalPolicies = async (filters: CmsListFilters = {}) => {
         ? {
             id: latestPublished.id,
             versionLabel: latestPublished.versionLabel,
+            content: latestPublished.content,
             effectiveDate: latestPublished.effectiveDate,
             status: latestPublished.status,
             publishedAt: latestPublished.publishedAt,
@@ -1251,11 +1269,30 @@ export const createLegalPolicy = async (
     throw new ConflictError('Legal policy slug already exists.');
   }
 
-  const policy = await prisma.cmsLegalPolicy.create({
-    data: {
-      name: input.name,
-      slug: input.slug,
-    },
+  const showInFooter = input.showInFooter ?? true;
+
+  const policy = await prisma.$transaction(async (tx) => {
+    const created = await tx.cmsLegalPolicy.create({
+      data: {
+        name: input.name.trim(),
+        slug: input.slug.trim(),
+        showInFooter,
+      },
+    });
+
+    await tx.cmsLegalPolicyVersion.create({
+      data: {
+        policyId: created.id,
+        versionLabel: 'v1.0',
+        content: input.content.trim(),
+        effectiveDate: new Date(),
+        status: CmsPublishStatus.PUBLISHED,
+        publishedById: adminId,
+        publishedAt: new Date(),
+      },
+    });
+
+    return created;
   });
 
   await writeAudit(
@@ -1267,7 +1304,102 @@ export const createLegalPolicy = async (
     `Created legal policy: "${policy.name}".`
   );
 
-  return policy;
+  return {
+    id: policy.id,
+    name: policy.name,
+    slug: policy.slug,
+    showInFooter: policy.showInFooter,
+    content: input.content.trim(),
+    createdAt: policy.createdAt,
+    updatedAt: policy.updatedAt,
+  };
+};
+
+export const updateLegalPolicy = async (
+  adminId: string,
+  adminLabel: string,
+  policyId: string,
+  input: UpdateLegalPolicyInput
+) => {
+  const policy = await prisma.cmsLegalPolicy.findUnique({ where: { id: policyId } });
+  if (!policy) {
+    throw new NotFoundError('Legal policy not found.');
+  }
+
+  if (input.slug && input.slug !== policy.slug) {
+    const slugTaken = await prisma.cmsLegalPolicy.findUnique({ where: { slug: input.slug } });
+    if (slugTaken) {
+      throw new ConflictError('Legal policy slug already exists.');
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const nextPolicy = await tx.cmsLegalPolicy.update({
+      where: { id: policyId },
+      data: {
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.slug !== undefined ? { slug: input.slug.trim() } : {}),
+        ...(input.showInFooter !== undefined ? { showInFooter: input.showInFooter } : {}),
+      },
+    });
+
+    let content: string | null = input.content?.trim() ?? null;
+
+    if (input.content !== undefined) {
+      const trimmed = input.content.trim();
+      const published = await tx.cmsLegalPolicyVersion.findFirst({
+        where: { policyId, status: CmsPublishStatus.PUBLISHED },
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      });
+
+      if (published) {
+        await tx.cmsLegalPolicyVersion.update({
+          where: { id: published.id },
+          data: { content: trimmed },
+        });
+      } else {
+        await tx.cmsLegalPolicyVersion.create({
+          data: {
+            policyId,
+            versionLabel: 'v1.0',
+            content: trimmed,
+            effectiveDate: new Date(),
+            status: CmsPublishStatus.PUBLISHED,
+            publishedById: adminId,
+            publishedAt: new Date(),
+          },
+        });
+      }
+      content = trimmed;
+    } else {
+      const published = await tx.cmsLegalPolicyVersion.findFirst({
+        where: { policyId, status: CmsPublishStatus.PUBLISHED },
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      });
+      content = published?.content ?? null;
+    }
+
+    return { policy: nextPolicy, content };
+  });
+
+  await writeAudit(
+    'CMS_LEGAL_POLICY_UPDATED',
+    adminId,
+    adminLabel,
+    'CmsLegalPolicy',
+    policyId,
+    `Updated legal policy: "${updated.policy.name}".`
+  );
+
+  return {
+    id: updated.policy.id,
+    name: updated.policy.name,
+    slug: updated.policy.slug,
+    showInFooter: updated.policy.showInFooter,
+    content: updated.content,
+    createdAt: updated.policy.createdAt,
+    updatedAt: updated.policy.updatedAt,
+  };
 };
 
 export const publishLegalVersion = async (
@@ -1432,6 +1564,9 @@ export const upsertContactSettings = async (
     generalInquiryEmail: input.generalInquiryEmail.trim(),
     customerSupportPhone: input.customerSupportPhone.trim(),
     officeAddress: input.officeAddress.trim(),
+    showGeneralInquiryEmail: input.showGeneralInquiryEmail ?? true,
+    showCustomerSupportPhone: input.showCustomerSupportPhone ?? true,
+    showOfficeAddress: input.showOfficeAddress ?? true,
     updatedById: adminId,
   };
 

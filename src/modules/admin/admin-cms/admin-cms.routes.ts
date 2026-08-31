@@ -19,6 +19,7 @@ import {
   testimonialStatusSchema,
   testimonialSortOrderSchema,
   createLegalPolicySchema,
+  updateLegalPolicySchema,
   publishLegalVersionSchema,
   updateSeoSchema,
   updateContactSettingsSchema,
@@ -1585,9 +1586,12 @@ router.get('/legal-policies', validate(listFilterSchema), cmsAdminController.lis
  *             required:
  *               - name
  *               - slug
+ *               - content
  *             properties:
- *               name: { type: string, example: 'Refund & Cancellation Policy' }
- *               slug: { type: string, example: 'refund-cancellation-policy' }
+ *               name: { type: string, example: 'Terms & Conditions' }
+ *               slug: { type: string, example: 'terms-and-conditions' }
+ *               content: { type: string, example: '<p>Terms & Conditions content...</p>' }
+ *               showInFooter: { type: boolean, example: true }
  *     responses:
  *       201:
  *         description: Legal policy created successfully.
@@ -1595,6 +1599,49 @@ router.get('/legal-policies', validate(listFilterSchema), cmsAdminController.lis
  *         description: Legal policy slug conflict.
  */
 router.post('/legal-policies', validate(createLegalPolicySchema), cmsAdminController.createLegalPolicy);
+
+/**
+ * @swagger
+ * /admin/cms/legal-policies/{id}:
+ *   put:
+ *     summary: Update Legal Policy
+ *     tags: ['Admin / Website / Legal']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string, example: 'Terms & Conditions' }
+ *               slug: { type: string, example: 'terms-and-conditions' }
+ *               content: { type: string, example: '<p>Updated policy content...</p>' }
+ *               showInFooter: { type: boolean, example: true }
+ *           example:
+ *             name: Terms & Conditions
+ *             slug: terms-and-conditions
+ *             content: '<p>Terms & Conditions content...</p>'
+ *             showInFooter: true
+ *     responses:
+ *       200:
+ *         description: Legal policy updated successfully.
+ *       404:
+ *         description: Legal policy not found.
+ *       409:
+ *         description: Legal policy slug conflict.
+ */
+router.put(
+  '/legal-policies/:id',
+  validate(updateLegalPolicySchema),
+  cmsAdminController.updateLegalPolicy
+);
 
 /**
  * @swagger
@@ -1741,6 +1788,9 @@ router.put('/seo', validate(updateSeoSchema), cmsAdminController.upsertSeoSettin
  *                   generalInquiryEmail: info@brisk.com
  *                   customerSupportPhone: '+353 123 456 789'
  *                   officeAddress: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *                   showGeneralInquiryEmail: true
+ *                   showCustomerSupportPhone: true
+ *                   showOfficeAddress: true
  *                   updatedAt: '2026-08-26T08:00:00.000Z'
  *       401:
  *         description: Unauthorized.
@@ -1783,10 +1833,25 @@ router.get('/settings/contact', cmsAdminController.getContactSettings);
  *                 type: string
  *                 example: 14 Kensington High Street, London, W8 4PT, United Kingdom
  *                 description: Official physical office address.
+ *               showGeneralInquiryEmail:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Show general inquiry email on public site.
+ *               showCustomerSupportPhone:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Show customer support phone on public site.
+ *               showOfficeAddress:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Show office address on public site.
  *           example:
  *             generalInquiryEmail: info@brisk.com
  *             customerSupportPhone: '+353 123 456 789'
  *             officeAddress: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *             showGeneralInquiryEmail: true
+ *             showCustomerSupportPhone: true
+ *             showOfficeAddress: true
  *     responses:
  *       200:
  *         description: Contact information updated successfully.
@@ -1801,6 +1866,9 @@ router.get('/settings/contact', cmsAdminController.getContactSettings);
  *                   generalInquiryEmail: info@brisk.com
  *                   customerSupportPhone: '+353 123 456 789'
  *                   officeAddress: 14 Kensington High Street, London, W8 4PT, United Kingdom
+ *                   showGeneralInquiryEmail: true
+ *                   showCustomerSupportPhone: true
+ *                   showOfficeAddress: true
  *                   updatedAt: '2026-08-26T08:00:00.000Z'
  *       400:
  *         description: Validation error.

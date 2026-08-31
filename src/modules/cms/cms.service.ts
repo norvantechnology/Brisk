@@ -515,6 +515,7 @@ export const listPublishedTestimonials = async (filters: {
 
 export const listPublishedLegalPolicies = async () => {
   const policies = await prisma.cmsLegalPolicy.findMany({
+    where: { showInFooter: true },
     orderBy: { name: 'asc' },
     include: {
       versions: {
@@ -746,6 +747,9 @@ export const getPublicContactSettings = async () => {
     general_inquiry_email: 'info@brisk.com',
     customer_support_phone: '+353 123 456 789',
     office_address: '14 Kensington High Street, London, W8 4PT, United Kingdom',
+    show_general_inquiry_email: true,
+    show_customer_support_phone: true,
+    show_office_address: true,
   };
 
   if (!contact) {
@@ -757,6 +761,9 @@ export const getPublicContactSettings = async () => {
       general_inquiry_email: contact.generalInquiryEmail,
       customer_support_phone: contact.customerSupportPhone,
       office_address: contact.officeAddress,
+      show_general_inquiry_email: contact.showGeneralInquiryEmail,
+      show_customer_support_phone: contact.showCustomerSupportPhone,
+      show_office_address: contact.showOfficeAddress,
       updated_at: contact.updatedAt,
     },
   };

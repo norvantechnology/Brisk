@@ -197,6 +197,7 @@ export const serializePublicLegalSummary = (
     id: policy.id,
     name: policy.name,
     slug: policy.slug,
+    show_in_footer: policy.showInFooter,
     current_version: current?.versionLabel ?? null,
     effective_date: current?.effectiveDate ?? null,
     published_at: current?.publishedAt ?? null,

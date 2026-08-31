@@ -1325,11 +1325,12 @@ model CmsTestimonial {
 }
 
 model CmsLegalPolicy {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String   @unique
+  showInFooter Boolean  @default(true) @map("show_in_footer")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   versions CmsLegalPolicyVersion[]
 
@@ -1375,13 +1376,16 @@ model CmsSeoSettings {
 
 /// Singleton row for Admin Settings → Contact Info (public support channels).
 model CmsContactSettings {
-  id                   String   @id @default(uuid()) @db.Uuid
-  generalInquiryEmail  String   @map("general_inquiry_email")
-  customerSupportPhone String   @map("customer_support_phone")
-  officeAddress        String   @map("office_address") @db.Text
-  updatedById          String?  @map("updated_by_id") @db.Uuid
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id                       String   @id @default(uuid()) @db.Uuid
+  generalInquiryEmail      String   @map("general_inquiry_email")
+  customerSupportPhone     String   @map("customer_support_phone")
+  officeAddress            String   @map("office_address") @db.Text
+  showGeneralInquiryEmail  Boolean  @default(true) @map("show_general_inquiry_email")
+  showCustomerSupportPhone Boolean  @default(true) @map("show_customer_support_phone")
+  showOfficeAddress        Boolean  @default(true) @map("show_office_address")
+  updatedById              String?  @map("updated_by_id") @db.Uuid
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
 
   updatedBy AdminUser? @relation("CmsContactUpdatedBy", fields: [updatedById], references: [id])
 

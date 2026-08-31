@@ -291,7 +291,23 @@ export const createLegalPolicySchema = z.object({
   body: z.object({
     name: z.string().min(1),
     slug: z.string().min(1),
+    content: z.string().min(1),
+    showInFooter: z.boolean().optional().default(true),
   }),
+});
+
+export const updateLegalPolicySchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z
+    .object({
+      name: z.string().min(1).optional(),
+      slug: z.string().min(1).optional(),
+      content: z.string().min(1).optional(),
+      showInFooter: z.boolean().optional(),
+    })
+    .refine((body) => Object.keys(body).length > 0, {
+      message: 'At least one field is required.',
+    }),
 });
 
 export const publishLegalVersionSchema = z.object({
@@ -322,6 +338,9 @@ export const updateContactSettingsSchema = z.object({
     generalInquiryEmail: z.string().email('generalInquiryEmail must be a valid email.'),
     customerSupportPhone: z.string().min(5, 'customerSupportPhone is required.'),
     officeAddress: z.string().min(5, 'officeAddress is required.'),
+    showGeneralInquiryEmail: z.boolean().optional().default(true),
+    showCustomerSupportPhone: z.boolean().optional().default(true),
+    showOfficeAddress: z.boolean().optional().default(true),
   }),
 });
 
