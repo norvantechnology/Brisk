@@ -30,6 +30,7 @@ import adminTraderVerificationRoutes from './modules/admin/admin-trader-verifica
 import adminTradersRoutes from './modules/admin/admin-traders/admin-traders.routes';
 import homePublicRoutes from './modules/cms/home-public.routes';
 import adminOffersRoutes from './modules/admin/admin-offers/admin-offers.routes';
+import adminLoyaltyRoutes from './modules/admin/admin-loyalty/admin-loyalty.routes';
 import publicOffersRoutes from './modules/offers/public-offers.routes';
 import loyaltyRoutes from './modules/loyalty/loyalty.routes';
 import propertyRoutes from './modules/property/property.routes';
@@ -74,6 +75,7 @@ app.use('/admin', adminTradersRoutes);
 app.use('/admin', adminDocumentRulesRoutes);
 app.use('/admin', adminTraderVerificationRoutes);
 app.use('/admin', adminOffersRoutes);
+app.use('/admin', adminLoyaltyRoutes);
 app.use('/admin/cms', adminCmsRoutes);
 app.use('/admin/cms', adminContactRoutes);
 app.use('/admin/blog/categories', adminBlogCategoryRoutes);

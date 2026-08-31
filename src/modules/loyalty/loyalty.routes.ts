@@ -38,7 +38,8 @@ router.get(
  *       - bearerAuth: []
  *     description: |
  *       **Mobile screen:** Offers → Loyalty tab list.
- *       Each item includes `pointsRequired`, `claimed`, and `redeemCode` when already redeemed.
+ *       Returns **active** offers created by Admin (`POST /admin/loyalty/offers`).
+ *       No static/default offers — empty list until admin creates offers.
  *     responses:
  *       200:
  *         description: `{ pointsBalance, offers[] }`

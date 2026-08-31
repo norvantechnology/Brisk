@@ -189,31 +189,4 @@ export async function seedPayments(prisma: PrismaClient): Promise<void> {
     });
     logger.info(`✅ Loyalty account seeded for customer: ${customer.fullName}`);
   }
-
-  const loyaltyOffers = [
-    {
-      title: 'Claim 100 BRP at Grand Heritage Hotel',
-      pointsRequired: 100,
-      description: 'Your exclusive welcome discount is now active in your wallet.',
-    },
-    {
-      title: '€10 Off Handyman Services',
-      pointsRequired: 150,
-      description: 'Redeem for any Handyman or Plumbing services in the Dublin area.',
-    },
-    {
-      title: 'Free Filter Change',
-      pointsRequired: 200,
-      description: 'Complimentary HVAC filter replacement on your next booking.',
-    },
-  ];
-
-  for (const offer of loyaltyOffers) {
-    const existing = await prisma.loyaltyOffer.findFirst({
-      where: { title: offer.title },
-    });
-    if (!existing) {
-      await prisma.loyaltyOffer.create({ data: offer });
-    }
-  }
 }

@@ -878,6 +878,8 @@ model LoyaltyOffer {
   title          String
   pointsRequired Int      @map("points_required")
   description    String?  @db.Text
+  imageUrl       String?  @map("image_url")
+  status         String   @default("active")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 

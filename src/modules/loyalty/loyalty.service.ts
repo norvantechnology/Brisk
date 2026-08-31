@@ -32,7 +32,10 @@ export const listLoyaltyOffers = async (userId: string) => {
   const account = await getOrCreateAccount(userId);
 
   const [offers, redemptions] = await Promise.all([
-    prisma.loyaltyOffer.findMany({ orderBy: { pointsRequired: 'asc' } }),
+    prisma.loyaltyOffer.findMany({
+      where: { status: 'active' },
+      orderBy: { pointsRequired: 'asc' },
+    }),
     prisma.loyaltyRedemption.findMany({
       where: {
         loyaltyAccountId: account.id,
@@ -55,6 +58,7 @@ export const listLoyaltyOffers = async (userId: string) => {
         title: offer.title,
         description: offer.description,
         pointsRequired: offer.pointsRequired,
+        imageUrl: offer.imageUrl,
         claimed: Boolean(redemption),
         redeemCode: redemption?.redeemCode ?? null,
         validUntil: redemption?.validUntil ?? null,
@@ -70,6 +74,9 @@ export const redeemLoyaltyOffer = async (userId: string, offerId: string) => {
   const offer = await prisma.loyaltyOffer.findUnique({ where: { id: offerId } });
   if (!offer) {
     throw new NotFoundError('Loyalty offer not found.');
+  }
+  if (offer.status !== 'active') {
+    throw new BadRequestError('This loyalty offer is not currently available.');
   }
 
   const existing = await prisma.loyaltyRedemption.findFirst({
@@ -129,6 +136,7 @@ export const redeemLoyaltyOffer = async (userId: string, offerId: string) => {
       title: offer.title,
       description: offer.description,
       pointsRequired: offer.pointsRequired,
+      imageUrl: offer.imageUrl,
     },
   };
 };
@@ -156,6 +164,7 @@ export const listRedemptions = async (userId: string) => {
         title: row.loyaltyOffer.title,
         description: row.loyaltyOffer.description,
         pointsRequired: row.loyaltyOffer.pointsRequired,
+        imageUrl: row.loyaltyOffer.imageUrl,
       },
     })),
   };

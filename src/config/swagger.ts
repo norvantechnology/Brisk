@@ -120,7 +120,12 @@ const options: swaggerJSDoc.Options = {
       {
         name: 'Customer / Loyalty',
         description:
-          'Mobile Offers → Loyalty tab: GET /loyalty/account, GET /loyalty/offers, POST /loyalty/offers/:id/redeem, GET /loyalty/redemptions. Auth: customer Bearer token.',
+          'Mobile Offers → Loyalty tab (dynamic offers from Admin). GET /loyalty/account, GET /loyalty/offers, POST /loyalty/offers/:id/redeem. Admin manages offers at /admin/loyalty/offers.',
+      },
+      {
+        name: 'Admin / Loyalty',
+        description:
+          'Admin CRUD for BRP loyalty offers. Created offers appear on customer GET /loyalty/offers when status=active.',
       },
       {
         name: 'Trader / Offers',
