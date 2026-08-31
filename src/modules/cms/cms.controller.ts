@@ -260,12 +260,12 @@ export const getTestimonials = async (
 };
 
 export const listLegalPolicies = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await cmsService.listPublishedLegalPolicies();
+    const data = await cmsService.listPublishedLegalPolicies(req.query as Record<string, unknown>);
     sendResponse({
       res,
       statusCode: 200,

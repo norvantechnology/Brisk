@@ -373,8 +373,19 @@ router.get('/help/html', cmsController.getHelpCenterHtml);
  * @swagger
  * /cms/legal:
  *   get:
- *     summary: List published legal policies (footer links)
+ *     summary: List published legal policies
+ *     description: |
+ *       Returns published legal policy summaries.
+ *
+ *       - `GET /cms/legal` — all published policies
+ *       - `GET /cms/legal?show_in_footer=true` — footer links only
+ *       - Alias: `showInFooter=true`
  *     tags: ['Website / Content']
+ *     parameters:
+ *       - in: query
+ *         name: show_in_footer
+ *         schema: { type: boolean, example: true }
+ *         description: When `true`, return only policies marked for footer display.
  *     responses:
  *       200:
  *         description: Legal policy summaries with current version.

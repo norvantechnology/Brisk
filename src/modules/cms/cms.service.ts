@@ -49,6 +49,11 @@ const parseFeatured = (value?: string | boolean): boolean | undefined => {
   return undefined;
 };
 
+const parseShowInFooter = (query: Record<string, unknown>): boolean | undefined => {
+  const value = query.show_in_footer ?? query.showInFooter;
+  return parseFeatured(value as string | boolean | undefined);
+};
+
 const parsePageLimit = (query: {
   page?: string | number;
   per_page?: string | number;
@@ -513,9 +518,11 @@ export const listPublishedTestimonials = async (filters: {
 // LEGAL
 // ==========================================
 
-export const listPublishedLegalPolicies = async () => {
+export const listPublishedLegalPolicies = async (query: Record<string, unknown> = {}) => {
+  const showInFooter = parseShowInFooter(query);
+
   const policies = await prisma.cmsLegalPolicy.findMany({
-    where: { showInFooter: true },
+    where: showInFooter === undefined ? {} : { showInFooter },
     orderBy: { name: 'asc' },
     include: {
       versions: {
