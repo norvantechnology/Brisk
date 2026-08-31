@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger';
 import { seedAdmin } from './admin.seed';
 import { seedDemoUsers } from './demo-users.seed';
 import { seedCategories } from './categories.seed';
+import { seedCurrencies } from './currencies.seed';
 import { seedCustomers } from './customers.seed';
 import { seedPayments } from './payments.seed';
 import { seedMarketingPages } from './marketing-pages.seed';
@@ -17,6 +18,7 @@ async function main() {
   await seedAdmin(prisma);
   await seedDemoUsers(prisma);
   await seedCategories(prisma);
+  await seedCurrencies(prisma);
   await seedCustomers(prisma);
   await seedPayments(prisma);
   await seedMarketingPages(prisma);

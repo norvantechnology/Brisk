@@ -51,6 +51,7 @@ export interface CreateCustomerInput {
   phoneVerified?: boolean;
   preferredLanguage?: string;
   preferredTimeSlot?: string;
+  preferredCurrency?: string;
   emailNotifications?: boolean;
   smsAlerts?: boolean;
   promoNotifications?: boolean;
@@ -67,6 +68,7 @@ export interface UpdateCustomerInput {
   phoneVerified?: boolean;
   preferredLanguage?: string;
   preferredTimeSlot?: string;
+  preferredCurrency?: string;
   emailNotifications?: boolean;
   smsAlerts?: boolean;
   promoNotifications?: boolean;

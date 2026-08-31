@@ -244,6 +244,8 @@ model User {
   country            String?
   preferredLanguage  String?    @default("English (UK)") @map("preferred_language")
   preferredTimeSlot  String?    @default("Morning (09:00 - 12:00)") @map("preferred_time_slot")
+  /// ISO 4217 code (EUR, USD, INR…). New transactions use this; history keeps original currency.
+  preferredCurrency  String     @default("EUR") @map("preferred_currency")
   emailNotifications Boolean    @default(true) @map("email_notifications")
   smsAlerts          Boolean    @default(true) @map("sms_alerts")
   promoNotifications Boolean    @default(false) @map("promo_notifications")
@@ -300,6 +302,7 @@ model AdminUser {
   reviewedSurveyConsumers SurveyConsumerRegistration[] @relation("SurveyConsumerReviewedBy")
   reviewedSurveyTraders   SurveyTraderRegistration[]   @relation("SurveyTraderReviewedBy")
   reviewedContactSubmissions ContactSubmission[]       @relation("ContactSubmissionReviewedBy")
+  updatedExchangeRates       ExchangeRate[]            @relation("ExchangeRateUpdatedBy")
 
   @@map("admin_users")
 }
@@ -606,6 +609,7 @@ model Quote {
   jobId         String      @map("job_id") @db.Uuid
   traderId      String      @map("trader_id") @db.Uuid
   quotedAmount  Decimal     @map("quoted_amount") @db.Decimal(10, 2)
+  currencyCode  String      @default("EUR") @map("currency_code")
   notes         String?     @db.Text
   estimatedDays Int?        @map("estimated_days")
   status        QuoteStatus @default(PENDING)
@@ -655,6 +659,7 @@ model Invoice {
   platformFee         Decimal       @default(0.0) @map("platform_fee") @db.Decimal(10, 2)
   tax                 Decimal       @default(0.0) @db.Decimal(10, 2)
   totalAmount         Decimal       @map("total_amount") @db.Decimal(10, 2)
+  currencyCode        String        @default("EUR") @map("currency_code")
   status              InvoiceStatus @default(UNPAID)
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
@@ -682,6 +687,7 @@ model Payment {
   cardLast4             String?       @map("card_last4")
   cardBrand             String?       @map("card_brand")
   amount                Decimal       @db.Decimal(10, 2)
+  currencyCode          String        @default("EUR") @map("currency_code")
   status                PaymentStatus @default(PENDING)
   paidAt                DateTime?     @map("paid_at")
   createdAt             DateTime      @default(now()) @map("created_at")
@@ -703,6 +709,7 @@ model Refund {
   userId         String       @map("user_id") @db.Uuid
   originalAmount Decimal      @map("original_amount") @db.Decimal(10, 2)
   refundAmount   Decimal      @map("refund_amount") @db.Decimal(10, 2)
+  currencyCode   String       @default("EUR") @map("currency_code")
   reason         String       @db.Text
   status         RefundStatus @default(PENDING)
   processedById  String?      @map("processed_by_id") @db.Uuid
@@ -722,6 +729,7 @@ model Payout {
   id               String       @id @default(uuid()) @db.Uuid
   traderId         String       @map("trader_id") @db.Uuid
   amount           Decimal      @db.Decimal(10, 2)
+  currencyCode     String       @default("EUR") @map("currency_code")
   status           PayoutStatus @default(PENDING)
   stripeTransferId String?      @map("stripe_transfer_id")
   processedAt      DateTime?    @map("processed_at")
@@ -754,6 +762,7 @@ model Offer {
   bannerImageUrl   String?      @map("banner_image_url")
   discountType     DiscountType @default(FLAT) @map("discount_type")
   discountValue    Decimal      @map("discount_value") @db.Decimal(10, 2)
+  currencyCode     String       @default("EUR") @map("currency_code")
   discountLabel    String?      @map("discount_label")
   createdById      String?      @map("created_by_id") @db.Uuid
   traderId         String?      @map("trader_id") @db.Uuid
@@ -841,6 +850,7 @@ model PromoCode {
   code          String       @unique
   discountType  DiscountType @default(FLAT) @map("discount_type")
   discountValue Decimal      @map("discount_value") @db.Decimal(10, 2)
+  currencyCode  String       @default("EUR") @map("currency_code")
   categoryScope String?      @map("category_scope")
   validFrom     DateTime     @map("valid_from")
   validUntil    DateTime     @map("valid_until")
@@ -1473,4 +1483,51 @@ model ContactSubmission {
   reviewedBy AdminUser? @relation("ContactSubmissionReviewedBy", fields: [reviewedById], references: [id])
 
   @@map("contact_submissions")
+}
+
+// ==========================================
+// CURRENCY & EXCHANGE RATES
+// ==========================================
+
+model Currency {
+  code          String   @id
+  name          String
+  symbol        String
+  decimalPlaces Int      @default(2) @map("decimal_places")
+  isActive      Boolean  @default(true) @map("is_active")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  ratesFrom ExchangeRate[] @relation("RateFromCurrency")
+  ratesTo   ExchangeRate[] @relation("RateToCurrency")
+
+  @@map("currencies")
+}
+
+model ExchangeRate {
+  id            String   @id @default(uuid()) @db.Uuid
+  fromCurrency  String   @map("from_currency")
+  toCurrency    String   @map("to_currency")
+  rate          Decimal  @db.Decimal(18, 8)
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+  updatedById   String?  @map("updated_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  fromCurrencyRel Currency   @relation("RateFromCurrency", fields: [fromCurrency], references: [code])
+  toCurrencyRel   Currency   @relation("RateToCurrency", fields: [toCurrency], references: [code])
+  updatedBy       AdminUser? @relation("ExchangeRateUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([fromCurrency, toCurrency])
+  @@map("exchange_rates")
+}
+
+model PlatformCurrencySettings {
+  id           String   @id @default("default")
+  baseCurrency String   @default("EUR") @map("base_currency")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  updatedById  String?  @map("updated_by_id") @db.Uuid
+
+  @@map("platform_currency_settings")
 }

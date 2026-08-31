@@ -1,8 +1,9 @@
 import { ActorType, DiscountType, OfferStatus, OfferType, Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
-import { offerInclude, serializeOffer } from './offers.serializers';
+import { offerInclude, serializeOfferWithMeta } from './offers.serializers';
 import { nextOfferCode } from './offers.query';
+import { currencyForNewRecord, getBaseCurrencyCode } from '../../services/currency.service';
 
 export type OfferWriteInput = {
   title: string;
@@ -87,13 +88,14 @@ export const loadOffer = async (id: string) => {
   if (!offer) {
     throw new NotFoundError('Offer not found.');
   }
-  return serializeOffer(offer);
+  return serializeOfferWithMeta(offer);
 };
 
 export const createOfferRecord = async (input: {
   offerType: OfferType;
   createdById?: string | null;
   traderId?: string | null;
+  creatorUserId?: string | null;
   body: OfferWriteInput;
 }) => {
   const validFrom = input.body.validFrom ? new Date(input.body.validFrom) : new Date();
@@ -118,6 +120,10 @@ export const createOfferRecord = async (input: {
     }
   }
 
+  const currencyCode = input.creatorUserId
+    ? await currencyForNewRecord(input.creatorUserId)
+    : await getBaseCurrencyCode();
+
   const offer = await prisma.offer.create({
     data: {
       offerCode: await nextOfferCode(),
@@ -130,6 +136,7 @@ export const createOfferRecord = async (input: {
       badgeTag: input.body.badgeTag ?? null,
       discountType: asDiscountType(input.body.discountType),
       discountValue: new Prisma.Decimal(input.body.discountValue),
+      currencyCode,
       discountLabel: input.body.discountLabel ?? null,
       createdById: input.createdById ?? null,
       traderId: input.traderId ?? input.body.traderId ?? null,
@@ -150,6 +157,7 @@ export const createOfferRecord = async (input: {
         code: input.body.couponCode.trim(),
         discountType: asDiscountType(input.body.discountType),
         discountValue: new Prisma.Decimal(input.body.discountValue),
+        currencyCode,
         categoryScope: (input.body.categoryIds ?? []).join(',') || null,
         validFrom,
         validUntil,

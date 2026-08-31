@@ -9,6 +9,10 @@ import {
 } from './admin-customers.types';
 import { ActorType, UserRole, UserStatus, DeletionRequestStatus, Prisma, User, PaymentMethod } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { serializeHistoricalMoney } from '../../../services/currency.service';
+
+const toHistoricalMoney = async (amount: number | { toString(): string }, currencyCode: string) =>
+  serializeHistoricalMoney(amount, currencyCode);
 
 type CustomerUser = User & {
   _count?: { jobs: number; bookings: number; payments: number };
@@ -225,6 +229,7 @@ export const createCustomer = async (adminId: string, adminLabel: string, input:
       mobileVerified: input.phoneVerified ?? false,
       preferredLanguage: input.preferredLanguage || 'English (UK)',
       preferredTimeSlot: input.preferredTimeSlot || 'Morning (09:00 - 12:00)',
+      preferredCurrency: input.preferredCurrency || 'EUR',
       emailNotifications: input.emailNotifications ?? true,
       smsAlerts: input.smsAlerts ?? true,
       promoNotifications: input.promoNotifications ?? false,
@@ -284,6 +289,7 @@ export const updateCustomer = async (
       mobileVerified: input.phoneVerified,
       preferredLanguage: input.preferredLanguage,
       preferredTimeSlot: input.preferredTimeSlot,
+      preferredCurrency: input.preferredCurrency,
       emailNotifications: input.emailNotifications,
       smsAlerts: input.smsAlerts,
       promoNotifications: input.promoNotifications,
@@ -637,46 +643,52 @@ export const listPaymentTransactions = async (filters: any) => {
     }),
   ]);
 
-  const formattedTransactions = payments.map((p) => {
-    const booking = p.invoice?.booking;
-    const job = booking?.job;
-    const traderUser = booking?.trader?.user;
+  const formattedTransactions = await Promise.all(
+    payments.map(async (p) => {
+      const booking = p.invoice?.booking;
+      const job = booking?.job;
+      const traderUser = booking?.trader?.user;
+      const currencyCode = p.currencyCode;
 
-    return {
-      id: p.id,
-      transactionRef: p.transactionRef || `TXN-${p.id.substring(0, 8).toUpperCase()}`,
-      date: p.paidAt || p.createdAt,
-      customer: {
-        id: p.user.id,
-        customerCode: p.user.customerCode || `cust-${p.user.id.substring(0, 3)}`,
-        fullName: p.user.fullName,
-      },
-      jobBooking: {
-        title: job?.title ?? null,
-        bookingRef: booking?.bookingRef ?? null,
-        categoryName: job?.category?.name ?? null,
-      },
-      trader: booking?.traderId
-        ? {
-            id: booking.traderId,
-            fullName: traderUser?.fullName ?? null,
-            traderCode: booking.trader?.traderCode ?? null,
-          }
-        : null,
-      serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 0,
-      feeOffer: {
-        discount: p.discountAmount ? Number(p.discountAmount) : 0,
-        fee: p.feeAmount ? Number(p.feeAmount) : 0,
-      },
-      totalPaid: Number(p.amount),
-      paymentMethod: {
-        method: p.method,
-        brand: p.cardBrand ?? null,
-        last4: p.cardLast4 ?? null,
-      },
-      status: p.status,
-    };
-  });
+      return {
+        id: p.id,
+        transactionRef: p.transactionRef || `TXN-${p.id.substring(0, 8).toUpperCase()}`,
+        date: p.paidAt || p.createdAt,
+        currencyCode,
+        customer: {
+          id: p.user.id,
+          customerCode: p.user.customerCode || `cust-${p.user.id.substring(0, 3)}`,
+          fullName: p.user.fullName,
+        },
+        jobBooking: {
+          title: job?.title ?? null,
+          bookingRef: booking?.bookingRef ?? null,
+          categoryName: job?.category?.name ?? null,
+        },
+        trader: booking?.traderId
+          ? {
+              id: booking.traderId,
+              fullName: traderUser?.fullName ?? null,
+              traderCode: booking.trader?.traderCode ?? null,
+            }
+          : null,
+        serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 0,
+        serviceChargeMoney: await toHistoricalMoney(p.serviceCharge ?? 0, currencyCode),
+        feeOffer: {
+          discount: p.discountAmount ? Number(p.discountAmount) : 0,
+          fee: p.feeAmount ? Number(p.feeAmount) : 0,
+        },
+        totalPaid: Number(p.amount),
+        totalPaidMoney: await toHistoricalMoney(p.amount, currencyCode),
+        paymentMethod: {
+          method: p.method,
+          brand: p.cardBrand ?? null,
+          last4: p.cardLast4 ?? null,
+        },
+        status: p.status,
+      };
+    })
+  );
 
   return {
     meta: {
@@ -718,11 +730,15 @@ export const getTransactionById = async (id: string) => {
   const traderUser = booking?.trader?.user;
   const primaryAddress = p.user.addresses.find((a) => a.isDefault) || p.user.addresses[0];
 
+  const currencyCode = p.currencyCode;
+
   return {
     id: p.id,
     transactionRef: p.transactionRef || `TXN-${p.id.substring(0, 8).toUpperCase()}`,
     paymentStatus: p.status,
+    currencyCode,
     totalAmountPaid: Number(p.amount),
+    totalAmountPaidMoney: await toHistoricalMoney(p.amount, currencyCode),
     paymentMethod: p.cardBrand && p.cardLast4 ? `${p.cardBrand} ****${p.cardLast4}` : p.method,
     transactionDate: p.paidAt || p.createdAt,
     jobBookingInfo: {
@@ -736,8 +752,10 @@ export const getTransactionById = async (id: string) => {
     },
     paymentAmountBreakdown: {
       serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 0,
+      serviceChargeMoney: await toHistoricalMoney(p.serviceCharge ?? 0, currencyCode),
       platformFee: p.feeAmount ? Number(p.feeAmount) : 0,
       totalAmountPaid: Number(p.amount),
+      totalAmountPaidMoney: await toHistoricalMoney(p.amount, currencyCode),
     },
     individualBillingAddress: primaryAddress
       ? {
@@ -788,16 +806,20 @@ export const listBillingInvoices = async (filters: any) => {
     }),
   ]);
 
-  const formattedInvoices = invoices.map((inv) => ({
-    id: inv.id,
-    invoiceNumber: inv.invoiceNumber ?? null,
-    customerName: inv.booking?.customer?.fullName ?? null,
-    jobBookingTitle: inv.booking?.job?.title ?? null,
-    traderName: inv.booking?.trader?.user?.fullName ?? null,
-    invoiceDate: inv.createdAt,
-    amount: Number(inv.totalAmount),
-    status: inv.status,
-  }));
+  const formattedInvoices = await Promise.all(
+    invoices.map(async (inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber ?? null,
+      customerName: inv.booking?.customer?.fullName ?? null,
+      jobBookingTitle: inv.booking?.job?.title ?? null,
+      traderName: inv.booking?.trader?.user?.fullName ?? null,
+      invoiceDate: inv.createdAt,
+      currencyCode: inv.currencyCode,
+      amount: Number(inv.totalAmount),
+      amountMoney: await toHistoricalMoney(inv.totalAmount, inv.currencyCode),
+      status: inv.status,
+    }))
+  );
 
   return {
     meta: {
@@ -839,10 +861,13 @@ export const getInvoiceById = async (id: string) => {
   const payment = inv.payments[0];
   const primaryAddress = customer?.addresses.find((a) => a.isDefault) || customer?.addresses[0];
 
+  const currencyCode = inv.currencyCode;
+
   return {
     id: inv.id,
     invoiceNumber: inv.invoiceNumber ?? null,
     invoiceDate: inv.createdAt,
+    currencyCode,
     bookingRef: inv.booking?.bookingRef ?? null,
     companyHeader: {
       title: 'BRISK MARKETPLACE',
@@ -870,13 +895,19 @@ export const getInvoiceById = async (id: string) => {
       title: inv.booking?.job?.title ?? null,
       description: 'On-site certified labor & inspection charges',
       subtotal: Number(inv.serviceCharge),
+      subtotalMoney: await toHistoricalMoney(inv.serviceCharge, currencyCode),
     },
     financialTotals: {
       serviceSubtotal: Number(inv.serviceCharge),
+      serviceSubtotalMoney: await toHistoricalMoney(inv.serviceCharge, currencyCode),
       taxesVat: Number(inv.tax),
+      taxesVatMoney: await toHistoricalMoney(inv.tax, currencyCode),
       platformConvenienceFee: Number(inv.platformFee),
+      platformConvenienceFeeMoney: await toHistoricalMoney(inv.platformFee, currencyCode),
       promoDiscount: Number(inv.promoDiscount),
+      promoDiscountMoney: await toHistoricalMoney(inv.promoDiscount, currencyCode),
       grandTotal: Number(inv.totalAmount),
+      grandTotalMoney: await toHistoricalMoney(inv.totalAmount, currencyCode),
     },
     digitalVerification: {
       transactionRef: payment?.transactionRef ?? null,
@@ -927,18 +958,23 @@ export const listRefundsQueue = async (filters: any) => {
     }),
   ]);
 
-  const formattedRefunds = refunds.map((r) => ({
-    id: r.id,
-    refundRef: r.refundRef,
-    transactionRef: r.transactionRef || 'TXN-98234108',
-    customerName: r.user.fullName,
-    jobBookingTitle: r.payment?.invoice?.booking?.job?.title || 'Roof Leak Repair & Tiling',
-    originalAmount: Number(r.originalAmount),
-    refundAmount: Number(r.refundAmount),
-    reason: r.reason,
-    status: r.status,
-    requestedAt: r.createdAt,
-  }));
+  const formattedRefunds = await Promise.all(
+    refunds.map(async (r) => ({
+      id: r.id,
+      refundRef: r.refundRef,
+      transactionRef: r.transactionRef || 'TXN-98234108',
+      customerName: r.user.fullName,
+      jobBookingTitle: r.payment?.invoice?.booking?.job?.title || 'Roof Leak Repair & Tiling',
+      currencyCode: r.currencyCode,
+      originalAmount: Number(r.originalAmount),
+      originalAmountMoney: await toHistoricalMoney(r.originalAmount, r.currencyCode),
+      refundAmount: Number(r.refundAmount),
+      refundAmountMoney: await toHistoricalMoney(r.refundAmount, r.currencyCode),
+      reason: r.reason,
+      status: r.status,
+      requestedAt: r.createdAt,
+    }))
+  );
 
   return {
     meta: {

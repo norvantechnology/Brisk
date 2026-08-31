@@ -25,7 +25,8 @@ router.use(authMiddleware);
  *       200:
  *         description: |
  *           Flat profile in `data`: id, fullName, email, mobileCountryCode (+353), mobileNumber (local digits only),
- *           profilePhotoUrl, city, country, preferredLanguage, preferredTimeSlot, emailNotifications, smsAlerts,
+ *           profilePhotoUrl, city, country, preferredLanguage, preferredTimeSlot, preferredCurrency (ISO 4217),
+ *           emailNotifications, smsAlerts,
  *           promoNotifications, isDeactivationInProgress, deactivationMessage, etc.
  *
  *           **Mobile:** stored as E.164 in DB; response splits into `mobileCountryCode` + `mobileNumber` (no + prefix on local part).
@@ -72,6 +73,7 @@ router.get('/me/stats', usersController.getStats);
  *               country: { type: string, example: Ireland }
  *               profilePhotoUrl: { type: string, example: "https://cdn.example.com/photo.jpg" }
  *               preferredLanguage: { type: string, example: "English (UK)" }
+ *               preferredCurrency: { type: string, example: "EUR", description: "ISO 4217 — affects new transactions only; order history keeps original currency." }
  *               preferredTimeSlot: { type: string, example: "Morning (09:00 - 12:00)" }
  *               emailNotifications: { type: boolean, example: true }
  *               smsAlerts: { type: boolean, example: true }

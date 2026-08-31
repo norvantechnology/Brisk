@@ -31,8 +31,10 @@ import adminTradersRoutes from './modules/admin/admin-traders/admin-traders.rout
 import homePublicRoutes from './modules/cms/home-public.routes';
 import adminOffersRoutes from './modules/admin/admin-offers/admin-offers.routes';
 import adminLoyaltyRoutes from './modules/admin/admin-loyalty/admin-loyalty.routes';
+import adminCurrencyRoutes from './modules/admin/admin-currency/admin-currency.routes';
 import publicOffersRoutes from './modules/offers/public-offers.routes';
 import loyaltyRoutes from './modules/loyalty/loyalty.routes';
+import currencyRoutes from './modules/currency/currency.routes';
 import propertyRoutes from './modules/property/property.routes';
 
 const app = express();
@@ -76,6 +78,7 @@ app.use('/admin', adminDocumentRulesRoutes);
 app.use('/admin', adminTraderVerificationRoutes);
 app.use('/admin', adminOffersRoutes);
 app.use('/admin', adminLoyaltyRoutes);
+app.use('/admin', adminCurrencyRoutes);
 app.use('/admin/cms', adminCmsRoutes);
 app.use('/admin/cms', adminContactRoutes);
 app.use('/admin/blog/categories', adminBlogCategoryRoutes);
@@ -92,6 +95,7 @@ app.use('/sub-categories', subcategoriesRouter);
 app.use('/contact', contactRoutes);
 app.use('/', publicOffersRoutes);
 app.use('/loyalty', loyaltyRoutes);
+app.use('/currency', currencyRoutes);
 app.use('/', propertyRoutes);
 
 /**

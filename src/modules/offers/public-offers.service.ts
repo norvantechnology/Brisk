@@ -1,8 +1,9 @@
 import { OfferClaimStatus, OfferStatus, OfferType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
-import { effectiveStatus, offerInclude, serializeOffer } from './offers.serializers';
+import { effectiveStatus, enrichOfferWithCurrency, offerInclude, serializeOfferWithMeta } from './offers.serializers';
 import { buildOfferWhere, normalizeOfferListFilters } from './offers.query';
+import { resolveUserCurrency } from '../../services/currency.service';
 
 const publicInclude = {
   ...offerInclude,
@@ -45,6 +46,7 @@ export const listPublicOffers = async (
   }
 
   let pointsBalance = 0;
+  const viewerCurrency = userId ? await resolveUserCurrency(userId) : null;
   if (kind === OfferType.PLATFORM && userId) {
     const loyalty = await prisma.loyaltyAccount.findUnique({
       where: { userId },
@@ -53,13 +55,21 @@ export const listPublicOffers = async (
     pointsBalance = loyalty?.pointsBalance ?? 0;
   }
 
+  const serializedOffers = await Promise.all(
+    offers.map(async (offer) => {
+      const base = {
+        ...(await serializeOfferWithMeta(offer)),
+        claimed: claimedIds.has(offer.id),
+      };
+      return enrichOfferWithCurrency(base, viewerCurrency);
+    })
+  );
+
   return {
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     pointsBalance: kind === OfferType.PLATFORM ? pointsBalance : undefined,
-    offers: offers.map((offer) => ({
-      ...serializeOffer(offer),
-      claimed: claimedIds.has(offer.id),
-    })),
+    preferredCurrency: viewerCurrency ?? undefined,
+    offers: serializedOffers,
   };
 };
 
@@ -80,7 +90,12 @@ export const getPublicOffer = async (id: string, userId?: string) => {
       )
     : false;
 
-  return { ...serializeOffer(offer), claimed };
+  const viewerCurrency = userId ? await resolveUserCurrency(userId) : null;
+  const base = {
+    ...(await serializeOfferWithMeta(offer)),
+    claimed,
+  };
+  return enrichOfferWithCurrency(base, viewerCurrency);
 };
 
 export const claimOffer = async (userId: string, offerId: string, expectedType?: OfferType) => {
@@ -125,7 +140,11 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
     data: { claimsCount: { increment: existing ? 0 : 1 } },
   });
 
-  const serialized = { ...serializeOffer(offer), claimed: true };
+  const viewerCurrency = await resolveUserCurrency(userId);
+  const resolvedOffer = await enrichOfferWithCurrency(
+    { ...(await serializeOfferWithMeta(offer)), claimed: true },
+    viewerCurrency
+  );
 
   return {
     claim: {
@@ -134,20 +153,21 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
       claimedAt: claim.claimedAt,
       jobId: claim.jobId,
     },
-    offer: serialized,
+    offer: resolvedOffer,
     nextJobPrefill: {
       appliedTraderOfferId: offer.id,
       traderId: offer.traderId,
       categoryIds: offer.categories.map((item) => item.categoryId),
       subcategoryIds: offer.subcategories.map((item) => item.subcategoryId),
-      ctaAction: serialized.ctaAction,
+      ctaAction: resolvedOffer.ctaAction,
       bannerTitle: offer.title,
-      discountLabel: serialized.discountLabel,
+      discountLabel: resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel,
     },
   };
 };
 
 export const listMyClaims = async (userId: string, offerType?: OfferType) => {
+  const viewerCurrency = await resolveUserCurrency(userId);
   const claims = await prisma.offerClaim.findMany({
     where: {
       userId,
@@ -161,14 +181,20 @@ export const listMyClaims = async (userId: string, offerType?: OfferType) => {
   });
 
   return {
-    claims: claims.map((claim) => ({
-      id: claim.id,
-      status: claim.status,
-      claimedAt: claim.claimedAt,
-      usedAt: claim.usedAt,
-      jobId: claim.jobId,
-      offer: { ...serializeOffer(claim.offer), claimed: true },
-    })),
+    preferredCurrency: viewerCurrency,
+    claims: await Promise.all(
+      claims.map(async (claim) => ({
+        id: claim.id,
+        status: claim.status,
+        claimedAt: claim.claimedAt,
+        usedAt: claim.usedAt,
+        jobId: claim.jobId,
+        offer: await enrichOfferWithCurrency(
+          { ...(await serializeOfferWithMeta(claim.offer)), claimed: true },
+          viewerCurrency
+        ),
+      }))
+    ),
   };
 };
 
@@ -206,6 +232,7 @@ export const listPromoCodes = async (categoryId?: string) => {
       code: code.code,
       discountType: code.discountType,
       discountValue: Number(code.discountValue),
+      currencyCode: code.currencyCode,
       categoryScope: code.categoryScope,
       validFrom: code.validFrom,
       validUntil: code.validUntil,
@@ -237,19 +264,25 @@ export const validatePromoCode = async (userId: string, code: string, categoryId
     }
   }
 
+  const viewerCurrency = await resolveUserCurrency(userId);
+
   return {
     valid: true,
     applyAt: 'invoice_checkout',
+    preferredCurrency: viewerCurrency,
     promoCode: {
       id: promo.id,
       code: promo.code,
       discountType: promo.discountType,
       discountValue: Number(promo.discountValue),
+      currencyCode: promo.currencyCode,
       categoryScope: promo.categoryScope,
       validFrom: promo.validFrom,
       validUntil: promo.validUntil,
     },
-    offer: promo.offer ? serializeOffer(promo.offer) : null,
+    offer: promo.offer
+      ? await enrichOfferWithCurrency(await serializeOfferWithMeta(promo.offer), viewerCurrency)
+      : null,
     note: 'Apply this code at invoice checkout via POST /invoices/:id/apply-promo once invoices are available. Codes are not bound to a job when claimed.',
     customerId: userId,
   };

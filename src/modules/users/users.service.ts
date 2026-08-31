@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError } from '../../utils/errors';
 import type { DeactivateAccountInput, UpdateProfileInput } from './users.validation';
 import { createAccountDeletionRequest } from './account-deletion.service';
 import { withSplitMobileFields } from '../../utils/phone';
+import { assertActiveCurrency } from '../../services/currency.service';
 
 const IN_PROGRESS_DELETION_STATUSES: DeletionRequestStatus[] = [
   DeletionRequestStatus.PENDING,
@@ -33,6 +34,7 @@ export const getUserProfile = async (userId: string) => {
       country: true,
       preferredLanguage: true,
       preferredTimeSlot: true,
+      preferredCurrency: true,
       emailNotifications: true,
       smsAlerts: true,
       promoNotifications: true,
@@ -101,6 +103,10 @@ export const updateUserProfile = async (userId: string, input: UpdateProfileInpu
     }
   }
 
+  if (input.preferredCurrency) {
+    await assertActiveCurrency(input.preferredCurrency);
+  }
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
@@ -112,6 +118,7 @@ export const updateUserProfile = async (userId: string, input: UpdateProfileInpu
       profilePhotoUrl: input.profilePhotoUrl,
       preferredLanguage: input.preferredLanguage,
       preferredTimeSlot: input.preferredTimeSlot,
+      preferredCurrency: input.preferredCurrency,
       emailNotifications: input.emailNotifications,
       smsAlerts: input.smsAlerts,
       promoNotifications: input.promoNotifications,
@@ -131,6 +138,7 @@ export const updateUserProfile = async (userId: string, input: UpdateProfileInpu
       country: true,
       preferredLanguage: true,
       preferredTimeSlot: true,
+      preferredCurrency: true,
       emailNotifications: true,
       smsAlerts: true,
       promoNotifications: true,

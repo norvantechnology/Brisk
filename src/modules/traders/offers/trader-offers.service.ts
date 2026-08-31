@@ -62,6 +62,7 @@ export const createMyOffer = async (userId: string, body: OfferWriteInput) => {
   return createOfferRecord({
     offerType: OfferType.TRADER,
     traderId: trader.id,
+    creatorUserId: userId,
     body,
   });
 };

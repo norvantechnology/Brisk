@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+const currencyCodeSchema = z
+  .string()
+  .trim()
+  .length(3)
+  .transform((v) => v.toUpperCase());
+
 const mobileNumberSchema = z
   .string()
   .trim()
@@ -15,6 +21,7 @@ export const updateProfileSchema = z.object({
     profilePhotoUrl: z.string().url('Profile photo must be a valid URL').optional(),
     preferredLanguage: z.string().trim().min(1).optional(),
     preferredTimeSlot: z.string().trim().min(1).optional(),
+    preferredCurrency: currencyCodeSchema.optional(),
     emailNotifications: z.boolean().optional(),
     smsAlerts: z.boolean().optional(),
     promoNotifications: z.boolean().optional(),

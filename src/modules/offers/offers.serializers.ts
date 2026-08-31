@@ -1,5 +1,10 @@
 import { DiscountType, OfferStatus, VerificationStatus } from '@prisma/client';
 import { resolveCategoryIconUrl } from '../categories/categories.serializers';
+import {
+  discountLabelForCurrency,
+  getCurrencyMeta,
+  serializeDisplayMoney,
+} from '../../services/currency.service';
 
 export const offerInclude = {
   createdBy: { select: { id: true, fullName: true, email: true } },
@@ -41,12 +46,21 @@ export const offerInclude = {
   },
 } as const;
 
-export const discountLabel = (type: DiscountType, value: number, label?: string | null) => {
-  if (label) return label;
-  if (type === DiscountType.PERCENTAGE) return `${value}%`;
-  if (type === DiscountType.FREE_SERVICE) return 'Free Visit';
-  return `Fixed €${value}`;
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  EUR: '€',
+  GBP: '£',
+  USD: '$',
+  INR: '₹',
 };
+
+const symbolForCode = (code: string) => CURRENCY_SYMBOLS[code] ?? code;
+
+export const discountLabel = (
+  type: DiscountType,
+  value: number,
+  label?: string | null,
+  currencySymbol = '€'
+) => discountLabelForCurrency(type, value, currencySymbol, label);
 
 export const effectiveStatus = (status: OfferStatus, validUntil: Date) => {
   if (status === OfferStatus.DISABLED) return OfferStatus.DISABLED;
@@ -66,6 +80,7 @@ type OfferRecord = {
   bannerImageUrl: string | null;
   discountType: DiscountType;
   discountValue: { toString(): string } | number;
+  currencyCode?: string;
   discountLabel: string | null;
   validFrom: Date;
   validUntil: Date;
@@ -104,6 +119,8 @@ type OfferRecord = {
 
 export const serializeOffer = (offer: OfferRecord) => {
   const value = Number(offer.discountValue);
+  const currencyCode = offer.currencyCode ?? 'EUR';
+  const currencySymbol = symbolForCode(currencyCode);
   const claims = offer._count?.claims ?? offer.claimsCount;
   const status = effectiveStatus(offer.status, offer.validUntil);
 
@@ -134,7 +151,8 @@ export const serializeOffer = (offer: OfferRecord) => {
     bannerImageUrl: offer.bannerImageUrl,
     discountType: offer.discountType,
     discountValue: value,
-    discountLabel: discountLabel(offer.discountType, value, offer.discountLabel),
+    currencyCode,
+    discountLabel: discountLabel(offer.discountType, value, offer.discountLabel, currencySymbol),
     validFrom: offer.validFrom,
     validUntil: offer.validUntil,
     status,
@@ -171,4 +189,46 @@ export const serializeOffer = (offer: OfferRecord) => {
     categories,
     subcategories: offer.subcategories.map((item) => item.subcategory),
   };
+};
+
+export const enrichOfferWithCurrency = async <
+  T extends ReturnType<typeof serializeOffer> & { claimed?: boolean },
+>(
+  offer: T,
+  viewerCurrency?: string | null
+): Promise<T & { discountMoney?: Awaited<ReturnType<typeof serializeDisplayMoney>>; displayDiscountLabel?: string }> => {
+  const meta = await getCurrencyMeta(offer.currencyCode);
+  const base = {
+    ...offer,
+    discountLabel: offer.discountLabel
+      ?? discountLabel(offer.discountType as DiscountType, offer.discountValue, null, meta.symbol),
+  };
+
+  if (offer.discountType === DiscountType.PERCENTAGE || offer.discountType === DiscountType.FREE_SERVICE) {
+    return base;
+  }
+
+  const discountMoney = await serializeDisplayMoney(
+    offer.discountValue,
+    offer.currencyCode,
+    viewerCurrency
+  );
+
+  return {
+    ...base,
+    discountMoney,
+    displayDiscountLabel: discountMoney.displayFormatted
+      ? `Fixed ${discountMoney.displayFormatted}`
+      : base.discountLabel,
+  };
+};
+
+export const enrichOffersWithCurrency = async (
+  offers: ReturnType<typeof serializeOffer>[],
+  viewerCurrency?: string | null
+) => Promise.all(offers.map((o) => enrichOfferWithCurrency(o, viewerCurrency)));
+
+export const serializeOfferWithMeta = async (offer: OfferRecord) => {
+  await getCurrencyMeta(offer.currencyCode ?? 'EUR');
+  return serializeOffer({ ...offer, currencyCode: offer.currencyCode ?? 'EUR' });
 };

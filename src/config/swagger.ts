@@ -128,6 +128,16 @@ const options: swaggerJSDoc.Options = {
           'Admin CRUD for BRP loyalty offers. Created offers appear on customer GET /loyalty/offers when status=active.',
       },
       {
+        name: 'Admin / Currency',
+        description:
+          'Admin currency catalog, platform base currency, and exchange rates. Historical payments keep stored currencyCode; rates affect new catalog/display only.',
+      },
+      {
+        name: 'Customer / Currency',
+        description:
+          'GET /currency — active currencies + rates. Set preferredCurrency on PATCH /users/profile (new records only; history unchanged).',
+      },
+      {
         name: 'Trader / Offers',
         description: 'Trader-authored offers CRUD under /traders/offers. Auth: trader Bearer token.',
       },
