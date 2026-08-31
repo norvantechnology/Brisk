@@ -1,4 +1,5 @@
-import { DiscountType, OfferStatus } from '@prisma/client';
+import { DiscountType, OfferStatus, VerificationStatus } from '@prisma/client';
+import { resolveCategoryIconUrl } from '../categories/categories.serializers';
 
 export const offerInclude = {
   createdBy: { select: { id: true, fullName: true, email: true } },
@@ -9,13 +10,23 @@ export const offerInclude = {
       traderType: true,
       avgRating: true,
       topRated: true,
+      verificationStatus: true,
       profilePhotoUrl: true,
       user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
+      _count: { select: { ratingsReceived: true } },
     },
   },
   categories: {
     include: {
-      category: { select: { id: true, name: true, categoryCode: true, iconName: true } },
+      category: {
+        select: {
+          id: true,
+          name: true,
+          categoryCode: true,
+          iconName: true,
+          urlSlug: true,
+        },
+      },
     },
   },
   subcategories: {
@@ -73,10 +84,20 @@ type OfferRecord = {
     traderType: string;
     avgRating: { toString(): string } | number;
     topRated: boolean;
+    verificationStatus: VerificationStatus;
     profilePhotoUrl: string | null;
     user: { id: string; fullName: string; profilePhotoUrl: string | null };
+    _count?: { ratingsReceived?: number };
   } | null;
-  categories: Array<{ category: { id: string; name: string; categoryCode: string; iconName: string | null } }>;
+  categories: Array<{
+    category: {
+      id: string;
+      name: string;
+      categoryCode: string;
+      iconName: string | null;
+      urlSlug: string | null;
+    };
+  }>;
   subcategories: Array<{ subcategory: { id: string; name: string; categoryId: string } }>;
   _count?: { claims?: number };
 };
@@ -85,6 +106,19 @@ export const serializeOffer = (offer: OfferRecord) => {
   const value = Number(offer.discountValue);
   const claims = offer._count?.claims ?? offer.claimsCount;
   const status = effectiveStatus(offer.status, offer.validUntil);
+
+  const categories = offer.categories.map((item) => ({
+    id: item.category.id,
+    name: item.category.name,
+    categoryCode: item.category.categoryCode,
+    iconName: item.category.iconName,
+    iconUrl: resolveCategoryIconUrl({
+      iconName: item.category.iconName,
+      urlSlug: item.category.urlSlug ?? '',
+    }),
+  }));
+
+  const primaryCategory = categories[0] ?? null;
 
   return {
     id: offer.id,
@@ -122,14 +156,19 @@ export const serializeOffer = (offer: OfferRecord) => {
           traderType: offer.trader.traderType,
           fullName: offer.trader.user.fullName,
           avgRating: Number(offer.trader.avgRating),
+          reviewsCount: offer.trader._count?.ratingsReceived ?? 0,
           topRated: offer.trader.topRated,
-          /** Trader avatar for customer offer cards (trader photo, else user photo). */
+          isVerified: offer.trader.verificationStatus === VerificationStatus.VERIFIED,
           profilePhotoUrl:
             offer.trader.profilePhotoUrl ?? offer.trader.user.profilePhotoUrl ?? null,
           imageUrl: offer.trader.profilePhotoUrl ?? offer.trader.user.profilePhotoUrl ?? null,
         }
       : null,
-    categories: offer.categories.map((item) => item.category),
+    /** Comma-separated category names for offer card subtitle. */
+    categoryLabel: categories.map((c) => c.name).join(', ') || null,
+    /** First linked category — use `iconUrl` for category icon on offer card. */
+    primaryCategory,
+    categories,
     subcategories: offer.subcategories.map((item) => item.subcategory),
   };
 };

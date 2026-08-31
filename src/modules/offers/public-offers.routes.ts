@@ -96,7 +96,8 @@ const router = Router();
  *
  *       Returns active, currently valid offers with `offerType=TRADER`.
  *       Each card includes `discountType` for the type icon, `claimed`, and trader info
- *       (`trader.fullName`, `trader.avgRating`, `trader.topRated`, `trader.profilePhotoUrl` / `trader.imageUrl`).
+ *       (`trader.fullName`, `trader.avgRating`, `trader.reviewsCount`, `trader.topRated`, `trader.isVerified`,
+ *       `trader.profilePhotoUrl` / `trader.imageUrl`, `primaryCategory.iconUrl`, `categoryLabel`).
  *       Query params map 1:1 to the confirmed filter modal (not a single opaque filter blob).
  *     parameters:
  *       - $ref: '#/components/parameters/OfferDateRange'

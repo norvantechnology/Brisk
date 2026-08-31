@@ -118,6 +118,11 @@ const options: swaggerJSDoc.Options = {
           'Mobile Offers tab: GET /trader-offers, GET /brisk-offers, POST .../claim, promo codes. Auth: customer Bearer token. Filter params map 1:1 to the filter modal.',
       },
       {
+        name: 'Customer / Loyalty',
+        description:
+          'Mobile Offers → Loyalty tab: GET /loyalty/account, GET /loyalty/offers, POST /loyalty/offers/:id/redeem, GET /loyalty/redemptions. Auth: customer Bearer token.',
+      },
+      {
         name: 'Trader / Offers',
         description: 'Trader-authored offers CRUD under /traders/offers. Auth: trader Bearer token.',
       },

@@ -31,6 +31,7 @@ import adminTradersRoutes from './modules/admin/admin-traders/admin-traders.rout
 import homePublicRoutes from './modules/cms/home-public.routes';
 import adminOffersRoutes from './modules/admin/admin-offers/admin-offers.routes';
 import publicOffersRoutes from './modules/offers/public-offers.routes';
+import loyaltyRoutes from './modules/loyalty/loyalty.routes';
 import propertyRoutes from './modules/property/property.routes';
 
 const app = express();
@@ -88,6 +89,7 @@ app.use('/categories', categoriesRouter);
 app.use('/sub-categories', subcategoriesRouter);
 app.use('/contact', contactRoutes);
 app.use('/', publicOffersRoutes);
+app.use('/loyalty', loyaltyRoutes);
 app.use('/', propertyRoutes);
 
 /**
