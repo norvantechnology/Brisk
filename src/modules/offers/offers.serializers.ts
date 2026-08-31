@@ -7,6 +7,8 @@ export const offerInclude = {
       id: true,
       businessName: true,
       traderType: true,
+      avgRating: true,
+      topRated: true,
       profilePhotoUrl: true,
       user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
     },
@@ -69,6 +71,8 @@ type OfferRecord = {
     id: string;
     businessName: string | null;
     traderType: string;
+    avgRating: { toString(): string } | number;
+    topRated: boolean;
     profilePhotoUrl: string | null;
     user: { id: string; fullName: string; profilePhotoUrl: string | null };
   } | null;
@@ -117,6 +121,8 @@ export const serializeOffer = (offer: OfferRecord) => {
           businessName: offer.trader.businessName,
           traderType: offer.trader.traderType,
           fullName: offer.trader.user.fullName,
+          avgRating: Number(offer.trader.avgRating),
+          topRated: offer.trader.topRated,
           /** Trader avatar for customer offer cards (trader photo, else user photo). */
           profilePhotoUrl:
             offer.trader.profilePhotoUrl ?? offer.trader.user.profilePhotoUrl ?? null,
