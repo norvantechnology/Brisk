@@ -10,6 +10,9 @@ node_modules/
 dist/
 build/
 
+# Local uploaded files (Railway: mount volume at /data/uploads)
+data/uploads/
+
 # Logs
 *.log
 npm-debug.log*

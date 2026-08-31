@@ -35,6 +35,8 @@ import adminCurrencyRoutes from './modules/admin/admin-currency/admin-currency.r
 import publicOffersRoutes from './modules/offers/public-offers.routes';
 import loyaltyRoutes from './modules/loyalty/loyalty.routes';
 import currencyRoutes from './modules/currency/currency.routes';
+import uploadsRoutes from './modules/uploads/uploads.routes';
+import { getUploadRoot } from './modules/uploads/storage/local.storage';
 import propertyRoutes from './modules/property/property.routes';
 
 const app = express();
@@ -62,6 +64,9 @@ app.use(express.json());
 
 // Parse URL-encoded request body
 app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded files (local storage — URLs stay stable when switching to S3/CDN)
+app.use('/uploads/files', express.static(getUploadRoot()));
 
 // Mount Swagger Documentation UI
 setupSwagger(app);
@@ -96,6 +101,7 @@ app.use('/contact', contactRoutes);
 app.use('/', publicOffersRoutes);
 app.use('/loyalty', loyaltyRoutes);
 app.use('/currency', currencyRoutes);
+app.use('/uploads', uploadsRoutes);
 app.use('/', propertyRoutes);
 
 /**

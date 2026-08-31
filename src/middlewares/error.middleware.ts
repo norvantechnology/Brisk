@@ -24,6 +24,9 @@ export const errorMiddleware = (
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
+  } else if ((err as { code?: string }).code === 'LIMIT_FILE_SIZE') {
+    statusCode = 400;
+    message = 'File exceeds maximum upload size.';
   } else {
     logger.error('Unhandled Server Error:', err);
   }

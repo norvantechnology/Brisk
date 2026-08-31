@@ -8,6 +8,13 @@ const servers: { url: string; description: string }[] = [
   { url: `http://localhost:${env.PORT}`, description: 'Local' },
 ];
 
+if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+  servers.unshift({
+    url: `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`,
+    description: 'Railway (dev)',
+  });
+}
+
 if (process.env.RENDER_EXTERNAL_URL) {
   servers.unshift({
     url: process.env.RENDER_EXTERNAL_URL,
@@ -135,7 +142,12 @@ const options: swaggerJSDoc.Options = {
       {
         name: 'Customer / Currency',
         description:
-          'GET /currency — active currencies + rates. Set preferredCurrency on PATCH /users/profile (new records only; history unchanged).',
+          'GET /currency — active currencies + rates. Set preferredCurrency on PATCH /users/me (new records only; history unchanged).',
+      },
+      {
+        name: 'Uploads',
+        description:
+          'POST /uploads multipart (file + purpose) → { url, objectKey }. Use url in existing JSON fields. Auth: customer, trader, or admin Bearer token.',
       },
       {
         name: 'Trader / Offers',
