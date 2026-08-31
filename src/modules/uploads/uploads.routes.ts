@@ -48,7 +48,7 @@ router.get('/purposes', controller.listPurposes);
  *                 format: binary
  *               purpose:
  *                 type: string
- *                 enum: [profile_photo, trader_cover, trader_document, offer_banner, category_banner, loyalty_image, cms_avatar, blog_cover, meter_reading_photo, job_photo]
+ *                 enum: [profile_photo, trader_cover, trader_document, category_banner, category_icon, offer_banner, loyalty_image, cms_section_bg, cms_section_fg, cms_section_video, cms_item_image, cms_item_icon, cms_avatar, cms_og_image, blog_cover, knowledge_graphic, knowledge_block_image, address_map_snapshot, meter_reading_photo, job_photo]
  *     responses:
  *       201:
  *         description: '{ url, objectKey, mimeType, sizeBytes, originalName, purpose }'
