@@ -187,7 +187,10 @@ const ensureTraderProfile = async (
 // AUTH FLOWS
 // ==========================================
 
-export const registerUser = async (input: RegisterInput) => {
+export const registerUser = async (
+  input: RegisterInput,
+  options?: { profilePhotoFile?: Express.Multer.File; reqHost?: string }
+) => {
   const { fullName, email, mobileNumber, password, role, profilePhotoUrl } = input;
 
   const [existingEmail, existingMobile] = await Promise.all([
@@ -218,6 +221,23 @@ export const registerUser = async (input: RegisterInput) => {
     },
   });
 
+  let savedProfilePhotoUrl = user.profilePhotoUrl;
+
+  if (options?.profilePhotoFile) {
+    const { storeUpload } = await import('../uploads/uploads.service');
+    const uploaded = await storeUpload({
+      file: options.profilePhotoFile,
+      purpose: 'profile_photo',
+      actor: { kind: 'user', id: user.id, role: user.role },
+      reqHost: options.reqHost,
+    });
+    savedProfilePhotoUrl = uploaded.url;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { profilePhotoUrl: uploaded.url },
+    });
+  }
+
   await generateOtp(mobileNumber, 'mobile_verification');
 
   return {
@@ -230,6 +250,7 @@ export const registerUser = async (input: RegisterInput) => {
       mobileVerified: false,
       requiresOtpVerification: true,
       nextStep: APP_NEXT_STEP.VERIFY_PHONE,
+      profilePhotoUrl: savedProfilePhotoUrl,
       ...getOtpMeta(),
     },
   };

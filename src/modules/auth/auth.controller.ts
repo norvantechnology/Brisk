@@ -5,7 +5,10 @@ import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await authService.registerUser(req.body);
+    const result = await authService.registerUser(req.body, {
+      profilePhotoFile: req.file,
+      reqHost: req.get('host') ?? undefined,
+    });
     sendResponse({
       res,
       statusCode: 201,

@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
 
 const REDEEM_VALID_DAYS = 30;
+const REDEEM_VALIDITY_LABEL = `${REDEEM_VALID_DAYS} days`;
 
 const generateRedeemCode = () => {
   const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -53,15 +54,27 @@ export const listLoyaltyOffers = async (userId: string) => {
     pointsBalance: account.pointsBalance,
     offers: offers.map((offer) => {
       const redemption = redemptionByOfferId.get(offer.id);
+      const claimed = Boolean(redemption);
+      const canRedeem = !claimed && account.pointsBalance >= offer.pointsRequired;
+      let status: 'available' | 'claimed' | 'insufficient_points' = 'available';
+      if (claimed) {
+        status = 'claimed';
+      } else if (account.pointsBalance < offer.pointsRequired) {
+        status = 'insufficient_points';
+      }
+
       return {
         id: offer.id,
         title: offer.title,
         description: offer.description,
         pointsRequired: offer.pointsRequired,
         imageUrl: offer.imageUrl,
-        claimed: Boolean(redemption),
+        claimed,
+        canRedeem,
+        status,
         redeemCode: redemption?.redeemCode ?? null,
-        validUntil: redemption?.validUntil ?? null,
+        validForDays: claimed ? REDEEM_VALID_DAYS : null,
+        validityLabel: claimed ? REDEEM_VALIDITY_LABEL : null,
         redemptionStatus: redemption?.status ?? null,
       };
     }),
@@ -135,7 +148,8 @@ export const redeemLoyaltyOffer = async (userId: string, offerId: string) => {
 
   return {
     redeemCode: result.redemption.redeemCode,
-    validUntil: result.redemption.validUntil,
+    validForDays: REDEEM_VALID_DAYS,
+    validityLabel: REDEEM_VALIDITY_LABEL,
     pointsRedeemed: offer.pointsRequired,
     pointsBalance: result.updatedAccount.pointsBalance,
     offer: {
@@ -163,7 +177,8 @@ export const listRedemptions = async (userId: string) => {
       id: row.id,
       redeemCode: row.redeemCode,
       pointsSpent: row.pointsSpent,
-      validUntil: row.validUntil,
+      validForDays: REDEEM_VALID_DAYS,
+      validityLabel: REDEEM_VALIDITY_LABEL,
       status: row.status,
       claimedAt: row.createdAt,
       offer: {

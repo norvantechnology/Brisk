@@ -39,7 +39,8 @@ router.get(
  *     description: |
  *       **Mobile screen:** Offers → Loyalty tab list.
  *       Returns **active** offers created by Admin (`POST /admin/loyalty/offers`).
- *       No static/default offers — empty list until admin creates offers.
+ *       Each offer includes `status`: `available` | `claimed` | `insufficient_points`, and `canRedeem`.
+ *       Claimed offers cannot be redeemed again (`canRedeem: false`, `status: claimed`).
  *     responses:
  *       200:
  *         description: `{ pointsBalance, offers[] }`
@@ -61,7 +62,7 @@ router.get(
  *       - bearerAuth: []
  *     description: |
  *       Deducts points, generates a unique `redeemCode` (valid 30 days).
- *       Powers "Confirm Redemption" → "Offer Claimed!" success screen.
+ *       Response includes `validityLabel` (e.g. `"30 days"`) and `validForDays: 30`.
  *     parameters:
  *       - in: path
  *         name: id

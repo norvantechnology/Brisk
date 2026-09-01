@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as authController from './auth.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
+import { uploadMiddleware } from '../uploads/uploads.middleware';
 import {
   registerSchema,
   verifyOtpSchema,
@@ -58,6 +59,26 @@ const router = Router();
  *                 type: boolean
  *                 example: true
  *                 description: Must be true — user accepted Terms & Privacy Policy.
+ *               profilePhotoUrl:
+ *                 type: string
+ *                 format: uri
+ *                 description: Optional profile photo URL (if not sending file).
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [fullName, email, mobileNumber, password, role, acceptedTerms]
+ *             properties:
+ *               fullName: { type: string }
+ *               email: { type: string, format: email }
+ *               mobileNumber: { type: string, example: "+353871234567" }
+ *               password: { type: string }
+ *               role: { type: string, enum: [CUSTOMER, TRADER] }
+ *               acceptedTerms: { type: boolean, example: true }
+ *               profilePhotoUrl: { type: string, format: uri, description: Optional URL instead of file. }
+ *               profilePhoto:
+ *                 type: string
+ *                 format: binary
+ *                 description: Optional profile image file — no token required on signup.
  *     responses:
  *       201:
  *         description: User registered successfully. OTP sent. Returns mobileNumber for the OTP screen.
@@ -68,7 +89,12 @@ const router = Router();
  *       429:
  *         description: OTP resend cooldown active.
  */
-router.post('/register', validate(registerSchema), authController.register);
+router.post(
+  '/register',
+  uploadMiddleware.single('profilePhoto'),
+  validate(registerSchema),
+  authController.register
+);
 
 /**
  * @swagger

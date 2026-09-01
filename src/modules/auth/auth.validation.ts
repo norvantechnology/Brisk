@@ -16,6 +16,13 @@ const otpCodeSchema = z
   .trim()
   .regex(/^\d{6}$/, 'Verification code must be exactly 6 digits');
 
+const acceptedTermsField = z.preprocess(
+  (value) => value === true || value === 'true',
+  z.literal(true, {
+    errorMap: () => ({ message: 'You must accept the Terms & Privacy Policy.' }),
+  })
+);
+
 const registerBodySchema = z.object({
   fullName: z.string().trim().min(2, 'Name must be at least 2 characters long'),
   email: z.string().trim().email('Invalid email format').toLowerCase(),
@@ -24,9 +31,7 @@ const registerBodySchema = z.object({
   role: z.enum(['CUSTOMER', 'TRADER'], {
     errorMap: () => ({ message: "Role must be either 'CUSTOMER' or 'TRADER'" }),
   }),
-  acceptedTerms: z.literal(true, {
-    errorMap: () => ({ message: 'You must accept the Terms & Privacy Policy.' }),
-  }),
+  acceptedTerms: acceptedTermsField,
   profilePhotoUrl: z.string().trim().url('Invalid profile photo URL').optional(),
 });
 
