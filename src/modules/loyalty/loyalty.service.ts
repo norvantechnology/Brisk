@@ -91,7 +91,14 @@ export const redeemLoyaltyOffer = async (userId: string, offerId: string) => {
   }
 
   if (account.pointsBalance < offer.pointsRequired) {
-    throw new BadRequestError('Insufficient BRP points for this redemption.');
+    throw new BadRequestError('Insufficient BRP points for this redemption.', {
+      code: 'INSUFFICIENT_BRP',
+      data: {
+        pointsBalance: account.pointsBalance,
+        pointsRequired: offer.pointsRequired,
+        offerId: offer.id,
+      },
+    });
   }
 
   const validUntil = new Date();

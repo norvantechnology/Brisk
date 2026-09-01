@@ -1445,6 +1445,35 @@ export const updateLegalPolicy = async (
   };
 };
 
+export const deleteLegalPolicy = async (
+  adminId: string,
+  adminLabel: string,
+  policyId: string
+) => {
+  const policy = await prisma.cmsLegalPolicy.findUnique({ where: { id: policyId } });
+  if (!policy) {
+    throw new NotFoundError('Legal policy not found.');
+  }
+
+  await prisma.cmsLegalPolicy.delete({ where: { id: policyId } });
+
+  await writeAudit(
+    'CMS_LEGAL_POLICY_DELETED',
+    adminId,
+    adminLabel,
+    'CmsLegalPolicy',
+    policyId,
+    `Deleted legal policy: "${policy.name}" (${policy.slug}).`
+  );
+
+  return {
+    id: policy.id,
+    name: policy.name,
+    slug: policy.slug,
+    deleted: true,
+  };
+};
+
 export const publishLegalVersion = async (
   adminId: string,
   adminLabel: string,

@@ -43,10 +43,14 @@ const PUBLIC_USER_SELECT = {
   mobileNumber: true,
   role: true,
   mobileVerified: true,
+  preferredCurrency: true,
 } as const;
 
 const toPublicUser = (
-  user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'>,
+  user: Pick<
+    User,
+    'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified' | 'preferredCurrency'
+  >,
   mobileVerifiedOverride?: boolean
 ) => ({
   id: user.id,
@@ -55,6 +59,7 @@ const toPublicUser = (
   mobileNumber: user.mobileNumber,
   role: user.role,
   mobileVerified: mobileVerifiedOverride ?? user.mobileVerified,
+  preferredCurrency: user.preferredCurrency,
 });
 
 const createAuthTokens = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
@@ -78,7 +83,10 @@ export const isTokenVersionValid = (tokenVersion: number | undefined, currentVer
   (tokenVersion ?? 0) === currentVersion;
 
 const buildSessionPayload = async (
-  user: Pick<User, 'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified'> & {
+  user: Pick<
+    User,
+    'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified' | 'preferredCurrency'
+  > & {
     tokenVersion?: number;
   }
 ) => {
@@ -363,6 +371,7 @@ export const getAuthenticatedUser = async (userId: string) => {
       status: true,
       preferredLanguage: true,
       preferredTimeSlot: true,
+      preferredCurrency: true,
       emailNotifications: true,
       smsAlerts: true,
       promoNotifications: true,

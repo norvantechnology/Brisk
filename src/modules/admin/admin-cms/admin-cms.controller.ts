@@ -677,6 +677,26 @@ export const updateLegalPolicy = async (
   }
 };
 
+export const deleteLegalPolicy = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const policy = await cmsService.deleteLegalPolicy(adminId, adminLabel, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Legal policy deleted successfully.',
+      data: { policy },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const publishLegalVersion = async (
   req: AuthenticatedAdminRequest,
   res: Response,

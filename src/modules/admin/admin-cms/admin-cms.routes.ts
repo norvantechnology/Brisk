@@ -1648,6 +1648,52 @@ router.put(
 
 /**
  * @swagger
+ * /admin/cms/legal-policies/{id}:
+ *   delete:
+ *     summary: Delete Legal Policy
+ *     tags: ['Admin / Website / Legal']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Permanently deletes a legal policy and all of its version history.
+ *       The policy is removed from public `GET /cms/legal` and footer links immediately.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Legal policy UUID from `GET /admin/cms/legal-policies`.
+ *     responses:
+ *       200:
+ *         description: Legal policy deleted successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Legal policy deleted successfully. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     policy:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string, format: uuid }
+ *                         name: { type: string, example: Cookie Policy }
+ *                         slug: { type: string, example: cookie-policy }
+ *                         deleted: { type: boolean, example: true }
+ *       404:
+ *         description: Legal policy not found.
+ */
+router.delete(
+  '/legal-policies/:id',
+  validate(idParamSchema),
+  cmsAdminController.deleteLegalPolicy
+);
+
+/**
+ * @swagger
  * /admin/cms/legal-policies/{id}/versions:
  *   get:
  *     summary: Get Legal Policy Version History
