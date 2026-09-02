@@ -846,6 +846,7 @@ router.patch(
  *       - `home` — Homepage (admin also has `/admin/cms/home`)
  *       - `about-brisk` — **About Us**
  *       - `contact-brisk` — **Contact Us**
+ *       - `how-it-works` — **How It Works**
  *
  *       Public website reads: `GET /pages/{pageSlug}` (snake_case fields).
  *     responses:
@@ -928,17 +929,19 @@ router.post(
  *       - bearerAuth: []
  *     description: |
  *       **About Us:** `pageSlug=about-brisk`  
- *       **Contact Us:** `pageSlug=contact-brisk`
+ *       **Contact Us:** `pageSlug=contact-brisk`  
+ *       **How It Works:** `pageSlug=how-it-works`
  *
  *       Seeded About sections: `hero`, `mission`, `vision`, `core_values`  
- *       Seeded Contact sections: `hero`, `contact_info`, `help_desks`, `map`
+ *       Seeded Contact sections: `hero`, `contact_info`, `help_desks`, `map`  
+ *       Seeded How It Works sections: `hero`, `interactive_roadmap`, `role_workflows`, `governance_layer`
  *     parameters:
  *       - in: path
  *         name: pageSlug
  *         required: true
  *         schema:
  *           type: string
- *           enum: [customers, traders, home, about-brisk, contact-brisk]
+ *           enum: [customers, traders, home, about-brisk, contact-brisk, how-it-works]
  *           example: about-brisk
  *         description: Exact slug — About Us = about-brisk · Contact Us = contact-brisk
  *     responses:
@@ -987,7 +990,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           enum: [customers, traders, home, about-brisk, contact-brisk]
+ *           enum: [customers, traders, home, about-brisk, contact-brisk, how-it-works]
  *           example: about-brisk
  *       - in: path
  *         name: sectionKey
