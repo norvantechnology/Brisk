@@ -36,7 +36,8 @@
  *       - Phone (+353) → `mobileNumber` (E.164, e.g. `+353871234567`)
  *       - Password → `password`
  *       - Terms checkbox → `acceptedTerms: true` (required)
- *       - Profile photo → `profilePhotoUrl` (optional URL after upload)
+ *       - Profile photo at signup → send `profilePhoto` file in **multipart/form-data** on this endpoint (no token). Or optional `profilePhotoUrl` if you already have a URL.
+ *       - Profile photo after login → `POST /uploads` then PATCH `/traders/me/account` with `profilePhotoUrl`.
  *     tags: ['Mobile / Auth']
  */
 

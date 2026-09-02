@@ -98,6 +98,7 @@ router.patch('/me', validate(updateTraderProfileSchema), tradersController.updat
  *       **Use on:** Profile → Edit your account.
  *
  *       Editable: `fullName`, `mobileNumber` (E.164 e.g. `+353212121212`), `profilePhotoUrl`.
+ *       **Profile photo update:** After login → `POST /uploads` (`purpose: profile_photo`) → pass returned `url` as `profilePhotoUrl` here (JSON only, no file on this endpoint).
  *       **Email is locked** (`emailLocked: true` on GET /traders/me) — do not send `email`.
  *       Changing phone sets `mobileVerified: false` and `mobileReverificationRequired: true`.
  *     requestBody:
