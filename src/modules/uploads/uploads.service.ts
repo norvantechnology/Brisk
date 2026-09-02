@@ -15,7 +15,15 @@ export const storeUpload = async (input: {
   }
 
   if (!isPurposeAllowed(purpose, actor)) {
-    throw new ForbiddenError(`You are not allowed to upload files for purpose "${purpose}".`);
+    const traderOnboardingHint =
+      actor.kind === 'user' &&
+      actor.role === 'TRADER' &&
+      (purpose === 'category_banner' || purpose === 'category_icon')
+        ? ' Use purpose "trader_document" for trader onboarding documents.'
+        : '';
+    throw new ForbiddenError(
+      `You are not allowed to upload files for purpose "${purpose}".${traderOnboardingHint}`
+    );
   }
 
   const config = PURPOSE_CONFIG[purpose];

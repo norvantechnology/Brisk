@@ -674,10 +674,291 @@ const seedContactBriskPage = async (prisma: PrismaClient) => {
   }
 };
 
+const seedHowItWorksPage = async (prisma: PrismaClient) => {
+  const page = await prisma.cmsMarketingPage.upsert({
+    where: { slug: 'how-it-works' },
+    update: { title: 'How It Works', status: CmsPublishStatus.PUBLISHED },
+    create: {
+      slug: 'how-it-works',
+      title: 'How It Works',
+      status: CmsPublishStatus.PUBLISHED,
+    },
+  });
+
+  const hero = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'hero' } },
+    update: {
+      title: 'How BRISK Works',
+      subtitle: 'Transparent Marketplace',
+      description:
+        'A transparent process connecting customers and traders from job posting to completion.',
+      primaryButtonText: 'Explore Steps',
+      primaryButtonUrl: '#timeline',
+      secondaryButtonText: 'Get Support',
+      secondaryButtonUrl: '/contact-brisk',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 1,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'hero',
+      sectionKey: 'hero',
+      title: 'How BRISK Works',
+      subtitle: 'Transparent Marketplace',
+      description:
+        'A transparent process connecting customers and traders from job posting to completion.',
+      primaryButtonText: 'Explore Steps',
+      primaryButtonUrl: '#timeline',
+      secondaryButtonText: 'Get Support',
+      secondaryButtonUrl: '/contact-brisk',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 1,
+    },
+  });
+
+  const heroOrbitSteps = [
+    { stepNumber: 1, title: 'Post Job', sortOrder: 1 },
+    { stepNumber: 2, title: 'Receive Offers', sortOrder: 2 },
+    { stepNumber: 3, title: 'Negotiate', sortOrder: 3 },
+    { stepNumber: 4, title: 'Agreement', sortOrder: 4 },
+    { stepNumber: 5, title: 'Work Started', sortOrder: 5 },
+    { stepNumber: 6, title: 'Completed', sortOrder: 6 },
+  ];
+
+  for (const step of heroOrbitSteps) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: hero.id, stepNumber: step.stepNumber },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: { sectionId: hero.id, ...step, status: CmsPublishStatus.PUBLISHED },
+      });
+    }
+  }
+
+  const roadmap = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'interactive_roadmap' } },
+    update: {
+      title: 'The Step-By-Step Journey',
+      subtitle: 'Interactive Roadmap',
+      description:
+        'Follow a clear, governed pathway that ensures safety, quality, and fair pricing for everyone.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 2,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'journey',
+      sectionKey: 'interactive_roadmap',
+      title: 'The Step-By-Step Journey',
+      subtitle: 'Interactive Roadmap',
+      description:
+        'Follow a clear, governed pathway that ensures safety, quality, and fair pricing for everyone.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 2,
+    },
+  });
+
+  const roadmapSteps = [
+    {
+      stepNumber: 1,
+      title: 'Publish Job',
+      description:
+        'Describe your project, add images, specify timelines, and post it to our verified trader network instantly.',
+      sortOrder: 1,
+    },
+    {
+      stepNumber: 2,
+      title: 'Receive Offers',
+      description: 'Local traders examine the specifications and send personalized quotes.',
+      sortOrder: 2,
+    },
+    {
+      stepNumber: 3,
+      title: 'Direct Chat',
+      description: 'Negotiate terms, modify scopes, and discuss milestones securely.',
+      sortOrder: 3,
+    },
+    {
+      stepNumber: 4,
+      title: 'Project Sign-off',
+      description: 'Accept a proposal to lock in scope, prices, and completion dates.',
+      sortOrder: 4,
+    },
+  ];
+
+  for (const step of roadmapSteps) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: roadmap.id, stepNumber: step.stepNumber },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: { sectionId: roadmap.id, ...step, status: CmsPublishStatus.PUBLISHED },
+      });
+    }
+  }
+
+  const roleWorkflows = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'role_workflows' } },
+    update: {
+      title: 'Tailored Journeys for Both Sides',
+      subtitle: 'Role Workflows',
+      description:
+        'How the BRISK app guides each stakeholder from first login to final job completion.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 3,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'role_workflows',
+      sectionKey: 'role_workflows',
+      title: 'Tailored Journeys for Both Sides',
+      subtitle: 'Role Workflows',
+      description:
+        'How the BRISK app guides each stakeholder from first login to final job completion.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 3,
+    },
+  });
+
+  const roleCards = [
+    {
+      title: 'Customer Journey',
+      description: 'Hire with confidence, manage quotes, and rate with peace of mind.',
+      sortOrder: 1,
+      metadata: {
+        role: 'customer',
+        label: 'For Customers',
+        steps: [
+          {
+            title: 'Define requirements',
+            description: 'Use our structured form to describe what service you need done.',
+          },
+          {
+            title: 'Compare quotes',
+            description: 'Filter traders by ratings, experience, price, and portfolios.',
+          },
+          {
+            title: 'Secure hire',
+            description: 'Accept the offer. Milestones and scope are securely stored.',
+          },
+        ],
+      },
+    },
+    {
+      title: 'Trader Journey',
+      description: 'Find genuine leads, win deals, and build a premium digital reputation.',
+      sortOrder: 2,
+      metadata: {
+        role: 'trader',
+        label: 'For Traders',
+        steps: [
+          {
+            title: 'Browse verified leads',
+            description: 'See detailed job cards matching your skills.',
+          },
+          {
+            title: 'Send structured proposals',
+            description: 'Draft detailed estimates and outline terms.',
+          },
+          {
+            title: 'Collect payments & reviews',
+            description: 'Build your profile credibility.',
+          },
+        ],
+      },
+    },
+  ];
+
+  for (const card of roleCards) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: roleWorkflows.id, title: card.title },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: {
+          sectionId: roleWorkflows.id,
+          title: card.title,
+          description: card.description,
+          sortOrder: card.sortOrder,
+          metadata: card.metadata,
+          status: CmsPublishStatus.PUBLISHED,
+        },
+      });
+    }
+  }
+
+  const governance = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'governance_layer' } },
+    update: {
+      title: 'A Governance Layer',
+      subtitle: 'Trust Architecture',
+      description:
+        "BRISK isn't just a noticeboard. We govern each transaction to eliminate common friction points.",
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'feature_grid',
+      sectionKey: 'governance_layer',
+      title: 'A Governance Layer',
+      subtitle: 'Trust Architecture',
+      description:
+        "BRISK isn't just a noticeboard. We govern each transaction to eliminate common friction points.",
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
+  });
+
+  const governanceItems = [
+    {
+      title: 'Vetting & Verification',
+      description:
+        'Every trader undergoes background checks, license verification, and reference validation prior to active bidding.',
+      icon: 'shield-check.svg',
+      sortOrder: 1,
+    },
+    {
+      title: 'Secured Communications',
+      description:
+        'Chats are saved on the platform, providing clear documentation of agreed terms.',
+      icon: 'chat-secure.svg',
+      sortOrder: 2,
+    },
+    {
+      title: 'Protected Negotiations',
+      description:
+        'Mutually approved milestones govern releases, so traders know they will get paid.',
+      icon: 'lock-milestone.svg',
+      sortOrder: 3,
+    },
+    {
+      title: 'Live Progress Tracking',
+      description:
+        'Receive status notifications, uploaded photos of milestones, and direct task updates.',
+      icon: 'progress-clock.svg',
+      sortOrder: 4,
+    },
+  ];
+
+  for (const item of governanceItems) {
+    const existing = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: governance.id, title: item.title },
+    });
+    if (!existing) {
+      await prisma.cmsPageSectionItem.create({
+        data: { sectionId: governance.id, ...item, status: CmsPublishStatus.PUBLISHED },
+      });
+    }
+  }
+};
+
 export const seedMarketingPages = async (prisma: PrismaClient) => {
   await seedCustomersPage(prisma);
   await seedTradersPage(prisma);
   await seedHomePage(prisma);
   await seedAboutBriskPage(prisma);
   await seedContactBriskPage(prisma);
+  await seedHowItWorksPage(prisma);
 };

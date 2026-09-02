@@ -271,9 +271,17 @@
  *       - **Company Verification** — Director Photo ID upload (`documentKey: director_photo_id`)
  *       - **Sole/Company Document Verification** — Passport, Garda Vetting, certificates, etc.
  *
- *       **When to call:** After user picks a file — upload file to your storage first, then send the **URL** here.
+ *       **When to call:** After user picks a file — upload via `POST /uploads` first, then send the returned **`url`** here.
  *
- *       **Note:** S3 presign not available yet — mobile must upload elsewhere and pass `fileUrl`.
+ *       **Upload purpose (required):** Always use `purpose: trader_document` for **all** onboarding documents
+ *       (entity-level, category-wise, passport, license, etc.). Do **not** use `category_banner` — that is
+ *       admin-only for CMS category images.
+ *
+ *       **Flow:**
+ *       1. `POST /uploads` — multipart: `file` + `purpose=trader_document` (Bearer trader token)
+ *       2. `PUT /traders/onboarding/documents` — JSON: `{ documentRuleId, fileUrl: <url from step 1>, fileName? }`
+ *
+ *       **Allowed trader upload purposes:** `GET /uploads/purposes` (includes `trader_document`).
  *
  *       **Match upload to UI row:** Use `documentRuleId` from `GET /document-requirements` or `data.documentRequirements` in status response.
  *     security:

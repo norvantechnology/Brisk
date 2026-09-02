@@ -25,6 +25,7 @@ const router = Router();
  *       - `home` — Homepage (same as `GET /cms/home` — see **Website / Home** tag)
  *       - `about-brisk` — **About Us** page
  *       - `contact-brisk` — **Contact Us** page
+ *       - `how-it-works` — **How It Works** page
  *
  *       **Reviews:** Use standard `GET /cms/testimonials?audience=CUSTOMER|TRADER|BOTH&limit=N` (same API for all pages).
  *
@@ -33,7 +34,7 @@ const router = Router();
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, enum: [customers, traders, home, about-brisk, contact-brisk], example: about-brisk }
+ *         schema: { type: string, enum: [customers, traders, home, about-brisk, contact-brisk, how-it-works], example: how-it-works }
  *         description: |
  *           **Purpose:** Select which page to load.
  *           **about-brisk** — About Us.
