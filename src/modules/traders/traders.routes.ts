@@ -34,7 +34,7 @@ router.use('/offers', traderOffersRoutes);
  *
  *       `data` is a flat object (plus nested `user`, `bankDetails`, `certifications`, `offers`, `notifications`).
  *
- *       **Header card:** `fullName`, `profilePhotoUrl`, `email`, `mobileCountryCode` + `mobileNumber`
+ *       **Header card:** `fullName`, `profilePhotoUrl`, `preferredCurrency`, `email`, `mobileCountryCode` + `mobileNumber`
  *       **Completion card:** `profileCompletionPercent`, `profileCompletionHint`, `missingProfileItems`
  *       **Verification badge:** `verificationStatus` (`VERIFIED` / `PENDING` / `REJECTED`)
  *       **Email / phone verify flags:** `emailVerified`, `mobileVerified` (booleans)

@@ -66,6 +66,7 @@ export const getTraderProfile = async (userId: string) => {
           email: true,
           mobileNumber: true,
           profilePhotoUrl: true,
+          preferredCurrency: true,
           mobileVerified: true,
           emailVerified: true,
           emailNotifications: true,
@@ -147,6 +148,7 @@ export const getTraderProfile = async (userId: string) => {
     mobileNumber: mobile.mobileNumber,
     mobileNumberE164: trader.user.mobileNumber,
     profilePhotoUrl,
+    preferredCurrency: trader.user.preferredCurrency,
     coverImageUrl: trader.coverImageUrl,
     yearsExperience: trader.yearsExperience,
     jobsDoneCount: trader.jobsDoneCount,
@@ -217,7 +219,8 @@ export const getTraderProfile = async (userId: string) => {
       fullName: trader.user.fullName,
       email: trader.user.email,
       mobileNumber: trader.user.mobileNumber,
-      profilePhotoUrl: trader.user.profilePhotoUrl,
+      profilePhotoUrl,
+      preferredCurrency: trader.user.preferredCurrency,
       mobileVerified: trader.user.mobileVerified,
       emailVerified: trader.user.emailVerified,
       emailNotifications: trader.user.emailNotifications,
@@ -258,6 +261,13 @@ export const updateTraderProfile = async (userId: string, input: UpdateTraderPro
       },
     },
   });
+
+  if (input.profilePhotoUrl !== undefined) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profilePhotoUrl: input.profilePhotoUrl || null },
+    });
+  }
 
   return updatedTrader;
 };
