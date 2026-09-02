@@ -13,6 +13,7 @@ import {
 import {
   BadRequestError,
   ForbiddenError,
+  NotFoundError,
 } from '../../../utils/errors';
 import {
   ONBOARDING_STEPS,
@@ -125,6 +126,13 @@ const assertOnboardingEditable = (trader: {
     trader.onboardingStatus === TraderOnboardingStatus.APPROVED
   ) {
     throw new ForbiddenError('Onboarding has already been submitted and cannot be edited.');
+  }
+};
+
+/** Documents may be replaced while onboarding is in progress or awaiting admin review. */
+const assertDocumentsEditable = (trader: { onboardingStatus: TraderOnboardingStatus }) => {
+  if (trader.onboardingStatus === TraderOnboardingStatus.APPROVED) {
+    throw new ForbiddenError('Onboarding is approved. Documents cannot be changed.');
   }
 };
 
@@ -415,7 +423,7 @@ export const uploadDocument = async (
 ) => {
   const { trader } = await ensureTraderForUser(userId);
   if (!options?.allowAfterSubmit) {
-    assertOnboardingEditable(trader);
+    assertDocumentsEditable(trader);
   }
 
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
@@ -491,17 +499,30 @@ export const uploadDocument = async (
 
 export const removeDocument = async (
   userId: string,
-  documentRuleId: string,
+  documentRuleOrDocId: string,
   options?: { allowAfterSubmit?: boolean }
 ) => {
   const { trader } = await ensureTraderForUser(userId);
   if (!options?.allowAfterSubmit) {
-    assertOnboardingEditable(trader);
+    assertDocumentsEditable(trader);
   }
 
-  await prisma.traderDocument.deleteMany({
+  let documentRuleId = documentRuleOrDocId;
+  const existingDoc = await prisma.traderDocument.findFirst({
+    where: { id: documentRuleOrDocId, traderId: trader.id },
+    select: { documentRuleId: true },
+  });
+  if (existingDoc) {
+    documentRuleId = existingDoc.documentRuleId;
+  }
+
+  const deleted = await prisma.traderDocument.deleteMany({
     where: { traderId: trader.id, documentRuleId },
   });
+
+  if (deleted.count === 0) {
+    throw new NotFoundError('Document not found for this trader.');
+  }
 
   return getOnboardingStatus(userId);
 };

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as authController from './auth.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
-import { uploadMiddleware } from '../uploads/uploads.middleware';
+import { registerUploadMiddleware } from './register-upload.middleware';
 import {
   registerSchema,
   verifyOtpSchema,
@@ -78,7 +78,7 @@ const router = Router();
  *               profilePhoto:
  *                 type: string
  *                 format: binary
- *                 description: Optional profile image file — no token required on signup.
+ *                 description: Optional profile image file — field name `profilePhoto` or `profilePhotoUrl`.
  *     responses:
  *       201:
  *         description: User registered successfully. OTP sent. Returns mobileNumber for the OTP screen.
@@ -91,7 +91,7 @@ const router = Router();
  */
 router.post(
   '/register',
-  uploadMiddleware.single('profilePhoto'),
+  registerUploadMiddleware,
   validate(registerSchema),
   authController.register
 );

@@ -2,11 +2,19 @@ import { Request, Response, NextFunction } from 'express';
 import * as authService from './auth.service';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
+import { pickRegisterProfilePhoto } from './register-upload.middleware';
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await authService.registerUser(req.body, {
-      profilePhotoFile: req.file,
+    const profilePhotoFile = pickRegisterProfilePhoto(req);
+    // File sent as multipart field — ignore any stale text profilePhotoUrl in body.
+    const body =
+      profilePhotoFile && req.body?.profilePhotoUrl
+        ? { ...req.body, profilePhotoUrl: undefined }
+        : req.body;
+
+    const result = await authService.registerUser(body, {
+      profilePhotoFile,
       reqHost: req.get('host') ?? undefined,
     });
     sendResponse({
