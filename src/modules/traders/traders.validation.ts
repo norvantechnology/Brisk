@@ -6,6 +6,13 @@ const mobileNumberSchema = z
   .trim()
   .regex(/^\+[1-9]\d{1,14}$/, 'Mobile number must be in E.164 format (e.g. +353871234567)');
 
+const currencyCodeSchema = z
+  .string()
+  .trim()
+  .length(3, 'Currency code must be 3 letters')
+  .regex(/^[A-Z]{3}$/, 'Currency code must be ISO 4217 uppercase (e.g. EUR, GBP)')
+  .transform((v) => v.toUpperCase());
+
 export const updateTraderProfileSchema = z.object({
   body: z.object({
     traderType: z.nativeEnum(TraderType).optional(),
@@ -26,6 +33,7 @@ export const updateTraderAccountSchema = z.object({
       fullName: z.string().trim().min(2).max(255).optional(),
       mobileNumber: mobileNumberSchema.optional(),
       profilePhotoUrl: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+      preferredCurrency: currencyCodeSchema.optional(),
       email: z.string().optional(),
     })
     .superRefine((body, ctx) => {
@@ -36,10 +44,16 @@ export const updateTraderAccountSchema = z.object({
           path: ['email'],
         });
       }
-      if (!body.fullName && !body.mobileNumber && body.profilePhotoUrl === undefined) {
+      if (
+        !body.fullName &&
+        !body.mobileNumber &&
+        body.profilePhotoUrl === undefined &&
+        body.preferredCurrency === undefined
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Provide at least one of fullName, mobileNumber, or profilePhotoUrl.',
+          message:
+            'Provide at least one of fullName, mobileNumber, profilePhotoUrl, or preferredCurrency.',
           path: ['fullName'],
         });
       }

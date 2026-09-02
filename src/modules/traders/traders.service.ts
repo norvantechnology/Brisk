@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { ForbiddenError, NotFoundError, BadRequestError, ConflictError } from '../../utils/errors';
 import { splitE164Mobile } from '../../utils/phone';
 import { getSupportWebviewLinks } from '../../utils/public-urls';
+import { assertActiveCurrency } from '../../services/currency.service';
 import type {
   UpdateTraderAccountInput,
   UpdateTraderBankDetailsInput,
@@ -291,6 +292,10 @@ export const updateTraderAccount = async (userId: string, input: UpdateTraderAcc
     }
   }
 
+  if (input.preferredCurrency) {
+    await assertActiveCurrency(input.preferredCurrency);
+  }
+
   await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },
@@ -298,6 +303,7 @@ export const updateTraderAccount = async (userId: string, input: UpdateTraderAcc
         fullName: input.fullName,
         mobileNumber: input.mobileNumber,
         profilePhotoUrl: input.profilePhotoUrl,
+        preferredCurrency: input.preferredCurrency,
         mobileVerified:
           input.mobileNumber && input.mobileNumber !== trader.user.mobileNumber ? false : undefined,
       },
