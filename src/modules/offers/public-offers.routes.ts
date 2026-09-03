@@ -195,13 +195,15 @@ router.get(
  *       **Mobile:** Prefer /accept for the Offer Detail Accept Offer button.
  *       List Claim Now should NOT call this — only navigate to detail.
  *
+ *       **Request:** path id only. No body required (empty {} is fine).
+ *
  *       Response includes nextJobPrefill, jobFormConfig, navigation (same as /accept).
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: Offer UUID to claim.
+ *         description: Offer UUID only — no other params/body required.
  *     responses:
  *       200:
  *         description: |
@@ -237,11 +239,20 @@ router.post(
  *       jobFormConfig drives show/hide for quote type and min/max budget:
  *       - Direct Trader (offer accepted): quote type locked FIXED, budget hidden, serviceCharge required
  *       - Without offer: quote type options from subcategory priceEnabled / priceEnteredBy
+ *
+ *       **Request:** path id only. No body required.
+ *
+ *       **discountType values on offer:** FLAT | PERCENTAGE | FREE_SERVICE
+ *       (FREE_SERVICE = free visit / free service UI).
+ *
+ *       **Jobs Done UI:** use trader.jobsDoneCount — not claimsCount.
+ *       claimsCount = how many customers claimed this offer.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *         description: Offer UUID only — no body required.
  *     responses:
  *       200:
  *         description: Offer accepted — continue to Post a New Job.

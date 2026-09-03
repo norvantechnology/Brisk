@@ -20,6 +20,7 @@ export const offerInclude = {
       yearsExperience: true,
       city: true,
       country: true,
+      jobsDoneCount: true,
       user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
       _count: { select: { ratingsReceived: true } },
     },
@@ -107,6 +108,7 @@ type OfferRecord = {
     yearsExperience?: number | null;
     city?: string | null;
     country?: string | null;
+    jobsDoneCount?: number | null;
     user: { id: string; fullName: string; profilePhotoUrl: string | null };
     _count?: { ratingsReceived?: number };
   } | null;
@@ -191,6 +193,8 @@ export const serializeOffer = (offer: OfferRecord) => {
             (offer.trader.yearsExperience ?? 0) > 0
               ? `${offer.trader.yearsExperience}+ Yrs`
               : null,
+          /** "Jobs Done" stat on offer detail — NOT claimsCount. */
+          jobsDoneCount: offer.trader.jobsDoneCount ?? 0,
           city: offer.trader.city ?? null,
           country: offer.trader.country ?? null,
           location: [offer.trader.city, offer.trader.country].filter(Boolean).join(', ') || null,
