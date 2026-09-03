@@ -29,7 +29,7 @@ export const errorMiddleware = (
     message = 'File exceeds maximum upload size.';
   } else if ((err as { code?: string }).code === 'LIMIT_UNEXPECTED_FILE') {
     statusCode = 400;
-    message = 'Unexpected file field. Use profilePhoto or profilePhotoUrl for signup photo upload.';
+    message = 'Unexpected file field. Use profilePhoto, profilePhotoUrl, profileImage, or image for signup photo upload.';
   } else {
     logger.error('Unhandled Server Error:', err);
   }

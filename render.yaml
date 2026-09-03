@@ -6,9 +6,15 @@ services:
     buildCommand: npm install && npm run db:generate && npm run db:push:deploy && npm run build
     startCommand: npm start
     healthCheckPath: /health
+    disk:
+      name: brisk-uploads
+      mountPath: /data/uploads
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
+      - key: UPLOAD_DIR
+        value: /data/uploads
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL

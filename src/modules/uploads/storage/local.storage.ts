@@ -17,6 +17,11 @@ const sanitizeExt = (originalName: string, mimeType: string) => {
 
 export const getUploadRoot = () => path.resolve(env.UPLOAD_DIR);
 
+/** Ensure upload root exists (needed on fresh deploy / persistent disk mount). */
+export const ensureUploadRoot = async () => {
+  await fs.mkdir(getUploadRoot(), { recursive: true });
+};
+
 export const getPublicBaseUrl = (reqHost?: string) => {
   if (env.UPLOAD_PUBLIC_BASE_URL) return env.UPLOAD_PUBLIC_BASE_URL.replace(/\/$/, '');
   if (process.env.RAILWAY_PUBLIC_DOMAIN) {

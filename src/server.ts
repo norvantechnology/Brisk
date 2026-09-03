@@ -2,10 +2,15 @@ import app from './app';
 import { env } from './config/env';
 import { connectDatabase, prisma } from './config/database';
 import { logger } from './utils/logger';
+import { ensureUploadRoot } from './modules/uploads/storage/local.storage';
 
 const startServer = async () => {
   // 1. Establish database connection
   await connectDatabase();
+
+  // 2. Ensure upload directory exists (Render/Railway persistent disk or local ./data/uploads)
+  await ensureUploadRoot();
+  logger.info(`Upload storage: ${env.UPLOAD_STORAGE} at ${env.UPLOAD_DIR}`);
 
   // 2. Start HTTP Server
   const server = app.listen(env.PORT, () => {

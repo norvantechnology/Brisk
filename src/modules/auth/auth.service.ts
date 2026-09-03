@@ -44,12 +44,20 @@ const PUBLIC_USER_SELECT = {
   role: true,
   mobileVerified: true,
   preferredCurrency: true,
+  profilePhotoUrl: true,
 } as const;
 
 const toPublicUser = (
   user: Pick<
     User,
-    'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified' | 'preferredCurrency'
+    | 'id'
+    | 'fullName'
+    | 'email'
+    | 'mobileNumber'
+    | 'role'
+    | 'mobileVerified'
+    | 'preferredCurrency'
+    | 'profilePhotoUrl'
   >,
   mobileVerifiedOverride?: boolean
 ) => ({
@@ -60,6 +68,7 @@ const toPublicUser = (
   role: user.role,
   mobileVerified: mobileVerifiedOverride ?? user.mobileVerified,
   preferredCurrency: user.preferredCurrency,
+  profilePhotoUrl: user.profilePhotoUrl,
 });
 
 const createAuthTokens = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
@@ -85,7 +94,14 @@ export const isTokenVersionValid = (tokenVersion: number | undefined, currentVer
 const buildSessionPayload = async (
   user: Pick<
     User,
-    'id' | 'fullName' | 'email' | 'mobileNumber' | 'role' | 'mobileVerified' | 'preferredCurrency'
+    | 'id'
+    | 'fullName'
+    | 'email'
+    | 'mobileNumber'
+    | 'role'
+    | 'mobileVerified'
+    | 'preferredCurrency'
+    | 'profilePhotoUrl'
   > & {
     tokenVersion?: number;
   }
