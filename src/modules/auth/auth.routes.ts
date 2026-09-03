@@ -222,7 +222,7 @@ router.post('/login', validate(loginSchema), authController.login);
  *                 example: jane@example.com
  *     responses:
  *       200:
- *         description: Account found. OTP sent to registered mobile (`otpSent: true`).
+ *         description: "Account found. OTP sent to registered mobile (otpSent true)."
  *       403:
  *         description: Account blocked, suspended, or inactive.
  *       404:

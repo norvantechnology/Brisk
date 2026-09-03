@@ -403,7 +403,7 @@ router.get('/legal', cmsController.listLegalPolicies);
  *         name: slug
  *         required: true
  *         schema: { type: string, example: privacy-policy }
- *         description: `terms-and-conditions` or `privacy-policy`
+ *         description: "terms-and-conditions or privacy-policy"
  *     responses:
  *       200:
  *         description: HTML document for WebView.

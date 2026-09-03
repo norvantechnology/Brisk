@@ -19,7 +19,7 @@ const router = Router();
  *       **Mobile screen:** Offers → Loyalty tab header ("Your BRISK points balance").
  *     responses:
  *       200:
- *         description: `{ pointsBalance, accountId }`
+ *         description: "pointsBalance and accountId"
  */
 router.get(
   '/account',
@@ -43,7 +43,7 @@ router.get(
  *       Claimed offers cannot be redeemed again (`canRedeem: false`, `status: claimed`).
  *     responses:
  *       200:
- *         description: `{ pointsBalance, offers[] }`
+ *         description: "pointsBalance and offers array"
  */
 router.get(
   '/offers',
@@ -95,7 +95,7 @@ router.post(
  *     description: Claimed loyalty rewards with redeem codes for the wallet / claimed badge UI.
  *     responses:
  *       200:
- *         description: `{ pointsBalance, redemptions[] }`
+ *         description: "pointsBalance and redemptions array"
  */
 router.get(
   '/redemptions',

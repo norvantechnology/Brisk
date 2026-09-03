@@ -19,18 +19,43 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  * @swagger
  * /invoices/{id}:
  *   get:
- *     summary: Get invoice with booking/job summary and line items
+ *     summary: Get invoice (Payment Details screen)
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       **Mobile screen:** Payment Details / Invoice breakdown.
+ *
+ *       **Auth:** Customer Bearer (must own the booking).
+ *
+ *       **When to call:** After `POST /jobs/{id}/publish` using `data.invoice.id`, or any time before pay.
+ *
+ *       **UI fields in `data`:**
+ *       - `orderId`, `payNowLabel` (e.g. Pay Now (€130.63)), `totalFormatted`
+ *       - `lineItems[]` with labels Service Charge, Platform Fee, Trader Offer, Promo Code
+ *       - `serviceSummary` (category, title, orderId, serviceProvider)
+ *       - `paymentMethods` (Apple Pay, Google Pay, Card)
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *         description: Invoice UUID from publish response.
  *     responses:
  *       200:
- *         description: Invoice breakdown for payment UI.
+ *         description: Full invoice payload.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/Invoice' }
+ *       403:
+ *         description: Invoice belongs to another customer.
+ *       404:
+ *         description: Invoice not found.
  */
 router.get(
   '/invoices/:id',
@@ -47,6 +72,15 @@ router.get(
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       **Mobile screen:** Promo code field on Payment Details.
+ *
+ *       Recalculates `promoDiscount`, `platformFee`, and `totalAmount`.
+ *       Only works while invoice status is UNPAID.
+ *
+ *       Promo must be active and within validity window. Optional `categoryScope` must match job category.
+ *
+ *       List/validate codes also via Customer Offers promo endpoints when available.
  *     parameters:
  *       - in: path
  *         name: id
@@ -57,13 +91,26 @@ router.get(
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [code]
- *             properties:
- *               code: { type: string, example: SAVE10 }
+ *             $ref: '#/components/schemas/ApplyPromoRequest'
+ *           example:
+ *             code: SAVE10
  *     responses:
  *       200:
- *         description: Updated invoice with promo discount.
+ *         description: Updated invoice including promoCode echo and refreshed lineItems.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/Invoice' }
+ *       400:
+ *         description: Invalid/expired promo, wrong category, or invoice not UNPAID.
+ *       403:
+ *         description: Not the invoice owner.
+ *       404:
+ *         description: Invoice not found.
  */
 router.post(
   '/invoices/:id/apply-promo',
@@ -76,35 +123,62 @@ router.post(
  * @swagger
  * /payments/intent:
  *   post:
- *     summary: Create a mock payment intent for an invoice
+ *     summary: Create payment intent for an invoice
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       **Mobile screen:** After choosing Apple Pay / Google Pay / Card on Payment Details.
+ *
+ *       Creates a PENDING payment row. Currently **mock Stripe** (`mock: true`) —
+ *       use returned `paymentId` with `POST /payments/{id}/confirm` (no real Stripe SDK required yet).
+ *
+ *       When `billingType=COMPANY`, `companyName` is required.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [invoiceId, method]
- *             properties:
- *               invoiceId: { type: string, format: uuid }
- *               method: { type: string, enum: [CARD, APPLE_PAY, GOOGLE_PAY] }
- *               billingType: { type: string, enum: [INDIVIDUAL, COMPANY] }
- *               companyName: { type: string }
- *               tinNumber: { type: string }
- *               billingAddress:
- *                 type: object
- *                 properties:
- *                   firstName: { type: string }
- *                   lastName: { type: string }
- *                   street: { type: string }
- *                   city: { type: string }
- *                   country: { type: string }
- *                   postcode: { type: string }
+ *             $ref: '#/components/schemas/CreatePaymentIntentRequest'
+ *           examples:
+ *             card:
+ *               summary: Card / individual
+ *               value:
+ *                 invoiceId: 11111111-1111-1111-1111-111111111111
+ *                 method: CARD
+ *                 billingType: INDIVIDUAL
+ *                 billingAddress:
+ *                   firstName: Alex
+ *                   lastName: Byrne
+ *                   street: 1 Main Street
+ *                   city: Dublin
+ *                   country: IE
+ *                   postcode: D04ABCD
+ *             company:
+ *               summary: Company billing
+ *               value:
+ *                 invoiceId: 11111111-1111-1111-1111-111111111111
+ *                 method: APPLE_PAY
+ *                 billingType: COMPANY
+ *                 companyName: Acme Ltd
+ *                 tinNumber: "1234567A"
  *     responses:
  *       201:
- *         description: Mock payment intent (mock true).
+ *         description: Payment intent created.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/PaymentIntentResponse' }
+ *       400:
+ *         description: Invoice already paid/refunded, or completed payment exists.
+ *       403:
+ *         description: Not the invoice owner.
+ *       404:
+ *         description: Invoice not found.
  */
 router.post(
   '/payments/intent',
@@ -117,26 +191,46 @@ router.post(
  * @swagger
  * /payments/{id}/confirm:
  *   post:
- *     summary: Confirm a pending payment (mock Stripe)
+ *     summary: Confirm payment (mock Stripe) → success receipt
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       **Mobile screen:** After card/wallet success → Payment Successful.
+ *
+ *       Marks payment COMPLETED and invoice PAID. Returns the same receipt shape as GET receipt
+ *       (`title`, `transactionId`, `amountPaid`, timeline Paid → Confirmed → Service).
+ *
+ *       Idempotent if already COMPLETED (returns receipt again).
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *         description: paymentId from POST /payments/intent.
  *     requestBody:
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               cardLast4: { type: string, example: "4242" }
- *               cardBrand: { type: string, example: Visa }
+ *             $ref: '#/components/schemas/ConfirmPaymentRequest'
+ *           example:
+ *             cardLast4: "4567"
+ *             cardBrand: visa
  *     responses:
  *       200:
- *         description: Receipt payload for success screen.
+ *         description: Payment confirmed; receipt payload for success screen.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/PaymentReceipt' }
+ *       400:
+ *         description: Payment FAILED, or invoice already paid (conflict path).
+ *       404:
+ *         description: Payment not found for this user.
  */
 router.post(
   '/payments/:id/confirm',
@@ -149,18 +243,36 @@ router.post(
  * @swagger
  * /payments/{id}/receipt:
  *   get:
- *     summary: Get payment receipt
+ *     summary: Get payment receipt (Payment Successful screen)
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Available only after payment status is COMPLETED.
+ *
+ *       **UI fields:** `title`, `transactionId`, `amountPaidFormatted`, `timeline`, `receiptSummary`,
+ *       `actions.viewJob` → GET /bookings/{id}.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *         description: Payment UUID.
  *     responses:
  *       200:
  *         description: Receipt summary.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/PaymentReceipt' }
+ *       400:
+ *         description: Payment not completed yet.
+ *       404:
+ *         description: Payment not found.
  */
 router.get(
   '/payments/:id/receipt',
@@ -173,18 +285,33 @@ router.get(
  * @swagger
  * /bookings/{id}:
  *   get:
- *     summary: Get booking with job, invoice, and payment status (View Job)
+ *     summary: Get booking (View Job after payment)
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       **Mobile screen:** View Job from payment success actions.
+ *
+ *       Includes nested job (with `offerApplied`), trader `displayName`, invoice lineItems, and latest payment.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *         description: Booking UUID from publish `data.booking.id` or receipt `actions.viewJob`.
  *     responses:
  *       200:
- *         description: Booking detail for View Job screen.
+ *         description: Booking detail.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/BookingDetail' }
+ *       404:
+ *         description: Booking not found for this customer.
  */
 router.get(
   '/bookings/:id',

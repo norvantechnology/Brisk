@@ -94,10 +94,11 @@ const router = Router();
  *     description: |
  *       **Mobile screen:** Offers → Traders Offers.
  *
- *       Returns active, currently valid offers with `offerType=TRADER`.
- *       Each card includes `discountType` for the type icon, `claimed`, and trader info
- *       (`trader.fullName`, `trader.avgRating`, `trader.reviewsCount`, `trader.topRated`, `trader.isVerified`,
- *       `trader.profilePhotoUrl` / `trader.imageUrl`, `primaryCategory.iconUrl`, `categoryLabel`).
+ *       Returns active, currently valid offers with offerType=TRADER.
+ *       Each card includes discountType for the type icon, claimed, and trader info:
+ *       fullName, displayName, avgRating, reviewsCount, topRated, isVerified,
+ *       yearsExperience, experienceLabel (e.g. 10+ Yrs), city, location,
+ *       profilePhotoUrl / imageUrl, plus primaryCategory.iconUrl and categoryLabel.
  *       Query params map 1:1 to the confirmed filter modal (not a single opaque filter blob).
  *     parameters:
  *       - $ref: '#/components/parameters/OfferDateRange'
@@ -133,7 +134,7 @@ router.get(
  *     description: Claimed trader and Brisk offers for the logged-in customer (Claimed badge / next-job banner).
  *     responses:
  *       200:
- *         description: `data.claims` with nested offer objects.
+ *         description: data.claims with nested offer objects.
  */
 router.get(
   '/trader-offers/claimed',
@@ -155,10 +156,15 @@ router.get(
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: Offer UUID (`data.offers[].id`).
+ *         description: Offer UUID from data.offers[].id.
+ *     description: |
+ *       Offer detail for the offer card / Description and Terms screen.
+ *
+ *       Extra UI fields: termsAndConditions (same as fullDescription), expiresOn,
+ *       trader.yearsExperience / experienceLabel / location / displayName.
  *     responses:
  *       200:
- *         description: Offer detail including `claimed`.
+ *         description: Offer detail including claimed flag and UI term fields.
  */
 router.get(
   '/trader-offers/:id',
@@ -178,9 +184,20 @@ router.get(
  *       - bearerAuth: []
  *     description: |
  *       Links this offer to the customer (one claim per customer per offer).
- *       Response `nextJobPrefill` is what Post a New Job should use for the offer banner
- *       (`appliedTraderOfferId`, trader, categories, discount label).
- *       Invoice line `trader_offer_discount` is applied later when the job/invoice is created.
+ *
+ *       **Response data:**
+ *       - claim — id, status, claimedAt, jobId
+ *       - offer — full offer object with claimed=true
+ *       - nextJobPrefill — wire into Post a New Job / POST /jobs
+ *
+ *       **nextJobPrefill fields:**
+ *       - offerApplied (true) — show Offer Applied banner
+ *       - claimId, appliedTraderOfferId, offerId, traderId
+ *       - categoryId / categoryIds, subcategoryId / subcategoryIds
+ *       - bannerTitle, bannerSubtitle, discountLabel, bannerImageUrl, title
+ *       - ctaAction
+ *
+ *       Trader offer discount is applied later on invoice when the job is published.
  *     parameters:
  *       - in: path
  *         name: id
@@ -189,7 +206,57 @@ router.get(
  *         description: Offer UUID to claim.
  *     responses:
  *       200:
- *         description: Claim created. `data.offer`, `data.claim`, `data.nextJobPrefill`.
+ *         description: |
+ *           Claim created. Envelope data has offer, claim, and nextJobPrefill.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     claim:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string, format: uuid }
+ *                         status: { type: string, example: CLAIMED }
+ *                         claimedAt: { type: string, format: date-time }
+ *                         jobId: { type: string, format: uuid, nullable: true }
+ *                     offer: { type: object }
+ *                     nextJobPrefill:
+ *                       type: object
+ *                       properties:
+ *                         offerApplied: { type: boolean, example: true }
+ *                         claimId: { type: string, format: uuid }
+ *                         appliedTraderOfferId: { type: string, format: uuid }
+ *                         offerId: { type: string, format: uuid }
+ *                         traderId: { type: string, format: uuid, nullable: true }
+ *                         categoryId: { type: string, format: uuid, nullable: true }
+ *                         categoryIds: { type: array, items: { type: string, format: uuid } }
+ *                         subcategoryId: { type: string, format: uuid, nullable: true }
+ *                         subcategoryIds: { type: array, items: { type: string, format: uuid } }
+ *                         ctaAction: { type: string }
+ *                         bannerTitle: { type: string }
+ *                         bannerSubtitle: { type: string, nullable: true }
+ *                         discountLabel: { type: string, nullable: true }
+ *                         bannerImageUrl: { type: string, nullable: true }
+ *                         title: { type: string }
+ *             example:
+ *               success: true
+ *               message: Trader offer claimed successfully.
+ *               data:
+ *                 claim: { id: cbc8fa2a-4044-4aa7-9702-d5843d9920c3, status: CLAIMED }
+ *                 nextJobPrefill:
+ *                   offerApplied: true
+ *                   appliedTraderOfferId: b7692de1-4d8c-40db-98e6-079ce14e8d68
+ *                   claimId: cbc8fa2a-4044-4aa7-9702-d5843d9920c3
+ *                   traderId: 2a0d6b4d-889c-4e48-8270-11a20d00d169
+ *                   categoryId: e076d231-b0da-46cb-b60d-8aa9fbb8ce26
+ *                   bannerTitle: Live Offer 15
+ *                   bannerSubtitle: "5%"
  *       409:
  *         description: Already claimed.
  */
@@ -315,7 +382,7 @@ router.post(
  *           **Alias:** `category_id`.
  *     responses:
  *       200:
- *         description: `data.promoCodes` array.
+ *         description: data.promoCodes array.
  */
 router.get(
   '/promo-codes',
