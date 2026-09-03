@@ -92,14 +92,17 @@ const router = Router();
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Offers → Traders Offers.
+ *       **Mobile screen:** Offers → Traders Offers list.
+ *
+ *       **Claim Now button:** navigate only to Offer Detail (GET /trader-offers/{id}).
+ *       Do **not** call claim/accept API from the list CTA.
  *
  *       Returns active, currently valid offers with offerType=TRADER.
  *       Each card includes discountType for the type icon, claimed, and trader info:
- *       fullName, displayName, avgRating, reviewsCount, topRated, isVerified,
+ *       fullName, displayName (businessName or person name), avgRating, reviewsCount, topRated, isVerified,
  *       yearsExperience, experienceLabel (e.g. 10+ Yrs), city, location,
  *       profilePhotoUrl / imageUrl, plus primaryCategory.iconUrl and categoryLabel.
- *       Query params map 1:1 to the confirmed filter modal (not a single opaque filter blob).
+ *       Query params map 1:1 to the confirmed filter modal.
  *     parameters:
  *       - $ref: '#/components/parameters/OfferDateRange'
  *       - $ref: '#/components/parameters/OfferDateFrom'
@@ -147,7 +150,7 @@ router.get(
  * @swagger
  * /trader-offers/{id}:
  *   get:
- *     summary: Get one trader / marketplace offer
+ *     summary: Offer Detail screen (after Claim Now navigate)
  *     tags: ['Customer / Offers']
  *     security:
  *       - bearerAuth: []
@@ -158,13 +161,17 @@ router.get(
  *         schema: { type: string, format: uuid }
  *         description: Offer UUID from data.offers[].id.
  *     description: |
- *       Offer detail for the offer card / Description and Terms screen.
+ *       **Mobile screen:** Offer Detail (opened from list Claim Now — navigation only).
  *
- *       Extra UI fields: termsAndConditions (same as fullDescription), expiresOn,
- *       trader.yearsExperience / experienceLabel / location / displayName.
+ *       Shows banner, Description and Terms (termsAndConditions / fullDescription), expiresOn,
+ *       trader.displayName / yearsExperience / experienceLabel / location.
+ *
+ *       **Accept Offer button** on this screen calls POST /trader-offers/{id}/accept
+ *       (see data.actions.acceptOffer). Then navigate to Post a New Job.
  *     responses:
  *       200:
- *         description: Offer detail including claimed flag and UI term fields.
+ *         description: |
+ *           Offer detail plus actions.claimNow (navigate) and actions.acceptOffer (API).
  */
 router.get(
   '/trader-offers/:id',
@@ -178,26 +185,17 @@ router.get(
  * @swagger
  * /trader-offers/{id}/claim:
  *   post:
- *     summary: Claim a trader offer for the next job
+ *     summary: "[Alias] Claim offer — prefer Accept Offer /accept for UI"
  *     tags: ['Customer / Offers']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Links this offer to the customer (one claim per customer per offer).
+ *       Same behaviour as POST /trader-offers/{id}/accept.
  *
- *       **Response data:**
- *       - claim — id, status, claimedAt, jobId
- *       - offer — full offer object with claimed=true
- *       - nextJobPrefill — wire into Post a New Job / POST /jobs
+ *       **Mobile:** Prefer /accept for the Offer Detail Accept Offer button.
+ *       List Claim Now should NOT call this — only navigate to detail.
  *
- *       **nextJobPrefill fields:**
- *       - offerApplied (true) — show Offer Applied banner
- *       - claimId, appliedTraderOfferId, offerId, traderId
- *       - categoryId / categoryIds, subcategoryId / subcategoryIds
- *       - bannerTitle, bannerSubtitle, discountLabel, bannerImageUrl, title
- *       - ctaAction
- *
- *       Trader offer discount is applied later on invoice when the job is published.
+ *       Response includes nextJobPrefill, jobFormConfig, navigation (same as /accept).
  *     parameters:
  *       - in: path
  *         name: id
@@ -207,56 +205,7 @@ router.get(
  *     responses:
  *       200:
  *         description: |
- *           Claim created. Envelope data has offer, claim, and nextJobPrefill.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 message: { type: string }
- *                 data:
- *                   type: object
- *                   properties:
- *                     claim:
- *                       type: object
- *                       properties:
- *                         id: { type: string, format: uuid }
- *                         status: { type: string, example: CLAIMED }
- *                         claimedAt: { type: string, format: date-time }
- *                         jobId: { type: string, format: uuid, nullable: true }
- *                     offer: { type: object }
- *                     nextJobPrefill:
- *                       type: object
- *                       properties:
- *                         offerApplied: { type: boolean, example: true }
- *                         claimId: { type: string, format: uuid }
- *                         appliedTraderOfferId: { type: string, format: uuid }
- *                         offerId: { type: string, format: uuid }
- *                         traderId: { type: string, format: uuid, nullable: true }
- *                         categoryId: { type: string, format: uuid, nullable: true }
- *                         categoryIds: { type: array, items: { type: string, format: uuid } }
- *                         subcategoryId: { type: string, format: uuid, nullable: true }
- *                         subcategoryIds: { type: array, items: { type: string, format: uuid } }
- *                         ctaAction: { type: string }
- *                         bannerTitle: { type: string }
- *                         bannerSubtitle: { type: string, nullable: true }
- *                         discountLabel: { type: string, nullable: true }
- *                         bannerImageUrl: { type: string, nullable: true }
- *                         title: { type: string }
- *             example:
- *               success: true
- *               message: Trader offer claimed successfully.
- *               data:
- *                 claim: { id: cbc8fa2a-4044-4aa7-9702-d5843d9920c3, status: CLAIMED }
- *                 nextJobPrefill:
- *                   offerApplied: true
- *                   appliedTraderOfferId: b7692de1-4d8c-40db-98e6-079ce14e8d68
- *                   claimId: cbc8fa2a-4044-4aa7-9702-d5843d9920c3
- *                   traderId: 2a0d6b4d-889c-4e48-8270-11a20d00d169
- *                   categoryId: e076d231-b0da-46cb-b60d-8aa9fbb8ce26
- *                   bannerTitle: Live Offer 15
- *                   bannerSubtitle: "5%"
+ *           Same payload as /accept — claim, offer, navigation, nextJobPrefill, jobFormConfig.
  *       409:
  *         description: Already claimed.
  */
@@ -295,7 +244,66 @@ router.post(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Offer accepted. data has claim, offer, navigation, nextJobPrefill, jobFormConfig.
+ *         description: Offer accepted — continue to Post a New Job.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Offer accepted. Continue to Post a New Job." }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     claim: { type: object }
+ *                     offer: { type: object }
+ *                     navigation:
+ *                       type: object
+ *                       properties:
+ *                         nextScreen: { type: string, example: POST_NEW_JOB }
+ *                         afterJobForm: { type: string, example: CHOOSE_LOCATION }
+ *                         afterLocation: { type: string, example: PAYMENT_DETAILS }
+ *                     nextJobPrefill:
+ *                       type: object
+ *                       properties:
+ *                         offerApplied: { type: boolean, example: true }
+ *                         claimId: { type: string, format: uuid }
+ *                         appliedTraderOfferId: { type: string, format: uuid }
+ *                         offerId: { type: string, format: uuid }
+ *                         traderId: { type: string, format: uuid, nullable: true }
+ *                         categoryId: { type: string, format: uuid, nullable: true }
+ *                         categoryIds: { type: array, items: { type: string, format: uuid } }
+ *                         subcategoryId: { type: string, format: uuid, nullable: true }
+ *                         subcategoryIds: { type: array, items: { type: string, format: uuid } }
+ *                         bannerTitle: { type: string }
+ *                         bannerSubtitle: { type: string, nullable: true }
+ *                         discountLabel: { type: string, nullable: true }
+ *                         bannerImageUrl: { type: string, nullable: true }
+ *                         title: { type: string }
+ *                         quoteType: { type: string, example: FIXED }
+ *                     jobFormConfig:
+ *                       $ref: '#/components/schemas/JobFormConfig'
+ *             example:
+ *               success: true
+ *               message: Offer accepted. Continue to Post a New Job.
+ *               data:
+ *                 navigation: { nextScreen: POST_NEW_JOB, afterJobForm: CHOOSE_LOCATION, afterLocation: PAYMENT_DETAILS }
+ *                 nextJobPrefill:
+ *                   offerApplied: true
+ *                   appliedTraderOfferId: b7692de1-4d8c-40db-98e6-079ce14e8d68
+ *                   claimId: cbc8fa2a-4044-4aa7-9702-d5843d9920c3
+ *                   quoteType: FIXED
+ *                   bannerTitle: Live Offer 15
+ *                   bannerSubtitle: "5%"
+ *                 jobFormConfig:
+ *                   offerApplied: true
+ *                   showQuoteType: false
+ *                   quoteTypeLocked: FIXED
+ *                   showBudgetRange: false
+ *                   showServiceCharge: true
+ *                   showImageUpload: true
+ *                   imageUploadPurpose: job_photo
+ *                   nextAfterLocation: PAYMENT_DETAILS
  *       409:
  *         description: Already claimed/accepted.
  */

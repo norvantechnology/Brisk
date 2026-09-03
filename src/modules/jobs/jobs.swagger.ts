@@ -5,6 +5,49 @@
  *     JobStatus:
  *       type: string
  *       enum: [DRAFT, PUBLISHED, QUOTED, ACCEPTED, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, PAYMENT_PENDING]
+ *     JobQuoteType:
+ *       type: string
+ *       enum: [FIXED, BUDGET_RANGE, OPEN_QUOTE]
+ *       description: |
+ *         FIXED = single service charge (Direct Trader / Accept Offer).
+ *         BUDGET_RANGE = show minBudget + maxBudget.
+ *         OPEN_QUOTE = request quotes (no budget).
+ *     JobFormConfig:
+ *       type: object
+ *       description: |
+ *         Show/hide rules for Post a New Job. Returned on Accept Offer (data.jobFormConfig)
+ *         and on Job responses (data.formConfig).
+ *       properties:
+ *         offerApplied: { type: boolean }
+ *         showOfferBanner: { type: boolean }
+ *         showQuoteType: { type: boolean, description: False on Direct Trader Accept Offer path }
+ *         quoteTypeOptions:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               key: { $ref: '#/components/schemas/JobQuoteType' }
+ *               label: { type: string }
+ *         defaultQuoteType: { $ref: '#/components/schemas/JobQuoteType' }
+ *         quoteTypeLocked: { allOf: [{ $ref: '#/components/schemas/JobQuoteType' }], nullable: true }
+ *         showServiceCharge: { type: boolean }
+ *         serviceChargeRequired: { type: boolean }
+ *         showBudgetRange: { type: boolean, description: Client shows min/max when quoteType is BUDGET_RANGE }
+ *         showMinBudget: { type: boolean }
+ *         showMaxBudget: { type: boolean }
+ *         showSiteVisit: { type: boolean }
+ *         showQaForm: { type: boolean }
+ *         qaFormSchema: { type: array, items: { type: object } }
+ *         showImageUpload: { type: boolean, example: true }
+ *         imageUploadPurpose: { type: string, example: job_photo }
+ *         maxImages: { type: integer, example: 10 }
+ *         priceEnabled: { type: boolean }
+ *         priceEnteredBy: { type: string, enum: [CUSTOMER, TRADER] }
+ *         nextAfterJobForm: { type: string, example: CHOOSE_LOCATION }
+ *         nextAfterLocation:
+ *           type: string
+ *           enum: [PAYMENT_DETAILS, WAITING_FOR_QUOTES]
+ *           description: Direct Trader → PAYMENT_DETAILS after location select
  *     JobOfferBanner:
  *       type: object
  *       nullable: true
@@ -92,6 +135,10 @@
  *         durationLabel: { type: string, nullable: true, example: "1 Hour" }
  *         phoneNumber: { type: string, nullable: true }
  *         serviceCharge: { type: number, nullable: true, example: 125 }
+ *         quoteType: { $ref: '#/components/schemas/JobQuoteType' }
+ *         minBudget: { type: number, nullable: true }
+ *         maxBudget: { type: number, nullable: true }
+ *         siteVisitRequested: { type: boolean }
  *         status: { $ref: '#/components/schemas/JobStatus' }
  *         scheduledDate: { type: string, format: date-time, nullable: true }
  *         qaFormAnswers: { type: object, nullable: true }
@@ -118,6 +165,7 @@
  *             id: { type: string, format: uuid }
  *             name: { type: string }
  *         offerApplied: { type: boolean, description: Show Offer Applied chip when true }
+ *         formConfig: { $ref: '#/components/schemas/JobFormConfig' }
  *         offer: { $ref: '#/components/schemas/JobOfferBanner' }
  *         address: { $ref: '#/components/schemas/JobAddress' }
  *         trader: { $ref: '#/components/schemas/JobTrader' }

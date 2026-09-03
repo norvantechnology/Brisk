@@ -24,20 +24,25 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Post a New Job (draft).
+ *       **Mobile screen:** Post a New Job (after Accept Offer).
  *
  *       **Auth:** Customer Bearer token.
  *
- *       **Flow order:**
- *       1. Claim offer → `POST /trader-offers/{id}/claim` → use `data.nextJobPrefill`
- *       2. `POST /jobs` with prefill fields (`appliedTraderOfferId`, `claimId`, `traderId`, `categoryId`, …)
- *       3. `PUT /jobs/{id}/location` with saved `addressId`
- *       4. `POST /jobs/{id}/publish` → booking + invoice
- *       5. Checkout via `/invoices` + `/payments`
+ *       **Confirmed UI flow:**
+ *       1. Offers list Claim Now → Offer Detail (GET) — no claim API
+ *       2. Accept Offer → POST /trader-offers/{id}/accept → use nextJobPrefill + jobFormConfig
+ *       3. This endpoint — create draft (quote type / min-max budget per jobFormConfig; images via uploads)
+ *       4. Choose Location → PUT /jobs/{id}/location
+ *       5. Publish → Payment Details → checkout Success/Fail
  *
- *       **Aliases:** `appliedTraderOfferId` and `offerId` are both accepted (same offer UUID).
+ *       **Images:** POST /uploads with purpose=job_photo, then pass urls in photoUrls.
  *
- *       **Response:** `data` is a Job object (includes `offerApplied`, `offer.bannerTitle`, `nextSteps`).
+ *       **Show/hide:** Prefer jobFormConfig from Accept Offer (also returned on Job as data.formConfig).
+ *       Direct Trader: quote type locked FIXED, min/max budget hidden, serviceCharge shown.
+ *
+ *       **Aliases:** appliedTraderOfferId and offerId are both accepted.
+ *
+ *       **Response:** Job includes offerApplied, quoteType, formConfig, nextSteps.
  *     requestBody:
  *       required: true
  *       content:
@@ -53,11 +58,14 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *             timeSlot: Morning
  *             durationLabel: "1 Hour"
  *             phoneNumber: "+353871234567"
- *             photoUrls: []
+ *             photoUrls:
+ *               - "https://brisk-aclm.onrender.com/uploads/files/job_photo/uuid/photo.png"
  *             appliedTraderOfferId: b7692de1-4d8c-40db-98e6-079ce14e8d68
  *             claimId: cbc8fa2a-4044-4aa7-9702-d5843d9920c3
  *             traderId: 2a0d6b4d-889c-4e48-8270-11a20d00d169
+ *             quoteType: FIXED
  *             serviceCharge: 125
+ *             siteVisitRequested: false
  *     responses:
  *       201:
  *         description: Job draft created. Body envelope is success/message/data (Job).
@@ -182,17 +190,18 @@ router.patch('/:id', ...customerOnly, validate(updateJobSchema), controller.upda
  * @swagger
  * /jobs/{id}/location:
  *   put:
- *     summary: Set job location from a saved address
+ *     summary: Choose Location — select saved address on job
  *     tags: ['Customer / Jobs']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Choose location / saved address step.
+ *       **Mobile screen:** Choose Location (after Post a New Job).
  *
- *       Copies address fields onto the job (`addressLine`, `city`, `postcode`, lat/lng).
- *       After success, `nextSteps.needsLocation` becomes false and `canPublish` true (while DRAFT).
+ *       Create address first with POST /addresses, then call this to select it.
+ *       Copies address fields onto the job.
  *
- *       Create addresses first via `POST /addresses`.
+ *       After success (Direct Trader / offer applied): nextSteps.nextAfterLocation = PAYMENT_DETAILS.
+ *       Next app step: POST /jobs/{id}/publish then open Payment Details.
  *     parameters:
  *       - in: path
  *         name: id
@@ -233,27 +242,20 @@ router.put(
  * @swagger
  * /jobs/{id}/publish:
  *   post:
- *     summary: Publish job (Direct Trader creates Quote + Booking + Invoice)
+ *     summary: Publish job → Payment Details (Direct Trader)
  *     tags: ['Customer / Jobs']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Review and publish / continue to payment.
+ *       **Mobile:** After Choose Location — continue to Payment Details.
  *
- *       **Requirements:**
- *       - Job must be DRAFT
- *       - Address required (body.addressId or previously set via location)
- *       - Direct Trader (`traderId` set) requires `serviceCharge` on body or draft
+ *       **Requirements:** DRAFT job, address set, serviceCharge for Direct Trader.
  *
- *       **Direct Trader side effects:**
- *       - Auto-accepted Quote
- *       - Booking (SCHEDULED)
- *       - Unpaid Invoice with Service Charge / Platform Fee (10% post-offer) / Trader Offer discount
- *       - Offer claim marked USED
- *       - Job status → SCHEDULED
+ *       **Direct Trader side effects:** Quote (ACCEPTED) + Booking + Unpaid Invoice;
+ *       claim marked USED; job → SCHEDULED.
  *
- *       **Response `data`:** `{ job, booking, invoice }` where `invoice` is the full Payment Details payload
- *       (same shape as GET /invoices/{id}), including `lineItems`, `payNowLabel`, `orderId`, `serviceSummary`.
+ *       **Response data.invoice** is the Payment Details payload (lineItems, payNowLabel, orderId).
+ *       Then: POST /payments/intent → confirm (Success) or fail (Fail screen).
  *
  *       **Math example:** serviceCharge 125, 5% offer → discount 6.25, platform fee 11.88, total 130.63.
  *     parameters:

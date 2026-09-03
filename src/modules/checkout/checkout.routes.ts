@@ -129,12 +129,12 @@ router.post(
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** After choosing Apple Pay / Google Pay / Card on Payment Details.
+ *       **Mobile screen:** Payment Details → choose Apple Pay / Google Pay / Card → checkout.
  *
- *       Creates a PENDING payment row. Currently **mock Stripe** (`mock: true`) —
- *       use returned `paymentId` with `POST /payments/{id}/confirm` (no real Stripe SDK required yet).
+ *       Creates a PENDING payment. Currently mock Stripe (mock true) —
+ *       then call POST /payments/{id}/confirm for Success or POST /payments/{id}/fail for Fail.
  *
- *       When `billingType=COMPANY`, `companyName` is required.
+ *       When billingType=COMPANY, companyName is required.
  *     requestBody:
  *       required: true
  *       content:
