@@ -4,6 +4,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../utils/error
 import { effectiveStatus, enrichOfferWithCurrency, offerInclude, serializeOfferWithMeta } from './offers.serializers';
 import { buildOfferWhere, normalizeOfferListFilters } from './offers.query';
 import { resolveUserCurrency } from '../../services/currency.service';
+import { buildJobFormConfig } from '../jobs/jobs.form-config';
 
 const publicInclude = {
   ...offerInclude,
@@ -95,7 +96,31 @@ export const getPublicOffer = async (id: string, userId?: string) => {
     ...(await serializeOfferWithMeta(offer)),
     claimed,
   };
-  return enrichOfferWithCurrency(base, viewerCurrency);
+  const enriched = await enrichOfferWithCurrency(base, viewerCurrency);
+
+  return {
+    ...enriched,
+    /**
+     * Mobile UI flow:
+     * Offers list "Claim Now" → this detail screen (GET).
+     * Detail "Accept Offer" → POST /trader-offers/{id}/accept (or /claim) → Post a New Job.
+     */
+    actions: {
+      claimNow: {
+        type: 'NAVIGATE',
+        screen: 'OFFER_DETAIL',
+        note: 'List CTA only — open this detail. Do not call claim API yet.',
+      },
+      acceptOffer: {
+        type: 'API',
+        method: 'POST',
+        path: `/trader-offers/${id}/accept`,
+        alternatePath: `/trader-offers/${id}/claim`,
+        nextScreen: 'POST_NEW_JOB',
+        note: 'Accept Offer button — claims offer and returns nextJobPrefill + jobFormConfig.',
+      },
+    },
+  };
 };
 
 export const claimOffer = async (userId: string, offerId: string, expectedType?: OfferType) => {
@@ -146,6 +171,17 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
     viewerCurrency
   );
 
+  const categoryId = offer.categories[0]?.categoryId ?? null;
+  const subcategoryId = offer.subcategories[0]?.subcategoryId ?? null;
+  const subcategory = subcategoryId
+    ? await prisma.subcategory.findUnique({ where: { id: subcategoryId } })
+    : null;
+
+  const jobFormConfig = buildJobFormConfig({
+    offerApplied: true,
+    subcategory,
+  });
+
   return {
     claim: {
       id: claim.id,
@@ -154,14 +190,20 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
       jobId: claim.jobId,
     },
     offer: resolvedOffer,
+    /** Wire Accept Offer → Post a New Job */
+    navigation: {
+      nextScreen: 'POST_NEW_JOB',
+      afterJobForm: 'CHOOSE_LOCATION',
+      afterLocation: 'PAYMENT_DETAILS',
+    },
     nextJobPrefill: {
       claimId: claim.id,
       appliedTraderOfferId: offer.id,
       offerId: offer.id,
       traderId: offer.traderId,
-      categoryId: offer.categories[0]?.categoryId ?? null,
+      categoryId,
       categoryIds: offer.categories.map((item) => item.categoryId),
-      subcategoryId: offer.subcategories[0]?.subcategoryId ?? null,
+      subcategoryId,
       subcategoryIds: offer.subcategories.map((item) => item.subcategoryId),
       ctaAction: resolvedOffer.ctaAction,
       /** "Offer Applied" banner on Post a New Job. */
@@ -171,7 +213,11 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
       discountLabel: resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel,
       bannerImageUrl: offer.bannerImageUrl,
       title: offer.title,
+      /** Locked to FIXED for Direct Trader accept-offer path */
+      quoteType: jobFormConfig.defaultQuoteType,
     },
+    /** Show/hide quote type, min/max budget, images, site visit on Post a New Job */
+    jobFormConfig,
   };
 };
 

@@ -84,6 +84,25 @@ export const claimTraderOffer = async (
   }
 };
 
+/** Alias of claim — maps to Figma "Accept Offer" on offer detail. */
+export const acceptTraderOffer = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await publicOffersService.claimOffer(req.user!.id, req.params.id, OfferType.TRADER);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Offer accepted. Continue to Post a New Job.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const claimBriskOffer = async (
   req: AuthenticatedRequest,
   res: Response,

@@ -202,6 +202,16 @@ enum SubcategoryPriceEnteredBy {
   TRADER
 }
 
+/// How the customer wants pricing handled on Post a New Job.
+enum JobQuoteType {
+  /// Single fixed service charge (Direct Trader / fixed price)
+  FIXED
+  /// Customer sets min/max budget; traders quote within range
+  BUDGET_RANGE
+  /// No budget — open bidding / request quotes
+  OPEN_QUOTE
+}
+
 enum DocumentRuleScope {
   ENTITY
   CATEGORY
@@ -586,6 +596,13 @@ model Job {
   phoneNumber   String?   @map("phone_number")
   /// Direct Trader flow: quoted/service charge before fees & discounts
   serviceCharge Decimal?  @map("service_charge") @db.Decimal(10, 2)
+  /// Post a New Job — quote type (show/hide driven by subcategory + offerApplied)
+  quoteType     JobQuoteType? @map("quote_type")
+  /// Budget range when quoteType = BUDGET_RANGE
+  minBudget     Decimal?  @map("min_budget") @db.Decimal(10, 2)
+  maxBudget     Decimal?  @map("max_budget") @db.Decimal(10, 2)
+  /// When subcategory.siteVisitEnabled — customer opt-in
+  siteVisitRequested Boolean @default(false) @map("site_visit_requested")
   status        JobStatus @default(DRAFT)
   scheduledDate DateTime? @map("scheduled_date")
   /// Answers to subcategory.qaFormSchema when the job was posted (fieldId → value)

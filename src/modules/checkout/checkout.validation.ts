@@ -59,6 +59,16 @@ export const confirmPaymentSchema = z.object({
     .default({}),
 });
 
+export const failPaymentSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z
+    .object({
+      reason: z.string().trim().max(500).optional(),
+    })
+    .optional()
+    .default({}),
+});
+
 export const bookingIdParamSchema = z.object({
   params: z.object({ id: uuid }),
 });
@@ -66,3 +76,4 @@ export const bookingIdParamSchema = z.object({
 export type ApplyPromoInput = z.infer<typeof applyPromoSchema>['body'];
 export type CreatePaymentIntentInput = z.infer<typeof createPaymentIntentSchema>['body'];
 export type ConfirmPaymentInput = z.infer<typeof confirmPaymentSchema>['body'];
+export type FailPaymentInput = z.infer<typeof failPaymentSchema>['body'];

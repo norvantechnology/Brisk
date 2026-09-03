@@ -8,6 +8,7 @@ import {
   bookingIdParamSchema,
   confirmPaymentSchema,
   createPaymentIntentSchema,
+  failPaymentSchema,
   invoiceIdParamSchema,
   paymentIdParamSchema,
 } from './checkout.validation';
@@ -237,6 +238,46 @@ router.post(
   ...customerOnly,
   validate(confirmPaymentSchema),
   controller.confirmPayment
+);
+
+/**
+ * @swagger
+ * /payments/{id}/fail:
+ *   post:
+ *     summary: Mark payment failed (Payment Failed screen)
+ *     tags: ['Customer / Checkout']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Mobile screen:** Payment Failed after wallet/card decline or user cancel.
+ *
+ *       Marks payment FAILED (invoice stays UNPAID). Response includes title, message,
+ *       empty timeline, and retryPayment action (create a new intent).
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string, example: Card declined }
+ *     responses:
+ *       200:
+ *         description: Failure payload for fail screen.
+ *       400:
+ *         description: Payment already completed.
+ *       404:
+ *         description: Payment not found.
+ */
+router.post(
+  '/payments/:id/fail',
+  ...customerOnly,
+  validate(failPaymentSchema),
+  controller.failPayment
 );
 
 /**

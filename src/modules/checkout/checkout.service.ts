@@ -12,6 +12,7 @@ import type {
   ApplyPromoInput,
   ConfirmPaymentInput,
   CreatePaymentIntentInput,
+  FailPaymentInput,
 } from './checkout.validation';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
@@ -525,6 +526,68 @@ export const confirmPayment = async (
   });
 
   return buildReceipt(payment.id, userId);
+};
+
+export const failPayment = async (
+  userId: string,
+  paymentId: string,
+  input: FailPaymentInput
+) => {
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId, userId },
+    include: { invoice: { include: invoiceOwnershipInclude } },
+  });
+  if (!payment) throw new NotFoundError('Payment not found.');
+
+  if (payment.status === PaymentStatus.COMPLETED) {
+    throw new BadRequestError('This payment is already completed.');
+  }
+
+  if (payment.status !== PaymentStatus.FAILED) {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.FAILED },
+    });
+  }
+
+  const invoice = payment.invoice;
+  const amount = money(payment.amount);
+
+  return {
+    paymentId: payment.id,
+    transactionId: payment.transactionRef,
+    transactionRef: payment.transactionRef,
+    status: PaymentStatus.FAILED,
+    method: payment.method,
+    amount,
+    amountFormatted: formatMoneyLabel(amount, payment.currencyCode),
+    currencyCode: payment.currencyCode,
+    currencySymbol: currencySymbol(payment.currencyCode),
+    title: 'Payment Failed',
+    message: input.reason || 'Your payment could not be completed. Please try again.',
+    reason: input.reason ?? null,
+    timeline: [
+      { key: 'PAID', label: 'Paid', completed: false, at: null },
+      { key: 'CONFIRMED', label: 'Confirmed', completed: false, at: null },
+      { key: 'SERVICE', label: 'Service', completed: false, at: null },
+    ],
+    actions: {
+      retryPayment: {
+        method: 'POST',
+        path: '/payments/intent',
+        invoiceId: payment.invoiceId,
+      },
+      viewInvoice: { method: 'GET', path: `/invoices/${payment.invoiceId}` },
+      backToHome: { path: '/' },
+    },
+    invoice: {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
+      status: invoice.status,
+      totalAmount: money(invoice.totalAmount),
+    },
+  };
 };
 
 export const getPaymentReceipt = async (userId: string, paymentId: string) => {

@@ -270,6 +270,45 @@ router.post(
 
 /**
  * @swagger
+ * /trader-offers/{id}/accept:
+ *   post:
+ *     summary: Accept Offer (same as claim) — navigate to Post a New Job
+ *     tags: ['Customer / Offers']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Mobile UI flow:**
+ *       1. Offers list → Claim Now → Offer Detail (GET /trader-offers/{id}) — no API claim yet
+ *       2. Offer Detail → Accept Offer → THIS endpoint
+ *       3. Response nextJobPrefill + jobFormConfig → open Post a New Job
+ *       4. Post job (images via POST /uploads purpose=job_photo) → Choose Location → publish → Payment → Success/Fail
+ *
+ *       Alias of POST /trader-offers/{id}/claim. Prefer /accept for the Accept Offer button.
+ *
+ *       jobFormConfig drives show/hide for quote type and min/max budget:
+ *       - Direct Trader (offer accepted): quote type locked FIXED, budget hidden, serviceCharge required
+ *       - Without offer: quote type options from subcategory priceEnabled / priceEnteredBy
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Offer accepted. data has claim, offer, navigation, nextJobPrefill, jobFormConfig.
+ *       409:
+ *         description: Already claimed/accepted.
+ */
+router.post(
+  '/trader-offers/:id/accept',
+  authMiddleware,
+  roleMiddleware(['CUSTOMER']),
+  validate(offerIdParamSchema),
+  controller.acceptTraderOffer
+);
+
+/**
+ * @swagger
  * /brisk-offers:
  *   get:
  *     summary: List platform-curated Brisk Offers

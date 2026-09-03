@@ -1,5 +1,6 @@
 import {
   DiscountType,
+  JobQuoteType,
   JobStatus,
   OfferClaimStatus,
   Prisma,
@@ -10,6 +11,7 @@ import {
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
+import { buildJobFormConfig, resolveQuoteTypeForCreate } from './jobs.form-config';
 import type {
   CreateJobInput,
   PublishJobInput,
@@ -109,7 +111,16 @@ const jobInclude = {
   },
   address: true,
   category: { select: { id: true, name: true } },
-  subcategory: { select: { id: true, name: true } },
+  subcategory: {
+    select: {
+      id: true,
+      name: true,
+      siteVisitEnabled: true,
+      priceEnabled: true,
+      priceEnteredBy: true,
+      qaFormSchema: true,
+    },
+  },
   trader: {
     select: {
       id: true,
@@ -167,6 +178,10 @@ const serializeJob = (
     durationLabel: job.durationLabel,
     phoneNumber: job.phoneNumber,
     serviceCharge: job.serviceCharge != null ? money(job.serviceCharge) : null,
+    quoteType: job.quoteType ?? null,
+    minBudget: job.minBudget != null ? money(job.minBudget) : null,
+    maxBudget: job.maxBudget != null ? money(job.maxBudget) : null,
+    siteVisitRequested: job.siteVisitRequested,
     status: job.status,
     scheduledDate: job.scheduledDate,
     qaFormAnswers: job.qaFormAnswers,
@@ -175,9 +190,22 @@ const serializeJob = (
     photos: job.photos.map((p) => ({ id: p.id, photoUrl: p.photoUrl, createdAt: p.createdAt })),
     coverPhotoUrl: job.photos[0]?.photoUrl ?? null,
     category: job.category,
-    subcategory: job.subcategory,
+    subcategory: job.subcategory
+      ? {
+          id: job.subcategory.id,
+          name: job.subcategory.name,
+          siteVisitEnabled: job.subcategory.siteVisitEnabled,
+          priceEnabled: job.subcategory.priceEnabled,
+          priceEnteredBy: job.subcategory.priceEnteredBy,
+          qaFormSchema: job.subcategory.qaFormSchema ?? [],
+        }
+      : null,
     /** True when an offer banner should show on job screens. */
     offerApplied,
+    formConfig: buildJobFormConfig({
+      offerApplied,
+      subcategory: job.subcategory,
+    }),
     offer: job.offer
       ? {
           id: job.offer.id,
@@ -260,6 +288,15 @@ const serializeJob = (
       canPay: Boolean(job.booking?.invoice?.id),
       invoiceId: job.booking?.invoice?.id ?? null,
       bookingId: job.booking?.id ?? null,
+      /** Direct Trader → PAYMENT_DETAILS; quote-wise → WAITING_FOR_QUOTES */
+      nextAfterLocation: offerApplied ? 'PAYMENT_DETAILS' : 'WAITING_FOR_QUOTES',
+      nextScreen: !job.addressId
+        ? 'CHOOSE_LOCATION'
+        : job.booking?.invoice?.id
+          ? 'PAYMENT_DETAILS'
+          : job.status === JobStatus.DRAFT
+            ? 'PUBLISH'
+            : null,
     },
   };
 };
@@ -324,16 +361,39 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
   const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
   if (!category) throw new NotFoundError('Category not found.');
 
+  let subcategoryFlags = null;
   if (input.subcategoryId) {
     const subcategory = await prisma.subcategory.findFirst({
       where: { id: input.subcategoryId, categoryId: input.categoryId },
     });
     if (!subcategory) throw new BadRequestError('Subcategory does not belong to the category.');
+    subcategoryFlags = subcategory;
   }
 
   if (traderId) {
     const trader = await prisma.trader.findUnique({ where: { id: traderId } });
     if (!trader) throw new NotFoundError('Trader not found.');
+  }
+
+  const offerApplied = Boolean(offerId);
+  const formConfig = buildJobFormConfig({
+    offerApplied,
+    subcategory: subcategoryFlags,
+  });
+  const quoteType = resolveQuoteTypeForCreate({
+    offerApplied,
+    quoteType: input.quoteType,
+    formDefault: formConfig.defaultQuoteType,
+  });
+
+  if (quoteType === JobQuoteType.FIXED && offerApplied && input.serviceCharge == null) {
+    // Allow draft without charge; publish still requires it.
+  }
+  if (
+    quoteType === JobQuoteType.BUDGET_RANGE &&
+    (input.minBudget == null || input.maxBudget == null)
+  ) {
+    // Draft may omit until user fills; no hard fail here.
   }
 
   const title =
@@ -365,7 +425,14 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
           timeSlot: input.timeSlot,
           durationLabel: input.durationLabel,
           phoneNumber: input.phoneNumber,
-          serviceCharge: input.serviceCharge,
+          serviceCharge:
+            quoteType === JobQuoteType.FIXED ? input.serviceCharge : undefined,
+          quoteType,
+          minBudget:
+            quoteType === JobQuoteType.BUDGET_RANGE ? input.minBudget ?? undefined : undefined,
+          maxBudget:
+            quoteType === JobQuoteType.BUDGET_RANGE ? input.maxBudget ?? undefined : undefined,
+          siteVisitRequested: input.siteVisitRequested ?? false,
           qaFormAnswers: input.qaFormAnswers as Prisma.InputJsonValue | undefined,
           status: JobStatus.DRAFT,
           photos: input.photoUrls?.length
@@ -452,6 +519,11 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
         durationLabel: input.durationLabel === undefined ? undefined : input.durationLabel,
         phoneNumber: input.phoneNumber === undefined ? undefined : input.phoneNumber,
         serviceCharge: input.serviceCharge === undefined ? undefined : input.serviceCharge,
+        quoteType: input.quoteType === undefined ? undefined : input.quoteType,
+        minBudget: input.minBudget === undefined ? undefined : input.minBudget,
+        maxBudget: input.maxBudget === undefined ? undefined : input.maxBudget,
+        siteVisitRequested:
+          input.siteVisitRequested === undefined ? undefined : input.siteVisitRequested,
         traderId: input.traderId === undefined ? undefined : input.traderId,
         qaFormAnswers:
           input.qaFormAnswers === undefined

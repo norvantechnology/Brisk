@@ -211,7 +211,20 @@
  *           type: number
  *           minimum: 0
  *           example: 125
- *           description: Base service amount. Required before/at publish for Direct Trader jobs.
+ *           description: Base service amount. Required before/at publish for Direct Trader FIXED jobs.
+ *         quoteType:
+ *           type: string
+ *           enum: [FIXED, BUDGET_RANGE, OPEN_QUOTE]
+ *           description: From jobFormConfig. Direct Trader Accept Offer locks FIXED.
+ *         minBudget:
+ *           type: number
+ *           description: Required when quoteType=BUDGET_RANGE (show/hide via jobFormConfig).
+ *         maxBudget:
+ *           type: number
+ *           description: Required when quoteType=BUDGET_RANGE.
+ *         siteVisitRequested:
+ *           type: boolean
+ *           description: Show when subcategory.siteVisitEnabled / formConfig.showSiteVisit.
  *     UpdateJobRequest:
  *       type: object
  *       properties:
@@ -227,6 +240,10 @@
  *         qaFormAnswers: { type: object, nullable: true }
  *         serviceCharge: { type: number, minimum: 0, nullable: true }
  *         traderId: { type: string, format: uuid, nullable: true }
+ *         quoteType: { type: string, enum: [FIXED, BUDGET_RANGE, OPEN_QUOTE] }
+ *         minBudget: { type: number, nullable: true }
+ *         maxBudget: { type: number, nullable: true }
+ *         siteVisitRequested: { type: boolean }
  *     SetJobLocationRequest:
  *       type: object
  *       required: [addressId]

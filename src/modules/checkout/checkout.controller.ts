@@ -79,6 +79,28 @@ export const confirmPayment = async (
   }
 };
 
+export const failPayment = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await checkoutService.failPayment(
+      req.user!.id,
+      req.params.id,
+      req.body ?? {}
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Payment marked as failed.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getPaymentReceipt = async (
   req: AuthenticatedRequest,
   res: Response,
