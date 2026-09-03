@@ -1040,30 +1040,43 @@ router.get(
  *             type: object
  *             required: [sectionType]
  *             properties:
- *               sectionType: { type: string, example: content }
- *               title: { type: string, example: Our Mission }
- *               subtitle: { type: string, example: null }
- *               description: { type: string, example: To make hiring trusted professionals simple. }
- *               primaryButtonText: { type: string }
- *               primaryButtonUrl: { type: string }
- *               secondaryButtonText: { type: string }
- *               secondaryButtonUrl: { type: string }
- *               backgroundImage: { type: string }
- *               foregroundImage: { type: string }
- *               backgroundVideo: { type: string }
- *               appStoreUrl: { type: string }
- *               googlePlayUrl: { type: string }
+ *               sectionType: { type: string, example: hero, description: Section type key (hero, journey, feature_grid, etc.) }
+ *               sectionKey: { type: string, example: hero, description: Ignored in body — taken from path param }
+ *               title: { type: string, nullable: true, example: For Customers. }
+ *               subtitle: { type: string, nullable: true }
+ *               description: { type: string, nullable: true }
+ *               primaryButtonText: { type: string, nullable: true, example: App Store. }
+ *               primaryButtonUrl: { type: string, nullable: true, example: /download }
+ *               secondaryButtonText: { type: string, nullable: true, example: Google Play. }
+ *               secondaryButtonUrl: { type: string, nullable: true, example: /download }
+ *               backgroundImage: { type: string, nullable: true, description: Image URL or null to clear }
+ *               foregroundImage: { type: string, nullable: true, description: Image URL or null to clear }
+ *               backgroundVideo: { type: string, nullable: true, description: Video URL or null to clear }
+ *               appStoreUrl: { type: string, nullable: true }
+ *               googlePlayUrl: { type: string, nullable: true }
  *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED], example: PUBLISHED }
- *               sortOrder: { type: integer, example: 2 }
+ *               sortOrder: { type: integer, example: 1 }
  *           example:
- *             sectionType: content
- *             title: Our Mission
- *             description: To make hiring trusted trade professionals simple, transparent, and fast.
+ *             sectionType: hero
+ *             title: For Customers.
+ *             subtitle: null
+ *             description: Post jobs, receive competitive offers, and hire verified traders with total transparency and platform-managed safety.
+ *             primaryButtonText: App Store.
+ *             primaryButtonUrl: /download
+ *             secondaryButtonText: Google Play.
+ *             secondaryButtonUrl: /download
+ *             backgroundImage: null
+ *             foregroundImage: null
+ *             backgroundVideo: null
+ *             appStoreUrl: null
+ *             googlePlayUrl: null
  *             status: PUBLISHED
- *             sortOrder: 2
+ *             sortOrder: 1
  *     responses:
  *       200:
- *         description: Section created or updated.
+ *         description: |
+ *           Section created or updated. Sending `null` for media fields (`backgroundImage`,
+ *           `foregroundImage`, `backgroundVideo`, etc.) **clears** the stored value.
  *       400:
  *         description: Validation error (sectionType required on create).
  *       404:
@@ -1077,7 +1090,7 @@ router.get(
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, example: contact-brisk }
+ *         schema: { type: string, example: customers }
  *       - in: path
  *         name: sectionKey
  *         required: true
@@ -1089,25 +1102,41 @@ router.get(
  *           schema:
  *             type: object
  *             properties:
- *               title: { type: string, example: Contact Us }
- *               subtitle: { type: string, example: We are here to help }
- *               description: { type: string }
- *               primaryButtonText: { type: string }
- *               primaryButtonUrl: { type: string }
- *               secondaryButtonText: { type: string }
- *               secondaryButtonUrl: { type: string }
- *               backgroundImage: { type: string }
- *               backgroundVideo: { type: string }
- *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
- *               sortOrder: { type: integer }
+ *               sectionType: { type: string, example: hero }
+ *               title: { type: string, nullable: true, example: For Customers. }
+ *               subtitle: { type: string, nullable: true }
+ *               description: { type: string, nullable: true }
+ *               primaryButtonText: { type: string, nullable: true }
+ *               primaryButtonUrl: { type: string, nullable: true }
+ *               secondaryButtonText: { type: string, nullable: true }
+ *               secondaryButtonUrl: { type: string, nullable: true }
+ *               backgroundImage: { type: string, nullable: true, description: Image URL or null to clear }
+ *               foregroundImage: { type: string, nullable: true, description: Image URL or null to clear }
+ *               backgroundVideo: { type: string, nullable: true, description: Video URL or null to clear }
+ *               appStoreUrl: { type: string, nullable: true }
+ *               googlePlayUrl: { type: string, nullable: true }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED], example: PUBLISHED }
+ *               sortOrder: { type: integer, example: 1 }
  *           example:
- *             title: Contact Us
- *             subtitle: We are here to help
- *             description: Reach the BRISK team for support or partnerships.
+ *             sectionType: hero
+ *             title: For Customers.
+ *             subtitle: null
+ *             description: Post jobs, receive competitive offers, and hire verified traders with total transparency and platform-managed safety.
+ *             primaryButtonText: App Store.
+ *             primaryButtonUrl: /download
+ *             secondaryButtonText: Google Play.
+ *             secondaryButtonUrl: /download
+ *             backgroundImage: null
+ *             foregroundImage: null
+ *             backgroundVideo: null
+ *             appStoreUrl: null
+ *             googlePlayUrl: null
  *             status: PUBLISHED
+ *             sortOrder: 1
  *     responses:
  *       200:
- *         description: Section updated.
+ *         description: |
+ *           Section updated. Explicit `null` clears media fields. Omit a field to leave it unchanged.
  *       404:
  *         description: Page or section not found.
  */
