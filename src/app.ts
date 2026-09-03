@@ -38,6 +38,8 @@ import currencyRoutes from './modules/currency/currency.routes';
 import uploadsRoutes from './modules/uploads/uploads.routes';
 import { getUploadRoot } from './modules/uploads/storage/local.storage';
 import propertyRoutes from './modules/property/property.routes';
+import jobsRoutes from './modules/jobs/jobs.routes';
+import checkoutRoutes from './modules/checkout/checkout.routes';
 
 const app = express();
 
@@ -106,6 +108,8 @@ app.use('/loyalty', loyaltyRoutes);
 app.use('/currency', currencyRoutes);
 app.use('/uploads', uploadsRoutes);
 app.use('/', propertyRoutes);
+app.use('/jobs', jobsRoutes);
+app.use('/', checkoutRoutes);
 
 /**
  * @swagger

@@ -17,6 +17,9 @@ export const offerInclude = {
       topRated: true,
       verificationStatus: true,
       profilePhotoUrl: true,
+      yearsExperience: true,
+      city: true,
+      country: true,
       user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
       _count: { select: { ratingsReceived: true } },
     },
@@ -101,6 +104,9 @@ type OfferRecord = {
     topRated: boolean;
     verificationStatus: VerificationStatus;
     profilePhotoUrl: string | null;
+    yearsExperience?: number | null;
+    city?: string | null;
+    country?: string | null;
     user: { id: string; fullName: string; profilePhotoUrl: string | null };
     _count?: { ratingsReceived?: number };
   } | null;
@@ -173,15 +179,30 @@ export const serializeOffer = (offer: OfferRecord) => {
           businessName: offer.trader.businessName,
           traderType: offer.trader.traderType,
           fullName: offer.trader.user.fullName,
+          /** Display name for offer cards (business or person). */
+          displayName: offer.trader.businessName || offer.trader.user.fullName,
           avgRating: Number(offer.trader.avgRating),
           reviewsCount: offer.trader._count?.ratingsReceived ?? 0,
           topRated: offer.trader.topRated,
           isVerified: offer.trader.verificationStatus === VerificationStatus.VERIFIED,
+          yearsExperience: offer.trader.yearsExperience ?? 0,
+          /** e.g. "10+ Yrs" for offer detail header. */
+          experienceLabel:
+            (offer.trader.yearsExperience ?? 0) > 0
+              ? `${offer.trader.yearsExperience}+ Yrs`
+              : null,
+          city: offer.trader.city ?? null,
+          country: offer.trader.country ?? null,
+          location: [offer.trader.city, offer.trader.country].filter(Boolean).join(', ') || null,
           profilePhotoUrl:
             offer.trader.profilePhotoUrl ?? offer.trader.user.profilePhotoUrl ?? null,
           imageUrl: offer.trader.profilePhotoUrl ?? offer.trader.user.profilePhotoUrl ?? null,
         }
       : null,
+    /** Alias for Description & Terms section on offer detail. */
+    termsAndConditions: offer.fullDescription,
+    /** ISO date for "Expires on" UI. */
+    expiresOn: offer.validUntil,
     /** Comma-separated category names for offer card subtitle. */
     categoryLabel: categories.map((c) => c.name).join(', ') || null,
     /** First linked category — use `iconUrl` for category icon on offer card. */

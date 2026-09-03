@@ -358,6 +358,7 @@ model Trader {
   documents       TraderDocument[]
   quotes          Quote[]
   bookings        Booking[]
+  jobs            Job[]
   payouts         Payout[]
   offers          Offer[]              @relation("TraderOffers")
   briskOffers     BriskOffer[]
@@ -398,6 +399,7 @@ model Address {
   // Relationships
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   property Property?
+  jobs     Job[]
 
   @@map("addresses")
 }
@@ -567,11 +569,23 @@ model Job {
   categoryId    String    @map("category_id") @db.Uuid
   subcategoryId String?   @map("subcategory_id") @db.Uuid
   offerId       String?   @map("offer_id") @db.Uuid
+  claimId       String?   @unique @map("claim_id") @db.Uuid
+  traderId      String?   @map("trader_id") @db.Uuid
   title         String
   description   String    @db.Text
+  addressId     String?   @map("address_id") @db.Uuid
   addressLine   String?   @map("address_line")
   city          String?
   postcode      String?
+  latitude      Float?
+  longitude     Float?
+  /// Morning | Afternoon | Anytime (Figma time slots)
+  timeSlot      String?   @map("time_slot")
+  /// e.g. "1 Hour"
+  durationLabel String?   @map("duration_label")
+  phoneNumber   String?   @map("phone_number")
+  /// Direct Trader flow: quoted/service charge before fees & discounts
+  serviceCharge Decimal?  @map("service_charge") @db.Decimal(10, 2)
   status        JobStatus @default(DRAFT)
   scheduledDate DateTime? @map("scheduled_date")
   /// Answers to subcategory.qaFormSchema when the job was posted (fieldId → value)
@@ -584,11 +598,15 @@ model Job {
   category     Category      @relation(fields: [categoryId], references: [id])
   subcategory  Subcategory?  @relation(fields: [subcategoryId], references: [id])
   offer        Offer?        @relation(fields: [offerId], references: [id])
+  claim        OfferClaim?   @relation(fields: [claimId], references: [id])
+  trader       Trader?       @relation(fields: [traderId], references: [id])
+  address      Address?      @relation(fields: [addressId], references: [id])
   photos       JobPhoto[]
   quotes       Quote[]
   booking      Booking?
   chatMessages ChatMessage[]
 
+  @@index([customerId, status])
   @@map("jobs")
 }
 
@@ -838,6 +856,7 @@ model OfferClaim {
 
   offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job   Job?
 
   @@unique([offerId, userId])
   @@index([userId, status])

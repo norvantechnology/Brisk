@@ -1,0 +1,75 @@
+import { JobStatus } from '@prisma/client';
+import { z } from 'zod';
+
+const uuid = z.string().uuid();
+
+export const createJobSchema = z.object({
+  body: z.object({
+    categoryId: uuid,
+    subcategoryId: uuid.nullable().optional(),
+    title: z.string().trim().min(1).optional(),
+    description: z.string().trim().min(1, 'Description is required.'),
+    scheduledDate: z.coerce.date().optional(),
+    timeSlot: z.string().trim().optional(),
+    durationLabel: z.string().trim().optional(),
+    phoneNumber: z.string().trim().optional(),
+    photoUrls: z.array(z.string().url()).optional(),
+    qaFormAnswers: z.record(z.unknown()).optional(),
+    offerId: uuid.optional(),
+    appliedTraderOfferId: uuid.optional(),
+    claimId: uuid.optional(),
+    traderId: uuid.nullable().optional(),
+    serviceCharge: z.coerce.number().nonnegative().optional(),
+  }),
+});
+
+export const listJobsSchema = z.object({
+  query: z.object({
+    status: z.nativeEnum(JobStatus).optional(),
+  }),
+});
+
+export const jobIdParamSchema = z.object({
+  params: z.object({ id: uuid }),
+});
+
+export const updateJobSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    categoryId: uuid.optional(),
+    subcategoryId: uuid.nullable().optional(),
+    title: z.string().trim().min(1).optional(),
+    description: z.string().trim().min(1).optional(),
+    scheduledDate: z.coerce.date().nullable().optional(),
+    timeSlot: z.string().trim().nullable().optional(),
+    durationLabel: z.string().trim().nullable().optional(),
+    phoneNumber: z.string().trim().nullable().optional(),
+    photoUrls: z.array(z.string().url()).optional(),
+    qaFormAnswers: z.record(z.unknown()).nullable().optional(),
+    serviceCharge: z.coerce.number().nonnegative().nullable().optional(),
+    traderId: uuid.nullable().optional(),
+  }),
+});
+
+export const setJobLocationSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    addressId: uuid,
+  }),
+});
+
+export const publishJobSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z
+    .object({
+      addressId: uuid.optional(),
+      serviceCharge: z.coerce.number().nonnegative().optional(),
+    })
+    .optional()
+    .default({}),
+});
+
+export type CreateJobInput = z.infer<typeof createJobSchema>['body'];
+export type UpdateJobInput = z.infer<typeof updateJobSchema>['body'];
+export type SetJobLocationInput = z.infer<typeof setJobLocationSchema>['body'];
+export type PublishJobInput = z.infer<typeof publishJobSchema>['body'];

@@ -155,13 +155,22 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
     },
     offer: resolvedOffer,
     nextJobPrefill: {
+      claimId: claim.id,
       appliedTraderOfferId: offer.id,
+      offerId: offer.id,
       traderId: offer.traderId,
+      categoryId: offer.categories[0]?.categoryId ?? null,
       categoryIds: offer.categories.map((item) => item.categoryId),
+      subcategoryId: offer.subcategories[0]?.subcategoryId ?? null,
       subcategoryIds: offer.subcategories.map((item) => item.subcategoryId),
       ctaAction: resolvedOffer.ctaAction,
+      /** "Offer Applied" banner on Post a New Job. */
+      offerApplied: true,
       bannerTitle: offer.title,
+      bannerSubtitle: resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel,
       discountLabel: resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel,
+      bannerImageUrl: offer.bannerImageUrl,
+      title: offer.title,
     },
   };
 };
