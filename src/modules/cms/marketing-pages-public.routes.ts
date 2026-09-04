@@ -66,15 +66,18 @@ router.get(
  *
  *       **Auth:** Not required.
  *
+ *       **Common sectionKey values (how-it-works):** `hero`, `interactive_roadmap`, `role_workflows`,
+ *       `customer_journey`, `trader_journey`, `governance_layer`
  *       **Common sectionKey values (customers):** `hero`, `why-customers`, `journey`, `peace-of-mind`, `app-download`
  *       **Common sectionKey values (traders):** `trader_hero`, `trader_benefits`, `trader_workflow`, `professional_potential`, `trader_cta`
  *     parameters:
  *       - in: path
  *         name: pageSlug
  *         required: true
- *         schema: { type: string, enum: [customers, traders], example: customers }
+ *         schema: { type: string, enum: [customers, traders, home, about-brisk, contact-brisk, how-it-works], example: how-it-works }
  *         description: |
  *           **Purpose:** Parent page — must match the page that owns this section.
+ *           **Example:** `how-it-works` for `customer_journey` / `trader_journey`.
  *           **Example:** `customers` for hero section on Customers page.
  *       - in: path
  *         name: sectionKey

@@ -2,17 +2,37 @@ import { CmsPageSection, CmsPageSectionItem, CmsPublishStatus } from '@prisma/cl
 
 const toApiStatus = (status: CmsPublishStatus) => status.toLowerCase();
 
-export const serializePublicSectionItem = (item: CmsPageSectionItem) => ({
-  id: item.id,
-  title: item.title,
-  description: item.description,
-  icon: item.icon,
-  image: item.image,
-  step_number: item.stepNumber,
-  sort_order: item.sortOrder,
-  status: toApiStatus(item.status),
-  metadata: item.metadata ?? null,
-});
+export const serializePublicSectionItem = (item: CmsPageSectionItem) => {
+  const metadata =
+    item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+      ? (item.metadata as Record<string, unknown>)
+      : null;
+
+  /** Legacy nested steps under role_workflows cards — expose as first-class array when present. */
+  const legacySteps = Array.isArray(metadata?.steps)
+    ? (metadata!.steps as Array<Record<string, unknown>>).map((step, index) => ({
+        step_number: typeof step.step_number === 'number' ? step.step_number : index + 1,
+        title: typeof step.title === 'string' ? step.title : '',
+        description: typeof step.description === 'string' ? step.description : '',
+        sort_order: typeof step.sort_order === 'number' ? step.sort_order : index + 1,
+      }))
+    : undefined;
+
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    icon: item.icon,
+    image: item.image,
+    step_number: item.stepNumber,
+    sort_order: item.sortOrder,
+    status: toApiStatus(item.status),
+    metadata: metadata
+      ? Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== 'steps'))
+      : null,
+    ...(legacySteps ? { steps: legacySteps } : {}),
+  };
+};
 
 export const serializePublicSection = (
   section: CmsPageSection & { items?: CmsPageSectionItem[] }

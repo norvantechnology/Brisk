@@ -934,7 +934,16 @@ router.post(
  *
  *       Seeded About sections: `hero`, `mission`, `vision`, `core_values`  
  *       Seeded Contact sections: `hero`, `contact_info`, `help_desks`, `map`  
- *       Seeded How It Works sections: `hero`, `interactive_roadmap`, `role_workflows`, `governance_layer`
+ *       Seeded How It Works sections: `hero`, `interactive_roadmap`, `role_workflows`,
+ *       `customer_journey`, `trader_journey`, `governance_layer`.
+ *
+ *       **Tailored Journeys (screenshot):**
+ *       - `role_workflows` — page heading title + description
+ *       - `customer_journey` — card title/description + `items[]` steps (`step_number`, `title`, `description`, `sort_order`, `status`)
+ *       - `trader_journey` — same for traders
+ *
+ *       Manage steps via existing section-item CRUD:
+ *       `POST/PUT /admin/cms/sections/{sectionId}/items` and `/admin/cms/section-items/{itemId}`.
  *     parameters:
  *       - in: path
  *         name: pageSlug

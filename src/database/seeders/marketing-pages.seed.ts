@@ -821,68 +821,148 @@ const seedHowItWorksPage = async (prisma: PrismaClient) => {
     },
   });
 
-  const roleCards = [
+  /**
+   * Customer / Trader journey cards + steps (How It Works screenshot).
+   * Section title/description = card heading; items[] = numbered steps (admin-manageable).
+   */
+  const journeySections = [
     {
+      sectionKey: 'customer_journey',
+      sectionType: 'journey',
+      sortOrder: 31,
       title: 'Customer Journey',
+      subtitle: 'For Customers',
       description: 'Hire with confidence, manage quotes, and rate with peace of mind.',
-      sortOrder: 1,
-      metadata: {
-        role: 'customer',
-        label: 'For Customers',
-        steps: [
-          {
-            title: 'Define requirements',
-            description: 'Use our structured form to describe what service you need done.',
-          },
-          {
-            title: 'Compare quotes',
-            description: 'Filter traders by ratings, experience, price, and portfolios.',
-          },
-          {
-            title: 'Secure hire',
-            description: 'Accept the offer. Milestones and scope are securely stored.',
-          },
-        ],
-      },
+      label: 'For Customers',
+      role: 'customer',
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Define requirements',
+          description: 'Use our structured form to describe what service you need done.',
+          sortOrder: 1,
+        },
+        {
+          stepNumber: 2,
+          title: 'Compare quotes',
+          description: 'Filter traders by ratings, experience, price, and portfolios.',
+          sortOrder: 2,
+        },
+        {
+          stepNumber: 3,
+          title: 'Secure hire',
+          description: 'Accept the offer. Milestones and scope are securely stored.',
+          sortOrder: 3,
+        },
+      ],
     },
     {
+      sectionKey: 'trader_journey',
+      sectionType: 'journey',
+      sortOrder: 32,
       title: 'Trader Journey',
+      subtitle: 'For Traders',
       description: 'Find genuine leads, win deals, and build a premium digital reputation.',
-      sortOrder: 2,
-      metadata: {
-        role: 'trader',
-        label: 'For Traders',
-        steps: [
-          {
-            title: 'Browse verified leads',
-            description: 'See detailed job cards matching your skills.',
-          },
-          {
-            title: 'Send structured proposals',
-            description: 'Draft detailed estimates and outline terms.',
-          },
-          {
-            title: 'Collect payments & reviews',
-            description: 'Build your profile credibility.',
-          },
-        ],
-      },
+      label: 'For Traders',
+      role: 'trader',
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Browse verified leads',
+          description: 'See detailed job cards matching your skills.',
+          sortOrder: 1,
+        },
+        {
+          stepNumber: 2,
+          title: 'Send structured proposals',
+          description: 'Draft detailed estimates and outline terms.',
+          sortOrder: 2,
+        },
+        {
+          stepNumber: 3,
+          title: 'Collect payments & reviews',
+          description: 'Build your profile credibility.',
+          sortOrder: 3,
+        },
+      ],
     },
   ];
 
-  for (const card of roleCards) {
-    const existing = await prisma.cmsPageSectionItem.findFirst({
-      where: { sectionId: roleWorkflows.id, title: card.title },
+  for (const journey of journeySections) {
+    const section = await prisma.cmsPageSection.upsert({
+      where: { pageId_sectionKey: { pageId: page.id, sectionKey: journey.sectionKey } },
+      update: {
+        title: journey.title,
+        subtitle: journey.subtitle,
+        description: journey.description,
+        status: CmsPublishStatus.PUBLISHED,
+        sortOrder: journey.sortOrder,
+      },
+      create: {
+        pageId: page.id,
+        sectionType: journey.sectionType,
+        sectionKey: journey.sectionKey,
+        title: journey.title,
+        subtitle: journey.subtitle,
+        description: journey.description,
+        status: CmsPublishStatus.PUBLISHED,
+        sortOrder: journey.sortOrder,
+      },
     });
-    if (!existing) {
+
+    for (const step of journey.steps) {
+      const existing = await prisma.cmsPageSectionItem.findFirst({
+        where: { sectionId: section.id, stepNumber: step.stepNumber },
+      });
+      if (existing) {
+        await prisma.cmsPageSectionItem.update({
+          where: { id: existing.id },
+          data: {
+            title: step.title,
+            description: step.description,
+            sortOrder: step.sortOrder,
+            status: CmsPublishStatus.PUBLISHED,
+            metadata: { role: journey.role, label: journey.label },
+          },
+        });
+      } else {
+        await prisma.cmsPageSectionItem.create({
+          data: {
+            sectionId: section.id,
+            stepNumber: step.stepNumber,
+            title: step.title,
+            description: step.description,
+            sortOrder: step.sortOrder,
+            status: CmsPublishStatus.PUBLISHED,
+            metadata: { role: journey.role, label: journey.label },
+          },
+        });
+      }
+    }
+
+    // Legacy: keep one summary card under role_workflows for older frontends (no nested steps).
+    const legacyCard = await prisma.cmsPageSectionItem.findFirst({
+      where: { sectionId: roleWorkflows.id, title: journey.title },
+    });
+    if (legacyCard) {
+      await prisma.cmsPageSectionItem.update({
+        where: { id: legacyCard.id },
+        data: {
+          description: journey.description,
+          sortOrder: journey.role === 'customer' ? 1 : 2,
+          status: CmsPublishStatus.PUBLISHED,
+          metadata: { role: journey.role, label: journey.label },
+        },
+      });
+    } else {
       await prisma.cmsPageSectionItem.create({
         data: {
           sectionId: roleWorkflows.id,
-          title: card.title,
-          description: card.description,
-          sortOrder: card.sortOrder,
-          metadata: card.metadata,
+          title: journey.title,
+          description: journey.description,
+          sortOrder: journey.role === 'customer' ? 1 : 2,
           status: CmsPublishStatus.PUBLISHED,
+          metadata: { role: journey.role, label: journey.label },
         },
       });
     }
