@@ -73,7 +73,7 @@ router.get('/', validate(listCategoriesQuerySchema), controller.listCategories);
  *               name: { type: string, maxLength: 100 }
  *               slug: { type: string, maxLength: 150 }
  *               description: { type: string, maxLength: 500, nullable: true }
- *               icon: { type: string, maxLength: 50, nullable: true }
+ *               icon: { type: string, maxLength: 500, nullable: true, description: 'Icon name or uploaded media URL.' }
  *               status: { type: string, enum: [active, inactive] }
  *               sort_order: { type: integer, minimum: 0 }
  *     responses:

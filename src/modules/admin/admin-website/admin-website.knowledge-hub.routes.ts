@@ -92,7 +92,7 @@ router.get('/sections', validate(listSectionsQuerySchema), controller.listSectio
  *                 type: string
  *                 format: uri
  *                 description: Alias for graphic_image_url.
- *               icon: { type: string, maxLength: 50, nullable: true }
+ *               icon: { type: string, maxLength: 500, nullable: true, description: 'Icon name or uploaded media URL.' }
  *               publishing_status: { type: string, enum: [draft, scheduled, published, archived] }
  *               cta_button_text: { type: string, maxLength: 100, nullable: true }
  *               cta_url: { type: string, maxLength: 500, nullable: true }
