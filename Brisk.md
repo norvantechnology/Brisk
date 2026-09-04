@@ -11,6 +11,8 @@
 > **v2 update:** Actual Figma screenshots of the Customer App (Onboarding, My Property, My Address, Profile, Notifications, Offers, Post-a-Job) have now been reviewed directly (not just the process docs). This revealed a **module the process docs never mentioned at all**: **Property & Utilities Management** — a "My Property" tab where customers submit electricity/gas meter readings (MPRN/GPRN) and manage utility subscriptions (Bins, Electricity, Gas, Home Insurance). This is added as new §4A (property model), §5 (folder structure), and §6.2A (module logic) below. The architecture decision (modular monolith, no microservices) is unchanged and reconfirmed.
 >
 > **v8 update (Aug 2026):** **Trader mobile onboarding + KYC document APIs SHIPPED** — see **§6.2B** and **§14.15**. Includes separate Sole Trader (`SOLO`) vs Company Trader (`COMPANY`) wizard, admin document rules, admin verification queue. **Homepage CMS** shipped with slug `home` (not `home-v2`); App Download section has `background_image` + `foreground_image`. Live-tested on production.
+>
+> **v9 update (Sep 2026):** **Customer Offer → Post Job → Site Visit & Pay Fee flow SHIPPED** — see **§6.4**, **§6.6**, **§7.2** and mobile guide [`docs/MOBILE_JOB_OFFER_SITE_VISIT_FLOW.md`](docs/MOBILE_JOB_OFFER_SITE_VISIT_FLOW.md). Claim is **not** on Accept; soft claim on publish; **USED on payment confirm**. Unified `GET /jobs/form-config` for all entry points. Site Visit fee from `subcategory.siteVisitFee` only (unset → 0; no invented default). UI copy owned by mobile.
 
 ---
 
@@ -750,44 +752,70 @@ Implements the **Trader mobile app onboarding Figma flow** — separate from Cus
 - Category → Subcategory tree (Residential/Commercial toggle, matches "All Sub-Category" screen).
 - Read-mostly, cached at the app layer (Redis once introduced) since this data changes rarely.
 - **Sub-category flags (admin):**
-  - `siteVisitEnabled` — turn site visit on/off for that service.
+  - `siteVisitEnabled` — turn site visit on/off for that service (shows Site Visit quote card).
+  - `siteVisitFee` — admin fee for Site Visit card / Pay Fee. **Null/unset → 0** (no API default amount). Mobile owns labels.
   - `priceEnabled` — show or hide the price field when posting a job.
   - `priceEnteredBy` — `CUSTOMER` or `TRADER` (who fills the price when the price field is shown).
 - **Sub-category Q&A form builder:** Admin builds a form when creating/editing a sub-category and saves it as JSON (`qaFormSchema`). Supported field types: `text`, `textarea`, `number`, `dropdown`, `single_choice`, `multi_choice`, `date`, `boolean`. When a customer/trader posts a job for that sub-category, the app renders this form and stores answers on the job as `qaFormAnswers` JSON.
-- **App read APIs (no admin token):** `GET /categories`, `GET /categories/:id`, `GET /categories/slug/:slug`, `GET /sub-categories`, `GET /sub-categories/:id` — active-only; list endpoints return full `data` array (no pagination); detail endpoints return `data` as the object directly. Each category includes `iconUrl`; each sub-category includes `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`. Swagger tag **Mobile / Categories**.
-- **Jobs create API** (accepting `qaFormAnswers`) still pending Phase 2 Jobs module — DB column already exists.
+- **App read APIs (no admin token):** `GET /categories`, `GET /categories/:id`, `GET /categories/slug/:slug`, `GET /sub-categories`, `GET /sub-categories/:id` — active-only; list endpoints return full `data` array (no pagination); detail endpoints return `data` as the object directly. Each category includes `iconUrl`; each sub-category includes `siteVisitEnabled`, `siteVisitFee`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`. Swagger tag **Mobile / Categories**.
+- **Jobs create API** accepting `qaFormAnswers` — **SHIPPED** (Customer Jobs module).
 
-### 6.4 Jobs Module (Job Posting Flow)
-Implements Consumer Journey §2 and the "Post a New Job" screens common to all three offer flows:
-- `POST /jobs` — create job draft: category, subcategory, title, description, date, time slot, duration, phone, specific requirements, photo uploads (pre-signed S3 URLs), optional `applied_trader_offer_id` (Direct Trader flow) or none (Quote-wise flow, public post).
-- `POST /jobs/:id/publish` — validates address chosen, sets status `published`, becomes visible to eligible traders (matched by category + service radius).
-- `PATCH /jobs/:id/reschedule` — new date/time, notifies assigned trader, requires trader acceptance to confirm.
-- `PATCH /jobs/:id/cancel` — reason required, triggers refund logic per cancellation policy, notifies trader.
-- Job status machine: `draft → published → quoted → accepted → confirmed → in_progress → completed` (+ `cancelled` branch at any pre-completion state, + `reschedule_requested`).
+### 6.4 Jobs Module (Job Posting Flow) — SHIPPED (Customer)
+
+> Full mobile contract: [`docs/MOBILE_JOB_OFFER_SITE_VISIT_FLOW.md`](docs/MOBILE_JOB_OFFER_SITE_VISIT_FLOW.md)
+
+Implements Consumer Journey §2 + Figma **Post a New Job → Select Location → Publish → Site Visit & Pay Fee → Success**.
+
+**UI → API**
+| Screen | API |
+|--------|-----|
+| Post a New Job | `GET /jobs/form-config` + `POST /jobs` (+ uploads) |
+| Select Location | `GET /addresses` → `PUT /jobs/{id}/location` |
+| Publish Job Post | `POST /jobs/{id}/publish` |
+| Site Visit & Pay Fee | invoice from publish → checkout |
+| Payment Successful | `POST /payments/{id}/confirm` |
+
+**Key endpoints**
+- `GET /jobs/form-config?categoryId&subcategoryId&offerId&entryPoint=` — unified show/hide for **every** entry point (home category, Accept Offer, trader profile). Returns `formConfig` + `prefill` + `offerBanner`.
+- `POST /jobs` — create **DRAFT**: category, subcategory, title, description, `scheduledDate`, `timeSlot` (Morning/Afternoon/Evening/Any time), `durationLabel`, phone, `photoUrls`, `qaFormAnswers`, `quoteType` (`REMOTE` \| `ONSITE`), optional `minBudget`/`maxBudget`, `offerId`/`appliedTraderOfferId`, `traderId`. **No prior claim required.**
+- `PUT /jobs/{id}/location` — `{ addressId }` from saved addresses.
+- `POST /jobs/{id}/publish` — requires address; for **ONSITE** + trader creates booking + unpaid invoice for **site visit fee**; soft-claims offer as `CLAIMED` (not USED yet).
+- `GET/PATCH /jobs`, `GET /jobs/{id}` — list/detail; detail includes `formConfig`, `offer.bannerMessage`, `nextSteps`.
+
+**Quote Type (Figma)**
+- `REMOTE` — Remote Quote based on photos & details.
+- `ONSITE` — Site Visit card with fee badge; sets `siteVisitRequested` + snapshots `siteVisitFee` on the job.
+- Legacy: `FIXED`, `BUDGET_RANGE`, `OPEN_QUOTE` still accepted.
+
+**Job status (current):** `DRAFT → PUBLISHED` (or `SCHEDULED` when Direct Trader / site-visit invoice created) → … (+ cancel later).
 
 ### 6.5 Quotes Module
 Two paths converge here:
-- **Direct Trader Offer flow**: job is posted *at* a specific trader (their offer pre-applied) — effectively an implicit quote at that trader's stated price; still modeled as a `QUOTES` row so downstream invoice/payment logic is identical regardless of path.
+- **Direct Trader / Site Visit Offer flow**: job is posted *at* a specific trader (offer linked via `offerId`) — auto-accepted quote created on publish for the fee/charge path.
 - **Quote-wise Offer flow**: job is public, multiple traders each `POST /jobs/:id/quotes` with price, estimated completion time, notes. Customer calls `GET /jobs/:id/quotes` to compare (price, rating, experience, reviews), then `POST /quotes/:id/accept`.
 - Accepting a quote creates a `BOOKING` and marks the other quotes `rejected`/`expired`.
 
 ### 6.6 Offers Module (three distinct sub-flows, kept as separate services under one `offers/` folder because their data and screens genuinely differ)
-- **Trader Offers** (`Traders Offers` tab): individual trader-authored offers ("€5 off first job", "Waived service fee", "5% Cash back") — each card shows a small type icon (cash/piggy-bank/percent) driven by an `offer_type` field. `POST /trader-offers/:id/claim` links the offer to the customer's *next* job for that trader — this is the discount later shown as `trader_offer_discount` on the invoice. Claiming pre-fills the "Post a New Job" screen with an offer banner (confirmed on screen) and carries the discount through to the price shown on the trader's profile ("Post Your Job" button shows the discounted total).
-- **Confirmed filter modal** (`GET /trader-offers?...`) supports: `date_range` (`today|yesterday|last_7_days|last_30_days|custom` with `from`/`to`), `trader_ids[]` (multi-select, with search-as-you-type), `offer_type` (`percentage|flat_amount`), `category_id` (multi-select with icon per category). Build this as real query params, not a single opaque "filter" blob, so each control maps 1:1 to a param.
-- **Brisk Offers** (`Brisk Offers` tab): platform-curated offers tied to a trader ("10% off Pest Control services", "Free Electrical Inspection"), each with a `tag` field (`special_local_promo`, `limited_availability`, etc.) and a distinct action-button label per offer (`Claim Offer` vs `Book Inspection` — model as a `cta_label`/`cta_action` pair rather than hardcoding "claim" everywhere, since "Book Inspection" implies a different downstream flow than a discount claim). Screen also shows the BRISK points balance inline even though this tab is about discounts, not points — just a persistent header, no functional link to redemption.
-- **Promo Codes**: BRISK-issued codes (e.g. `PEST10BRISK`, `ALL10BRISK`) searchable/filterable by category, applied at the **invoice/checkout step** (not tied to a specific job upfront) via `POST /invoices/:id/apply-promo`. Validated for category scope, validity window, and (recommended, to confirm) one-use-per-customer.
+- **Trader Offers** (`Traders Offers` tab): individual trader-authored offers. Card fields include `discountType` (`FLAT` \| `PERCENTAGE` \| `FREE_SERVICE`), `claimed`, `canApply`, trader `displayName` / `jobsDoneCount` (Jobs Done — **not** `claimsCount`).
+- **List CTA "Claim Now"** = **navigate to Offer Detail only** (`GET /trader-offers/{id}`). Do **not** call claim.
+- **Detail CTA "Accept Offer"** = `POST /trader-offers/{id}/accept` (alias `/claim`) → returns `nextJobPrefill` + `jobFormConfig` + `claimTiming`. **Soft prepare only — does not lock the offer.**
+- **Lock timing:** soft `CLAIMED` on `POST /jobs/{id}/publish`; **`USED` on payment confirm**. Abandoned Accept/draft without pay stays reusable.
+- **Confirmed filter modal** (`GET /trader-offers?...`) supports: `date_range` (`today|yesterday|last_7_days|last_30_days|custom` with `from`/`to`), `trader_ids[]`, `discountType`, `category_id`, search, page/limit.
+- **Brisk Offers** (`Brisk Offers` tab): platform-curated offers with `badgeTag`, `ctaLabel`/`ctaAction`. `POST /brisk-offers/{id}/claim` still creates a claim row for promo wallet use.
+- **Promo Codes**: applied at invoice via `POST /invoices/{id}/apply-promo`.
 
 ### 6.7 Bookings & Invoices Modules
-- A `BOOKING` is created the moment a quote is accepted (either path).
-- `InvoiceService.buildBreakdown(bookingId)` computes: service charge → minus trader-offer discount (if any) → minus promo discount (if applied) → plus platform fee (if applicable) → plus tax → total. This exact structure matches all three flow docs' "Breakdown" sections.
-- `GET /bookings/:id` returns full booking detail screen data (booking number, category, description, images, address, schedule, trader info, quote, payment summary, timeline, current status) — matches Consumer Journey §9 "Booking Details".
-- `GET /bookings?status=active|completed|cancelled|rescheduled` — matches §8 "Booking History".
+- A `BOOKING` is created on site-visit / Direct Trader **publish** (or when a marketplace quote is accepted).
+- Invoice `purpose`: `SITE_VISIT_FEE` (flat visit fee, no 10% platform markup) or `SERVICE` (service charge + 10% platform fee after discounts).
+- `GET /invoices/{id}` powers **Site Visit & Pay Fee** / Payment Details: `screenTitle`, `confirmPayLabel`, `feeNote`, `lineItems`, trader card, billing types, payment methods.
+- Line item for site visit uses label **Site Visit Fee** (key `siteVisitFee`).
 
 ### 6.8 Payments Module
-- `POST /payments/intent` — creates a Stripe PaymentIntent for the invoice total; supports card, Apple Pay, Google Pay (all via Stripe's unified Payment Element — docs explicitly say "powered by Stripe").
-- Billing details: `individual` vs `company` (company adds `company_name` + `tin_number`) — stored against the invoice/payment record, not the user profile, since billing details can differ per transaction.
-- `POST /payments/webhook` — Stripe webhook (payment_intent.succeeded/failed) is the **source of truth** for marking payment complete — never trust the client-side "success" callback alone. On success: booking status → `confirmed`, receipt generated, notifications fired to both parties (matches "Payment Success" screen with Transaction ID, receipt summary, status tracker Paid→Confirmed→Service).
-- `GET /payments/history` — matches §10 Payment History.
+- `POST /payments/intent` — PaymentIntent for invoice total; supports card, Apple Pay, Google Pay; billing `INDIVIDUAL` \| `COMPANY` (+ companyName, tinNumber, billingAddress).
+- `POST /payments/{id}/confirm` — marks payment COMPLETED, invoice PAID, and offer claim **USED**. Returns **Payment Successful!** receipt (`title`, `message`, `receiptSummary`, timeline Paid→Confirmed→Service).
+- `POST /payments/{id}/fail` — Fail screen payload.
+- `GET /payments/{id}/receipt` — reload Success screen.
+- Stripe webhook remains the long-term source of truth once live keys are wired; mobile confirm is used in current mock/live hybrid.
 
 ### 6.9 Loyalty Module
 - `LOYALTY_ACCOUNTS.points_balance` per user (BRP — Brisk Reward Points).
@@ -858,7 +886,9 @@ sequenceDiagram
     API-->>T: notify job confirmed
 ```
 
-### 7.2 Direct Trader Offer Flow (offer-first)
+### 7.2 Direct Trader / Site Visit Offer Flow (offer-first) — CURRENT
+
+> Detail: [`docs/MOBILE_JOB_OFFER_SITE_VISIT_FLOW.md`](docs/MOBILE_JOB_OFFER_SITE_VISIT_FLOW.md)
 
 ```mermaid
 sequenceDiagram
@@ -866,20 +896,24 @@ sequenceDiagram
     participant API as Backend API
     participant DB as PostgreSQL
 
-    C->>API: GET /trader-offers
-    API-->>C: list (trader, offer, "Claim now")
-    C->>API: POST /trader-offers/:id/claim
-    API->>DB: create claimed-offer record (pending job)
-    C->>API: POST /jobs (with applied_trader_offer_id)
-    API->>DB: insert job, link offer
-    C->>API: POST /jobs/:id/publish (with saved/new address)
-    API->>DB: status=published, implicit quote at offer price
-    Note over API,DB: Direct-trader jobs skip open bidding —\na single QUOTES row is created at the trader's stated price
-    C->>API: POST /quotes/:id/accept
-    API->>DB: create booking
-    C->>API: GET /invoices/:bookingId (shows offer discount applied)
-    C->>API: POST /payments/intent → Stripe → webhook confirms
-    API->>DB: booking.status=confirmed
+    C->>API: GET /trader-offers/{id}
+    Note over C: Claim Now = navigate only
+    C->>API: POST /trader-offers/{id}/accept
+    Note over API: Prefill only — no hard claim
+    API-->>C: nextJobPrefill + jobFormConfig
+    C->>API: GET /jobs/form-config?offerId=…
+    C->>API: POST /uploads (job_photo)
+    C->>API: POST /jobs (offerId, quoteType=ONSITE|REMOTE)
+    API->>DB: draft job + soft-link offer
+    C->>API: GET /addresses
+    C->>API: PUT /jobs/{id}/location
+    C->>API: POST /jobs/{id}/publish
+    API->>DB: soft CLAIMED + booking + unpaid invoice (site visit fee or service)
+    API-->>C: invoice (Site Visit & Pay Fee)
+    C->>API: POST /payments/intent
+    C->>API: POST /payments/{id}/confirm
+    API->>DB: PAID + offer USED
+    API-->>C: Payment Successful receipt
 ```
 
 ### 7.3 Loyalty Redemption

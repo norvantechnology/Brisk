@@ -4,7 +4,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../utils/error
 import { effectiveStatus, enrichOfferWithCurrency, offerInclude, serializeOfferWithMeta } from './offers.serializers';
 import { buildOfferWhere, normalizeOfferListFilters } from './offers.query';
 import { resolveUserCurrency } from '../../services/currency.service';
-import { buildJobFormConfig } from '../jobs/jobs.form-config';
+import { buildJobFormConfig, buildOfferAppliedBanner, buildNextJobPrefill } from '../jobs/jobs.form-config';
 
 const publicInclude = {
   ...offerInclude,
@@ -34,6 +34,7 @@ export const listPublicOffers = async (
   ]);
 
   const claimedIds = new Set<string>();
+  const softClaimedIds = new Set<string>();
   if (userId && offers.length) {
     const claims = await prisma.offerClaim.findMany({
       where: {
@@ -41,9 +42,12 @@ export const listPublicOffers = async (
         offerId: { in: offers.map((offer) => offer.id) },
         status: { in: [OfferClaimStatus.CLAIMED, OfferClaimStatus.USED] },
       },
-      select: { offerId: true },
+      select: { offerId: true, status: true },
     });
-    claims.forEach((claim) => claimedIds.add(claim.offerId));
+    claims.forEach((claim) => {
+      if (claim.status === OfferClaimStatus.USED) claimedIds.add(claim.offerId);
+      else if (claim.status === OfferClaimStatus.CLAIMED) softClaimedIds.add(claim.offerId);
+    });
   }
 
   let pointsBalance = 0;
@@ -56,11 +60,30 @@ export const listPublicOffers = async (
     pointsBalance = loyalty?.pointsBalance ?? 0;
   }
 
+  const inProgressIds = new Set<string>();
+  if (userId && softClaimedIds.size) {
+    const softClaims = await prisma.offerClaim.findMany({
+      where: {
+        userId,
+        offerId: { in: [...softClaimedIds] },
+        status: OfferClaimStatus.CLAIMED,
+        jobId: { not: null },
+      },
+      select: { offerId: true },
+    });
+    softClaims.forEach((c) => inProgressIds.add(c.offerId));
+  }
+
   const serializedOffers = await Promise.all(
     offers.map(async (offer) => {
+      const used = claimedIds.has(offer.id);
+      const inProgress = inProgressIds.has(offer.id);
       const base = {
         ...(await serializeOfferWithMeta(offer)),
-        claimed: claimedIds.has(offer.id),
+        claimed: used,
+        canApply: !used && !inProgress,
+        hasAbandonedClaim: softClaimedIds.has(offer.id) && !inProgress,
+        inProgress,
       };
       return enrichOfferWithCurrency(base, viewerCurrency);
     })
@@ -83,18 +106,18 @@ export const getPublicOffer = async (id: string, userId?: string) => {
     throw new NotFoundError('Offer not found.');
   }
 
-  const claimed = userId
-    ? Boolean(
-        await prisma.offerClaim.findUnique({
-          where: { offerId_userId: { offerId: id, userId } },
-        })
-      )
-    : false;
+  const claimFlags = userId ? await resolveClaimFlags(userId, id) : {
+    claimed: false,
+    canApply: true,
+    claimId: null as string | null,
+    claimStatus: null as OfferClaimStatus | null,
+  };
 
   const viewerCurrency = userId ? await resolveUserCurrency(userId) : null;
   const base = {
     ...(await serializeOfferWithMeta(offer)),
-    claimed,
+    claimed: claimFlags.claimed,
+    canApply: claimFlags.canApply,
   };
   const enriched = await enrichOfferWithCurrency(base, viewerCurrency);
 
@@ -102,27 +125,73 @@ export const getPublicOffer = async (id: string, userId?: string) => {
     ...enriched,
     /**
      * Mobile UI flow:
-     * Offers list "Claim Now" → this detail screen (GET).
-     * Detail "Accept Offer" → POST /trader-offers/{id}/accept (or /claim) → Post a New Job.
+     * Offers list "Claim Now" → this detail screen (GET) — navigate only.
+     * Detail "Accept Offer" → optional POST /accept (prefill) OR navigate with offerId to Post Job.
+     * Offer is claimed (USED) only on Payment Successful — no separate claim API required.
      */
     actions: {
       claimNow: {
         type: 'NAVIGATE',
         screen: 'OFFER_DETAIL',
-        note: 'List CTA only — open this detail. Do not call claim API yet.',
+        note: 'List CTA only — open this detail. Do not call any claim API.',
       },
       acceptOffer: {
-        type: 'API',
+        type: 'OPTIONAL',
         method: 'POST',
         path: `/trader-offers/${id}/accept`,
         alternatePath: `/trader-offers/${id}/claim`,
         nextScreen: 'POST_NEW_JOB',
-        note: 'Accept Offer button — claims offer and returns nextJobPrefill + jobFormConfig.',
+        note: 'Optional prefill only — does NOT claim. Pass offerId on POST /jobs. Claim = Payment Successful.',
       },
     },
   };
 };
 
+/**
+ * Resolve offer usage flags for a customer.
+ * - claimed = true only when USED (Payment Successful)
+ * - canApply = false when USED (or legacy soft CLAIMED+jobId)
+ */
+const resolveClaimFlags = async (userId: string, offerId: string) => {
+  const claim = await prisma.offerClaim.findUnique({
+    where: { offerId_userId: { offerId, userId } },
+  });
+  if (!claim || claim.status === OfferClaimStatus.CANCELLED) {
+    return { claimed: false, canApply: true, claimId: null, claimStatus: null };
+  }
+  if (claim.status === OfferClaimStatus.USED) {
+    return {
+      claimed: true,
+      canApply: false,
+      claimId: claim.id,
+      claimStatus: claim.status,
+    };
+  }
+  // Legacy soft CLAIMED + job (old publish path) — treat as in-progress
+  if (claim.status === OfferClaimStatus.CLAIMED && claim.jobId) {
+    return {
+      claimed: false,
+      canApply: false,
+      claimId: claim.id,
+      claimStatus: claim.status,
+      inProgress: true,
+    };
+  }
+  // Platform wallet CLAIMED / abandoned — reusable for trader job flow until USED
+  return {
+    claimed: false,
+    canApply: true,
+    claimId: claim.id,
+    claimStatus: claim.status,
+  };
+};
+
+/**
+ * Accept Offer / optional prefill helper — **never claims** a trader offer.
+ * Frontend can skip this and use GET /trader-offers/{id} + GET /jobs/form-config instead.
+ * Offer is applied (claim → USED) only on payment confirm (or marketplace publish with no pay).
+ * Platform (Brisk) offers still create a CLAIMED wallet row on /brisk-offers/{id}/claim.
+ */
 export const claimOffer = async (userId: string, offerId: string, expectedType?: OfferType) => {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
@@ -135,39 +204,66 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
     throw new BadRequestError(
       expectedType === OfferType.TRADER
         ? 'This endpoint is for trader-authored offers. Use POST /brisk-offers/:id/claim for platform offers.'
-        : 'This endpoint is for Brisk/platform offers. Use POST /trader-offers/:id/claim for trader offers.'
+        : 'This endpoint is for Brisk/platform offers. Use POST /trader-offers/:id/accept for trader offers.'
     );
   }
 
   const status = effectiveStatus(offer.status, offer.validUntil);
   if (status !== OfferStatus.ACTIVE || offer.validFrom.getTime() > Date.now()) {
-    throw new BadRequestError('This offer is not currently claimable.');
+    throw new BadRequestError('This offer is not currently available.');
   }
 
-  const existing = await prisma.offerClaim.findUnique({
-    where: { offerId_userId: { offerId, userId } },
-  });
-  if (existing && existing.status !== OfferClaimStatus.CANCELLED) {
-    throw new ConflictError('You have already claimed this offer.');
+  const flags = await resolveClaimFlags(userId, offerId);
+  if (!flags.canApply) {
+    throw new ConflictError('You have already used this offer.');
   }
 
-  const claim = existing
-    ? await prisma.offerClaim.update({
-        where: { id: existing.id },
-        data: { status: OfferClaimStatus.CLAIMED, claimedAt: new Date(), usedAt: null },
-      })
-    : await prisma.offerClaim.create({
-        data: { offerId, userId, status: OfferClaimStatus.CLAIMED },
+  const isPlatform = offer.offerType === OfferType.PLATFORM;
+
+  // Platform promo wallet only — trader Accept never writes a claim row.
+  let claim: {
+    id: string;
+    status: string;
+    claimedAt: string;
+    jobId: string;
+  } = { id: '', status: '', claimedAt: '', jobId: '' };
+
+  if (isPlatform) {
+    const existing = await prisma.offerClaim.findUnique({
+      where: { offerId_userId: { offerId, userId } },
+    });
+    if (existing && existing.status === OfferClaimStatus.USED) {
+      throw new ConflictError('You have already used this offer.');
+    }
+    const saved = existing
+      ? await prisma.offerClaim.update({
+          where: { id: existing.id },
+          data: { status: OfferClaimStatus.CLAIMED, claimedAt: new Date(), usedAt: null },
+        })
+      : await prisma.offerClaim.create({
+          data: { offerId, userId, status: OfferClaimStatus.CLAIMED },
+        });
+    if (!existing) {
+      await prisma.offer.update({
+        where: { id: offerId },
+        data: { claimsCount: { increment: 1 } },
       });
-
-  await prisma.offer.update({
-    where: { id: offerId },
-    data: { claimsCount: { increment: existing ? 0 : 1 } },
-  });
+    }
+    claim = {
+      id: saved.id,
+      status: saved.status,
+      claimedAt: saved.claimedAt ? saved.claimedAt.toISOString() : '',
+      jobId: saved.jobId ?? '',
+    };
+  }
 
   const viewerCurrency = await resolveUserCurrency(userId);
   const resolvedOffer = await enrichOfferWithCurrency(
-    { ...(await serializeOfferWithMeta(offer)), claimed: true },
+    {
+      ...(await serializeOfferWithMeta(offer)),
+      claimed: false,
+      canApply: true,
+    },
     viewerCurrency
   );
 
@@ -177,28 +273,40 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
     ? await prisma.subcategory.findUnique({ where: { id: subcategoryId } })
     : null;
 
+  const discountLabelText =
+    resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel ?? null;
+  const offerBanner = buildOfferAppliedBanner({
+    discountType: offer.discountType,
+    discountValue: Number(offer.discountValue),
+    discountLabel: discountLabelText,
+    currencyCode: offer.currencyCode,
+  });
+
   const jobFormConfig = buildJobFormConfig({
     offerApplied: true,
     subcategory,
+    entryPoint: 'OFFER',
+    currencyCode: offer.currencyCode,
+    offerBanner,
   });
 
+  const afterLocation =
+    jobFormConfig.showSiteVisitFee || offer.traderId
+      ? 'SITE_VISIT_PAY_FEE'
+      : 'WAITING_FOR_QUOTES';
+
   return {
-    claim: {
-      id: claim.id,
-      status: claim.status,
-      claimedAt: claim.claimedAt,
-      jobId: claim.jobId,
-    },
+    claim,
     offer: resolvedOffer,
-    /** Wire Accept Offer → Post a New Job */
     navigation: {
       nextScreen: 'POST_NEW_JOB',
       afterJobForm: 'CHOOSE_LOCATION',
-      afterLocation: 'PAYMENT_DETAILS',
+      afterLocation,
+      afterPublish: afterLocation,
+      afterPayment: 'SUCCESS',
     },
-    nextJobPrefill: {
-      claimId: claim.id,
-      appliedTraderOfferId: offer.id,
+    nextJobPrefill: buildNextJobPrefill({
+      claimId: '',
       offerId: offer.id,
       traderId: offer.traderId,
       categoryId,
@@ -206,18 +314,27 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
       subcategoryId,
       subcategoryIds: offer.subcategories.map((item) => item.subcategoryId),
       ctaAction: resolvedOffer.ctaAction,
-      /** "Offer Applied" banner on Post a New Job. */
       offerApplied: true,
-      bannerTitle: offer.title,
-      bannerSubtitle: resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel,
-      discountLabel: resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel,
+      bannerTitle: offerBanner.title,
+      bannerSubtitle: offerBanner.discountLabel,
+      bannerMessage: offerBanner.message,
+      discountLabel: discountLabelText,
       bannerImageUrl: offer.bannerImageUrl,
       title: offer.title,
-      /** Locked to FIXED for Direct Trader accept-offer path */
       quoteType: jobFormConfig.defaultQuoteType,
-    },
-    /** Show/hide quote type, min/max budget, images, site visit on Post a New Job */
+      formConfig: jobFormConfig,
+    }),
     jobFormConfig,
+    claimTiming: {
+      claimOnAccept: false,
+      softClaimOnPublish: false,
+      claimUsedOnPaymentConfirm: true,
+      claimRequiredApi: false,
+      publishPath: 'POST /jobs/{jobId}/publish',
+      confirmPaymentPath: 'POST /payments/{paymentId}/confirm',
+      note:
+        'No separate claim API for trader offers. Accept is optional prefill only. Pass offerId on POST /jobs. Offer is claimed (USED) on Payment Successful (POST /payments/{id}/confirm).',
+    },
   };
 };
 
@@ -245,7 +362,11 @@ export const listMyClaims = async (userId: string, offerType?: OfferType) => {
         usedAt: claim.usedAt,
         jobId: claim.jobId,
         offer: await enrichOfferWithCurrency(
-          { ...(await serializeOfferWithMeta(claim.offer)), claimed: true },
+          {
+            ...(await serializeOfferWithMeta(claim.offer)),
+            claimed: claim.status === OfferClaimStatus.USED,
+            canApply: claim.status !== OfferClaimStatus.USED,
+          },
           viewerCurrency
         ),
       }))

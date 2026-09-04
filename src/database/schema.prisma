@@ -202,13 +202,17 @@ enum SubcategoryPriceEnteredBy {
   TRADER
 }
 
-/// How the customer wants pricing handled on Post a New Job.
+/// How the customer wants quoting handled on Post a New Job (Figma Quote Type cards).
 enum JobQuoteType {
-  /// Single fixed service charge (Direct Trader / fixed price)
+  /// Remote quote based on photos & details
+  REMOTE
+  /// On-site / location-based quote (site visit)
+  ONSITE
+  /// Locked fixed service charge (Direct Trader invoice path)
   FIXED
-  /// Customer sets min/max budget; traders quote within range
+  /// @deprecated Prefer minBudget/maxBudget fields with REMOTE/ONSITE
   BUDGET_RANGE
-  /// No budget — open bidding / request quotes
+  /// @deprecated Prefer REMOTE
   OPEN_QUOTE
 }
 
@@ -551,6 +555,8 @@ model Subcategory {
   status             String                      @default("active") // active | inactive
   /// Admin toggle: site visit required / available for this service
   siteVisitEnabled   Boolean                     @default(false) @map("site_visit_enabled")
+  /// Site-visit fee charged when quoteType=ONSITE. Admin-configured; null/unset → 0 (no platform default).
+  siteVisitFee       Decimal?                    @map("site_visit_fee") @db.Decimal(10, 2)
   /// Admin toggle: show price field when posting a job for this sub-category
   priceEnabled       Boolean                     @default(true) @map("price_enabled")
   /// Who fills the price when priceEnabled=true
@@ -603,6 +609,8 @@ model Job {
   maxBudget     Decimal?  @map("max_budget") @db.Decimal(10, 2)
   /// When subcategory.siteVisitEnabled — customer opt-in
   siteVisitRequested Boolean @default(false) @map("site_visit_requested")
+  /// Snapshot of site-visit fee at post time (Pay Fee screen)
+  siteVisitFee  Decimal?  @map("site_visit_fee") @db.Decimal(10, 2)
   status        JobStatus @default(DRAFT)
   scheduledDate DateTime? @map("scheduled_date")
   /// Answers to subcategory.qaFormSchema when the job was posted (fieldId → value)

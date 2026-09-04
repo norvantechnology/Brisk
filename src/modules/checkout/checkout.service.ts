@@ -1,12 +1,14 @@
 import {
   DiscountType,
   InvoiceStatus,
+  JobQuoteType,
+  OfferClaimStatus,
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
 import { prisma } from '../../config/database';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { computeInvoiceBreakdown } from '../jobs/jobs.service';
 import type {
   ApplyPromoInput,
@@ -61,6 +63,7 @@ const invoiceOwnershipInclude = {
               currencyCode: true,
             },
           },
+          claim: { select: { id: true, status: true } },
           photos: { take: 1, orderBy: { createdAt: 'asc' as const } },
         },
       },
@@ -68,7 +71,13 @@ const invoiceOwnershipInclude = {
         select: {
           id: true,
           businessName: true,
-          user: { select: { fullName: true } },
+          avgRating: true,
+          topRated: true,
+          verificationStatus: true,
+          yearsExperience: true,
+          profilePhotoUrl: true,
+          _count: { select: { ratingsReceived: true } },
+          user: { select: { fullName: true, profilePhotoUrl: true } },
         },
       },
       customer: {
@@ -105,17 +114,21 @@ const serializeInvoiceBreakdown = (invoice: {
   currencyCode: invoice.currencyCode,
 });
 
-const buildLineItems = (invoice: {
-  serviceCharge: Prisma.Decimal;
-  traderOfferDiscount: Prisma.Decimal;
-  promoDiscount: Prisma.Decimal;
-  platformFee: Prisma.Decimal;
-  tax: Prisma.Decimal;
-}) => {
+const buildLineItems = (
+  invoice: {
+    serviceCharge: Prisma.Decimal;
+    traderOfferDiscount: Prisma.Decimal;
+    promoDiscount: Prisma.Decimal;
+    platformFee: Prisma.Decimal;
+    tax: Prisma.Decimal;
+  },
+  purpose: 'SERVICE' | 'SITE_VISIT_FEE' = 'SERVICE'
+) => {
+  /** Labels empty — mobile owns display copy; keys identify the row. */
   const items: Array<{ key: string; label: string; amount: number; type: 'charge' | 'discount' | 'fee' }> = [
     {
-      key: 'serviceCharge',
-      label: 'Service Charge',
+      key: purpose === 'SITE_VISIT_FEE' ? 'siteVisitFee' : 'serviceCharge',
+      label: '',
       amount: money(invoice.serviceCharge),
       type: 'charge',
     },
@@ -123,7 +136,7 @@ const buildLineItems = (invoice: {
   if (money(invoice.platformFee) > 0) {
     items.push({
       key: 'platformFee',
-      label: 'Platform Fee',
+      label: '',
       amount: money(invoice.platformFee),
       type: 'fee',
     });
@@ -131,7 +144,7 @@ const buildLineItems = (invoice: {
   if (money(invoice.traderOfferDiscount) > 0) {
     items.push({
       key: 'traderOfferDiscount',
-      label: 'Trader Offer',
+      label: '',
       amount: -money(invoice.traderOfferDiscount),
       type: 'discount',
     });
@@ -139,15 +152,28 @@ const buildLineItems = (invoice: {
   if (money(invoice.promoDiscount) > 0) {
     items.push({
       key: 'promoDiscount',
-      label: 'Promo Code',
+      label: '',
       amount: -money(invoice.promoDiscount),
       type: 'discount',
     });
   }
   if (money(invoice.tax) > 0) {
-    items.push({ key: 'tax', label: 'Tax', amount: money(invoice.tax), type: 'fee' });
+    items.push({ key: 'tax', label: '', amount: money(invoice.tax), type: 'fee' });
   }
   return items;
+};
+
+const resolveInvoicePurpose = (job: {
+  quoteType?: JobQuoteType | null;
+  siteVisitRequested?: boolean;
+}): 'SERVICE' | 'SITE_VISIT_FEE' =>
+  job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
+    ? 'SITE_VISIT_FEE'
+    : 'SERVICE';
+
+const formatTimeSlotRange = (timeSlot?: string | null) => {
+  // No static slot ranges — return the stored timeSlot value only.
+  return timeSlot?.trim() || null;
 };
 
 const currencySymbol = (code: string) =>
@@ -160,32 +186,51 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
   const job = invoice.booking.job;
   const trader = invoice.booking.trader;
   const breakdown = serializeInvoiceBreakdown(invoice);
+  const purpose = resolveInvoicePurpose(job);
   const serviceProvider =
     trader?.businessName || trader?.user?.fullName || null;
   const orderId = invoice.invoiceNumber || invoice.booking.bookingRef || invoice.id;
+  const totalFormatted = formatMoneyLabel(breakdown.totalAmount, invoice.currencyCode);
+  const slotRange = formatTimeSlotRange(job.timeSlot);
+  const visitSlotLabel =
+    job.scheduledDate && slotRange
+      ? `${new Date(job.scheduledDate).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        })}, ${slotRange}`
+      : job.scheduledDate
+        ? new Date(job.scheduledDate).toISOString()
+        : null;
 
   return {
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
-    /** UI "Order ID" e.g. #5864-2824 */
     orderId,
     status: invoice.status,
     bookingId: invoice.bookingId,
     createdAt: invoice.createdAt,
     updatedAt: invoice.updatedAt,
+    purpose,
+    screenTitle: '',
     ...breakdown,
+    siteVisitFee: purpose === 'SITE_VISIT_FEE' ? breakdown.serviceCharge : 0,
     currencySymbol: currencySymbol(invoice.currencyCode),
-    totalFormatted: formatMoneyLabel(breakdown.totalAmount, invoice.currencyCode),
-    /** Primary CTA label for Payment Details screen. */
-    payNowLabel: `Pay Now (${formatMoneyLabel(breakdown.totalAmount, invoice.currencyCode)})`,
-    lineItems: buildLineItems(invoice),
-    /** Service summary card on invoice screen. */
+    totalFormatted,
+    payNowLabel: '',
+    confirmPayLabel: '',
+    feeNote: '',
+    lineItems: buildLineItems(invoice, purpose),
     serviceSummary: {
-      categoryName: job.category?.name ?? null,
-      subcategoryName: job.subcategory?.name ?? null,
+      categoryName: job.category?.name ?? '',
+      subcategoryName: job.subcategory?.name ?? '',
       title: job.title,
       orderId,
-      serviceProvider,
+      jobRef: job.jobRef,
+      serviceProvider: serviceProvider ?? '',
+      scheduledDate: job.scheduledDate,
+      timeSlot: job.timeSlot ?? '',
+      timeSlotRange: slotRange ?? '',
+      visitSlotLabel: visitSlotLabel ?? '',
     },
     booking: {
       id: invoice.booking.id,
@@ -199,6 +244,9 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
       title: job.title,
       description: job.description,
       status: job.status,
+      quoteType: job.quoteType,
+      siteVisitRequested: job.siteVisitRequested,
+      siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : null,
       scheduledDate: job.scheduledDate,
       timeSlot: job.timeSlot,
       durationLabel: job.durationLabel,
@@ -226,12 +274,23 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
           businessName: trader.businessName,
           fullName: trader.user?.fullName ?? null,
           displayName: trader.businessName || trader.user?.fullName || null,
+          avgRating: Number(trader.avgRating ?? 0),
+          reviewsCount: trader._count?.ratingsReceived ?? 0,
+          topRated: trader.topRated,
+          isVerified: trader.verificationStatus === 'VERIFIED',
+          yearsExperience: trader.yearsExperience ?? 0,
+          profilePhotoUrl:
+            trader.profilePhotoUrl ?? trader.user?.profilePhotoUrl ?? null,
         }
       : null,
     paymentMethods: [
-      { key: 'APPLE_PAY', label: 'Apple Pay', enabled: true },
-      { key: 'GOOGLE_PAY', label: 'Google Pay', enabled: true },
-      { key: 'CARD', label: 'Pay with Credit or Debit Card', enabled: true },
+      { key: 'APPLE_PAY', label: 'Pay with Apple Pay', enabled: true },
+      { key: 'GOOGLE_PAY', label: 'Pay with Google Pay', enabled: true },
+      { key: 'CARD', label: 'Credit/Debit Card', provider: 'stripe', enabled: true },
+    ],
+    billingTypes: [
+      { key: 'INDIVIDUAL', label: 'Individual/Personal Billing' },
+      { key: 'COMPANY', label: 'Company Billing' },
     ],
     paymentStatus: invoice.payments[0]?.status ?? null,
     latestPaymentId: invoice.payments[0]?.id ?? null,
@@ -254,10 +313,10 @@ const buildReceipt = async (paymentId: string, userId: string) => {
   const trader = invoice.booking.trader;
   const amountPaid = money(payment.amount);
   const isPaid = payment.status === PaymentStatus.COMPLETED;
+  const purpose = resolveInvoicePurpose(job);
 
   return {
     paymentId: payment.id,
-    /** Aliases for success screen. */
     transactionId: payment.transactionRef,
     transactionRef: payment.transactionRef,
     status: payment.status,
@@ -272,17 +331,19 @@ const buildReceipt = async (paymentId: string, userId: string) => {
     cardBrand: payment.cardBrand,
     billingType: payment.billingType,
     companyName: payment.companyName,
-    title: isPaid ? 'Payment Successful!' : 'Payment Pending',
-    /** Success screen timeline: Paid → Confirmed → Service */
+    purpose,
+    title: '',
+    message: '',
+    /** Success screen steps — keys only; labels owned by mobile. */
     timeline: [
-      { key: 'PAID', label: 'Paid', completed: isPaid, at: payment.paidAt },
+      { key: 'PAID', label: '', completed: isPaid, at: payment.paidAt },
       {
         key: 'CONFIRMED',
-        label: 'Confirmed',
+        label: '',
         completed: isPaid,
         at: isPaid ? payment.paidAt : null,
       },
-      { key: 'SERVICE', label: 'Service', completed: false, at: null },
+      { key: 'SERVICE', label: '', completed: false, at: null },
     ],
     receiptSummary: {
       transactionId: payment.transactionRef,
@@ -291,9 +352,10 @@ const buildReceipt = async (paymentId: string, userId: string) => {
       amountPaidFormatted: formatMoneyLabel(amountPaid, payment.currencyCode),
     },
     actions: {
-      viewJob: invoice.booking.id
-        ? { method: 'GET', path: `/bookings/${invoice.booking.id}` }
-        : null,
+      viewJob: {
+        method: 'GET',
+        path: `/jobs/${job.id}`,
+      },
       backToHome: { path: '/' },
     },
     invoice: {
@@ -301,8 +363,9 @@ const buildReceipt = async (paymentId: string, userId: string) => {
       invoiceNumber: invoice.invoiceNumber,
       orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
       status: invoice.status,
+      purpose,
       ...serializeInvoiceBreakdown(invoice),
-      lineItems: buildLineItems(invoice),
+      lineItems: buildLineItems(invoice, purpose),
     },
     booking: {
       id: invoice.booking.id,
@@ -315,6 +378,8 @@ const buildReceipt = async (paymentId: string, userId: string) => {
       jobRef: job.jobRef,
       title: job.title,
       status: job.status,
+      quoteType: job.quoteType,
+      siteVisitRequested: job.siteVisitRequested,
       scheduledDate: job.scheduledDate,
       timeSlot: job.timeSlot,
       durationLabel: job.durationLabel,
@@ -330,13 +395,11 @@ const buildReceipt = async (paymentId: string, userId: string) => {
           businessName: trader.businessName,
           fullName: trader.user?.fullName ?? null,
           displayName: trader.businessName || trader.user?.fullName || null,
+          avgRating: Number(trader.avgRating ?? 0),
+          reviewsCount: trader._count?.ratingsReceived ?? 0,
+          isVerified: trader.verificationStatus === 'VERIFIED',
         }
       : null,
-    customer: {
-      id: invoice.booking.customer.id,
-      fullName: invoice.booking.customer.fullName,
-      email: invoice.booking.customer.email,
-    },
   };
 };
 
@@ -481,7 +544,7 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     billingAddress: input.billingAddress ?? null,
     invoiceId: invoice.id,
     orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
-    payNowLabel: `Pay Now (${formatMoneyLabel(money(payment.amount), payment.currencyCode)})`,
+    payNowLabel: '',
   };
 };
 
@@ -523,6 +586,57 @@ export const confirmPayment = async (
       where: { id: payment.invoiceId },
       data: { status: InvoiceStatus.PAID },
     });
+
+    // Claim / apply offer only on Payment Successful — create or update → USED.
+    const booking = await tx.booking.findUnique({
+      where: { id: payment.invoice.bookingId },
+      include: { job: { select: { id: true, claimId: true, offerId: true } } },
+    });
+    const job = booking?.job;
+    if (job?.offerId) {
+      const existingClaim = await tx.offerClaim.findUnique({
+        where: { offerId_userId: { offerId: job.offerId, userId } },
+      });
+      if (existingClaim?.status === OfferClaimStatus.USED && existingClaim.jobId !== job.id) {
+        throw new ConflictError('You have already used this offer.');
+      }
+      const claimId = existingClaim
+        ? (
+            await tx.offerClaim.update({
+              where: { id: existingClaim.id },
+              data: {
+                status: OfferClaimStatus.USED,
+                usedAt: paidAt,
+                claimedAt: existingClaim.claimedAt ?? paidAt,
+                jobId: job.id,
+              },
+            })
+          ).id
+        : (
+            await tx.offerClaim.create({
+              data: {
+                offerId: job.offerId,
+                userId,
+                status: OfferClaimStatus.USED,
+                claimedAt: paidAt,
+                usedAt: paidAt,
+                jobId: job.id,
+              },
+            })
+          ).id;
+      if (!existingClaim) {
+        await tx.offer.update({
+          where: { id: job.offerId },
+          data: { claimsCount: { increment: 1 } },
+        });
+      }
+      if (job.claimId !== claimId) {
+        await tx.job.update({
+          where: { id: job.id },
+          data: { claimId },
+        });
+      }
+    }
   });
 
   return buildReceipt(payment.id, userId);

@@ -3,6 +3,7 @@ import {
   JobQuoteType,
   JobStatus,
   OfferClaimStatus,
+  OfferStatus,
   Prisma,
   QuoteStatus,
   BookingStatus,
@@ -10,14 +11,22 @@ import {
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
-import { BadRequestError, NotFoundError } from '../../utils/errors';
-import { buildJobFormConfig, resolveQuoteTypeForCreate } from './jobs.form-config';
+import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
+import {
+  buildJobFormConfig,
+  buildNextJobPrefill,
+  buildOfferAppliedBanner,
+  resolveQuoteTypeForCreate,
+  resolveSiteVisitFee,
+  str,
+} from './jobs.form-config';
 import type {
   CreateJobInput,
   PublishJobInput,
   SetJobLocationInput,
   UpdateJobInput,
 } from './jobs.validation';
+import type { JobFormEntryPoint } from './jobs.form-config';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -71,12 +80,15 @@ export const computeInvoiceBreakdown = (input: {
   traderOfferDiscount: number;
   promoDiscount?: number;
   currencyCode?: string;
+  /** Site visit fee invoices: no platform fee markup (Figma Pay Fee = flat fee). */
+  purpose?: 'SERVICE' | 'SITE_VISIT_FEE';
 }) => {
   const serviceCharge = round2(input.serviceCharge);
   const traderOfferDiscount = round2(Math.min(input.traderOfferDiscount, serviceCharge));
   const promoDiscount = round2(input.promoDiscount ?? 0);
   const postOffer = Math.max(serviceCharge - traderOfferDiscount, 0);
-  const platformFee = round2(postOffer * 0.1);
+  const platformFee =
+    input.purpose === 'SITE_VISIT_FEE' ? 0 : round2(postOffer * 0.1);
   const tax = 0;
   const totalAmount = round2(
     serviceCharge - traderOfferDiscount - promoDiscount + platformFee + tax
@@ -90,6 +102,7 @@ export const computeInvoiceBreakdown = (input: {
     tax,
     totalAmount: Math.max(totalAmount, 0),
     currencyCode: input.currencyCode ?? 'EUR',
+    purpose: input.purpose ?? 'SERVICE',
   };
 };
 
@@ -116,6 +129,7 @@ const jobInclude = {
       id: true,
       name: true,
       siteVisitEnabled: true,
+      siteVisitFee: true,
       priceEnabled: true,
       priceEnteredBy: true,
       qaFormSchema: true,
@@ -157,146 +171,245 @@ const serializeJob = (
 
   return {
     id: job.id,
-    jobRef: job.jobRef,
+    jobRef: str(job.jobRef),
     customerId: job.customerId,
     categoryId: job.categoryId,
-    subcategoryId: job.subcategoryId,
-    offerId: job.offerId,
-    /** Alias used by Post a New Job / claim flow. */
-    appliedTraderOfferId: job.offerId,
-    claimId: job.claimId,
-    traderId: job.traderId,
-    title: job.title,
-    description: job.description,
-    addressId: job.addressId,
-    addressLine: job.addressLine,
-    city: job.city,
-    postcode: job.postcode,
-    latitude: job.latitude,
-    longitude: job.longitude,
-    timeSlot: job.timeSlot,
-    durationLabel: job.durationLabel,
-    phoneNumber: job.phoneNumber,
-    serviceCharge: job.serviceCharge != null ? money(job.serviceCharge) : null,
-    quoteType: job.quoteType ?? null,
-    minBudget: job.minBudget != null ? money(job.minBudget) : null,
-    maxBudget: job.maxBudget != null ? money(job.maxBudget) : null,
+    subcategoryId: str(job.subcategoryId),
+    offerId: str(job.offerId),
+    appliedTraderOfferId: str(job.offerId),
+    claimId: str(job.claimId),
+    traderId: str(job.traderId),
+    title: str(job.title),
+    description: str(job.description),
+    addressId: str(job.addressId),
+    addressLine: str(job.addressLine),
+    city: str(job.city),
+    postcode: str(job.postcode),
+    latitude: job.latitude ?? 0,
+    longitude: job.longitude ?? 0,
+    timeSlot: str(job.timeSlot),
+    durationLabel: str(job.durationLabel),
+    phoneNumber: str(job.phoneNumber),
+    serviceCharge: job.serviceCharge != null ? money(job.serviceCharge) : 0,
+    quoteType: job.quoteType ?? JobQuoteType.REMOTE,
+    minBudget: job.minBudget != null ? money(job.minBudget) : 0,
+    maxBudget: job.maxBudget != null ? money(job.maxBudget) : 0,
     siteVisitRequested: job.siteVisitRequested,
+    siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
     status: job.status,
-    scheduledDate: job.scheduledDate,
-    qaFormAnswers: job.qaFormAnswers,
+    scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : '',
+    qaFormAnswers: job.qaFormAnswers ?? {},
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     photos: job.photos.map((p) => ({ id: p.id, photoUrl: p.photoUrl, createdAt: p.createdAt })),
-    coverPhotoUrl: job.photos[0]?.photoUrl ?? null,
-    category: job.category,
+    coverPhotoUrl: str(job.photos[0]?.photoUrl),
+    category: job.category ?? { id: '', name: '' },
     subcategory: job.subcategory
       ? {
           id: job.subcategory.id,
           name: job.subcategory.name,
           siteVisitEnabled: job.subcategory.siteVisitEnabled,
+          siteVisitFee:
+            job.subcategory.siteVisitFee != null
+              ? money(job.subcategory.siteVisitFee)
+              : 0,
           priceEnabled: job.subcategory.priceEnabled,
           priceEnteredBy: job.subcategory.priceEnteredBy,
           qaFormSchema: job.subcategory.qaFormSchema ?? [],
         }
-      : null,
-    /** True when an offer banner should show on job screens. */
+      : {
+          id: '',
+          name: '',
+          siteVisitEnabled: false,
+          siteVisitFee: 0,
+          priceEnabled: true,
+          priceEnteredBy: 'CUSTOMER',
+          qaFormSchema: [],
+        },
     offerApplied,
     formConfig: buildJobFormConfig({
       offerApplied,
       subcategory: job.subcategory,
+      entryPoint: offerApplied ? 'OFFER' : 'DIRECT',
+      currencyCode: job.offer?.currencyCode,
+      offerBanner: job.offer
+        ? buildOfferAppliedBanner({
+            discountType: job.offer.discountType,
+            discountValue: money(job.offer.discountValue),
+            discountLabel: job.offer.discountLabel,
+            currencyCode: job.offer.currencyCode,
+          })
+        : null,
     }),
     offer: job.offer
-      ? {
-          id: job.offer.id,
-          offerCode: job.offer.offerCode,
-          title: job.offer.title,
-          discountType: job.offer.discountType,
-          discountValue: money(job.offer.discountValue),
-          discountLabel: job.offer.discountLabel,
-          currencyCode: job.offer.currencyCode,
-          offerType: job.offer.offerType,
-          traderId: job.offer.traderId,
-          bannerImageUrl: job.offer.bannerImageUrl,
-          /** Banner fields for "Offer Applied" chip on job form. */
-          bannerTitle: job.offer.title,
-          bannerSubtitle: job.offer.discountLabel,
-        }
-      : null,
+      ? (() => {
+          const banner = buildOfferAppliedBanner({
+            discountType: job.offer.discountType,
+            discountValue: money(job.offer.discountValue),
+            discountLabel: job.offer.discountLabel,
+            currencyCode: job.offer.currencyCode,
+          });
+          return {
+            id: job.offer.id,
+            offerCode: str(job.offer.offerCode),
+            title: str(job.offer.title),
+            discountType: job.offer.discountType,
+            discountValue: money(job.offer.discountValue),
+            discountLabel: str(job.offer.discountLabel),
+            currencyCode: str(job.offer.currencyCode) || 'EUR',
+            offerType: job.offer.offerType,
+            traderId: str(job.offer.traderId),
+            bannerImageUrl: str(job.offer.bannerImageUrl),
+            bannerTitle: banner.title,
+            bannerSubtitle: banner.discountLabel,
+            bannerMessage: banner.message,
+            offerBanner: banner,
+          };
+        })()
+      : {
+          id: '',
+          offerCode: '',
+          title: '',
+          discountType: '',
+          discountValue: 0,
+          discountLabel: '',
+          currencyCode: 'EUR',
+          offerType: '',
+          traderId: '',
+          bannerImageUrl: '',
+          bannerTitle: '',
+          bannerSubtitle: '',
+          bannerMessage: '',
+          offerBanner: { title: '', message: '', discountLabel: '' },
+        },
     address: job.address
       ? {
           id: job.address.id,
-          label: job.address.label ?? job.address.addressType,
-          addressType: job.address.addressType,
-          houseNumber: job.address.houseNumber,
-          addressLine1: job.address.addressLine1,
-          addressLine2: job.address.addressLine2,
-          city: job.address.city,
-          county: job.address.county,
-          eircode: job.address.eircode,
-          country: job.address.country,
-          latitude: job.address.latitude,
-          longitude: job.address.longitude,
+          label: str(job.address.label ?? job.address.addressType),
+          addressType: str(job.address.addressType),
+          houseNumber: str(job.address.houseNumber),
+          addressLine1: str(job.address.addressLine1),
+          addressLine2: str(job.address.addressLine2),
+          city: str(job.address.city),
+          county: str(job.address.county),
+          eircode: str(job.address.eircode),
+          country: str(job.address.country),
+          latitude: job.address.latitude ?? 0,
+          longitude: job.address.longitude ?? 0,
           isDefault: job.address.isDefault,
         }
-      : null,
+      : {
+          id: '',
+          label: '',
+          addressType: '',
+          houseNumber: '',
+          addressLine1: '',
+          addressLine2: '',
+          city: '',
+          county: '',
+          eircode: '',
+          country: '',
+          latitude: 0,
+          longitude: 0,
+          isDefault: false,
+        },
     trader: job.trader
       ? {
           id: job.trader.id,
-          businessName: job.trader.businessName,
-          fullName: job.trader.user?.fullName ?? null,
-          displayName: traderDisplayName,
-          traderType: job.trader.traderType,
+          businessName: str(job.trader.businessName),
+          fullName: str(job.trader.user?.fullName),
+          displayName: str(traderDisplayName),
+          traderType: str(job.trader.traderType),
           avgRating: Number(job.trader.avgRating),
           topRated: job.trader.topRated,
           yearsExperience: job.trader.yearsExperience ?? 0,
           experienceLabel:
             (job.trader.yearsExperience ?? 0) > 0
               ? `${job.trader.yearsExperience}+ Yrs`
-              : null,
-          city: job.trader.city ?? null,
-          country: job.trader.country ?? null,
+              : '',
+          city: str(job.trader.city),
+          country: str(job.trader.country),
           location:
-            [job.trader.city, job.trader.country].filter(Boolean).join(', ') || null,
-          profilePhotoUrl:
-            job.trader.profilePhotoUrl ?? job.trader.user?.profilePhotoUrl ?? null,
+            [job.trader.city, job.trader.country].filter(Boolean).join(', ') || '',
+          profilePhotoUrl: str(
+            job.trader.profilePhotoUrl ?? job.trader.user?.profilePhotoUrl
+          ),
         }
-      : null,
-    claim: job.claim,
-    bookingId: job.booking?.id ?? null,
-    invoiceId: job.booking?.invoice?.id ?? null,
+      : {
+          id: '',
+          businessName: '',
+          fullName: '',
+          displayName: '',
+          traderType: '',
+          avgRating: 0,
+          topRated: false,
+          yearsExperience: 0,
+          experienceLabel: '',
+          city: '',
+          country: '',
+          location: '',
+          profilePhotoUrl: '',
+        },
+    claim: job.claim
+      ? {
+          id: job.claim.id,
+          status: job.claim.status,
+          claimedAt: job.claim.claimedAt ? job.claim.claimedAt.toISOString() : '',
+        }
+      : { id: '', status: '', claimedAt: '' },
+    bookingId: str(job.booking?.id),
+    invoiceId: str(job.booking?.invoice?.id),
     booking: job.booking
       ? {
           id: job.booking.id,
-          bookingRef: job.booking.bookingRef,
+          bookingRef: str(job.booking.bookingRef),
           status: job.booking.status,
-          scheduledDate: job.booking.scheduledDate,
+          scheduledDate: job.booking.scheduledDate
+            ? job.booking.scheduledDate.toISOString()
+            : '',
           invoice: job.booking.invoice
             ? {
                 id: job.booking.invoice.id,
-                invoiceNumber: job.booking.invoice.invoiceNumber,
+                invoiceNumber: str(job.booking.invoice.invoiceNumber),
                 status: job.booking.invoice.status,
                 totalAmount: money(job.booking.invoice.totalAmount),
               }
-            : null,
+            : { id: '', invoiceNumber: '', status: '', totalAmount: 0 },
         }
-      : null,
-    /** Next-step hints for the mobile wizard. */
+      : {
+          id: '',
+          bookingRef: '',
+          status: '',
+          scheduledDate: '',
+          invoice: { id: '', invoiceNumber: '', status: '', totalAmount: 0 },
+        },
     nextSteps: {
       needsLocation: !job.addressId,
       canPublish: Boolean(job.addressId) && job.status === JobStatus.DRAFT,
       canPay: Boolean(job.booking?.invoice?.id),
-      invoiceId: job.booking?.invoice?.id ?? null,
-      bookingId: job.booking?.id ?? null,
-      /** Direct Trader → PAYMENT_DETAILS; quote-wise → WAITING_FOR_QUOTES */
-      nextAfterLocation: offerApplied ? 'PAYMENT_DETAILS' : 'WAITING_FOR_QUOTES',
+      invoiceId: str(job.booking?.invoice?.id),
+      bookingId: str(job.booking?.id),
+      publishCtaLabel: '',
+      chooseLocationCtaLabel: '',
+      nextAfterLocation:
+        offerApplied ||
+        job.quoteType === JobQuoteType.ONSITE ||
+        job.siteVisitRequested
+          ? 'SITE_VISIT_PAY_FEE'
+          : 'WAITING_FOR_QUOTES',
+      paymentScreen:
+        job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
+          ? 'SITE_VISIT_PAY_FEE'
+          : 'PAYMENT_DETAILS',
       nextScreen: !job.addressId
         ? 'CHOOSE_LOCATION'
         : job.booking?.invoice?.id
-          ? 'PAYMENT_DETAILS'
+          ? job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
+            ? 'SITE_VISIT_PAY_FEE'
+            : 'PAYMENT_DETAILS'
           : job.status === JobStatus.DRAFT
             ? 'PUBLISH'
-            : null,
+            : '',
     },
   };
 };
@@ -332,29 +445,35 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
   if (offerId) {
     const offer = await prisma.offer.findUnique({ where: { id: offerId } });
     if (!offer) throw new NotFoundError('Offer not found.');
+    if (offer.status !== OfferStatus.ACTIVE) {
+      throw new BadRequestError('This offer is not active.');
+    }
+    const now = new Date();
+    if (offer.validFrom > now || offer.validUntil < now) {
+      throw new BadRequestError('This offer is not currently valid.');
+    }
     resolvedOffer = offer;
     traderId = offer.traderId ?? traderId;
 
-    if (!claimId) {
-      const claim = await prisma.offerClaim.findUnique({
-        where: { offerId_userId: { offerId, userId: customerId } },
-      });
-      if (claim && claim.status === OfferClaimStatus.CLAIMED) {
-        claimId = claim.id;
-      }
+    // Soft-link offerId only. Claim is created as USED on Payment Successful — not here.
+    // Ignore client claimId for trader flow (no separate claim API).
+    const existingClaim = await prisma.offerClaim.findUnique({
+      where: { offerId_userId: { offerId, userId: customerId } },
+    });
+    if (existingClaim?.status === OfferClaimStatus.USED) {
+      throw new ConflictError('You have already used this offer.');
     }
+    claimId = null;
   }
 
-  if (claimId) {
+  if (claimId && !offerId) {
     const claim = await prisma.offerClaim.findFirst({
       where: { id: claimId, userId: customerId },
+      include: { offer: true },
     });
     if (!claim) throw new NotFoundError('Offer claim not found.');
-    if (claim.status !== OfferClaimStatus.CLAIMED) {
-      throw new BadRequestError('This offer claim is not available to use.');
-    }
-    if (offerId && claim.offerId !== offerId) {
-      throw new BadRequestError('Claim does not belong to the selected offer.');
+    if (claim.status === OfferClaimStatus.USED) {
+      throw new BadRequestError('This offer has already been used.');
     }
   }
 
@@ -378,22 +497,46 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
   const offerApplied = Boolean(offerId);
   const formConfig = buildJobFormConfig({
     offerApplied,
-    subcategory: subcategoryFlags,
+    subcategory: subcategoryFlags
+      ? {
+          ...subcategoryFlags,
+          siteVisitFee:
+            subcategoryFlags.siteVisitFee != null
+              ? money(subcategoryFlags.siteVisitFee)
+              : null,
+        }
+      : null,
+    entryPoint: offerApplied ? 'OFFER' : 'DIRECT',
   });
   const quoteType = resolveQuoteTypeForCreate({
-    offerApplied,
     quoteType: input.quoteType,
     formDefault: formConfig.defaultQuoteType,
   });
+  const siteVisitRequested =
+    input.siteVisitRequested ?? quoteType === JobQuoteType.ONSITE;
+  const siteVisitFee =
+    siteVisitRequested || quoteType === JobQuoteType.ONSITE
+      ? resolveSiteVisitFee(
+          subcategoryFlags
+            ? {
+                siteVisitEnabled: subcategoryFlags.siteVisitEnabled,
+                siteVisitFee:
+                  subcategoryFlags.siteVisitFee != null
+                    ? money(subcategoryFlags.siteVisitFee)
+                    : null,
+                priceEnabled: subcategoryFlags.priceEnabled,
+                priceEnteredBy: subcategoryFlags.priceEnteredBy,
+              }
+            : { siteVisitEnabled: true, priceEnabled: true, priceEnteredBy: 'CUSTOMER' }
+        )
+      : null;
 
-  if (quoteType === JobQuoteType.FIXED && offerApplied && input.serviceCharge == null) {
-    // Allow draft without charge; publish still requires it.
-  }
   if (
-    quoteType === JobQuoteType.BUDGET_RANGE &&
-    (input.minBudget == null || input.maxBudget == null)
+    input.minBudget != null &&
+    input.maxBudget != null &&
+    input.maxBudget < input.minBudget
   ) {
-    // Draft may omit until user fills; no hard fail here.
+    throw new BadRequestError('maxBudget must be greater than or equal to minBudget.');
   }
 
   const title =
@@ -425,14 +568,12 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
           timeSlot: input.timeSlot,
           durationLabel: input.durationLabel,
           phoneNumber: input.phoneNumber,
-          serviceCharge:
-            quoteType === JobQuoteType.FIXED ? input.serviceCharge : undefined,
+          serviceCharge: input.serviceCharge,
           quoteType,
-          minBudget:
-            quoteType === JobQuoteType.BUDGET_RANGE ? input.minBudget ?? undefined : undefined,
-          maxBudget:
-            quoteType === JobQuoteType.BUDGET_RANGE ? input.maxBudget ?? undefined : undefined,
-          siteVisitRequested: input.siteVisitRequested ?? false,
+          minBudget: input.minBudget ?? undefined,
+          maxBudget: input.maxBudget ?? undefined,
+          siteVisitRequested,
+          siteVisitFee: siteVisitFee ?? undefined,
           qaFormAnswers: input.qaFormAnswers as Prisma.InputJsonValue | undefined,
           status: JobStatus.DRAFT,
           photos: input.photoUrls?.length
@@ -595,12 +736,44 @@ export const publishJob = async (
   if (!address) throw new NotFoundError('Address not found.');
 
   const traderId = existing.traderId;
-  const serviceChargeRaw =
-    input.serviceCharge ??
-    (existing.serviceCharge != null ? money(existing.serviceCharge) : null);
+  const isSiteVisit =
+    existing.quoteType === JobQuoteType.ONSITE || existing.siteVisitRequested;
+
+  const siteVisitFeeRaw =
+    existing.siteVisitFee != null
+      ? money(existing.siteVisitFee)
+      : resolveSiteVisitFee(
+          existing.subcategory
+            ? {
+                siteVisitEnabled: existing.subcategory.siteVisitEnabled,
+                siteVisitFee:
+                  existing.subcategory.siteVisitFee != null
+                    ? money(existing.subcategory.siteVisitFee)
+                    : null,
+                priceEnabled: existing.subcategory.priceEnabled,
+                priceEnteredBy: existing.subcategory.priceEnteredBy,
+              }
+            : null
+        );
+
+  const serviceChargeRaw = isSiteVisit
+    ? siteVisitFeeRaw
+    : input.serviceCharge ??
+      (existing.serviceCharge != null ? money(existing.serviceCharge) : null) ??
+      (existing.maxBudget != null ? money(existing.maxBudget) : null);
+
+  if (isSiteVisit && !traderId) {
+    throw new BadRequestError(
+      'A trader is required to publish a Site Visit job (from offer or trader selection).'
+    );
+  }
 
   if (traderId && (serviceChargeRaw == null || Number.isNaN(serviceChargeRaw))) {
-    throw new BadRequestError('Service charge is required for Direct Trader jobs.');
+    throw new BadRequestError(
+      isSiteVisit
+        ? 'Site visit fee is required to publish.'
+        : 'Service charge (or maxBudget) is required for Direct Trader jobs.'
+    );
   }
 
   const result = await prisma.$transaction(
@@ -615,7 +788,15 @@ export const publishJob = async (
         postcode: address.eircode,
         latitude: address.latitude,
         longitude: address.longitude,
-        ...(serviceChargeRaw != null ? { serviceCharge: serviceChargeRaw } : {}),
+        ...(isSiteVisit
+          ? {
+              siteVisitFee: siteVisitFeeRaw,
+              siteVisitRequested: true,
+              serviceCharge: siteVisitFeeRaw,
+            }
+          : serviceChargeRaw != null
+            ? { serviceCharge: serviceChargeRaw }
+            : {}),
       },
       include: jobInclude,
     });
@@ -623,21 +804,43 @@ export const publishJob = async (
     let booking = null;
     let invoice = null;
 
+    // Soft-link offerId only. Do NOT claim here — claim → USED on payment confirm
+    // (or immediately below when this publish has no invoice / no pay step).
+    if (job.offerId) {
+      const existingClaim = await tx.offerClaim.findUnique({
+        where: { offerId_userId: { offerId: job.offerId, userId: customerId } },
+      });
+      if (existingClaim?.status === OfferClaimStatus.USED) {
+        throw new ConflictError('You have already used this offer.');
+      }
+    }
+
     if (traderId && serviceChargeRaw != null) {
       const offer = job.offerId
         ? await tx.offer.findUnique({ where: { id: job.offerId } })
         : null;
 
-      const traderOfferDiscount = computeTraderOfferDiscount(
-        serviceChargeRaw,
-        offer?.discountType,
-        offer ? money(offer.discountValue) : 0
-      );
+      /**
+       * Site Visit Pay Fee: charge flat visit fee. Job offer (€5 etc.) applies to
+       * the eventual service — not this facilitation fee (matches Figma).
+       * FREE_SERVICE (free visit) still zeros the visit fee.
+       */
+      const traderOfferDiscount = isSiteVisit
+        ? offer?.discountType === DiscountType.FREE_SERVICE
+          ? serviceChargeRaw
+          : 0
+        : computeTraderOfferDiscount(
+            serviceChargeRaw,
+            offer?.discountType,
+            offer ? money(offer.discountValue) : 0
+          );
+
       const breakdown = computeInvoiceBreakdown({
         serviceCharge: serviceChargeRaw,
         traderOfferDiscount,
         promoDiscount: 0,
         currencyCode: offer?.currencyCode ?? 'EUR',
+        purpose: isSiteVisit ? 'SITE_VISIT_FEE' : 'SERVICE',
       });
 
       await tx.quote.create({
@@ -647,7 +850,9 @@ export const publishJob = async (
           quotedAmount: breakdown.serviceCharge,
           currencyCode: breakdown.currencyCode,
           status: QuoteStatus.ACCEPTED,
-          notes: 'Direct Trader offer — auto-accepted on publish.',
+          notes: isSiteVisit
+            ? 'Site visit fee — auto-accepted on publish.'
+            : 'Direct Trader offer — auto-accepted on publish.',
         },
       });
 
@@ -683,16 +888,7 @@ export const publishJob = async (
         data: { status: JobStatus.SCHEDULED },
       });
 
-      if (job.claimId) {
-        await tx.offerClaim.update({
-          where: { id: job.claimId },
-          data: {
-            status: OfferClaimStatus.USED,
-            usedAt: new Date(),
-            jobId: job.id,
-          },
-        });
-      }
+      // Claim stays unset until Payment Successful (confirmPayment).
 
       booking = {
         id: createdBooking.id,
@@ -709,7 +905,50 @@ export const publishJob = async (
         bookingId: createdInvoice.bookingId,
         status: createdInvoice.status,
         ...breakdown,
+        purpose: isSiteVisit ? 'SITE_VISIT_FEE' : 'SERVICE',
       };
+    } else if (job.offerId) {
+      // No payment step (e.g. waiting for quotes) — claim offer as USED when job goes live.
+      const existingClaim = await tx.offerClaim.findUnique({
+        where: { offerId_userId: { offerId: job.offerId, userId: customerId } },
+      });
+      if (existingClaim?.status === OfferClaimStatus.USED) {
+        throw new ConflictError('You have already used this offer.');
+      }
+      const claimId = existingClaim
+        ? (
+            await tx.offerClaim.update({
+              where: { id: existingClaim.id },
+              data: {
+                status: OfferClaimStatus.USED,
+                usedAt: new Date(),
+                claimedAt: existingClaim.claimedAt ?? new Date(),
+                jobId: job.id,
+              },
+            })
+          ).id
+        : (
+            await tx.offerClaim.create({
+              data: {
+                offerId: job.offerId,
+                userId: customerId,
+                status: OfferClaimStatus.USED,
+                claimedAt: new Date(),
+                usedAt: new Date(),
+                jobId: job.id,
+              },
+            })
+          ).id;
+      if (!existingClaim) {
+        await tx.offer.update({
+          where: { id: job.offerId },
+          data: { claimsCount: { increment: 1 } },
+        });
+      }
+      await tx.job.update({
+        where: { id: job.id },
+        data: { claimId },
+      });
     }
 
     const refreshed = await tx.job.findUniqueOrThrow({
@@ -733,14 +972,231 @@ export const publishJob = async (
     const fullInvoice = await getInvoice(customerId, result.invoiceId);
     return {
       job: result.job,
-      booking: result.booking,
+      booking: result.booking ?? {
+        id: '',
+        bookingRef: '',
+        status: '',
+        scheduledDate: '',
+        traderId: '',
+        jobId: '',
+      },
+      invoiceId: result.invoiceId,
       invoice: fullInvoice,
     };
   }
 
   return {
     job: result.job,
-    booking: result.booking,
-    invoice: null,
+    booking: result.booking ?? {
+      id: '',
+      bookingRef: '',
+      status: '',
+      scheduledDate: '',
+      traderId: '',
+      jobId: '',
+    },
+    invoiceId: '',
+    invoice: {
+      id: '',
+      invoiceNumber: '',
+      bookingId: '',
+      status: '',
+      purpose: '',
+      totalAmount: 0,
+      siteVisitFee: 0,
+      screenTitle: '',
+      confirmPayLabel: '',
+      payNowLabel: '',
+      feeNote: '',
+    },
+  };
+};
+
+/**
+ * Unified Post a New Job form config for every entry point
+ * (home category, offer accept, trader profile).
+ */
+export const getJobFormConfig = async (
+  customerId: string,
+  query: {
+    categoryId?: string;
+    subcategoryId?: string;
+    offerId?: string;
+    entryPoint?: JobFormEntryPoint;
+  }
+) => {
+  let offerApplied = false;
+  let categoryId = query.categoryId ?? null;
+  let subcategoryId = query.subcategoryId ?? null;
+  let traderId: string | null = null;
+  let offerMeta: {
+    id: string;
+    title: string;
+    discountLabel: string | null;
+    bannerImageUrl: string | null;
+    discountType: DiscountType;
+    discountValue: number;
+    currencyCode: string;
+  } | null = null;
+
+  if (query.offerId) {
+    const offer = await prisma.offer.findUnique({
+      where: { id: query.offerId },
+      include: {
+        categories: { select: { categoryId: true }, take: 1 },
+        subcategories: { select: { subcategoryId: true }, take: 1 },
+      },
+    });
+    if (!offer) throw new NotFoundError('Offer not found.');
+
+    const claim = await prisma.offerClaim.findUnique({
+      where: { offerId_userId: { offerId: offer.id, userId: customerId } },
+    });
+    if (claim?.status === OfferClaimStatus.USED) {
+      throw new ConflictError('You have already used this offer.');
+    }
+
+    offerApplied = true;
+    traderId = offer.traderId;
+    categoryId = categoryId ?? offer.categories[0]?.categoryId ?? null;
+    subcategoryId = subcategoryId ?? offer.subcategories[0]?.subcategoryId ?? null;
+    offerMeta = {
+      id: offer.id,
+      title: offer.title,
+      discountLabel: offer.discountLabel,
+      bannerImageUrl: offer.bannerImageUrl,
+      discountType: offer.discountType,
+      discountValue: money(offer.discountValue),
+      currencyCode: offer.currencyCode,
+    };
+  }
+
+  let subcategoryFlags = null;
+  if (subcategoryId) {
+    const subcategory = await prisma.subcategory.findUnique({ where: { id: subcategoryId } });
+    if (!subcategory) throw new NotFoundError('Subcategory not found.');
+    if (categoryId && subcategory.categoryId !== categoryId) {
+      throw new BadRequestError('Subcategory does not belong to the category.');
+    }
+    categoryId = categoryId ?? subcategory.categoryId;
+    subcategoryFlags = subcategory;
+  }
+
+  let category = null;
+  if (categoryId) {
+    category = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (!category) throw new NotFoundError('Category not found.');
+  }
+
+  const entryPoint: JobFormEntryPoint =
+    query.entryPoint ??
+    (offerApplied
+      ? 'OFFER'
+      : query.subcategoryId
+        ? 'HOME_SUBCATEGORY'
+        : query.categoryId
+          ? 'HOME_CATEGORY'
+          : 'DIRECT');
+
+  const offerBanner = offerMeta
+    ? buildOfferAppliedBanner({
+        discountType: offerMeta.discountType,
+        discountValue: offerMeta.discountValue,
+        discountLabel: offerMeta.discountLabel,
+        currencyCode: offerMeta.currencyCode,
+      })
+    : { title: '', message: '', discountLabel: '' };
+
+  const formConfig = buildJobFormConfig({
+    offerApplied,
+    subcategory: subcategoryFlags,
+    entryPoint,
+    currencyCode: offerMeta?.currencyCode,
+    offerBanner: offerApplied ? offerBanner : null,
+  });
+
+  const emptyOffer = {
+    id: '',
+    title: '',
+    discountLabel: '',
+    bannerImageUrl: '',
+    bannerTitle: '',
+    bannerSubtitle: '',
+    bannerMessage: '',
+    offerBanner: { title: '', message: '', discountLabel: '' },
+  };
+
+  return {
+    entryPoint,
+    categoryId: str(categoryId),
+    subcategoryId: str(subcategoryId),
+    traderId: str(traderId),
+    offerId: str(offerMeta?.id),
+    offerApplied,
+    category: category
+      ? { id: category.id, name: str(category.name) }
+      : { id: '', name: '' },
+    subcategory: subcategoryFlags
+      ? {
+          id: subcategoryFlags.id,
+          name: str(subcategoryFlags.name),
+          siteVisitEnabled: subcategoryFlags.siteVisitEnabled,
+          siteVisitFee: resolveSiteVisitFee(subcategoryFlags),
+          priceEnabled: subcategoryFlags.priceEnabled,
+          priceEnteredBy: subcategoryFlags.priceEnteredBy,
+        }
+      : {
+          id: '',
+          name: '',
+          siteVisitEnabled: false,
+          siteVisitFee: 0,
+          priceEnabled: true,
+          priceEnteredBy: 'CUSTOMER',
+        },
+    offer: offerMeta
+      ? {
+          id: offerMeta.id,
+          title: str(offerMeta.title),
+          discountLabel: str(offerMeta.discountLabel),
+          bannerImageUrl: str(offerMeta.bannerImageUrl),
+          bannerTitle: str(offerBanner.title),
+          bannerSubtitle: str(offerBanner.discountLabel),
+          bannerMessage: str(offerBanner.message),
+          offerBanner,
+        }
+      : emptyOffer,
+    prefill: offerMeta
+      ? buildNextJobPrefill({
+          offerId: offerMeta.id,
+          traderId,
+          categoryId,
+          subcategoryId,
+          offerApplied: true,
+          bannerTitle: offerBanner.title,
+          bannerSubtitle: offerBanner.discountLabel,
+          bannerMessage: offerBanner.message,
+          discountLabel: offerMeta.discountLabel,
+          bannerImageUrl: offerMeta.bannerImageUrl,
+          title: offerMeta.title,
+          quoteType: formConfig.defaultQuoteType,
+          formConfig,
+        })
+      : buildNextJobPrefill({
+          offerId: '',
+          traderId,
+          categoryId,
+          subcategoryId,
+          offerApplied: false,
+          quoteType: formConfig.defaultQuoteType,
+          formConfig,
+        }),
+    formConfig,
+    navigation: {
+      nextScreen: 'POST_NEW_JOB',
+      afterJobForm: formConfig.nextAfterJobForm,
+      afterLocation: formConfig.nextAfterLocation,
+      afterPublish: formConfig.nextAfterLocation,
+      afterPayment: 'SUCCESS',
+    },
   };
 };

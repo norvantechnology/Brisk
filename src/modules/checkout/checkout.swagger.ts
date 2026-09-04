@@ -19,11 +19,12 @@
  *       properties:
  *         key:
  *           type: string
- *           enum: [serviceCharge, platformFee, traderOfferDiscount, promoDiscount, tax]
+ *           enum: [serviceCharge, siteVisitFee, platformFee, traderOfferDiscount, promoDiscount, tax]
  *         label:
  *           type: string
- *           description: Exact UI label — Service Charge, Platform Fee, Trader Offer, Promo Code, Tax
- *           example: Service Charge
+ *           description: |
+ *             Exact UI label — Site Visit Fee, Service Charge, Platform Fee, Trader Offer / Free Visit, Promo Code, Tax
+ *           example: Site Visit Fee
  *         amount:
  *           type: number
  *           description: Positive for charges/fees; negative for discounts
@@ -48,34 +49,47 @@
  *         enabled: { type: boolean }
  *     Invoice:
  *       type: object
- *       description: Payment Details screen payload
+ *       description: |
+ *         Payment Details / Site Visit & Pay Fee payload from GET /invoices/{id}
+ *         or publish `data.invoice`.
  *       properties:
  *         id: { type: string, format: uuid }
  *         invoiceNumber: { type: string, example: INV-2026-9C7E }
  *         orderId:
  *           type: string
- *           description: UI Order ID (invoiceNumber or bookingRef)
+ *           description: UI Order ID / Job ref display (invoiceNumber or bookingRef)
  *           example: INV-2026-9C7E
  *         status: { $ref: '#/components/schemas/InvoiceStatus' }
+ *         purpose:
+ *           type: string
+ *           enum: [SERVICE, SITE_VISIT_FEE]
+ *           description: SITE_VISIT_FEE → Site Visit & Pay Fee screen; SERVICE → Payment Details
+ *         screenTitle:
+ *           type: string
+ *           description: Empty — mobile owns screen title; use purpose
  *         bookingId: { type: string, format: uuid }
  *         createdAt: { type: string, format: date-time }
  *         updatedAt: { type: string, format: date-time }
- *         serviceCharge: { type: number, example: 125 }
- *         traderOfferDiscount: { type: number, example: 6.25 }
+ *         serviceCharge: { type: number, description: Base amount (site visit fee stored here for SITE_VISIT_FEE) }
+ *         siteVisitFee: { type: number, description: Alias when purpose=SITE_VISIT_FEE; else 0 }
+ *         traderOfferDiscount: { type: number, example: 0 }
  *         promoDiscount: { type: number, example: 0 }
  *         platformFee:
  *           type: number
- *           example: 11.88
- *           description: 10% of (serviceCharge - traderOfferDiscount)
+ *           example: 0
+ *           description: 10% of post-discount for SERVICE; 0 for SITE_VISIT_FEE
  *         tax: { type: number, example: 0 }
- *         totalAmount: { type: number, example: 130.63 }
- *         currencyCode: { type: string, example: EUR }
- *         currencySymbol: { type: string, example: "€" }
- *         totalFormatted: { type: string, example: "€130.63" }
+ *         totalAmount: { type: number, description: Total Amount Due Now }
+ *         currencyCode: { type: string }
+ *         currencySymbol: { type: string }
+ *         totalFormatted: { type: string, description: Dynamic amount formatting only }
  *         payNowLabel:
  *           type: string
- *           example: "Pay Now (€130.63)"
- *           description: Primary CTA label on Payment Details
+ *           description: Empty — mobile owns CTA; use totalAmount / totalFormatted
+ *         confirmPayLabel: { type: string, description: Empty — mobile owns CTA }
+ *         feeNote:
+ *           type: string
+ *           description: Empty — mobile owns info-box copy
  *         lineItems:
  *           type: array
  *           items: { $ref: '#/components/schemas/InvoiceLineItem' }
@@ -143,32 +157,51 @@
  *     CreatePaymentIntentRequest:
  *       type: object
  *       required: [invoiceId, method]
+ *       description: Body for Confirm & Pay on Site Visit & Pay Fee / Payment Details.
  *       properties:
  *         invoiceId:
  *           type: string
  *           format: uuid
- *           description: "From publish response data.invoice.id or GET /invoices/{id}"
+ *           description: |
+ *             **Required.** From publish `data.invoice.id` or GET /invoices/{id}.
+ *             Must be UNPAID and owned by the customer.
  *         method:
- *           $ref: '#/components/schemas/PaymentMethod'
+ *           allOf:
+ *             - $ref: '#/components/schemas/PaymentMethod'
+ *           description: |
+ *             Payment method button selected:
+ *             CARD (Stripe form), APPLE_PAY, or GOOGLE_PAY.
  *         billingType:
  *           allOf:
  *             - $ref: '#/components/schemas/BillingType'
  *           default: INDIVIDUAL
+ *           description: |
+ *             Radio on Pay Fee screen:
+ *             INDIVIDUAL = Individual/Personal Billing;
+ *             COMPANY = Company Billing (show company fields).
  *         companyName:
  *           type: string
- *           description: Required when billingType is COMPANY
- *         tinNumber: { type: string }
- *         billingAddress: { $ref: '#/components/schemas/BillingAddress' }
+ *           description: Required when billingType=COMPANY (Company Name field).
+ *         tinNumber:
+ *           type: string
+ *           description: Optional TIN / VAT when Company Billing (e.g. DE 123 456 789).
+ *         billingAddress:
+ *           allOf:
+ *             - $ref: '#/components/schemas/BillingAddress'
+ *           description: Optional company/personal address lines on Pay Fee form.
  *     PaymentIntentResponse:
  *       type: object
  *       properties:
- *         paymentId: { type: string, format: uuid }
+ *         paymentId:
+ *           type: string
+ *           format: uuid
+ *           description: Pass this id to POST /payments/{id}/confirm or /fail.
  *         transactionId: { type: string, example: TXN-DBBA9C9F }
  *         transactionRef: { type: string, example: TXN-DBBA9C9F }
- *         clientSecret: { type: string, example: mock_secret_... }
+ *         clientSecret: { type: string, example: mock_secret_..., description: Stripe client secret (mock until live keys) }
  *         publishableKey: { type: string, nullable: true }
- *         amount: { type: number, example: 130.63 }
- *         amountFormatted: { type: string, example: "€130.63" }
+ *         amount: { type: number, example: 30, description: Amount due now (site visit fee or service total) }
+ *         amountFormatted: { type: string, example: "€30.00" }
  *         currencyCode: { type: string, example: EUR }
  *         currencySymbol: { type: string, example: "€" }
  *         method: { $ref: '#/components/schemas/PaymentMethod' }
@@ -180,12 +213,13 @@
  *         billingAddress: { type: object, nullable: true }
  *         invoiceId: { type: string, format: uuid }
  *         orderId: { type: string }
- *         payNowLabel: { type: string, example: "Pay Now (€130.63)" }
+ *         payNowLabel: { type: string, description: Empty — mobile owns CTA; use amount / amountFormatted }
  *     ConfirmPaymentRequest:
  *       type: object
+ *       description: Optional card metadata after Stripe success (for receipt display).
  *       properties:
- *         cardLast4: { type: string, minLength: 4, maxLength: 4, example: "4567" }
- *         cardBrand: { type: string, example: visa }
+ *         cardLast4: { type: string, minLength: 4, maxLength: 4, example: "4567", description: Last 4 digits if CARD method }
+ *         cardBrand: { type: string, example: visa, description: Card brand for receipt }
  *     ReceiptTimelineStep:
  *       type: object
  *       properties:
@@ -195,16 +229,16 @@
  *         at: { type: string, format: date-time, nullable: true }
  *     PaymentReceipt:
  *       type: object
- *       description: Payment Successful screen
+ *       description: Payment confirm/receipt payload — amounts + purpose; UI copy owned by mobile
  *       properties:
  *         paymentId: { type: string, format: uuid }
- *         transactionId: { type: string, example: TXN-DBBA9C9F }
+ *         transactionId: { type: string, description: Shown as Transaction ID on receipt }
  *         transactionRef: { type: string }
  *         status: { $ref: '#/components/schemas/PaymentStatus' }
  *         method: { $ref: '#/components/schemas/PaymentMethod' }
  *         amount: { type: number }
  *         amountPaid: { type: number }
- *         amountPaidFormatted: { type: string, example: "€130.63" }
+ *         amountPaidFormatted: { type: string }
  *         currencyCode: { type: string }
  *         currencySymbol: { type: string }
  *         paidAt: { type: string, format: date-time, nullable: true }
@@ -212,10 +246,12 @@
  *         cardBrand: { type: string, nullable: true }
  *         billingType: { $ref: '#/components/schemas/BillingType' }
  *         companyName: { type: string, nullable: true }
- *         title: { type: string, example: "Payment Successful!" }
+ *         purpose: { type: string, enum: [SERVICE, SITE_VISIT_FEE], description: Mobile picks success copy from purpose }
+ *         title: { type: string, description: Empty — mobile owns }
+ *         message: { type: string, description: Empty — mobile owns }
  *         timeline:
  *           type: array
- *           description: Status tracker Paid then Confirmed then Service
+ *           description: Keys PAID / CONFIRMED / SERVICE; labels empty
  *           items: { $ref: '#/components/schemas/ReceiptTimelineStep' }
  *         receiptSummary:
  *           type: object

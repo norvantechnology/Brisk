@@ -12,6 +12,8 @@ export type OfferWriteInput = {
   /** Alias for fullDescription — mobile "Description & Terms" field. */
   description?: string | null;
   fullDescription?: string | null;
+  /** Same as description — Figma "Description & Terms" label. */
+  termsAndConditions?: string | null;
   bannerImageUrl?: string | null;
   badgeTag?: string | null;
   discountType: DiscountType | 'FLAT' | 'PERCENTAGE' | 'FREE_SERVICE';
@@ -30,7 +32,8 @@ export type OfferWriteInput = {
 const resolveFullDescription = (body: {
   description?: string | null;
   fullDescription?: string | null;
-}) => body.fullDescription ?? body.description ?? null;
+  termsAndConditions?: string | null;
+}) => body.fullDescription ?? body.description ?? body.termsAndConditions ?? null;
 
 const asDiscountType = (value: OfferWriteInput['discountType']): DiscountType =>
   value as DiscountType;
@@ -197,7 +200,9 @@ export const updateOfferRecord = async (id: string, body: Partial<OfferWriteInpu
       couponCode: body.couponCode === undefined ? undefined : body.couponCode?.trim() || null,
       shortDescription: body.shortDescription,
       fullDescription:
-        body.fullDescription !== undefined || body.description !== undefined
+        body.fullDescription !== undefined ||
+        body.description !== undefined ||
+        body.termsAndConditions !== undefined
           ? resolveFullDescription(body)
           : undefined,
       bannerImageUrl: body.bannerImageUrl,

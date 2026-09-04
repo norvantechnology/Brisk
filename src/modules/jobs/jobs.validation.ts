@@ -20,7 +20,6 @@ const refineBudget = (
   ctx: z.RefinementCtx
 ) => {
   if (
-    data.quoteType === JobQuoteType.BUDGET_RANGE &&
     data.minBudget != null &&
     data.maxBudget != null &&
     data.maxBudget < data.minBudget
@@ -32,6 +31,17 @@ const refineBudget = (
     });
   }
 };
+
+export const jobFormConfigSchema = z.object({
+  query: z.object({
+    categoryId: uuid.optional(),
+    subcategoryId: uuid.optional(),
+    offerId: uuid.optional(),
+    entryPoint: z
+      .enum(['OFFER', 'HOME_CATEGORY', 'HOME_SUBCATEGORY', 'DIRECT', 'TRADER_PROFILE'])
+      .optional(),
+  }),
+});
 
 export const createJobSchema = z.object({
   body: z
@@ -109,3 +119,4 @@ export type CreateJobInput = z.infer<typeof createJobSchema>['body'];
 export type UpdateJobInput = z.infer<typeof updateJobSchema>['body'];
 export type SetJobLocationInput = z.infer<typeof setJobLocationSchema>['body'];
 export type PublishJobInput = z.infer<typeof publishJobSchema>['body'];
+export type JobFormConfigQuery = z.infer<typeof jobFormConfigSchema>['query'];

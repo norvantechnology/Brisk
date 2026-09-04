@@ -166,12 +166,13 @@ router.get(
  *       Shows banner, Description and Terms (termsAndConditions / fullDescription), expiresOn,
  *       trader.displayName / yearsExperience / experienceLabel / location.
  *
- *       **Accept Offer button** on this screen calls POST /trader-offers/{id}/accept
- *       (see data.actions.acceptOffer). Then navigate to Post a New Job.
+ *       **Accept Offer button** is optional: POST /trader-offers/{id}/accept for prefill,
+ *       or navigate to Post a New Job with offerId from this detail. **Does not claim.**
+ *       Offer is claimed only on Payment Successful (`POST /payments/{id}/confirm`).
  *     responses:
  *       200:
  *         description: |
- *           Offer detail plus actions.claimNow (navigate) and actions.acceptOffer (API).
+ *           Offer detail plus actions.claimNow (navigate) and actions.acceptOffer (optional prefill).
  */
 router.get(
   '/trader-offers/:id',
@@ -185,31 +186,23 @@ router.get(
  * @swagger
  * /trader-offers/{id}/claim:
  *   post:
- *     summary: "[Alias] Claim offer — prefer Accept Offer /accept for UI"
+ *     summary: "[Optional alias] Same as /accept — prefill only, does NOT claim"
  *     tags: ['Customer / Offers']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Same behaviour as POST /trader-offers/{id}/accept.
- *
- *       **Mobile:** Prefer /accept for the Offer Detail Accept Offer button.
- *       List Claim Now should NOT call this — only navigate to detail.
- *
- *       **Request:** path id only. No body required (empty {} is fine).
- *
- *       Response includes nextJobPrefill, jobFormConfig, navigation (same as /accept).
+ *       **Not a claim API.** Same as POST /trader-offers/{id}/accept — optional prefill only.
+ *       Frontend does not need this; pass `offerId` on POST /jobs. Offer is claimed on Payment Successful.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: Offer UUID only — no other params/body required.
  *     responses:
  *       200:
- *         description: |
- *           Same payload as /accept — claim, offer, navigation, nextJobPrefill, jobFormConfig.
+ *         description: Prefill payload; claim object empty for trader offers.
  *       409:
- *         description: Already claimed.
+ *         description: Offer already USED.
  */
 router.post(
   '/trader-offers/:id/claim',
@@ -223,100 +216,76 @@ router.post(
  * @swagger
  * /trader-offers/{id}/accept:
  *   post:
- *     summary: Accept Offer (same as claim) — navigate to Post a New Job
+ *     summary: Optional Accept Offer prefill — does NOT claim the offer
  *     tags: ['Customer / Offers']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile UI flow:**
- *       1. Offers list → Claim Now → Offer Detail (GET /trader-offers/{id}) — no API claim yet
- *       2. Offer Detail → Accept Offer → THIS endpoint
- *       3. Response nextJobPrefill + jobFormConfig → open Post a New Job
- *       4. Post job (images via POST /uploads purpose=job_photo) → Choose Location → publish → Payment → Success/Fail
+ *       **Mobile:**
+ *       1. List Claim Now → GET detail (navigate only)
+ *       2. Accept Offer → THIS endpoint is **optional** (prefill). Or skip and open Post Job with offerId.
+ *       3. POST /jobs with offerId → location → publish → pay
+ *       4. **POST /payments/{id}/confirm** → offer claimed (USED) — Payment Successful
  *
- *       Alias of POST /trader-offers/{id}/claim. Prefer /accept for the Accept Offer button.
+ *       No separate claim API is required. `data.claim` is empty for trader offers.
+ *       `claimTiming.claimOnAccept=false`, `softClaimOnPublish=false`, `claimUsedOnPaymentConfirm=true`.
  *
- *       jobFormConfig drives show/hide for quote type and min/max budget:
- *       - Direct Trader (offer accepted): quote type locked FIXED, budget hidden, serviceCharge required
- *       - Without offer: quote type options from subcategory priceEnabled / priceEnteredBy
- *
- *       **Request:** path id only. No body required.
- *
- *       **discountType values on offer:** FLAT | PERCENTAGE | FREE_SERVICE
- *       (FREE_SERVICE = free visit / free service UI).
- *
- *       **Jobs Done UI:** use trader.jobsDoneCount — not claimsCount.
- *       claimsCount = how many customers claimed this offer.
+ *       **Request:** path `id` only. No body.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: Offer UUID only — no body required.
  *     responses:
  *       200:
- *         description: Offer accepted — continue to Post a New Job.
+ *         description: Prefill only — claim happens on Payment Successful.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
  *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: "Offer accepted. Continue to Post a New Job." }
+ *                 message: { type: string, example: "Offer prepared. Continue to Post a New Job. Claim happens on Payment Successful only." }
  *                 data:
  *                   type: object
  *                   properties:
- *                     claim: { type: object }
+ *                     claim:
+ *                       type: object
+ *                       description: Always empty strings for trader offers (no claim yet)
+ *                       properties:
+ *                         id: { type: string, example: "" }
+ *                         status: { type: string, example: "" }
+ *                         claimedAt: { type: string, example: "" }
+ *                         jobId: { type: string, example: "" }
  *                     offer: { type: object }
+ *                     claimTiming:
+ *                       type: object
+ *                       properties:
+ *                         claimOnAccept: { type: boolean, example: false }
+ *                         softClaimOnPublish: { type: boolean, example: false }
+ *                         claimUsedOnPaymentConfirm: { type: boolean, example: true }
+ *                         claimRequiredApi: { type: boolean, example: false }
+ *                         confirmPaymentPath: { type: string, example: "POST /payments/{paymentId}/confirm" }
  *                     navigation:
  *                       type: object
  *                       properties:
  *                         nextScreen: { type: string, example: POST_NEW_JOB }
  *                         afterJobForm: { type: string, example: CHOOSE_LOCATION }
- *                         afterLocation: { type: string, example: PAYMENT_DETAILS }
+ *                         afterLocation: { type: string, example: SITE_VISIT_PAY_FEE }
+ *                         afterPayment: { type: string, example: SUCCESS }
  *                     nextJobPrefill:
  *                       type: object
  *                       properties:
  *                         offerApplied: { type: boolean, example: true }
- *                         claimId: { type: string, format: uuid }
+ *                         claimId: { type: string, example: "" }
  *                         appliedTraderOfferId: { type: string, format: uuid }
  *                         offerId: { type: string, format: uuid }
- *                         traderId: { type: string, format: uuid, nullable: true }
- *                         categoryId: { type: string, format: uuid, nullable: true }
- *                         categoryIds: { type: array, items: { type: string, format: uuid } }
- *                         subcategoryId: { type: string, format: uuid, nullable: true }
- *                         subcategoryIds: { type: array, items: { type: string, format: uuid } }
- *                         bannerTitle: { type: string }
- *                         bannerSubtitle: { type: string, nullable: true }
- *                         discountLabel: { type: string, nullable: true }
- *                         bannerImageUrl: { type: string, nullable: true }
- *                         title: { type: string }
- *                         quoteType: { type: string, example: FIXED }
- *                     jobFormConfig:
- *                       $ref: '#/components/schemas/JobFormConfig'
- *             example:
- *               success: true
- *               message: Offer accepted. Continue to Post a New Job.
- *               data:
- *                 navigation: { nextScreen: POST_NEW_JOB, afterJobForm: CHOOSE_LOCATION, afterLocation: PAYMENT_DETAILS }
- *                 nextJobPrefill:
- *                   offerApplied: true
- *                   appliedTraderOfferId: b7692de1-4d8c-40db-98e6-079ce14e8d68
- *                   claimId: cbc8fa2a-4044-4aa7-9702-d5843d9920c3
- *                   quoteType: FIXED
- *                   bannerTitle: Live Offer 15
- *                   bannerSubtitle: "5%"
- *                 jobFormConfig:
- *                   offerApplied: true
- *                   showQuoteType: false
- *                   quoteTypeLocked: FIXED
- *                   showBudgetRange: false
- *                   showServiceCharge: true
- *                   showImageUpload: true
- *                   imageUploadPurpose: job_photo
- *                   nextAfterLocation: PAYMENT_DETAILS
+ *                         traderId: { type: string }
+ *                         categoryId: { type: string }
+ *                         subcategoryId: { type: string }
+ *                     jobFormConfig: { type: object }
  *       409:
- *         description: Already claimed/accepted.
+ *         description: Offer already USED.
  */
 router.post(
   '/trader-offers/:id/accept',

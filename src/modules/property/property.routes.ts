@@ -57,20 +57,42 @@ router.get('/utility-providers', ...customerOnly, controller.listUtilityProvider
  * @swagger
  * /addresses:
  *   get:
- *     summary: List saved addresses (My Address tab)
+ *     summary: List saved addresses (Select Location / My Address)
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       `data` is a **list** of address objects (not `{ items: [] }`).
+ *       **Mobile screens:**
+ *       - Select Location (job post) — Home / Work / Other cards
+ *       - My Address tab
+ *
+ *       `data` is a **list** (not `{ items: [] }`).
+ *
+ *       **Useful fields per item:**
+ *       - `id` — pass as `addressId` to PUT /jobs/{jobId}/location
+ *       - `label` / `addressType` — Home, Work, Other
+ *       - `icon` — `home` | `work` | `other` (UI hint)
+ *       - `formattedAddress` — single-line card subtitle
+ *       - `isDefault` / `isPrimary` — preselect default
  *     responses:
  *       200:
  *         description: Address array in `data`.
  *   post:
- *     summary: Add address (Add Address modal)
+ *     summary: Add address (Choose Location / Add Address)
  *     tags: ['Customer / Property']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Create a new saved address then select it with PUT /jobs/{id}/location.
+ *
+ *       **Body params:**
+ *       - `addressType` — Home | Work | Custom (maps to card label/icon)
+ *       - `label` — display name (defaults to addressType)
+ *       - `houseNumber`, `addressLine1` (**required**), `addressLine2`, `city` (**required**)
+ *       - `county`, `eircode`, `country` (default Ireland)
+ *       - `latitude` / `longitude` — from map / current location
+ *       - `isDefault` — mark as primary
+ *       - Optional meters: `mprnNumber`, `gprnNumber`, `utnNumber`
  *     requestBody:
  *       required: true
  *       content:
@@ -79,21 +101,37 @@ router.get('/utility-providers', ...customerOnly, controller.listUtilityProvider
  *             type: object
  *             required: [addressLine1, city]
  *             properties:
- *               addressType: { type: string, enum: [Home, Work, Custom], example: Home }
- *               label: { type: string, example: Home }
- *               houseNumber: { type: string, example: "14" }
- *               addressLine1: { type: string, example: Oak Street }
- *               addressLine2: { type: string }
- *               city: { type: string, example: Dublin }
+ *               addressType:
+ *                 type: string
+ *                 enum: [Home, Work, Custom]
+ *                 example: Home
+ *                 description: Card type on Select Location (Home / Work / Other→Custom).
+ *               label:
+ *                 type: string
+ *                 example: Home
+ *                 description: Display label; defaults to addressType.
+ *               houseNumber:
+ *                 type: string
+ *                 example: "14"
+ *                 description: House / building number.
+ *               addressLine1:
+ *                 type: string
+ *                 example: Oak Street
+ *                 description: **Required.** Primary street line.
+ *               addressLine2: { type: string, description: Optional second line }
+ *               city:
+ *                 type: string
+ *                 example: Dublin
+ *                 description: **Required.** City / locality.
  *               county: { type: string, example: Dublin 6 }
- *               eircode: { type: string, example: D06 XY12 }
+ *               eircode: { type: string, example: D06 XY12, description: Irish Eircode / postal code }
  *               mprnNumber: { type: string, example: "12345678901" }
  *               gprnNumber: { type: string, example: "12356787" }
  *               utnNumber: { type: string, example: "012345678" }
- *               latitude: { type: number, example: 53.3331 }
+ *               latitude: { type: number, example: 53.3331, description: From Use My Current location / map pin }
  *               longitude: { type: number, example: -6.2489 }
  *               mapImageUrl: { type: string }
- *               isDefault: { type: boolean, example: true }
+ *               isDefault: { type: boolean, example: true, description: Preselect on Select Location }
  *     responses:
  *       201:
  *         description: Address created (also creates linked property + meters when MPRN/GPRN provided).

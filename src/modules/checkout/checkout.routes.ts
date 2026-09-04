@@ -20,39 +20,38 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  * @swagger
  * /invoices/{id}:
  *   get:
- *     summary: Get invoice (Payment Details screen)
+ *     summary: Get invoice — Site Visit & Pay Fee / Payment Details
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Payment Details / Invoice breakdown.
+ *       **Mobile screens:**
+ *       - Site Visit & Pay Fee (`data.purpose=SITE_VISIT_FEE`, `screenTitle`)
+ *       - Payment Details (SERVICE invoices)
  *
- *       **Auth:** Customer Bearer (must own the booking).
+ *       **Auth:** Customer Bearer; must own the booking.
  *
- *       **When to call:** After `POST /jobs/{id}/publish` using `data.invoice.id`, or any time before pay.
+ *       **When:** After `POST /jobs/{id}/publish` using `data.invoice.id`, or reload before pay.
  *
- *       **UI fields in `data`:**
- *       - `orderId`, `payNowLabel` (e.g. Pay Now (€130.63)), `totalFormatted`
- *       - `lineItems[]` with labels Service Charge, Platform Fee, Trader Offer, Promo Code
- *       - `serviceSummary` (category, title, orderId, serviceProvider)
- *       - `paymentMethods` (Apple Pay, Google Pay, Card)
+ *       **Key fields (dynamic amounts; UI copy owned by mobile):**
+ *       - `purpose` — SITE_VISIT_FEE vs SERVICE
+ *       - `totalAmount` / `siteVisitFee` / `totalFormatted`
+ *       - `trader` — name, verified, rating, reviewsCount, photo
+ *       - `serviceSummary` — category/subcategory/title/scheduledDate/timeSlot from job
+ *       - `billingTypes` / `paymentMethods`
+ *       - `lineItems` — keys + amounts (`label` empty for app mapping)
+ *
+ *       Job offer discount is **not** deducted from site-visit fee (unless FREE_SERVICE).
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: Invoice UUID from publish response.
+ *         description: |
+ *           Invoice UUID from publish response `data.invoice.id` or job `invoiceId` / `nextSteps.invoiceId`.
  *     responses:
  *       200:
- *         description: Full invoice payload.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 message: { type: string }
- *                 data: { $ref: '#/components/schemas/Invoice' }
+ *         description: Full invoice / Pay Fee payload in `data`.
  *       403:
  *         description: Invoice belongs to another customer.
  *       404:
@@ -124,17 +123,25 @@ router.post(
  * @swagger
  * /payments/intent:
  *   post:
- *     summary: Create payment intent for an invoice
+ *     summary: Create payment intent (Site Visit & Pay Fee / Payment Details)
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Payment Details → choose Apple Pay / Google Pay / Card → checkout.
+ *       **Mobile:** After Publish, on Site Visit & Pay Fee or Payment Details.
+ *       User picks Apple Pay / Google Pay / Card, fills billing, taps Confirm & Pay.
  *
- *       Creates a PENDING payment. Currently mock Stripe (mock true) —
- *       then call POST /payments/{id}/confirm for Success or POST /payments/{id}/fail for Fail.
+ *       Creates PENDING payment. Mock Stripe returns `clientSecret` + `paymentId`.
+ *       Then call `POST /payments/{paymentId}/confirm` (Success) or `/fail` (Fail).
  *
- *       When billingType=COMPANY, companyName is required.
+ *       **billingType=COMPANY** requires `companyName` (TIN optional). Matches Company Billing form.
+ *
+ *       **Body params:**
+ *       - `invoiceId` (uuid, required) — from publish `data.invoice.id`
+ *       - `method` — CARD | APPLE_PAY | GOOGLE_PAY
+ *       - `billingType` — INDIVIDUAL | COMPANY
+ *       - `companyName` / `tinNumber` — when COMPANY
+ *       - `billingAddress` — optional object (addressLine, city, postalCode, country)
  *     requestBody:
  *       required: true
  *       content:
@@ -192,23 +199,28 @@ router.post(
  * @swagger
  * /payments/{id}/confirm:
  *   post:
- *     summary: Confirm payment (mock Stripe) → success receipt
+ *     summary: Confirm payment → Payment Successful (+ mark offer USED)
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** After card/wallet success → Payment Successful.
+ *       **Mobile screen:** Payment Successful!
  *
- *       Marks payment COMPLETED and invoice PAID. Returns the same receipt shape as GET receipt
- *       (`title`, `transactionId`, `amountPaid`, timeline Paid → Confirmed → Service).
+ *       Marks payment COMPLETED and invoice PAID.
+ *       **Also marks linked offer claim USED** (final lock after site-visit / service pay).
  *
- *       Idempotent if already COMPLETED (returns receipt again).
+ *       Returns receipt: `title`, `message` (site-visit copy when purpose=SITE_VISIT_FEE),
+ *       `receiptSummary` (transactionId, date, amountPaid), timeline Paid→Confirmed→Service,
+ *       `actions.viewJob` → GET /jobs/{jobId}.
+ *
+ *       Idempotent if already COMPLETED.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: paymentId from POST /payments/intent.
+ *         description: |
+ *           `paymentId` from POST /payments/intent (`data.paymentId`). Not the invoice id.
  *     requestBody:
  *       content:
  *         application/json:

@@ -112,3 +112,26 @@ export const publishJob = async (
     next(error);
   }
 };
+
+export const getJobFormConfig = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getJobFormConfig(req.user!.id, req.query as {
+      categoryId?: string;
+      subcategoryId?: string;
+      offerId?: string;
+      entryPoint?: 'OFFER' | 'HOME_CATEGORY' | 'HOME_SUBCATEGORY' | 'DIRECT' | 'TRADER_PROFILE';
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job form config retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

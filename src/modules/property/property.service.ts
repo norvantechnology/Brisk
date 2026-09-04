@@ -83,6 +83,13 @@ const serializeAddress = (address: {
   id: address.id,
   label: address.label ?? address.addressType,
   addressType: address.addressType,
+  /** Icon hint for Select Location: Home | Work | Other */
+  icon:
+    /home/i.test(address.addressType) || /home/i.test(address.label ?? '')
+      ? 'home'
+      : /work/i.test(address.addressType) || /work/i.test(address.label ?? '')
+        ? 'work'
+        : 'other',
   houseNumber: address.houseNumber,
   addressLine1: address.addressLine1,
   addressLine2: address.addressLine2,
@@ -90,6 +97,16 @@ const serializeAddress = (address: {
   county: address.county,
   eircode: address.eircode,
   country: address.country,
+  /** Single line for Select Location cards */
+  formattedAddress: [
+    address.houseNumber,
+    address.addressLine1,
+    address.addressLine2,
+    address.city,
+    address.eircode,
+  ]
+    .filter(Boolean)
+    .join(', '),
   mprnNumber: address.mprnNumber,
   gprnNumber: address.gprnNumber,
   utnNumber: address.utnNumber,

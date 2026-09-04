@@ -76,6 +76,7 @@ export interface CreateSubcategoryInput {
   featured?: boolean;
   status?: string;
   siteVisitEnabled?: boolean;
+  siteVisitFee?: number | null;
   priceEnabled?: boolean;
   priceEnteredBy?: SubcategoryPriceEnteredBy | 'CUSTOMER' | 'TRADER';
   qaFormSchema?: QaFormField[] | null;
@@ -90,6 +91,7 @@ export interface UpdateSubcategoryInput {
   featured?: boolean;
   status?: string;
   siteVisitEnabled?: boolean;
+  siteVisitFee?: number | null;
   priceEnabled?: boolean;
   priceEnteredBy?: SubcategoryPriceEnteredBy | 'CUSTOMER' | 'TRADER';
   qaFormSchema?: QaFormField[] | null;

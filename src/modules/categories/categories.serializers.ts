@@ -36,6 +36,7 @@ type SubcategoryRow = Pick<
   | 'featured'
   | 'status'
   | 'siteVisitEnabled'
+  | 'siteVisitFee'
   | 'priceEnabled'
   | 'priceEnteredBy'
   | 'qaFormSchema'
@@ -79,6 +80,8 @@ export const serializeSubcategory = (
   featured: sub.featured,
   status: sub.status,
   siteVisitEnabled: sub.siteVisitEnabled,
+  /** Site-visit fee from admin subcategory. Null/unset = 0 — no platform default amount. */
+  siteVisitFee: sub.siteVisitFee != null ? Number(sub.siteVisitFee) : null,
   priceEnabled: sub.priceEnabled,
   /** Who fills price when priceEnabled=true. Ignore when priceEnabled=false. */
   priceEnteredBy: sub.priceEnteredBy as SubcategoryPriceEnteredBy,

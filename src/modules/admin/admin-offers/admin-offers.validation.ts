@@ -30,9 +30,11 @@ const offerBodyBase = {
   title: z.string().trim().min(2).max(255),
   couponCode: z.string().trim().min(3).max(40).optional().nullable(),
   shortDescription: z.string().trim().max(300).optional().nullable(),
-  /** Description & Terms — preferred key for mobile. Stored as fullDescription. */
+  /** Description & Terms — preferred key for mobile Create Offers. Stored as fullDescription. */
   description: z.string().trim().max(4000).optional().nullable(),
   fullDescription: z.string().trim().max(4000).optional().nullable(),
+  /** Alias of description — same "Description & Terms" text box. */
+  termsAndConditions: z.string().trim().max(4000).optional().nullable(),
   bannerImageUrl: z.string().trim().url().optional().nullable(),
   badgeTag: z.string().trim().max(80).optional().nullable(),
   discountType: z.enum(['FLAT', 'PERCENTAGE', 'FREE_SERVICE']),
@@ -75,6 +77,7 @@ export const updateOfferSchema = z.object({
     shortDescription: z.string().trim().max(300).optional().nullable(),
     description: z.string().trim().max(4000).optional().nullable(),
     fullDescription: z.string().trim().max(4000).optional().nullable(),
+    termsAndConditions: z.string().trim().max(4000).optional().nullable(),
     bannerImageUrl: z.string().trim().url().optional().nullable(),
     badgeTag: z.string().trim().max(80).optional().nullable(),
     discountType: z.enum(['FLAT', 'PERCENTAGE', 'FREE_SERVICE']).optional(),

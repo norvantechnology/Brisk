@@ -76,7 +76,8 @@ export const claimTraderOffer = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Trader offer claimed successfully.',
+      message:
+        'Offer prepared for job posting. No claim yet — offer is applied on Payment Successful.',
       data,
     });
   } catch (error) {
@@ -84,7 +85,7 @@ export const claimTraderOffer = async (
   }
 };
 
-/** Alias of claim — maps to Figma "Accept Offer" on offer detail. */
+/** Optional prefill for Figma "Accept Offer" — does not claim. */
 export const acceptTraderOffer = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -95,7 +96,8 @@ export const acceptTraderOffer = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Offer accepted. Continue to Post a New Job.',
+      message:
+        'Offer prepared. Continue to Post a New Job. Claim happens on Payment Successful only.',
       data,
     });
   } catch (error) {
