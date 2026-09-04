@@ -94,11 +94,8 @@ sequenceDiagram
     participant API as BRISK API
 
     App->>API: GET /trader-offers/{id}
-    Note over App: Claim Now = navigate only
-    App->>API: POST /trader-offers/{id}/accept
-    API-->>App: nextJobPrefill + jobFormConfig (no lock)
-    App->>API: GET /jobs/form-config?offerId=...
-    App->>API: POST /uploads (purpose=job_photo)
+    Note over App: Claim Now = navigate only; cache jobFormConfig + nextJobPrefill
+    Note over App: Post Job uses cached config — no form-config call on that screen
     App->>API: POST /jobs (quoteType=ONSITE, offerId, photoUrls…)
     API-->>App: draft Job + formConfig + nextSteps
     App->>API: GET /addresses
@@ -118,7 +115,7 @@ sequenceDiagram
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/trader-offers` | List; each row has `claimed`, `canApply` |
-| GET | `/trader-offers/{id}` | Detail + `actions` (Claim Now = NAVIGATE) |
+| GET | `/trader-offers/{id}` | Detail + `jobFormConfig` + `nextJobPrefill` (cache for Post Job — no second call) + `actions` |
 | POST | `/trader-offers/{id}/accept` | Optional prefill only — **not** a claim |
 | POST | `/trader-offers/{id}/claim` | Alias of accept — still **not** a claim |
 | GET | `/brisk-offers` | Platform offers |

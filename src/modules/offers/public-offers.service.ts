@@ -10,6 +10,105 @@ const publicInclude = {
   ...offerInclude,
 };
 
+type OfferWithPublicInclude = {
+  id: string;
+  traderId: string | null;
+  discountType: import('@prisma/client').DiscountType;
+  discountValue: { toString(): string } | number;
+  currencyCode: string | null;
+  bannerImageUrl: string | null;
+  title: string;
+  categories: Array<{ categoryId: string }>;
+  subcategories: Array<{
+    subcategoryId: string;
+    subcategory: {
+      id: string;
+      name: string;
+      categoryId: string;
+      siteVisitEnabled: boolean;
+      siteVisitFee: { toString(): string } | number | null;
+      priceEnabled: boolean;
+      priceEnteredBy: string | null;
+    };
+  }>;
+};
+
+/** Build Post Job navigation payload from an already-loaded offer (no extra API needed on mobile). */
+const buildOfferJobNavigation = (
+  offer: OfferWithPublicInclude,
+  resolvedOffer: {
+    displayDiscountLabel?: string;
+    discountLabel?: string;
+    ctaAction?: string;
+  }
+) => {
+  const categoryId = offer.categories[0]?.categoryId ?? null;
+  const subcategory = offer.subcategories[0]?.subcategory ?? null;
+  const subcategoryId = subcategory?.id ?? offer.subcategories[0]?.subcategoryId ?? null;
+
+  const discountLabelText =
+    resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel ?? null;
+  const offerBanner = buildOfferAppliedBanner({
+    discountType: offer.discountType,
+    discountValue: Number(offer.discountValue),
+    discountLabel: discountLabelText,
+    currencyCode: offer.currencyCode ?? undefined,
+  });
+
+  const jobFormConfig = buildJobFormConfig({
+    offerApplied: true,
+    subcategory: subcategory
+      ? {
+          id: subcategory.id,
+          name: subcategory.name,
+          siteVisitEnabled: subcategory.siteVisitEnabled,
+          siteVisitFee: subcategory.siteVisitFee,
+          priceEnabled: subcategory.priceEnabled,
+          priceEnteredBy:
+            (subcategory.priceEnteredBy as 'CUSTOMER' | 'TRADER') || 'CUSTOMER',
+        }
+      : null,
+    entryPoint: 'OFFER',
+    currencyCode: offer.currencyCode ?? undefined,
+    offerBanner,
+  });
+
+  const afterLocation =
+    jobFormConfig.showSiteVisitFee || offer.traderId
+      ? 'SITE_VISIT_PAY_FEE'
+      : 'WAITING_FOR_QUOTES';
+
+  return {
+    jobFormConfig,
+    nextJobPrefill: buildNextJobPrefill({
+      claimId: '',
+      offerId: offer.id,
+      traderId: offer.traderId,
+      categoryId,
+      categoryIds: offer.categories.map((item) => item.categoryId),
+      subcategoryId,
+      subcategoryIds: offer.subcategories.map((item) => item.subcategoryId),
+      ctaAction: resolvedOffer.ctaAction,
+      offerApplied: true,
+      bannerTitle: offerBanner.title,
+      bannerSubtitle: offerBanner.discountLabel,
+      bannerMessage: offerBanner.message,
+      discountLabel: discountLabelText,
+      bannerImageUrl: offer.bannerImageUrl,
+      title: offer.title,
+      quoteType: jobFormConfig.defaultQuoteType,
+      formConfig: jobFormConfig,
+    }),
+    navigation: {
+      nextScreen: 'POST_NEW_JOB',
+      afterJobForm: 'CHOOSE_LOCATION',
+      afterLocation,
+      afterPublish: afterLocation,
+      afterPayment: 'SUCCESS',
+    },
+  };
+};
+
 export const listPublicOffers = async (
   kind: OfferType,
   query: Record<string, unknown>,
@@ -120,6 +219,7 @@ export const getPublicOffer = async (id: string, userId?: string) => {
     canApply: claimFlags.canApply,
   };
   const enriched = await enrichOfferWithCurrency(base, viewerCurrency);
+  const jobNav = buildOfferJobNavigation(offer, enriched);
 
   return {
     ...enriched,
@@ -127,8 +227,13 @@ export const getPublicOffer = async (id: string, userId?: string) => {
      * Mobile UI flow:
      * Offers list "Claim Now" → this detail screen (GET) — navigate only.
      * Detail "Accept Offer" → optional POST /accept (prefill) OR navigate with offerId to Post Job.
+     * Prefer `jobFormConfig` + `nextJobPrefill` from THIS response — do not wait on a second
+     * form-config call on Post Job (avoids late/missing response breaking the flow).
      * Offer is claimed (USED) only on Payment Successful — no separate claim API required.
      */
+    jobFormConfig: jobNav.jobFormConfig,
+    nextJobPrefill: jobNav.nextJobPrefill,
+    navigation: jobNav.navigation,
     actions: {
       claimNow: {
         type: 'NAVIGATE',
@@ -141,7 +246,7 @@ export const getPublicOffer = async (id: string, userId?: string) => {
         path: `/trader-offers/${id}/accept`,
         alternatePath: `/trader-offers/${id}/claim`,
         nextScreen: 'POST_NEW_JOB',
-        note: 'Optional prefill only — does NOT claim. Pass offerId on POST /jobs. Claim = Payment Successful.',
+        note: 'Optional. Prefer jobFormConfig/nextJobPrefill from this GET. Pass offerId on POST /jobs. Claim = Payment Successful.',
       },
     },
   };
@@ -267,64 +372,14 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
     viewerCurrency
   );
 
-  const categoryId = offer.categories[0]?.categoryId ?? null;
-  const subcategoryId = offer.subcategories[0]?.subcategoryId ?? null;
-  const subcategory = subcategoryId
-    ? await prisma.subcategory.findUnique({ where: { id: subcategoryId } })
-    : null;
-
-  const discountLabelText =
-    resolvedOffer.displayDiscountLabel ?? resolvedOffer.discountLabel ?? null;
-  const offerBanner = buildOfferAppliedBanner({
-    discountType: offer.discountType,
-    discountValue: Number(offer.discountValue),
-    discountLabel: discountLabelText,
-    currencyCode: offer.currencyCode,
-  });
-
-  const jobFormConfig = buildJobFormConfig({
-    offerApplied: true,
-    subcategory,
-    entryPoint: 'OFFER',
-    currencyCode: offer.currencyCode,
-    offerBanner,
-  });
-
-  const afterLocation =
-    jobFormConfig.showSiteVisitFee || offer.traderId
-      ? 'SITE_VISIT_PAY_FEE'
-      : 'WAITING_FOR_QUOTES';
+  const jobNav = buildOfferJobNavigation(offer, resolvedOffer);
 
   return {
     claim,
     offer: resolvedOffer,
-    navigation: {
-      nextScreen: 'POST_NEW_JOB',
-      afterJobForm: 'CHOOSE_LOCATION',
-      afterLocation,
-      afterPublish: afterLocation,
-      afterPayment: 'SUCCESS',
-    },
-    nextJobPrefill: buildNextJobPrefill({
-      claimId: '',
-      offerId: offer.id,
-      traderId: offer.traderId,
-      categoryId,
-      categoryIds: offer.categories.map((item) => item.categoryId),
-      subcategoryId,
-      subcategoryIds: offer.subcategories.map((item) => item.subcategoryId),
-      ctaAction: resolvedOffer.ctaAction,
-      offerApplied: true,
-      bannerTitle: offerBanner.title,
-      bannerSubtitle: offerBanner.discountLabel,
-      bannerMessage: offerBanner.message,
-      discountLabel: discountLabelText,
-      bannerImageUrl: offer.bannerImageUrl,
-      title: offer.title,
-      quoteType: jobFormConfig.defaultQuoteType,
-      formConfig: jobFormConfig,
-    }),
-    jobFormConfig,
+    navigation: jobNav.navigation,
+    nextJobPrefill: jobNav.nextJobPrefill,
+    jobFormConfig: jobNav.jobFormConfig,
     claimTiming: {
       claimOnAccept: false,
       softClaimOnPublish: false,
@@ -333,7 +388,7 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
       publishPath: 'POST /jobs/{jobId}/publish',
       confirmPaymentPath: 'POST /payments/{paymentId}/confirm',
       note:
-        'No separate claim API for trader offers. Accept is optional prefill only. Pass offerId on POST /jobs. Offer is claimed (USED) on Payment Successful (POST /payments/{id}/confirm).',
+        'No separate claim API for trader offers. Prefer GET /trader-offers/{id} jobFormConfig (cache on navigate). Accept is optional. Pass offerId on POST /jobs. Offer is claimed (USED) on Payment Successful.',
     },
   };
 };

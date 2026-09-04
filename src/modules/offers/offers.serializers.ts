@@ -40,7 +40,17 @@ export const offerInclude = {
   },
   subcategories: {
     include: {
-      subcategory: { select: { id: true, name: true, categoryId: true } },
+      subcategory: {
+        select: {
+          id: true,
+          name: true,
+          categoryId: true,
+          siteVisitEnabled: true,
+          siteVisitFee: true,
+          priceEnabled: true,
+          priceEnteredBy: true,
+        },
+      },
     },
   },
   _count: {
@@ -121,7 +131,17 @@ type OfferRecord = {
       urlSlug: string | null;
     };
   }>;
-  subcategories: Array<{ subcategory: { id: string; name: string; categoryId: string } }>;
+  subcategories: Array<{
+    subcategory: {
+      id: string;
+      name: string;
+      categoryId: string;
+      siteVisitEnabled?: boolean;
+      siteVisitFee?: { toString(): string } | number | null;
+      priceEnabled?: boolean;
+      priceEnteredBy?: string | null;
+    };
+  }>;
   _count?: { claims?: number };
 };
 
@@ -212,7 +232,21 @@ export const serializeOffer = (offer: OfferRecord) => {
     /** First linked category — use `iconUrl` for category icon on offer card. */
     primaryCategory,
     categories,
-    subcategories: offer.subcategories.map((item) => item.subcategory),
+    subcategories: offer.subcategories.map((item) => {
+      const sub = item.subcategory;
+      return {
+        id: sub.id,
+        name: sub.name,
+        categoryId: sub.categoryId,
+        siteVisitEnabled: Boolean(sub.siteVisitEnabled),
+        siteVisitFee:
+          sub.siteVisitFee != null && Number(sub.siteVisitFee) >= 0
+            ? Number(sub.siteVisitFee)
+            : 0,
+        priceEnabled: Boolean(sub.priceEnabled),
+        priceEnteredBy: sub.priceEnteredBy ?? '',
+      };
+    }),
   };
 };
 

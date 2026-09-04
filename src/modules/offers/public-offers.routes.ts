@@ -166,13 +166,17 @@ router.get(
  *       Shows banner, Description and Terms (termsAndConditions / fullDescription), expiresOn,
  *       trader.displayName / yearsExperience / experienceLabel / location.
  *
+ *       **Also returns `jobFormConfig` + `nextJobPrefill`** (same shape as Accept) so Post Job can
+ *       open immediately with top label / budget / site-visit flags — **no second API call** on
+ *       the Post Job screen (avoids late/missing form-config breaking the flow).
+ *
  *       **Accept Offer button** is optional: POST /trader-offers/{id}/accept for prefill,
- *       or navigate to Post a New Job with offerId from this detail. **Does not claim.**
+ *       or navigate to Post a New Job using cached jobFormConfig from this detail. **Does not claim.**
  *       Offer is claimed only on Payment Successful (`POST /payments/{id}/confirm`).
  *     responses:
  *       200:
  *         description: |
- *           Offer detail plus actions.claimNow (navigate) and actions.acceptOffer (optional prefill).
+ *           Offer detail plus jobFormConfig, nextJobPrefill, navigation, and actions.
  */
 router.get(
   '/trader-offers/:id',
