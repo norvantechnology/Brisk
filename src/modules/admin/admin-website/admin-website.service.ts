@@ -1027,37 +1027,50 @@ export const createSection = async (
   input: SectionInput
 ) => {
   const existingSlug = await prisma.cmsKnowledgeGuide.findUnique({ where: { slug: input.slug } });
-  if (existingSlug && !existingSlug.deletedAt) {
-    throw new ConflictError('Knowledge Hub section slug already exists.');
+  // Unique is DB-wide (includes soft-deleted). Any existing row blocks create.
+  if (existingSlug) {
+    throw new ConflictError(
+      existingSlug.deletedAt
+        ? 'Knowledge Hub section slug already exists on a deleted section. Use a different slug or restore that section.'
+        : 'Knowledge Hub section slug already exists.'
+    );
   }
 
   const status = fromApiPublishStatus(input.publishing_status);
 
-  const guide = await prisma.cmsKnowledgeGuide.create({
-    data: {
-      title: input.section_title,
-      slug: input.slug,
-      description: input.short_description,
-      detailedContent: input.detailed_content ?? null,
-      graphicImageUrl: input.graphic_image_url ?? null,
-      iconName: input.icon ?? null,
-      status,
-      ctaButtonText: input.cta_button_text ?? null,
-      ctaUrl: input.cta_url ?? null,
-      sortOrder: input.sort_order,
-      seoTitle: input.seo_title ?? null,
-      seoDescription: input.meta_description ?? null,
-      blocks: input.content_blocks?.length
-        ? {
-            create: input.content_blocks.map(mapBlockCreate),
-          }
-        : undefined,
-    },
-    include: {
-      blocks: { orderBy: { sortOrder: 'asc' } },
-      _count: { select: { blocks: true } },
-    },
-  });
+  let guide;
+  try {
+    guide = await prisma.cmsKnowledgeGuide.create({
+      data: {
+        title: input.section_title,
+        slug: input.slug,
+        description: input.short_description,
+        detailedContent: input.detailed_content ?? null,
+        graphicImageUrl: input.graphic_image_url ?? null,
+        iconName: input.icon ?? null,
+        status,
+        ctaButtonText: input.cta_button_text ?? null,
+        ctaUrl: input.cta_url ?? null,
+        sortOrder: input.sort_order,
+        seoTitle: input.seo_title ?? null,
+        seoDescription: input.meta_description ?? null,
+        blocks: input.content_blocks?.length
+          ? {
+              create: input.content_blocks.map(mapBlockCreate),
+            }
+          : undefined,
+      },
+      include: {
+        blocks: { orderBy: { sortOrder: 'asc' } },
+        _count: { select: { blocks: true } },
+      },
+    });
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2002') {
+      throw new ConflictError('Knowledge Hub section slug already exists.');
+    }
+    throw err;
+  }
 
   await writeAudit(
     'WEBSITE_KNOWLEDGE_SECTION_CREATED',

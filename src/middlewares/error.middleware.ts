@@ -30,6 +30,13 @@ export const errorMiddleware = (
   } else if ((err as { code?: string }).code === 'LIMIT_UNEXPECTED_FILE') {
     statusCode = 400;
     message = 'Unexpected file field. Use profilePhoto, profilePhotoUrl, profileImage, or image for signup photo upload.';
+  } else if ((err as { code?: string }).code === 'P2002') {
+    // Prisma unique constraint — return 409 instead of bare 500
+    statusCode = 409;
+    const targets = (err as { meta?: { target?: string[] } }).meta?.target;
+    message = targets?.length
+      ? `Already exists: ${targets.join(', ')}.`
+      : 'A record with the same unique value already exists.';
   } else {
     logger.error('Unhandled Server Error:', err);
   }
