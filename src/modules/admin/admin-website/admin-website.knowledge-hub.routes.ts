@@ -92,7 +92,7 @@ router.get('/sections', validate(listSectionsQuerySchema), controller.listSectio
  *                 type: string
  *                 format: uri
  *                 description: Alias for graphic_image_url.
- *               icon: { type: string, maxLength: 500, nullable: true, description: 'Icon name or uploaded media URL.' }
+ *               icon: { type: string, maxLength: 2000, nullable: true, description: 'Icon name or uploaded media URL (alias section_icon).' }
  *               publishing_status: { type: string, enum: [draft, scheduled, published, archived] }
  *               cta_button_text: { type: string, maxLength: 100, nullable: true }
  *               cta_url: { type: string, maxLength: 500, nullable: true }
@@ -223,7 +223,7 @@ router.get('/sections/:id', validate(idParamSchema), controller.getSection);
  *               detailed_content: { type: string, nullable: true }
  *               graphic_image_url: { type: string, format: uri, description: 'Alias graphic_image accepted. JSON URL only; multipart/S3 later.' }
  *               graphic_image: { type: string, format: uri, description: 'Alias for graphic_image_url.' }
- *               icon: { type: string, nullable: true }
+ *               icon: { type: string, maxLength: 2000, nullable: true, description: 'Icon name or uploaded media URL (alias section_icon).' }
  *               publishing_status: { type: string, enum: [draft, scheduled, published, archived] }
  *               cta_button_text: { type: string, nullable: true }
  *               cta_url: { type: string, nullable: true }

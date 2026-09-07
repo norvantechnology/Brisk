@@ -36,6 +36,12 @@ const aliasField = (canonical: string, alias: string) => (raw: unknown) => {
 const aliasCoverImage = aliasField('cover_image_url', 'cover_image');
 const aliasGraphicImage = aliasField('graphic_image_url', 'graphic_image');
 const aliasBlockImage = aliasField('image', 'image_url');
+const aliasSectionIcon = aliasField('icon', 'section_icon');
+
+/** Uploaded media URL or short icon name — must fit full CDN/upload URLs. */
+const mediaIconOrUrl = z.string().max(2000).optional().nullable();
+
+const aliasSectionBody = (raw: unknown) => aliasSectionIcon(aliasGraphicImage(raw));
 
 const paginationQuery = {
   page: z.string().optional(),
@@ -75,7 +81,7 @@ export const createCategorySchema = z.object({
     name: z.string().min(1).max(100),
     slug: z.string().min(1).max(150),
     description: z.string().max(500).optional().nullable(),
-    icon: z.string().max(500).optional().nullable(),
+    icon: mediaIconOrUrl,
     status: activeStatusEnum,
     sort_order: z.number().int().min(0),
   }),
@@ -87,7 +93,7 @@ export const updateCategorySchema = z.object({
     name: z.string().min(1).max(100),
     slug: z.string().min(1).max(150),
     description: z.string().max(500).optional().nullable(),
-    icon: z.string().max(500).optional().nullable(),
+    icon: mediaIconOrUrl,
     status: activeStatusEnum,
     sort_order: z.number().int().min(0),
   }),
@@ -220,7 +226,7 @@ const contentBlockSchema = z.preprocess(
     sort_order: z.number().int().min(0),
     title: z.string().optional().nullable(),
     description: z.string().optional().nullable(),
-    icon: z.string().optional().nullable(),
+    icon: mediaIconOrUrl,
     image: optionalImageUrlNullable,
     button_text: z.string().optional().nullable(),
     button_url: z.string().optional().nullable(),
@@ -234,8 +240,8 @@ const sectionBodyBase = {
   short_description: z.string().min(1),
   detailed_content: z.string().optional().nullable(),
   graphic_image_url: optionalImageUrlNullable,
-  /** Icon name or uploaded media URL (cms_item_icon / similar). */
-  icon: z.string().max(500).optional().nullable(),
+  /** Icon name or uploaded media URL (cms_item_icon / similar). Alias: section_icon. */
+  icon: mediaIconOrUrl,
   publishing_status: publishStatusEnum,
   cta_button_text: z.string().max(100).optional().nullable(),
   cta_url: z.string().max(500).optional().nullable(),
@@ -246,12 +252,12 @@ const sectionBodyBase = {
 };
 
 export const createSectionSchema = z.object({
-  body: z.preprocess(aliasGraphicImage, z.object(sectionBodyBase)),
+  body: z.preprocess(aliasSectionBody, z.object(sectionBodyBase)),
 });
 
 export const updateSectionSchema = z.object({
   params: z.object({ id: uuid }),
-  body: z.preprocess(aliasGraphicImage, z.object(sectionBodyBase)),
+  body: z.preprocess(aliasSectionBody, z.object(sectionBodyBase)),
 });
 
 export const patchSectionStatusSchema = z.object({

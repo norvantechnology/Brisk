@@ -73,7 +73,7 @@ router.get('/', validate(listCategoriesQuerySchema), controller.listCategories);
  *               name: { type: string, maxLength: 100 }
  *               slug: { type: string, maxLength: 150 }
  *               description: { type: string, maxLength: 500, nullable: true }
- *               icon: { type: string, maxLength: 500, nullable: true, description: 'Icon name or uploaded media URL.' }
+ *               icon: { type: string, maxLength: 2000, nullable: true, description: 'Icon name or uploaded media URL.' }
  *               status: { type: string, enum: [active, inactive] }
  *               sort_order: { type: integer, minimum: 0 }
  *     responses:
@@ -178,7 +178,7 @@ router.get('/:id', validate(idParamSchema), controller.getCategory);
  *               name: { type: string }
  *               slug: { type: string }
  *               description: { type: string, nullable: true }
- *               icon: { type: string, nullable: true }
+ *               icon: { type: string, maxLength: 2000, nullable: true, description: 'Icon name or uploaded media URL.' }
  *               status: { type: string, enum: [active, inactive] }
  *               sort_order: { type: integer }
  *     responses:
