@@ -1395,8 +1395,14 @@ router.patch(
  *             properties:
  *               title: { type: string, example: Trust }
  *               description: { type: string, example: Verified traders and transparent workflows. }
- *               icon: { type: string, nullable: true }
- *               image: { type: string, nullable: true }
+ *               icon:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Media URL, or null/empty string to clear.
+ *               image:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Media URL, or null/empty string to clear.
  *               stepNumber: { type: integer, example: 1, nullable: true }
  *               sortOrder: { type: integer, example: 1 }
  *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED], example: PUBLISHED }
@@ -1460,6 +1466,10 @@ router.post(
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Update a section item. Send `icon: null` or `image: null` (or `""`) to **clear**
+ *       removed media. Omitting `icon` / `image` leaves the existing DB value unchanged.
+ *       Same handler available as `PATCH`.
  *     parameters:
  *       - in: path
  *         name: itemId
@@ -1472,13 +1482,60 @@ router.post(
  *           schema:
  *             type: object
  *             properties:
- *               title: { type: string }
- *               description: { type: string }
- *               icon: { type: string }
- *               image: { type: string }
- *               stepNumber: { type: integer }
+ *               title: { type: string, nullable: true }
+ *               description: { type: string, nullable: true }
+ *               icon:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Media URL, or null/empty string to clear removed icon.
+ *                 example: null
+ *               image:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Media URL, or null/empty string to clear removed image.
+ *                 example: null
+ *               stepNumber: { type: integer, nullable: true }
  *               sortOrder: { type: integer }
  *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *               metadata: { type: object, nullable: true }
+ *           example:
+ *             title: Fairness
+ *             description: Competitive offers that work for both sides.
+ *             icon: null
+ *             image: null
+ *             stepNumber: null
+ *             sortOrder: 4
+ *             status: PUBLISHED
+ *             metadata: null
+ *     responses:
+ *       200:
+ *         description: Item updated (cleared media returns icon/image as null).
+ *   patch:
+ *     summary: Update section item (alias of PUT)
+ *     tags: ['Admin / Website / Marketing Pages']
+ *     security:
+ *       - bearerAuth: []
+ *     description: Same as PUT — `icon: null` / `image: null` clears media.
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string, nullable: true }
+ *               description: { type: string, nullable: true }
+ *               icon: { type: string, nullable: true, description: URL or null to clear }
+ *               image: { type: string, nullable: true, description: URL or null to clear }
+ *               stepNumber: { type: integer, nullable: true }
+ *               sortOrder: { type: integer }
+ *               status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+ *               metadata: { type: object, nullable: true }
  *     responses:
  *       200:
  *         description: Item updated.
@@ -1503,6 +1560,12 @@ router.get(
 );
 
 router.put(
+  '/section-items/:itemId',
+  validate(updateSectionItemSchema),
+  pageSectionsAdminController.updateAdminSectionItem
+);
+
+router.patch(
   '/section-items/:itemId',
   validate(updateSectionItemSchema),
   pageSectionsAdminController.updateAdminSectionItem

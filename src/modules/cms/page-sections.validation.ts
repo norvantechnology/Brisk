@@ -84,7 +84,9 @@ export const createSectionItemSchema = z.object({
   body: z.object({
     title: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
+    /** URL string, or null/"" to clear media. */
     icon: z.string().nullable().optional(),
+    /** URL string, or null/"" to clear media. */
     image: z.string().nullable().optional(),
     stepNumber: z.number().int().min(1).nullable().optional(),
     sortOrder: z.number().int().min(0).optional(),
@@ -100,7 +102,9 @@ export const updateSectionItemSchema = z.object({
   body: z.object({
     title: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
+    /** URL string, or null/"" to clear removed media. Omitted = leave unchanged. */
     icon: z.string().nullable().optional(),
+    /** URL string, or null/"" to clear removed media. Omitted = leave unchanged. */
     image: z.string().nullable().optional(),
     stepNumber: z.number().int().min(1).nullable().optional(),
     sortOrder: z.number().int().min(0).optional(),

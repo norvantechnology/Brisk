@@ -18,6 +18,15 @@ const PUBLISHED = CmsPublishStatus.PUBLISHED;
 const optionalNullable = <T>(value: T | null | undefined): T | null | undefined =>
   value === undefined ? undefined : value;
 
+/** Same as optionalNullable, but empty string also clears (media remove in admin UI). */
+const optionalNullableMedia = (
+  value: string | null | undefined
+): string | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  return value;
+};
+
 const publishedItemWhere = { status: PUBLISHED };
 
 const getPageBySlug = async (pageSlug: string) => {
@@ -398,14 +407,19 @@ export const createAdminSectionItem = async (sectionId: string, input: SectionIt
   const item = await prisma.cmsPageSectionItem.create({
     data: {
       sectionId,
-      title: input.title ?? undefined,
-      description: input.description ?? undefined,
-      icon: input.icon ?? undefined,
-      image: input.image ?? undefined,
-      stepNumber: input.stepNumber ?? undefined,
+      title: optionalNullable(input.title),
+      description: optionalNullable(input.description),
+      icon: optionalNullableMedia(input.icon),
+      image: optionalNullableMedia(input.image),
+      stepNumber: optionalNullable(input.stepNumber),
       sortOrder: input.sortOrder ?? 0,
       status: input.status ?? PUBLISHED,
-      metadata: input.metadata ?? undefined,
+      metadata:
+        input.metadata === undefined
+          ? undefined
+          : input.metadata === null
+            ? Prisma.JsonNull
+            : input.metadata,
     },
   });
 
@@ -421,14 +435,20 @@ export const updateAdminSectionItem = async (itemId: string, input: SectionItemI
   const item = await prisma.cmsPageSectionItem.update({
     where: { id: itemId },
     data: {
-      title: input.title ?? undefined,
-      description: input.description ?? undefined,
-      icon: input.icon ?? undefined,
-      image: input.image ?? undefined,
-      stepNumber: input.stepNumber ?? undefined,
+      title: optionalNullable(input.title),
+      description: optionalNullable(input.description),
+      /** Explicit null / "" clears media when admin removes icon or image. */
+      icon: optionalNullableMedia(input.icon),
+      image: optionalNullableMedia(input.image),
+      stepNumber: optionalNullable(input.stepNumber),
       sortOrder: input.sortOrder ?? undefined,
       status: input.status ?? undefined,
-      metadata: input.metadata ?? undefined,
+      metadata:
+        input.metadata === undefined
+          ? undefined
+          : input.metadata === null
+            ? Prisma.JsonNull
+            : input.metadata,
     },
   });
 
