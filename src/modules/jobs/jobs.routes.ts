@@ -117,7 +117,7 @@ router.get(
  *
  *       **Auth:** Customer Bearer.
  *
- *       Creates status **DRAFT**. Same body shape for every entry point — use
+ *       Creates status **DRAFT** (wizard in progress — not live). Same body for every entry point — use
  *       `GET /jobs/form-config` (or Accept `jobFormConfig`) for show/hide.
  *
  *       **Offer path:** send `offerId` (or `appliedTraderOfferId`) + usually `traderId`
@@ -128,7 +128,8 @@ router.get(
  *
  *       **Images:** `POST /uploads` with `purpose=job_photo`, then put returned URLs in `photoUrls`.
  *
- *       **Next:** `PUT /jobs/{id}/location` → `POST /jobs/{id}/publish`.
+ *       **Next:** `PUT /jobs/{id}/location` → `POST /jobs/{id}/publish` (creates unpaid invoice,
+ *       job → `PAYMENT_PENDING` — not live until pay) → Payment Details.
  *     requestBody:
  *       required: true
  *       content:
@@ -351,9 +352,10 @@ router.put(
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile CTA:** **Publish Job Post** on Select Location.
+ *       **Mobile CTA:** **Publish Job Post** on Select Location → opens Payment Details.
+ *       Name is “publish” but job is **not live** until payment succeeds.
  *
- *       **Auth:** Customer Bearer; job must be DRAFT and owned by caller.
+ *       **Auth:** Customer Bearer; job must be DRAFT (or already `PAYMENT_PENDING` — idempotent).
  *
  *       **Requirements:**
  *       - Address already set (`PUT …/location`) **or** pass `addressId` in body
@@ -361,12 +363,14 @@ router.put(
  *         from job snapshot / subcategory only (0 if admin unset — no default amount)
  *       - Direct Trader SERVICE path: `serviceCharge` or `maxBudget` if not site visit
  *
- *       **Offer claim:** Publish does **not** claim. Pass `offerId` on the job only.
- *       Offer becomes **USED** on `POST /payments/{id}/confirm` (Payment Successful).
- *       If publish creates no invoice (waiting for quotes), claim → USED when job goes live.
+ *       **Status:** pay path → `PAYMENT_PENDING` + unpaid invoice. Job becomes `SCHEDULED`
+ *       only on `POST /payments/{id}/confirm` (Payment Successful). No-pay path → `PUBLISHED`.
  *
- *       **Site Visit side effects:** Quote ACCEPTED + Booking SCHEDULED + Invoice UNPAID
- *       with `purpose=SITE_VISIT_FEE`.
+ *       **Offer claim:** Publish does **not** claim. Pass `offerId` on the job only.
+ *       Offer becomes **USED** on payment confirm. If publish creates no invoice (waiting for quotes),
+ *       claim → USED when job goes live.
+ *
+ *       **Idempotent:** calling publish again while `PAYMENT_PENDING` returns the same invoice.
  *
  *       **Next screen:** open invoice → `POST /payments/intent` → confirm/fail.
  *     parameters:

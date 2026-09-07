@@ -2,6 +2,7 @@ import {
   DiscountType,
   InvoiceStatus,
   JobQuoteType,
+  JobStatus,
   OfferClaimStatus,
   PaymentStatus,
   Prisma,
@@ -588,52 +589,76 @@ export const confirmPayment = async (
     });
 
     // Claim / apply offer only on Payment Successful — create or update → USED.
+    // Job goes live (SCHEDULED) only after payment succeeds.
     const booking = await tx.booking.findUnique({
       where: { id: payment.invoice.bookingId },
-      include: { job: { select: { id: true, claimId: true, offerId: true } } },
+      include: {
+        job: {
+          select: {
+            id: true,
+            claimId: true,
+            offerId: true,
+            quoteType: true,
+            siteVisitRequested: true,
+          },
+        },
+      },
     });
     const job = booking?.job;
-    if (job?.offerId) {
-      const existingClaim = await tx.offerClaim.findUnique({
-        where: { offerId_userId: { offerId: job.offerId, userId } },
-      });
-      if (existingClaim?.status === OfferClaimStatus.USED && existingClaim.jobId !== job.id) {
-        throw new ConflictError('You have already used this offer.');
-      }
-      const claimId = existingClaim
-        ? (
-            await tx.offerClaim.update({
-              where: { id: existingClaim.id },
-              data: {
-                status: OfferClaimStatus.USED,
-                usedAt: paidAt,
-                claimedAt: existingClaim.claimedAt ?? paidAt,
-                jobId: job.id,
-              },
-            })
-          ).id
-        : (
-            await tx.offerClaim.create({
-              data: {
-                offerId: job.offerId,
-                userId,
-                status: OfferClaimStatus.USED,
-                claimedAt: paidAt,
-                usedAt: paidAt,
-                jobId: job.id,
-              },
-            })
-          ).id;
-      if (!existingClaim) {
-        await tx.offer.update({
-          where: { id: job.offerId },
-          data: { claimsCount: { increment: 1 } },
+    if (job) {
+      const nextStatus =
+        job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
+          ? JobStatus.SCHEDULED
+          : JobStatus.SCHEDULED;
+
+      if (job.offerId) {
+        const existingClaim = await tx.offerClaim.findUnique({
+          where: { offerId_userId: { offerId: job.offerId, userId } },
         });
-      }
-      if (job.claimId !== claimId) {
+        if (existingClaim?.status === OfferClaimStatus.USED && existingClaim.jobId !== job.id) {
+          throw new ConflictError('You have already used this offer.');
+        }
+        const claimId = existingClaim
+          ? (
+              await tx.offerClaim.update({
+                where: { id: existingClaim.id },
+                data: {
+                  status: OfferClaimStatus.USED,
+                  usedAt: paidAt,
+                  claimedAt: existingClaim.claimedAt ?? paidAt,
+                  jobId: job.id,
+                },
+              })
+            ).id
+          : (
+              await tx.offerClaim.create({
+                data: {
+                  offerId: job.offerId,
+                  userId,
+                  status: OfferClaimStatus.USED,
+                  claimedAt: paidAt,
+                  usedAt: paidAt,
+                  jobId: job.id,
+                },
+              })
+            ).id;
+        if (!existingClaim) {
+          await tx.offer.update({
+            where: { id: job.offerId },
+            data: { claimsCount: { increment: 1 } },
+          });
+        }
         await tx.job.update({
           where: { id: job.id },
-          data: { claimId },
+          data: {
+            status: nextStatus,
+            ...(job.claimId !== claimId ? { claimId } : {}),
+          },
+        });
+      } else {
+        await tx.job.update({
+          where: { id: job.id },
+          data: { status: nextStatus },
         });
       }
     }

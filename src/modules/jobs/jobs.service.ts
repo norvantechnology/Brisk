@@ -386,7 +386,10 @@ const serializeJob = (
     nextSteps: {
       needsLocation: !job.addressId,
       canPublish: Boolean(job.addressId) && job.status === JobStatus.DRAFT,
-      canPay: Boolean(job.booking?.invoice?.id),
+      canPay:
+        Boolean(job.booking?.invoice?.id) &&
+        (job.status === JobStatus.PAYMENT_PENDING ||
+          job.booking?.invoice?.status === InvoiceStatus.UNPAID),
       invoiceId: str(job.booking?.invoice?.id),
       bookingId: str(job.booking?.id),
       publishCtaLabel: '',
@@ -403,7 +406,7 @@ const serializeJob = (
           : 'PAYMENT_DETAILS',
       nextScreen: !job.addressId
         ? 'CHOOSE_LOCATION'
-        : job.booking?.invoice?.id
+        : job.status === JobStatus.PAYMENT_PENDING || job.booking?.invoice?.id
           ? job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
             ? 'SITE_VISIT_PAY_FEE'
             : 'PAYMENT_DETAILS'
@@ -713,8 +716,35 @@ export const publishJob = async (
   input: PublishJobInput
 ) => {
   const existing = await getOwnedJob(customerId, jobId);
+
+  // Idempotent: location → Payment Details may call publish again.
+  // Until payment succeeds job stays PAYMENT_PENDING with the same unpaid invoice.
+  if (existing.status === JobStatus.PAYMENT_PENDING && existing.booking?.invoice?.id) {
+    const { getInvoice } = await import('../checkout/checkout.service');
+    const fullInvoice = await getInvoice(customerId, existing.booking.invoice.id);
+    return {
+      job: serializeJob(existing),
+      booking: {
+        id: existing.booking.id,
+        bookingRef: str(existing.booking.bookingRef),
+        status: existing.booking.status,
+        scheduledDate: existing.booking.scheduledDate
+          ? existing.booking.scheduledDate.toISOString()
+          : '',
+        traderId: '',
+        jobId: existing.id,
+      },
+      invoiceId: existing.booking.invoice.id,
+      invoice: fullInvoice,
+    };
+  }
+
   if (existing.status !== JobStatus.DRAFT) {
-    throw new BadRequestError('Only draft jobs can be published.');
+    throw new BadRequestError(
+      existing.booking?.invoice?.id
+        ? 'Job already has an invoice. Use GET /invoices/{invoiceId} for Payment Details.'
+        : 'Only draft jobs can be published.'
+    );
   }
 
   let addressId = input.addressId ?? existing.addressId;
@@ -778,10 +808,13 @@ export const publishJob = async (
 
   const result = await prisma.$transaction(
     async (tx) => {
+    // Pay path → PAYMENT_PENDING until Payment Successful.
+    // No-pay path (waiting for quotes) → PUBLISHED (live).
+    const willCreateInvoice = Boolean(traderId && serviceChargeRaw != null);
     const job = await tx.job.update({
       where: { id: jobId },
       data: {
-        status: JobStatus.PUBLISHED,
+        status: willCreateInvoice ? JobStatus.PAYMENT_PENDING : JobStatus.PUBLISHED,
         addressId: address.id,
         addressLine: formatAddressLine(address),
         city: address.city,
@@ -815,7 +848,7 @@ export const publishJob = async (
       }
     }
 
-    if (traderId && serviceChargeRaw != null) {
+    if (willCreateInvoice && traderId && serviceChargeRaw != null) {
       const offer = job.offerId
         ? await tx.offer.findUnique({ where: { id: job.offerId } })
         : null;
@@ -883,12 +916,8 @@ export const publishJob = async (
         },
       });
 
-      await tx.job.update({
-        where: { id: job.id },
-        data: { status: JobStatus.SCHEDULED },
-      });
-
-      // Claim stays unset until Payment Successful (confirmPayment).
+      // Stay PAYMENT_PENDING until Payment Successful (confirmPayment → SCHEDULED).
+      // Claim stays unset until then.
 
       booking = {
         id: createdBooking.id,
