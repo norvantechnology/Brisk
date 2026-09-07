@@ -247,6 +247,18 @@ export const serializeOffer = (offer: OfferRecord) => {
         priceEnteredBy: sub.priceEnteredBy ?? '',
       };
     }),
+    /**
+     * Top-level flags for offer → job flow (from first linked subcategory).
+     * Defaults when no subcategory: site visit off, price off.
+     */
+    siteVisitEnabled: Boolean(offer.subcategories[0]?.subcategory?.siteVisitEnabled),
+    priceEnabled: Boolean(offer.subcategories[0]?.subcategory?.priceEnabled),
+    siteVisitFee:
+      offer.subcategories[0]?.subcategory?.siteVisitFee != null &&
+      Number(offer.subcategories[0].subcategory.siteVisitFee) >= 0
+        ? Number(offer.subcategories[0].subcategory.siteVisitFee)
+        : 0,
+    priceEnteredBy: offer.subcategories[0]?.subcategory?.priceEnteredBy ?? '',
   };
 };
 

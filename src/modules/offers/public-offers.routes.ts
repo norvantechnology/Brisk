@@ -102,6 +102,8 @@ const router = Router();
  *       fullName, displayName (businessName or person name), avgRating, reviewsCount, topRated, isVerified,
  *       yearsExperience, experienceLabel (e.g. 10+ Yrs), city, location,
  *       profilePhotoUrl / imageUrl, plus primaryCategory.iconUrl and categoryLabel.
+ *       Also includes top-level `siteVisitEnabled`, `priceEnabled`, `siteVisitFee`, `priceEnteredBy`
+ *       from the offer's first subcategory (for budget / site-visit UI on offer flow).
  *       Query params map 1:1 to the confirmed filter modal.
  *     parameters:
  *       - $ref: '#/components/parameters/OfferDateRange'
