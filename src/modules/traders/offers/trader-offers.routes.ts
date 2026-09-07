@@ -61,22 +61,20 @@ const router = Router();
  *       Creates `offerType=TRADER` owned by the logged-in trader.
  *       Customers see it on Offers → Traders Offers while ACTIVE and in date range.
  *
- *       **Figma field → API key mapping:**
- *       | UI label | Body key | Notes |
- *       |----------|----------|-------|
- *       | Offer Type % / Flat | `discountType` | `PERCENTAGE` or `FLAT` (`FREE_SERVICE` also allowed) |
- *       | Offer Value | `discountValue` | e.g. 10 for 10% or €10 |
- *       | Offer Headline | `title` | Card headline e.g. "€10 off your first job" |
- *       | Category | `categoryIds[]` | UUID array (one or many) |
- *       | Sub-category | `subcategoryIds[]` | UUID array |
- *       | Expiry Date | `validUntil` | ISO date/datetime from picker |
- *       | **Description & Terms** | **`description`** | Multi-line text box — conditions / T&Cs |
+ *       Field mapping (Figma to API):
+ *       - Offer Type % / Flat -> discountType (PERCENTAGE or FLAT; FREE_SERVICE also allowed)
+ *       - Offer Value -> discountValue
+ *       - Offer Headline -> title
+ *       - Category -> categoryIds[]
+ *       - Sub-category -> subcategoryIds[]
+ *       - Expiry Date -> validUntil
+ *       - Description and Terms -> description
  *
- *       Prefer sending **`description`** for Description & Terms.
- *       Aliases also accepted: `fullDescription`, `termsAndConditions` (same storage).
- *       Response returns all of: `description`, `fullDescription`, `termsAndConditions`.
+ *       Prefer sending description for Description and Terms.
+ *       Aliases also accepted: fullDescription, termsAndConditions (same storage).
+ *       Response returns description, fullDescription, and termsAndConditions.
  *
- *       Active/Deactive toggle after create: `PATCH /traders/offers/{id}/status`.
+ *       Active/Deactive toggle after create: PATCH /traders/offers/{id}/status.
  *     requestBody:
  *       required: true
  *       content:
@@ -87,70 +85,64 @@ const router = Router();
  *             properties:
  *               title:
  *                 type: string
- *                 example: €10 off your first job
- *                 description: **Offer Headline** on Create Offers form (card title).
+ *                 example: "10 EUR off your first job"
+ *                 description: Offer Headline on Create Offers form (card title).
  *               couponCode: { type: string, example: FIRST10, description: Optional coupon code }
  *               shortDescription:
  *                 type: string
- *                 description: Optional short card blurb (max 300). Not the Description & Terms box.
+ *                 description: Optional short card blurb (max 300). Not the Description and Terms box.
  *               description:
  *                 type: string
  *                 maxLength: 4000
- *                 example: Valid for first-time customers only. Cannot be combined with other offers.
- *                 description: |
- *                   **Description & Terms** text box (Figma).
- *                   Explain conditions / terms and conditions.
- *                   Stored as fullDescription; echoed as description + termsAndConditions in response.
+ *                 example: "Valid for first-time customers only. Cannot be combined with other offers."
+ *                 description: Description and Terms text box. Stored as fullDescription.
  *               fullDescription:
  *                 type: string
- *                 description: Alias of `description`. Prefer `description` from mobile.
+ *                 description: Alias of description. Prefer description from mobile.
  *               termsAndConditions:
  *                 type: string
- *                 description: Alias of `description` (same Description & Terms text box).
+ *                 description: Alias of description (same Description and Terms text box).
  *               bannerImageUrl: { type: string, format: uri }
  *               discountType:
  *                 type: string
  *                 enum: [FLAT, PERCENTAGE, FREE_SERVICE]
- *                 description: |
- *                   Offer Type radios — Percentage (%) → PERCENTAGE, Flat Amount → FLAT.
+ *                 description: Offer Type radios. Percentage -> PERCENTAGE, Flat Amount -> FLAT.
  *               discountValue:
  *                 type: number
  *                 example: 10
- *                 description: Offer Value number (10 for 10% or €10 flat). Max 100 when PERCENTAGE.
+ *                 description: Offer Value number (10 for 10% or 10 EUR flat). Max 100 when PERCENTAGE.
  *               discountLabel: { type: string, example: "10%", description: Optional display override }
  *               validFrom:
  *                 type: string
  *                 format: date-time
- *                 description: Optional. Omit — server starts now. UI can collect only expiry.
+ *                 description: Optional. Omit and server starts now.
  *               validUntil:
  *                 type: string
  *                 format: date-time
- *                 description: **Expiry Date** from date picker (ISO). Example `2026-10-30T23:59:59.000Z` or `2026-10-30`.
+ *                 description: Expiry Date from date picker (ISO).
  *               categoryIds:
  *                 type: array
- *                 description: Category dropdown — UUID array (Electrical → category id).
+ *                 description: Category dropdown UUID array.
  *                 items: { type: string, format: uuid }
  *               subcategoryIds:
  *                 type: array
- *                 description: Sub-category dropdown — UUID array (Installations → subcategory id).
+ *                 description: Sub-category dropdown UUID array.
  *                 items: { type: string, format: uuid }
- *               ctaLabel: { type: string, example: Claim now }
+ *               ctaLabel: { type: string, example: "Claim now" }
  *               ctaAction: { type: string, enum: [CLAIM, BOOK_INSPECTION] }
  *           example:
- *             title: €10 off your first job
+ *             title: "10 EUR off your first job"
  *             discountType: PERCENTAGE
  *             discountValue: 10
- *             description: Valid for first-time customers only. Explain any conditions here.
- *             validUntil: '2026-10-30T23:59:59.000Z'
+ *             description: "Valid for first-time customers only. Explain any conditions here."
+ *             validUntil: "2026-10-30T23:59:59.000Z"
  *             categoryIds:
  *               - e076d231-b0da-46cb-b60d-8aa9fbb8ce26
  *             subcategoryIds:
  *               - 8a44f8fb-1598-40c9-a658-7f3db5748f14
  *     responses:
  *       201:
- *         description: |
- *           Offer created in `data`. Includes `description`, `fullDescription`, `termsAndConditions`
- *           (same text), plus `categories` + `subcategories`.
+ *         description: Offer created in data with description aliases plus categories and subcategories.
  */
 router.get('/', validate(offerFilterSchema), controller.listMyOffers);
 router.post('/', validate(createOfferSchema), controller.createMyOffer);
