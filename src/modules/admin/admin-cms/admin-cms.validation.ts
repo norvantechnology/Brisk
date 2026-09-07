@@ -14,6 +14,21 @@ const paginationQuery = {
   search: z.string().optional(),
 };
 
+/** Valid URL, empty string, or null (clear media). Omitted = undefined. */
+const optionalNullableUrl = z
+  .union([z.string().url(), z.literal(''), z.null()])
+  .optional()
+  .transform((v) => (v === '' || v === null ? null : v));
+
+const pickAvatarUrl = (
+  primary: string | null | undefined,
+  alias: string | null | undefined
+): string | null | undefined => {
+  if (primary !== undefined) return primary;
+  if (alias !== undefined) return alias;
+  return undefined;
+};
+
 const pageTypeAliases = [
   'customer',
   'trader',
@@ -159,8 +174,8 @@ export const createTestimonialSchema = z.object({
     role: z.string().optional(),
     companyName: z.string().optional(),
     badgeLabel: z.string().optional(),
-    authorAvatarUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
-    avatar: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
+    authorAvatarUrl: optionalNullableUrl,
+    avatar: optionalNullableUrl,
     quoteText: z.string().min(1).optional(),
     review: z.string().min(1).optional(),
     rating: z.number().min(1).max(5).optional().default(5),
@@ -193,7 +208,7 @@ export const createTestimonialSchema = z.object({
     .transform((body) => ({
     authorName: body.authorName ?? body.name!,
     authorRole: body.authorRole ?? body.role,
-    authorAvatarUrl: body.authorAvatarUrl ?? body.avatar,
+    authorAvatarUrl: pickAvatarUrl(body.authorAvatarUrl, body.avatar),
     quoteText: body.quoteText ?? body.review!,
     rating: body.rating,
     pageType:
@@ -223,8 +238,8 @@ export const updateTestimonialSchema = z.object({
     role: z.string().optional(),
     companyName: z.string().optional(),
     badgeLabel: z.string().optional(),
-    authorAvatarUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
-    avatar: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
+    authorAvatarUrl: optionalNullableUrl,
+    avatar: optionalNullableUrl,
     quoteText: z.string().min(1).optional(),
     review: z.string().min(1).optional(),
     rating: z.number().min(1).max(5).optional(),
@@ -245,7 +260,7 @@ export const updateTestimonialSchema = z.object({
       ? { authorRole: body.authorRole ?? body.role }
       : {}),
     ...(body.authorAvatarUrl !== undefined || body.avatar !== undefined
-      ? { authorAvatarUrl: body.authorAvatarUrl ?? body.avatar }
+      ? { authorAvatarUrl: pickAvatarUrl(body.authorAvatarUrl, body.avatar) }
       : {}),
     ...(body.quoteText !== undefined || body.review !== undefined
       ? { quoteText: body.quoteText ?? body.review }

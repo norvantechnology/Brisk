@@ -78,7 +78,7 @@ export type CreateTestimonialInput = {
   authorRole?: string;
   companyName?: string;
   badgeLabel?: string;
-  authorAvatarUrl?: string;
+  authorAvatarUrl?: string | null;
   quoteText: string;
   rating?: number;
   pageType?: import('@prisma/client').CmsTestimonialPageType;

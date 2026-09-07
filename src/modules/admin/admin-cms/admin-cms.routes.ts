@@ -727,7 +727,7 @@ router.get('/testimonials', validate(listFilterSchema), cmsAdminController.listT
  *               authorRole: { type: string, example: 'Homeowner' }
  *               companyName: { type: string, example: 'Murphy Residences' }
  *               badgeLabel: { type: string, example: 'Verified Customer' }
- *               authorAvatarUrl: { type: string, example: 'https://cdn.brisk.com/avatars/sarah.jpg' }
+ *               authorAvatarUrl: { type: string, format: uri, nullable: true, description: 'Avatar URL, or null/empty to clear.' }
  *               quoteText: { type: string, example: 'BRISK made hiring a trader effortless.' }
  *               rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
  *               targetAudience: { type: string, enum: [BOTH, CUSTOMER, TRADER], example: 'BOTH' }
@@ -764,7 +764,7 @@ router.post('/testimonials', validate(createTestimonialSchema), cmsAdminControll
  *               authorRole: { type: string }
  *               companyName: { type: string }
  *               badgeLabel: { type: string }
- *               authorAvatarUrl: { type: string }
+ *               authorAvatarUrl: { type: string, format: uri, nullable: true, description: 'Avatar URL, or null/empty to clear.' }
  *               quoteText: { type: string }
  *               rating: { type: integer, minimum: 1, maximum: 5 }
  *               targetAudience: { type: string, enum: [BOTH, CUSTOMER, TRADER] }
