@@ -810,9 +810,14 @@ export const publishJob = async (
   }
 
   if (existing.status !== JobStatus.DRAFT) {
+    if (existing.status === JobStatus.PUBLISHED && !existing.booking?.invoice?.id) {
+      throw new BadRequestError(
+        'This job is already live with no payment step (e.g. Remote / waiting for quotes). Payment Details + address change only apply when publish returns invoiceId and status PAYMENT_PENDING (Site Visit / Direct Trader with fee). Create a new ONSITE job with traderId/offerId for that flow.'
+      );
+    }
     throw new BadRequestError(
       existing.booking?.invoice?.id
-        ? 'Job already has an invoice. Use GET /invoices/{invoiceId} for Payment Details.'
+        ? 'Job already has an invoice. Use GET /invoices/{invoiceId} for Payment Details. While unpaid (PAYMENT_PENDING), call publish again with a new addressId to change address.'
         : 'Only draft jobs can be published.'
     );
   }
