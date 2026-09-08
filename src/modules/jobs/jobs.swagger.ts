@@ -423,14 +423,16 @@
  *             Must belong to the authenticated customer. Used for Home/Work/Other selection.
  *     PublishJobRequest:
  *       type: object
- *       description: Body optional if address already set via PUT /jobs/{id}/location.
+ *       description: |
+ *         Preferred mobile body: pass `addressId` only — sets location + creates unpaid invoice.
+ *         Separate PUT /jobs/{id}/location is not required.
  *       properties:
  *         addressId:
  *           type: string
  *           format: uuid
  *           description: |
- *             Optional if already set via PUT /jobs/{id}/location.
- *             If omitted, job.addressId must already exist or publish returns 400.
+ *             Saved address UUID from GET /addresses. Required unless job already has addressId.
+ *             Can be sent again while PAYMENT_PENDING to change address before pay.
  *         serviceCharge:
  *           type: number
  *           minimum: 0
@@ -441,11 +443,15 @@
  *     PublishJobResponse:
  *       type: object
  *       properties:
+ *         invoiceId:
+ *           type: string
+ *           format: uuid
+ *           description: Use this for GET /invoices/{invoiceId} and payments.
  *         job: { $ref: '#/components/schemas/Job' }
  *         booking:
  *           type: object
  *           nullable: true
- *           description: Created only for Direct Trader publish (traderId + serviceCharge).
+ *           description: Created when pay path runs (traderId + fee/charge).
  *           properties:
  *             id: { type: string, format: uuid }
  *             bookingRef: { type: string }
@@ -457,7 +463,7 @@
  *           allOf:
  *             - $ref: '#/components/schemas/Invoice'
  *           nullable: true
- *           description: Full invoice (lineItems, payNowLabel, serviceSummary) when Direct Trader.
+ *           description: Full invoice for Payment Details when pay is required.
  *     JobListResponse:
  *       type: object
  *       properties:

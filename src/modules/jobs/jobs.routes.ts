@@ -352,27 +352,29 @@ router.put(
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile CTA:** **Publish Job Post** on Select Location → opens Payment Details.
+ *       **Mobile CTA:** Select address → **Next** calls this once with `addressId`.
+ *       Separate `PUT /jobs/{id}/location` is **optional** (not required).
  *       Name is “publish” but job is **not live** until payment succeeds.
  *
- *       **Auth:** Customer Bearer; job must be DRAFT (or already `PAYMENT_PENDING` — idempotent).
+ *       **Auth:** Customer Bearer; job must be DRAFT or unpaid `PAYMENT_PENDING`.
+ *
+ *       **Body (preferred):** `{ "addressId": "<uuid from GET /addresses>" }`
  *
  *       **Requirements:**
- *       - Address already set (`PUT …/location`) **or** pass `addressId` in body
+ *       - `addressId` in body **or** address already on job
  *       - Site Visit (`quoteType=ONSITE`): **traderId required**; charges `siteVisitFee`
- *         from job snapshot / subcategory only (0 if admin unset — no default amount)
  *       - Direct Trader SERVICE path: `serviceCharge` or `maxBudget` if not site visit
  *
- *       **Status:** pay path → `PAYMENT_PENDING` + unpaid invoice. Job becomes `SCHEDULED`
- *       only on `POST /payments/{id}/confirm` (Payment Successful). No-pay path → `PUBLISHED`.
+ *       **Status:** pay path → `PAYMENT_PENDING` + unpaid invoice. Job → `SCHEDULED`
+ *       only on payment confirm. No-pay path → `PUBLISHED`.
  *
- *       **Offer claim:** Publish does **not** claim. Pass `offerId` on the job only.
- *       Offer becomes **USED** on payment confirm. If publish creates no invoice (waiting for quotes),
- *       claim → USED when job goes live.
+ *       **Back + change address:** call publish again with new `addressId` while unpaid —
+ *       address updates, **same** `invoiceId` returned (no error).
  *
- *       **Idempotent:** calling publish again while `PAYMENT_PENDING` returns the same invoice.
+ *       **Invoice id for Payment Details:** use `data.invoiceId` or `data.invoice.id`
+ *       (also on `data.job.invoiceId` / `data.job.nextSteps.invoiceId`).
  *
- *       **Next screen:** open invoice → `POST /payments/intent` → confirm/fail.
+ *       **Next:** `GET /invoices/{invoiceId}` optional reload → pay intent → confirm.
  *     parameters:
  *       - in: path
  *         name: id
@@ -387,17 +389,21 @@ router.put(
  *             $ref: '#/components/schemas/PublishJobRequest'
  *           examples:
  *             siteVisit:
- *               summary: Publish site visit (address already on job)
- *               value: {}
- *             withAddress:
- *               summary: Publish and set address in one call
+ *               summary: Preferred — set address + create invoice in one call
  *               value:
  *                 addressId: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
+ *             changeAddressWhileUnpaid:
+ *               summary: Back from Payment Details — change address, same invoice
+ *               value:
+ *                 addressId: 6bfdd798-371f-4342-a4cd-c874a7392730
+ *             alreadyHasAddress:
+ *               summary: Address already on job (legacy)
+ *               value: {}
  *     responses:
  *       200:
  *         description: |
- *           `data.job`, `data.booking`, `data.invoice` (full Pay Fee payload when trader+fee).
- *           Navigate to Site Visit & Pay Fee using `data.invoice.id`.
+ *           `data.invoiceId` + `data.invoice` (Payment Details). Job status `PAYMENT_PENDING` when pay needed.
+ *           Navigate with `data.invoiceId`.
  *       400:
  *         description: Not DRAFT, missing address, missing trader for site visit, or missing fee/charge.
  *       404:

@@ -687,7 +687,20 @@ export const setJobLocation = async (
   input: SetJobLocationInput
 ) => {
   const existing = await getOwnedJob(customerId, jobId);
-  assertDraft(existing.status);
+  // Allow address change while unpaid (user went back from Payment Details).
+  if (
+    existing.status !== JobStatus.DRAFT &&
+    existing.status !== JobStatus.PAYMENT_PENDING
+  ) {
+    throw new BadRequestError('Only draft or unpaid jobs can update location.');
+  }
+  if (
+    existing.status === JobStatus.PAYMENT_PENDING &&
+    existing.booking?.invoice?.status &&
+    existing.booking.invoice.status !== InvoiceStatus.UNPAID
+  ) {
+    throw new BadRequestError('Cannot change address after payment.');
+  }
 
   const address = await prisma.address.findFirst({
     where: { id: input.addressId, userId: customerId },
@@ -710,6 +723,49 @@ export const setJobLocation = async (
   return serializeJob(job);
 };
 
+const resolveOwnedAddress = async (customerId: string, addressId: string) => {
+  const address = await prisma.address.findFirst({
+    where: { id: addressId, userId: customerId },
+  });
+  if (!address) throw new NotFoundError('Address not found.');
+  return address;
+};
+
+const buildPublishSuccessPayload = async (
+  customerId: string,
+  job: Prisma.JobGetPayload<{ include: typeof jobInclude }>,
+  invoiceId: string
+) => {
+  const { getInvoice } = await import('../checkout/checkout.service');
+  const fullInvoice = await getInvoice(customerId, invoiceId);
+  const serialized = serializeJob(job);
+  return {
+    job: serialized,
+    booking: job.booking
+      ? {
+          id: job.booking.id,
+          bookingRef: str(job.booking.bookingRef),
+          status: job.booking.status,
+          scheduledDate: job.booking.scheduledDate
+            ? job.booking.scheduledDate.toISOString()
+            : '',
+          traderId: '',
+          jobId: job.id,
+        }
+      : {
+          id: '',
+          bookingRef: '',
+          status: '',
+          scheduledDate: '',
+          traderId: '',
+          jobId: job.id,
+        },
+    /** Prefer these for Payment Details navigation */
+    invoiceId,
+    invoice: fullInvoice,
+  };
+};
+
 export const publishJob = async (
   customerId: string,
   jobId: string,
@@ -717,26 +773,40 @@ export const publishJob = async (
 ) => {
   const existing = await getOwnedJob(customerId, jobId);
 
-  // Idempotent: location → Payment Details may call publish again.
-  // Until payment succeeds job stays PAYMENT_PENDING with the same unpaid invoice.
+  // Preferred mobile path: one call with addressId (no separate PUT /location).
+  const addressId = input.addressId ?? existing.addressId ?? null;
+  if (!addressId) {
+    throw new BadRequestError(
+      'Address is required. Pass addressId in POST /jobs/{id}/publish body.'
+    );
+  }
+  const address = await resolveOwnedAddress(customerId, addressId);
+
+  // Unpaid checkout: allow back → change address → publish again (same invoiceId).
   if (existing.status === JobStatus.PAYMENT_PENDING && existing.booking?.invoice?.id) {
-    const { getInvoice } = await import('../checkout/checkout.service');
-    const fullInvoice = await getInvoice(customerId, existing.booking.invoice.id);
-    return {
-      job: serializeJob(existing),
-      booking: {
-        id: existing.booking.id,
-        bookingRef: str(existing.booking.bookingRef),
-        status: existing.booking.status,
-        scheduledDate: existing.booking.scheduledDate
-          ? existing.booking.scheduledDate.toISOString()
-          : '',
-        traderId: '',
-        jobId: existing.id,
-      },
-      invoiceId: existing.booking.invoice.id,
-      invoice: fullInvoice,
-    };
+    if (existing.booking.invoice.status !== InvoiceStatus.UNPAID) {
+      throw new BadRequestError(
+        'Job already has a paid invoice. Use GET /invoices/{invoiceId} for Payment Details.'
+      );
+    }
+
+    let job = existing;
+    if (existing.addressId !== address.id) {
+      job = await prisma.job.update({
+        where: { id: jobId },
+        data: {
+          addressId: address.id,
+          addressLine: formatAddressLine(address),
+          city: address.city,
+          postcode: address.eircode,
+          latitude: address.latitude,
+          longitude: address.longitude,
+        },
+        include: jobInclude,
+      });
+    }
+
+    return buildPublishSuccessPayload(customerId, job, existing.booking.invoice.id);
   }
 
   if (existing.status !== JobStatus.DRAFT) {
@@ -746,24 +816,6 @@ export const publishJob = async (
         : 'Only draft jobs can be published.'
     );
   }
-
-  let addressId = input.addressId ?? existing.addressId;
-  if (input.addressId) {
-    const address = await prisma.address.findFirst({
-      where: { id: input.addressId, userId: customerId },
-    });
-    if (!address) throw new NotFoundError('Address not found.');
-    addressId = address.id;
-  }
-
-  if (!addressId) {
-    throw new BadRequestError('Address is required to publish a job.');
-  }
-
-  const address = await prisma.address.findFirst({
-    where: { id: addressId, userId: customerId },
-  });
-  if (!address) throw new NotFoundError('Address not found.');
 
   const traderId = existing.traderId;
   const isSiteVisit =
@@ -986,36 +1038,22 @@ export const publishJob = async (
     });
 
     return {
-      job: serializeJob(refreshed),
+      job: refreshed,
       booking,
-      invoiceId: invoice?.id ?? null,
+      invoiceId: invoice?.id ?? '',
       invoice,
     };
   },
     { timeout: 30000 }
   );
 
-  // Reload full invoice payload (lineItems, payNowLabel, serviceSummary) for Payment Details UI.
+  // Reload full invoice payload for Payment Details UI.
   if (result.invoiceId) {
-    const { getInvoice } = await import('../checkout/checkout.service');
-    const fullInvoice = await getInvoice(customerId, result.invoiceId);
-    return {
-      job: result.job,
-      booking: result.booking ?? {
-        id: '',
-        bookingRef: '',
-        status: '',
-        scheduledDate: '',
-        traderId: '',
-        jobId: '',
-      },
-      invoiceId: result.invoiceId,
-      invoice: fullInvoice,
-    };
+    return buildPublishSuccessPayload(customerId, result.job, result.invoiceId);
   }
 
   return {
-    job: result.job,
+    job: serializeJob(result.job),
     booking: result.booking ?? {
       id: '',
       bookingRef: '',
