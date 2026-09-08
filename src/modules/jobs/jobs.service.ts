@@ -517,6 +517,14 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
   });
   const siteVisitRequested =
     input.siteVisitRequested ?? quoteType === JobQuoteType.ONSITE;
+
+  // Site Visit always needs a trader (from offer or explicit selection).
+  if ((siteVisitRequested || quoteType === JobQuoteType.ONSITE) && !traderId) {
+    throw new BadRequestError(
+      'Site Visit jobs require traderId (or offerId with a trader). Pass nextJobPrefill.traderId and offerId from GET /trader-offers/{id} on POST /jobs.'
+    );
+  }
+
   const siteVisitFee =
     siteVisitRequested || quoteType === JobQuoteType.ONSITE
       ? resolveSiteVisitFee(
