@@ -167,6 +167,8 @@ export const serializeOffer = (offer: OfferRecord) => {
 
   return {
     id: offer.id,
+    /** Alias of id — use on POST /jobs as offerId */
+    offerId: offer.id,
     offerCode: offer.offerCode,
     offerType: offer.offerType,
     title: offer.title,
@@ -195,6 +197,8 @@ export const serializeOffer = (offer: OfferRecord) => {
     createdBy: offer.createdBy
       ? { id: offer.createdBy.id, fullName: offer.createdBy.fullName, email: offer.createdBy.email }
       : null,
+    /** Flat alias for POST /jobs — same as trader.id */
+    traderId: offer.trader?.id ?? (offer as { traderId?: string | null }).traderId ?? null,
     trader: offer.trader
       ? {
           id: offer.trader.id,

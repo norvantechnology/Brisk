@@ -183,6 +183,121 @@ const currencySymbol = (code: string) =>
 const formatMoneyLabel = (amount: number, currencyCode: string) =>
   `${currencySymbol(currencyCode)}${amount.toFixed(2)}`;
 
+const buildPromoTitle = (input: {
+  discountType: DiscountType;
+  discountValue: number;
+  currencyCode: string;
+  offerTitle?: string | null;
+  categoryName?: string | null;
+}) => {
+  if (input.offerTitle?.trim()) return input.offerTitle.trim();
+  const cat = input.categoryName?.trim() || 'All Category';
+  const sym = currencySymbol(input.currencyCode);
+  if (input.discountType === DiscountType.PERCENTAGE) {
+    return `${input.discountValue}% OFF ${cat}`;
+  }
+  if (input.discountType === DiscountType.FREE_SERVICE) {
+    return `Free Service — ${cat}`;
+  }
+  return `${sym}${input.discountValue} Off ${cat}`;
+};
+
+/** Payment Details → Brisk Offers bottom sheet items (promo codes). */
+const loadBriskOffersSheet = async (jobCategoryId?: string | null) => {
+  const now = new Date();
+  const codes = await prisma.promoCode.findMany({
+    where: {
+      active: true,
+      validFrom: { lte: now },
+      validUntil: { gte: now },
+    },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      offer: { select: { id: true, title: true } },
+    },
+    take: 50,
+  });
+
+  const categoryIds = Array.from(
+    new Set(
+      codes
+        .flatMap((c) => (c.categoryScope ? c.categoryScope.split(',').map((s) => s.trim()) : []))
+        .filter(Boolean)
+    )
+  );
+  const categories = categoryIds.length
+    ? await prisma.category.findMany({
+        where: { id: { in: categoryIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
+
+  const items = codes.map((code) => {
+    const scopeIds = code.categoryScope
+      ? code.categoryScope.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+    const primaryCategoryId = scopeIds[0] ?? null;
+    const categoryName = primaryCategoryId
+      ? categoryNameById.get(primaryCategoryId) ?? null
+      : null;
+    const discountValue = money(code.discountValue);
+    const title = buildPromoTitle({
+      discountType: code.discountType,
+      discountValue,
+      currencyCode: code.currencyCode,
+      offerTitle: code.offer?.title,
+      categoryName,
+    });
+    const discountLabel =
+      code.discountType === DiscountType.PERCENTAGE
+        ? `${discountValue}% Off`
+        : code.discountType === DiscountType.FREE_SERVICE
+          ? 'Free'
+          : `${currencySymbol(code.currencyCode)}${discountValue} Off`;
+
+    return {
+      id: code.id,
+      title,
+      code: code.code,
+      couponCode: code.code,
+      discountType: code.discountType,
+      discountValue,
+      discountLabel,
+      currencyCode: code.currencyCode,
+      categoryId: primaryCategoryId ?? '',
+      categoryIds: scopeIds,
+      categoryName: categoryName ?? (scopeIds.length ? '' : 'All'),
+      categoryScope: code.categoryScope ?? '',
+      validFrom: code.validFrom,
+      validUntil: code.validUntil,
+      offerId: code.offerId ?? '',
+      appliesToJobCategory:
+        !jobCategoryId ||
+        scopeIds.length === 0 ||
+        scopeIds.includes(jobCategoryId),
+    };
+  });
+
+  // Prefer codes that apply to this job category first, then others for browsing.
+  items.sort((a, b) => Number(b.appliesToJobCategory) - Number(a.appliesToJobCategory));
+
+  const categoryFilters = [
+    { key: 'ALL', label: 'All', categoryId: '' },
+    ...categories.map((c) => ({ key: c.id, label: c.name, categoryId: c.id })),
+  ];
+
+  return {
+    sheetTitle: '',
+    searchPlaceholder: '',
+    applyPath: '/invoices/{invoiceId}/apply-promo',
+    categoryFilters,
+    items,
+    /** Alias — same list for mobile models that expect promoCodes */
+    promoCodes: items,
+  };
+};
+
 const serializeInvoice = (invoice: InvoiceWithRelations) => {
   const job = invoice.booking.job;
   const trader = invoice.booking.trader;
@@ -411,7 +526,13 @@ export const getInvoice = async (userId: string, invoiceId: string) => {
   });
   if (!invoice) throw new NotFoundError('Invoice not found.');
   assertInvoiceOwner(invoice, userId);
-  return serializeInvoice(invoice);
+  const base = serializeInvoice(invoice);
+  const briskOffers = await loadBriskOffersSheet(invoice.booking.job.categoryId);
+  return {
+    ...base,
+    briskOffers,
+    promoCodes: briskOffers.items,
+  };
 };
 
 export const applyPromo = async (userId: string, invoiceId: string, input: ApplyPromoInput) => {
@@ -479,9 +600,12 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     include: invoiceOwnershipInclude,
   });
 
+  const briskOffers = await loadBriskOffersSheet(updated.booking.job.categoryId);
   return {
     ...serializeInvoice(updated),
     promoCode: promo.code,
+    briskOffers,
+    promoCodes: briskOffers.items,
   };
 };
 

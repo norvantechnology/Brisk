@@ -131,6 +131,44 @@
  *         paymentMethods:
  *           type: array
  *           items: { $ref: '#/components/schemas/PaymentMethodOption' }
+ *         briskOffers:
+ *           type: object
+ *           description: |
+ *             Payment Details → Brisk Offers bottom sheet.
+ *             List = `briskOffers.items` (title + couponCode). Apply via
+ *             POST /invoices/{id}/apply-promo with `{ "code": "<couponCode>" }`.
+ *           properties:
+ *             sheetTitle: { type: string }
+ *             searchPlaceholder: { type: string }
+ *             applyPath: { type: string, example: /invoices/{invoiceId}/apply-promo }
+ *             categoryFilters:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   key: { type: string }
+ *                   label: { type: string }
+ *                   categoryId: { type: string }
+ *             items:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string, format: uuid }
+ *                   title: { type: string, example: 10% OFF Pest Control }
+ *                   code: { type: string, example: PEST10BRISK }
+ *                   couponCode: { type: string, example: PEST10BRISK }
+ *                   discountType: { type: string }
+ *                   discountValue: { type: number }
+ *                   discountLabel: { type: string }
+ *                   categoryName: { type: string }
+ *                   appliesToJobCategory: { type: boolean }
+ *             promoCodes:
+ *               type: array
+ *               description: Alias of items
+ *         promoCodes:
+ *           type: array
+ *           description: Flat alias of briskOffers.items
  *         paymentStatus: { type: string, nullable: true }
  *         latestPaymentId: { type: string, format: uuid, nullable: true }
  *         promoCode:

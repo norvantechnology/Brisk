@@ -39,6 +39,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       - `trader` — name, verified, rating, reviewsCount, photo
  *       - `serviceSummary` — category/subcategory/title/scheduledDate/timeSlot from job
  *       - `billingTypes` / `paymentMethods`
+ *       - `briskOffers` / `promoCodes` — Brisk Offers bottom sheet (title + couponCode)
  *       - `lineItems` — keys + amounts (`label` empty for app mapping)
  *
  *       Job offer discount is **not** deducted from site-visit fee (unless FREE_SERVICE).
