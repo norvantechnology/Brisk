@@ -139,11 +139,14 @@ router.post(
  *       **billingType=COMPANY** requires `companyName` (TIN optional). Matches Company Billing form.
  *
  *       **Body params:**
- *       - `invoiceId` (uuid, required) — from publish `data.invoice.id`
- *       - `method` — CARD | APPLE_PAY | GOOGLE_PAY
- *       - `billingType` — INDIVIDUAL | COMPANY
- *       - `companyName` / `tinNumber` — when COMPANY
- *       - `billingAddress` — optional object (addressLine, city, postalCode, country)
+ *       - `invoiceId` (uuid, **required**) — from publish `data.invoice.id`
+ *       - `method` — optional, default `CARD` (`APPLE_PAY` | `GOOGLE_PAY` | `CARD`)
+ *       - `billingType` — optional, default `INDIVIDUAL` (`COMPANY` needs `companyName`)
+ *       - `companyName` / `tinNumber` — only when COMPANY (checkout billing screen)
+ *       - `billingAddress` — **optional**; not needed on Payment Details Pay Now
+ *
+ *       **Payment Details Pay Now minimum body:**
+ *       `{ "invoiceId": "<uuid>" }`
  *     requestBody:
  *       required: true
  *       content:
@@ -151,8 +154,12 @@ router.post(
  *           schema:
  *             $ref: '#/components/schemas/CreatePaymentIntentRequest'
  *           examples:
+ *             payNowMinimum:
+ *               summary: Payment Details — Pay Now (minimum)
+ *               value:
+ *                 invoiceId: 11111111-1111-1111-1111-111111111111
  *             card:
- *               summary: Card / individual
+ *               summary: Card + optional billing (checkout screen)
  *               value:
  *                 invoiceId: 11111111-1111-1111-1111-111111111111
  *                 method: CARD

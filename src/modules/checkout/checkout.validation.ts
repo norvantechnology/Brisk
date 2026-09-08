@@ -18,10 +18,12 @@ export const createPaymentIntentSchema = z.object({
   body: z
     .object({
       invoiceId: uuid,
-      method: z.nativeEnum(PaymentMethod),
+      /** Optional on Payment Details Pay Now — defaults to CARD */
+      method: z.nativeEnum(PaymentMethod).optional().default(PaymentMethod.CARD),
       billingType: z.nativeEnum(BillingType).optional().default(BillingType.INDIVIDUAL),
       companyName: z.string().trim().optional(),
       tinNumber: z.string().trim().optional(),
+      /** Optional — fill on checkout/billing screen if needed; not required for Pay Now */
       billingAddress: z
         .object({
           firstName: z.string().trim().min(1),

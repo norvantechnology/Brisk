@@ -194,8 +194,10 @@
  *         postcode: { type: string, example: D04ABCD }
  *     CreatePaymentIntentRequest:
  *       type: object
- *       required: [invoiceId, method]
- *       description: Body for Confirm & Pay on Site Visit & Pay Fee / Payment Details.
+ *       required: [invoiceId]
+ *       description: |
+ *         Payment Details Pay Now — only `invoiceId` required.
+ *         `method` defaults to CARD. `billingAddress` optional (checkout screen).
  *       properties:
  *         invoiceId:
  *           type: string
@@ -207,16 +209,15 @@
  *           allOf:
  *             - $ref: '#/components/schemas/PaymentMethod'
  *           description: |
- *             Payment method button selected:
- *             CARD (Stripe form), APPLE_PAY, or GOOGLE_PAY.
+ *             Optional, default CARD.
+ *             CARD / APPLE_PAY / GOOGLE_PAY.
  *         billingType:
  *           allOf:
  *             - $ref: '#/components/schemas/BillingType'
  *           default: INDIVIDUAL
  *           description: |
- *             Radio on Pay Fee screen:
- *             INDIVIDUAL = Individual/Personal Billing;
- *             COMPANY = Company Billing (show company fields).
+ *             Optional, default INDIVIDUAL.
+ *             COMPANY requires companyName (billing/checkout screen).
  *         companyName:
  *           type: string
  *           description: Required when billingType=COMPANY (Company Name field).
