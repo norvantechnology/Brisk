@@ -78,6 +78,7 @@ router.get(
  *
  *       Recalculates `promoDiscount`, `platformFee`, and `totalAmount`.
  *       Only works while invoice status is UNPAID.
+ *       **One promo only:** if `promoDiscount` already &gt; 0 / `promoApplied=true`, returns 400.
  *
  *       Promo must be active and within validity window. Optional `categoryScope` must match job category.
  *

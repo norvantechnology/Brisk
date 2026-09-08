@@ -410,6 +410,8 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     ],
     paymentStatus: invoice.payments[0]?.status ?? null,
     latestPaymentId: invoice.payments[0]?.id ?? null,
+    /** True after a promo has been applied (blocks second apply). */
+    promoApplied: money(invoice.promoDiscount) > 0,
   };
 };
 
@@ -545,6 +547,13 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
 
   if (invoice.status !== InvoiceStatus.UNPAID) {
     throw new BadRequestError('Promo codes can only be applied to unpaid invoices.');
+  }
+
+  // One promo per invoice — confirmed checkout rule (cannot stack / replace).
+  if (money(invoice.promoDiscount) > 0) {
+    throw new BadRequestError(
+      'A promo code is already applied to this invoice. Only one promo can be used per payment.'
+    );
   }
 
   const code = input.code.trim().toUpperCase();
