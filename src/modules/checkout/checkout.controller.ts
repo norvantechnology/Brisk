@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../utils/apiResponse';
+import { env } from '../../config/env';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import * as checkoutService from './checkout.service';
 
@@ -63,6 +64,20 @@ export const confirmPayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // TEMP: mobile wants confirm → false for failure-screen testing. Toggle via env.
+    if (env.CONFIRM_PAYMENT_FORCE_FAIL) {
+      const data = await checkoutService.failPayment(req.user!.id, req.params.id, {
+        reason: 'Payment confirmation failed (temporary test mode).',
+      });
+      sendResponse({
+        res,
+        statusCode: 400,
+        message: 'Payment confirmation failed.',
+        data,
+      });
+      return;
+    }
+
     const data = await checkoutService.confirmPayment(
       req.user!.id,
       req.params.id,
