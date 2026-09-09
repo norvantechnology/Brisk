@@ -740,8 +740,13 @@ export const confirmPayment = async (
   if (payment.status === PaymentStatus.COMPLETED) {
     return buildReceipt(payment.id, userId);
   }
-  if (payment.status === PaymentStatus.FAILED) {
-    throw new BadRequestError('This payment has failed and cannot be confirmed.');
+  // FAILED is retriable while invoice is still UNPAID (e.g. after fail screen → Pay Now again
+  // with the same paymentId, or recovery after temporary test force-fail).
+  if (
+    payment.status !== PaymentStatus.PENDING &&
+    payment.status !== PaymentStatus.FAILED
+  ) {
+    throw new BadRequestError(`Payment cannot be confirmed from status ${payment.status}.`);
   }
   if (payment.invoice.status === InvoiceStatus.PAID) {
     throw new BadRequestError('Invoice is already paid.');
