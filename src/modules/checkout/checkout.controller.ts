@@ -64,14 +64,15 @@ export const confirmPayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // TEMP: mobile wants confirm → false for failure-screen testing. Toggle via env.
+    // TEMP: mobile wants confirm → FAILED payload for failure-screen testing.
+    // Keep HTTP 200 — mobile handles success/fail from data.status (no Dio 400).
     if (env.CONFIRM_PAYMENT_FORCE_FAIL) {
       const data = await checkoutService.failPayment(req.user!.id, req.params.id, {
         reason: 'Payment confirmation failed (temporary test mode).',
       });
       sendResponse({
         res,
-        statusCode: 400,
+        statusCode: 200,
         message: 'Payment confirmation failed.',
         data,
       });
