@@ -18,6 +18,11 @@ import type {
   CreatePaymentIntentInput,
   FailPaymentInput,
 } from './checkout.validation';
+import {
+  emitInvoiceUpdated,
+  emitPaymentCompleted,
+  emitPaymentFailed,
+} from '../../sockets/realtime';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -645,12 +650,23 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
   });
 
   const briskOffers = await loadBriskOffersSheet(updated.booking.job.categoryId);
-  return {
+  const serialized = {
     ...serializeInvoice(updated),
     promoCode: promo.code,
     briskOffers,
     promoCodes: briskOffers.items,
   };
+  emitInvoiceUpdated({
+    invoiceId: updated.id,
+    jobId: updated.booking.job.id,
+    status: updated.status,
+    totalAmount: money(updated.totalAmount),
+    promoDiscount: money(updated.promoDiscount),
+    promoApplied: money(updated.promoDiscount) > 0,
+    customerId: userId,
+    at: new Date().toISOString(),
+  });
+  return serialized;
 };
 
 export const createPaymentIntent = async (userId: string, input: CreatePaymentIntentInput) => {
@@ -878,7 +894,30 @@ export const confirmPayment = async (
     }
   });
 
-  return buildReceipt(payment.id, userId);
+  const receipt = await buildReceipt(payment.id, userId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: payment.invoice.bookingId },
+    select: {
+      id: true,
+      jobId: true,
+      traderId: true,
+      trader: { select: { userId: true } },
+      job: { select: { customerId: true, status: true } },
+    },
+  });
+  emitPaymentCompleted({
+    paymentId: payment.id,
+    invoiceId: payment.invoiceId,
+    jobId: booking?.jobId ?? null,
+    bookingId: booking?.id ?? null,
+    status: PaymentStatus.COMPLETED,
+    amount: money(payment.amount),
+    customerId: userId,
+    traderId: booking?.traderId ?? null,
+    traderUserId: booking?.trader?.userId ?? null,
+    at: new Date().toISOString(),
+  });
+  return receipt;
 };
 
 export const failPayment = async (
@@ -905,6 +944,18 @@ export const failPayment = async (
 
   const invoice = payment.invoice;
   const amount = money(payment.amount);
+
+  emitPaymentFailed({
+    paymentId: payment.id,
+    invoiceId: payment.invoiceId,
+    jobId: invoice.booking.job.id,
+    bookingId: invoice.bookingId,
+    status: PaymentStatus.FAILED,
+    amount,
+    customerId: userId,
+    traderId: invoice.booking.trader?.id ?? null,
+    at: new Date().toISOString(),
+  });
 
   return {
     paymentId: payment.id,

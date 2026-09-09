@@ -1,29 +1,33 @@
+import http from 'http';
 import app from './app';
 import { env } from './config/env';
 import { connectDatabase, prisma } from './config/database';
 import { logger } from './utils/logger';
 import { ensureUploadRoot } from './modules/uploads/storage/local.storage';
+import { initSocketServer } from './sockets/socket-server';
 
 const startServer = async () => {
-  // 1. Establish database connection
   await connectDatabase();
 
-  // 2. Ensure upload directory exists (Render/Railway persistent disk or local ./data/uploads)
   await ensureUploadRoot();
   logger.info(`Upload storage: ${env.UPLOAD_STORAGE} at ${env.UPLOAD_DIR}`);
 
-  // 2. Start HTTP Server
-  const server = app.listen(env.PORT, () => {
-    logger.info(`🚀 BRISK backend monolith running in [${env.NODE_ENV}] mode on http://localhost:${env.PORT}`);
+  const httpServer = http.createServer(app);
+  initSocketServer(httpServer);
+
+  const server = httpServer.listen(env.PORT, () => {
+    logger.info(
+      `🚀 BRISK backend monolith running in [${env.NODE_ENV}] mode on http://localhost:${env.PORT}`
+    );
+    logger.info('Realtime: Socket.IO available at /socket.io');
   });
 
-  // Graceful shutdown handling
   const shutdown = async (signal: string) => {
     logger.info(`Received ${signal}. Shutting down gracefully...`);
-    
+
     server.close(async () => {
       logger.info('HTTP server closed.');
-      
+
       try {
         await prisma.$disconnect();
         logger.info('Database connection closed.');
@@ -34,7 +38,6 @@ const startServer = async () => {
       }
     });
 
-    // Force close server after 10s if graceful shutdown fails
     setTimeout(() => {
       logger.error('Could not close connections in time, forcefully shutting down.');
       process.exit(1);

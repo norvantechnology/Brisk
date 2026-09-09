@@ -97,18 +97,53 @@ export const updateJobSchema = z.object({
     .superRefine(refineBudget),
 });
 
+const publishAddressObjectSchema = z.object({
+  addressType: z.enum(['Home', 'Work', 'Custom']).optional(),
+  label: z.string().trim().min(1).optional(),
+  houseNumber: z.string().trim().optional(),
+  addressLine1: z.string().trim().min(1, 'Street address is required.'),
+  addressLine2: z.string().trim().optional(),
+  city: z.string().trim().min(1, 'City is required.'),
+  county: z.string().trim().optional(),
+  eircode: z.string().trim().optional(),
+  country: z.string().trim().optional(),
+  latitude: z.coerce.number().optional(),
+  longitude: z.coerce.number().optional(),
+  mapImageUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
+  isDefault: z.boolean().optional(),
+});
+
 export const setJobLocationSchema = z.object({
   params: z.object({ id: uuid }),
-  body: z.object({
-    addressId: uuid,
-  }),
+  body: z
+    .object({
+      addressId: uuid.optional(),
+      /** Inline searched location — backend creates a saved address when addressId is missing. */
+      address: publishAddressObjectSchema.optional(),
+      /** Alias of `address` (mobile map search). */
+      location: publishAddressObjectSchema.optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (!data.addressId && !data.address && !data.location) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Provide addressId or address/location object.',
+          path: ['addressId'],
+        });
+      }
+    }),
 });
 
 export const publishJobSchema = z.object({
   params: z.object({ id: uuid }),
   body: z
     .object({
+      /** Existing saved address (GET /addresses). */
       addressId: uuid.optional(),
+      /** Searched/new location — created as a customer address when addressId is omitted. */
+      address: publishAddressObjectSchema.optional(),
+      /** Alias of `address` for map-search payloads. */
+      location: publishAddressObjectSchema.optional(),
       serviceCharge: z.coerce.number().nonnegative().optional(),
     })
     .optional()
@@ -120,3 +155,4 @@ export type UpdateJobInput = z.infer<typeof updateJobSchema>['body'];
 export type SetJobLocationInput = z.infer<typeof setJobLocationSchema>['body'];
 export type PublishJobInput = z.infer<typeof publishJobSchema>['body'];
 export type JobFormConfigQuery = z.infer<typeof jobFormConfigSchema>['query'];
+export type PublishAddressObject = z.infer<typeof publishAddressObjectSchema>;

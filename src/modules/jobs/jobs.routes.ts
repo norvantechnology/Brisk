@@ -352,24 +352,29 @@ router.put(
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile CTA:** Select address → **Next** calls this once with `addressId`.
+ *       **Mobile CTA:** Select address → **Next** calls this once.
  *       Separate `PUT /jobs/{id}/location` is **optional** (not required).
  *       Name is “publish” but job is **not live** until payment succeeds.
  *
  *       **Auth:** Customer Bearer; job must be DRAFT or unpaid `PAYMENT_PENDING`.
  *
- *       **Body (preferred):** `{ "addressId": "<uuid from GET /addresses>" }`
+ *       **Body options (pick one):**
+ *       1. `{ "addressId": "<uuid>" }` — saved address from GET /addresses
+ *       2. `{ "address": { addressLine1, city, latitude, longitude, ... } }` — map search (no addressId yet);
+ *          backend **creates** the address, attaches it to the job, then publishes
+ *       3. `{ "location": { ... } }` — same as `address` (alias)
+ *       4. `{}` — only if job already has addressId
  *
  *       **Requirements:**
- *       - `addressId` in body **or** address already on job
+ *       - One of the address options above
  *       - Site Visit (`quoteType=ONSITE`): **traderId required**; charges `siteVisitFee`
  *       - Direct Trader SERVICE path: `serviceCharge` or `maxBudget` if not site visit
  *
  *       **Status:** pay path → `PAYMENT_PENDING` + unpaid invoice. Job → `SCHEDULED`
  *       only on payment confirm. No-pay path → `PUBLISHED`.
  *
- *       **Back + change address:** call publish again with new `addressId` while unpaid —
- *       address updates, **same** `invoiceId` returned (no error).
+ *       **Back + change address:** call publish again with new `addressId` **or** new
+ *       `address`/`location` while unpaid — address updates, **same** `invoiceId` returned.
  *
  *       **Invoice id for Payment Details:** use `data.invoiceId` or `data.invoice.id`
  *       (also on `data.job.invoiceId` / `data.job.nextSteps.invoiceId`).
@@ -389,9 +394,21 @@ router.put(
  *             $ref: '#/components/schemas/PublishJobRequest'
  *           examples:
  *             siteVisit:
- *               summary: Preferred — set address + create invoice in one call
+ *               summary: Saved addressId
  *               value:
  *                 addressId: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
+ *             mapSearch:
+ *               summary: No addressId — send searched location (backend creates address)
+ *               value:
+ *                 location:
+ *                   label: Grafton Street
+ *                   addressLine1: 12 Grafton Street
+ *                   city: Dublin
+ *                   county: Dublin
+ *                   eircode: D02 XY45
+ *                   country: Ireland
+ *                   latitude: 53.342
+ *                   longitude: -6.259
  *             changeAddressWhileUnpaid:
  *               summary: Back from Payment Details — change address, same invoice
  *               value:

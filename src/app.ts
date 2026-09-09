@@ -40,6 +40,7 @@ import { getUploadRoot } from './modules/uploads/storage/local.storage';
 import propertyRoutes from './modules/property/property.routes';
 import jobsRoutes from './modules/jobs/jobs.routes';
 import checkoutRoutes from './modules/checkout/checkout.routes';
+import realtimeRoutes from './sockets/realtime.routes';
 
 const app = express();
 
@@ -110,6 +111,7 @@ app.use('/uploads', uploadsRoutes);
 app.use('/', propertyRoutes);
 app.use('/jobs', jobsRoutes);
 app.use('/', checkoutRoutes);
+app.use('/realtime', realtimeRoutes);
 
 /**
  * @swagger

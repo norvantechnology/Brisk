@@ -22,11 +22,17 @@ import {
 } from './jobs.form-config';
 import type {
   CreateJobInput,
+  PublishAddressObject,
   PublishJobInput,
   SetJobLocationInput,
   UpdateJobInput,
 } from './jobs.validation';
 import type { JobFormEntryPoint } from './jobs.form-config';
+import {
+  emitJobCreated,
+  emitJobPublished,
+  emitJobUpdated,
+} from '../../sockets/realtime';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -607,7 +613,16 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
     { timeout: 20000 }
   );
 
-  return getJob(customerId, created.id);
+  const job = await getJob(customerId, created.id);
+  emitJobCreated({
+    jobId: job.id,
+    jobRef: job.jobRef,
+    status: job.status,
+    customerId,
+    traderId: job.traderId || null,
+    at: new Date().toISOString(),
+  });
+  return job;
 };
 
 export const listJobs = async (customerId: string, status?: JobStatus) => {
@@ -686,7 +701,16 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
     });
   });
 
-  return serializeJob(job);
+  const serialized = serializeJob(job);
+  emitJobUpdated({
+    jobId: serialized.id,
+    jobRef: serialized.jobRef,
+    status: serialized.status,
+    customerId,
+    traderId: serialized.traderId || null,
+    at: new Date().toISOString(),
+  });
+  return serialized;
 };
 
 export const setJobLocation = async (
@@ -710,11 +734,7 @@ export const setJobLocation = async (
     throw new BadRequestError('Cannot change address after payment.');
   }
 
-  const address = await prisma.address.findFirst({
-    where: { id: input.addressId, userId: customerId },
-  });
-  if (!address) throw new NotFoundError('Address not found.');
-
+  const address = await resolveJobAddressForPublish(customerId, existing.addressId, input);
   const addressChanged = existing.addressId !== address.id;
 
   const job = await prisma.job.update({
@@ -740,7 +760,17 @@ export const setJobLocation = async (
     await clearInvoicePromoIfApplied(existing.booking.invoice.id);
   }
 
-  return serializeJob(job);
+  const serialized = serializeJob(job);
+  emitJobUpdated({
+    jobId: serialized.id,
+    jobRef: serialized.jobRef,
+    status: serialized.status,
+    customerId,
+    traderId: serialized.traderId || null,
+    invoiceId: existing.booking?.invoice?.id ?? null,
+    at: new Date().toISOString(),
+  });
+  return serialized;
 };
 
 const resolveOwnedAddress = async (customerId: string, addressId: string) => {
@@ -749,6 +779,55 @@ const resolveOwnedAddress = async (customerId: string, addressId: string) => {
   });
   if (!address) throw new NotFoundError('Address not found.');
   return address;
+};
+
+/**
+ * Resolve address for publish / location:
+ * 1) addressId if provided
+ * 2) inline address/location object → create saved address
+ * 3) existing job.addressId
+ */
+const resolveJobAddressForPublish = async (
+  customerId: string,
+  existingAddressId: string | null | undefined,
+  input: {
+    addressId?: string;
+    address?: PublishAddressObject;
+    location?: PublishAddressObject;
+  }
+) => {
+  if (input.addressId) {
+    return resolveOwnedAddress(customerId, input.addressId);
+  }
+
+  const inline = input.address ?? input.location;
+  if (inline) {
+    const { createAddress } = await import('../property/property.service');
+    const created = await createAddress(customerId, {
+      addressType: inline.addressType ?? 'Custom',
+      label: inline.label,
+      houseNumber: inline.houseNumber,
+      addressLine1: inline.addressLine1,
+      addressLine2: inline.addressLine2,
+      city: inline.city,
+      county: inline.county,
+      eircode: inline.eircode,
+      country: inline.country ?? 'Ireland',
+      latitude: inline.latitude,
+      longitude: inline.longitude,
+      mapImageUrl: inline.mapImageUrl,
+      isDefault: inline.isDefault ?? false,
+    });
+    return resolveOwnedAddress(customerId, created.id);
+  }
+
+  if (existingAddressId) {
+    return resolveOwnedAddress(customerId, existingAddressId);
+  }
+
+  throw new BadRequestError(
+    'Address is required. Pass addressId, or address/location object with the searched place details.'
+  );
 };
 
 const buildPublishSuccessPayload = async (
@@ -793,14 +872,8 @@ export const publishJob = async (
 ) => {
   const existing = await getOwnedJob(customerId, jobId);
 
-  // Preferred mobile path: one call with addressId (no separate PUT /location).
-  const addressId = input.addressId ?? existing.addressId ?? null;
-  if (!addressId) {
-    throw new BadRequestError(
-      'Address is required. Pass addressId in POST /jobs/{id}/publish body.'
-    );
-  }
-  const address = await resolveOwnedAddress(customerId, addressId);
+  // addressId OR inline address/location (map search) OR address already on job.
+  const address = await resolveJobAddressForPublish(customerId, existing.addressId, input);
 
   // Unpaid checkout: allow back → change address → publish again (same invoiceId).
   if (existing.status === JobStatus.PAYMENT_PENDING && existing.booking?.invoice?.id) {
@@ -829,7 +902,22 @@ export const publishJob = async (
       await clearInvoicePromoIfApplied(existing.booking.invoice.id);
     }
 
-    return buildPublishSuccessPayload(customerId, job, existing.booking.invoice.id);
+    const republish = await buildPublishSuccessPayload(
+      customerId,
+      job,
+      existing.booking.invoice.id
+    );
+    emitJobUpdated({
+      jobId: republish.job.id,
+      jobRef: republish.job.jobRef,
+      status: republish.job.status,
+      customerId,
+      traderId: republish.job.traderId || null,
+      invoiceId: republish.invoiceId,
+      bookingId: republish.booking?.id || null,
+      at: new Date().toISOString(),
+    });
+    return republish;
   }
 
   if (existing.status !== JobStatus.DRAFT) {
@@ -1077,11 +1165,52 @@ export const publishJob = async (
 
   // Reload full invoice payload for Payment Details UI.
   if (result.invoiceId) {
-    return buildPublishSuccessPayload(customerId, result.job, result.invoiceId);
+    const payload = await buildPublishSuccessPayload(customerId, result.job, result.invoiceId);
+    const traderUserId = result.job.traderId
+      ? (
+          await prisma.trader.findUnique({
+            where: { id: result.job.traderId },
+            select: { userId: true },
+          })
+        )?.userId
+      : null;
+    emitJobPublished({
+      jobId: payload.job.id,
+      jobRef: payload.job.jobRef,
+      status: payload.job.status,
+      customerId,
+      traderId: payload.job.traderId || null,
+      traderUserId: traderUserId ?? null,
+      invoiceId: payload.invoiceId,
+      bookingId: payload.booking?.id || null,
+      at: new Date().toISOString(),
+    });
+    return payload;
   }
 
+  const publishedJob = serializeJob(result.job);
+  const traderUserId = result.job.traderId
+    ? (
+        await prisma.trader.findUnique({
+          where: { id: result.job.traderId },
+          select: { userId: true },
+        })
+      )?.userId
+    : null;
+  emitJobPublished({
+    jobId: publishedJob.id,
+    jobRef: publishedJob.jobRef,
+    status: publishedJob.status,
+    customerId,
+    traderId: publishedJob.traderId || null,
+    traderUserId: traderUserId ?? null,
+    invoiceId: null,
+    bookingId: result.booking?.id ?? null,
+    at: new Date().toISOString(),
+  });
+
   return {
-    job: serializeJob(result.job),
+    job: publishedJob,
     booking: result.booking ?? {
       id: '',
       bookingRef: '',

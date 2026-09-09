@@ -413,26 +413,52 @@
  *         siteVisitRequested: { type: boolean, description: Keep true when Site Visit card selected }
  *     SetJobLocationRequest:
  *       type: object
- *       required: [addressId]
+ *       description: |
+ *         Provide **either** `addressId` **or** inline `address` / `location` (map search).
  *       properties:
  *         addressId:
  *           type: string
  *           format: uuid
- *           description: |
- *             Saved address UUID from GET /addresses or POST /addresses.
- *             Must belong to the authenticated customer. Used for Home/Work/Other selection.
+ *           description: Saved address UUID from GET /addresses.
+ *         address:
+ *           $ref: '#/components/schemas/InlineJobAddress'
+ *         location:
+ *           $ref: '#/components/schemas/InlineJobAddress'
+ *     InlineJobAddress:
+ *       type: object
+ *       required: [addressLine1, city]
+ *       description: Map-search / new place — backend creates a saved Address row for the customer.
+ *       properties:
+ *         addressType: { type: string, enum: [Home, Work, Custom], default: Custom }
+ *         label: { type: string, example: Selected location }
+ *         houseNumber: { type: string }
+ *         addressLine1: { type: string, example: 12 Grafton Street }
+ *         addressLine2: { type: string }
+ *         city: { type: string, example: Dublin }
+ *         county: { type: string, example: Dublin }
+ *         eircode: { type: string, example: D02 XY45 }
+ *         country: { type: string, example: Ireland }
+ *         latitude: { type: number, example: 53.342 }
+ *         longitude: { type: number, example: -6.259 }
+ *         isDefault: { type: boolean, default: false }
  *     PublishJobRequest:
  *       type: object
  *       description: |
- *         Preferred mobile body: pass `addressId` only — sets location + creates unpaid invoice.
- *         Separate PUT /jobs/{id}/location is not required.
+ *         Pass **one of**:
+ *         1. `addressId` — existing saved address
+ *         2. `address` or `location` — searched place; backend creates address then publishes
+ *         3. empty body — only if job already has addressId
  *       properties:
  *         addressId:
  *           type: string
  *           format: uuid
  *           description: |
- *             Saved address UUID from GET /addresses. Required unless job already has addressId.
+ *             Saved address UUID from GET /addresses.
  *             Can be sent again while PAYMENT_PENDING to change address before pay.
+ *         address:
+ *           $ref: '#/components/schemas/InlineJobAddress'
+ *         location:
+ *           $ref: '#/components/schemas/InlineJobAddress'
  *         serviceCharge:
  *           type: number
  *           minimum: 0
