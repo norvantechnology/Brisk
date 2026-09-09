@@ -715,6 +715,8 @@ export const setJobLocation = async (
   });
   if (!address) throw new NotFoundError('Address not found.');
 
+  const addressChanged = existing.addressId !== address.id;
+
   const job = await prisma.job.update({
     where: { id: jobId },
     data: {
@@ -727,6 +729,16 @@ export const setJobLocation = async (
     },
     include: jobInclude,
   });
+
+  // After location change on unpaid checkout, allow promo apply again.
+  if (
+    addressChanged &&
+    existing.status === JobStatus.PAYMENT_PENDING &&
+    existing.booking?.invoice?.id
+  ) {
+    const { clearInvoicePromoIfApplied } = await import('../checkout/checkout.service');
+    await clearInvoicePromoIfApplied(existing.booking.invoice.id);
+  }
 
   return serializeJob(job);
 };
@@ -812,6 +824,9 @@ export const publishJob = async (
         },
         include: jobInclude,
       });
+      // Location change resets promo so customer can apply again on Payment Details.
+      const { clearInvoicePromoIfApplied } = await import('../checkout/checkout.service');
+      await clearInvoicePromoIfApplied(existing.booking.invoice.id);
     }
 
     return buildPublishSuccessPayload(customerId, job, existing.booking.invoice.id);

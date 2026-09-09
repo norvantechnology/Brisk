@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
 import { prisma } from '../../config/database';
+import { env } from '../../config/env';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { computeInvoiceBreakdown } from '../jobs/jobs.service';
 import type {
@@ -410,7 +411,7 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     ],
     paymentStatus: invoice.payments[0]?.status ?? null,
     latestPaymentId: invoice.payments[0]?.id ?? null,
-    /** True after a promo has been applied (blocks second apply). */
+    /** True when a promo discount is on the invoice (re-apply still allowed while UNPAID). */
     promoApplied: money(invoice.promoDiscount) > 0,
   };
 };
@@ -537,6 +538,33 @@ export const getInvoice = async (userId: string, invoiceId: string) => {
   };
 };
 
+/** Clear promo when customer changes job location while still unpaid (Payment Details). */
+export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice || invoice.status !== InvoiceStatus.UNPAID) return;
+  if (money(invoice.promoDiscount) <= 0) return;
+
+  const purpose =
+    money(invoice.platformFee) === 0 ? ('SITE_VISIT_FEE' as const) : ('SERVICE' as const);
+  const breakdown = computeInvoiceBreakdown({
+    serviceCharge: money(invoice.serviceCharge),
+    traderOfferDiscount: money(invoice.traderOfferDiscount),
+    promoDiscount: 0,
+    currencyCode: invoice.currencyCode,
+    purpose,
+  });
+
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: {
+      promoDiscount: breakdown.promoDiscount,
+      platformFee: breakdown.platformFee,
+      tax: breakdown.tax,
+      totalAmount: breakdown.totalAmount,
+    },
+  });
+};
+
 export const applyPromo = async (userId: string, invoiceId: string, input: ApplyPromoInput) => {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -549,13 +577,8 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     throw new BadRequestError('Promo codes can only be applied to unpaid invoices.');
   }
 
-  // One promo per invoice — confirmed checkout rule (cannot stack / replace).
-  if (money(invoice.promoDiscount) > 0) {
-    throw new BadRequestError(
-      'A promo code is already applied to this invoice. Only one promo can be used per payment.'
-    );
-  }
-
+  // One promo at a time (no stacking). Re-apply / replace is allowed while UNPAID
+  // (e.g. after location change on Payment Details).
   const code = input.code.trim().toUpperCase();
   const promo = await prisma.promoCode.findFirst({
     where: {
@@ -662,19 +685,28 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     },
   });
 
+  const publishableKey =
+    env.STRIPE_PUBLISHABLE_KEY ?? 'pk_test_brisk_mock_replace_via_env';
+  const stripeMerchantIdentifier =
+    env.STRIPE_MERCHANT_IDENTIFIER ?? 'merchant.com.brisk';
+  const usingLiveStripe = Boolean(env.STRIPE_PUBLISHABLE_KEY);
+
   return {
     paymentId: payment.id,
     transactionId: payment.transactionRef,
     transactionRef: payment.transactionRef,
-    clientSecret: `mock_secret_${payment.id}`,
-    publishableKey: null,
+    clientSecret: usingLiveStripe
+      ? `pi_pending_${payment.id}_secret_${payment.id}`
+      : `mock_secret_${payment.id}`,
+    publishableKey,
+    stripeMerchantIdentifier,
     amount: money(payment.amount),
     amountFormatted: formatMoneyLabel(money(payment.amount), payment.currencyCode),
     currencyCode: payment.currencyCode,
     currencySymbol: currencySymbol(payment.currencyCode),
     method: payment.method,
     status: payment.status,
-    mock: true as const,
+    mock: !usingLiveStripe,
     billingAddress: input.billingAddress ?? null,
     invoiceId: invoice.id,
     orderId: invoice.invoiceNumber || invoice.booking.bookingRef,

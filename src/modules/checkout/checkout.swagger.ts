@@ -238,7 +238,8 @@
  *         transactionId: { type: string, example: TXN-DBBA9C9F }
  *         transactionRef: { type: string, example: TXN-DBBA9C9F }
  *         clientSecret: { type: string, example: mock_secret_..., description: Stripe client secret (mock until live keys) }
- *         publishableKey: { type: string, nullable: true }
+ *         publishableKey: { type: string, example: pk_test_brisk_mock_replace_via_env, description: From STRIPE_PUBLISHABLE_KEY env (mobile must not hardcode) }
+ *         stripeMerchantIdentifier: { type: string, example: merchant.com.brisk, description: Apple Pay merchant id from STRIPE_MERCHANT_IDENTIFIER }
  *         amount: { type: number, example: 30, description: Amount due now (site visit fee or service total) }
  *         amountFormatted: { type: string, example: "€30.00" }
  *         currencyCode: { type: string, example: EUR }

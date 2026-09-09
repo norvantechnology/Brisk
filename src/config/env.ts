@@ -17,6 +17,10 @@ const envSchema = z.object({
   UPLOAD_PUBLIC_BASE_URL: z.string().url().optional(),
   UPLOAD_MAX_MB: z.coerce.number().default(10),
   UPLOAD_STORAGE: z.enum(['local', 's3']).default('local'),
+  /** Stripe publishable key returned on POST /payments/intent (mobile must not hardcode). */
+  STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  /** Apple Pay merchant id returned on POST /payments/intent. */
+  STRIPE_MERCHANT_IDENTIFIER: z.string().min(1).optional(),
 });
 
 const parseEnv = () => {
