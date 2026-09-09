@@ -415,50 +415,114 @@
  *       type: object
  *       description: |
  *         Provide **either** `addressId` **or** inline `address` / `location` (map search).
+ *         Do not send both unless `addressId` should win (addressId is preferred when present).
  *       properties:
  *         addressId:
  *           type: string
  *           format: uuid
  *           description: Saved address UUID from GET /addresses.
+ *           example: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
  *         address:
  *           $ref: '#/components/schemas/InlineJobAddress'
  *         location:
  *           $ref: '#/components/schemas/InlineJobAddress'
+ *       example:
+ *         location:
+ *           label: Grafton Street
+ *           addressLine1: 12 Grafton Street
+ *           city: Dublin
+ *           county: Dublin
+ *           eircode: D02 XY45
+ *           country: Ireland
+ *           latitude: 53.342
+ *           longitude: -6.259
  *     InlineJobAddress:
  *       type: object
  *       required: [addressLine1, city]
- *       description: Map-search / new place — backend creates a saved Address row for the customer.
+ *       description: |
+ *         Map-search / new place payload. Backend creates a saved Address for the customer
+ *         and returns its id on the job as `addressId`.
  *       properties:
- *         addressType: { type: string, enum: [Home, Work, Custom], default: Custom }
- *         label: { type: string, example: Selected location }
- *         houseNumber: { type: string }
- *         addressLine1: { type: string, example: 12 Grafton Street }
- *         addressLine2: { type: string }
- *         city: { type: string, example: Dublin }
- *         county: { type: string, example: Dublin }
- *         eircode: { type: string, example: D02 XY45 }
- *         country: { type: string, example: Ireland }
- *         latitude: { type: number, example: 53.342 }
- *         longitude: { type: number, example: -6.259 }
- *         isDefault: { type: boolean, default: false }
+ *         addressType:
+ *           type: string
+ *           enum: [Home, Work, Custom]
+ *           default: Custom
+ *         label:
+ *           type: string
+ *           example: Selected location
+ *         houseNumber:
+ *           type: string
+ *           example: "12"
+ *         addressLine1:
+ *           type: string
+ *           example: 12 Grafton Street
+ *         addressLine2:
+ *           type: string
+ *           nullable: true
+ *         city:
+ *           type: string
+ *           example: Dublin
+ *         county:
+ *           type: string
+ *           example: Dublin
+ *         eircode:
+ *           type: string
+ *           example: D02 XY45
+ *         country:
+ *           type: string
+ *           example: Ireland
+ *           default: Ireland
+ *         latitude:
+ *           type: number
+ *           format: double
+ *           example: 53.342
+ *         longitude:
+ *           type: number
+ *           format: double
+ *           example: -6.259
+ *         mapImageUrl:
+ *           type: string
+ *           format: uri
+ *           nullable: true
+ *         isDefault:
+ *           type: boolean
+ *           default: false
+ *       example:
+ *         label: Grafton Street
+ *         addressLine1: 12 Grafton Street
+ *         city: Dublin
+ *         county: Dublin
+ *         eircode: D02 XY45
+ *         country: Ireland
+ *         latitude: 53.342
+ *         longitude: -6.259
  *     PublishJobRequest:
  *       type: object
  *       description: |
- *         Pass **one of**:
- *         1. `addressId` — existing saved address
- *         2. `address` or `location` — searched place; backend creates address then publishes
- *         3. empty body — only if job already has addressId
+ *         **Request body for POST /jobs/{id}/publish** — pass **one of**:
+ *         1. `addressId` — existing saved address from GET /addresses
+ *         2. `address` or `location` — searched place; backend creates address, attaches to job, publishes
+ *         3. `{}` empty — only if job already has `addressId`
+ *
+ *         Optional: `serviceCharge` for non–site-visit Direct Trader path.
  *       properties:
  *         addressId:
  *           type: string
  *           format: uuid
+ *           nullable: true
  *           description: |
  *             Saved address UUID from GET /addresses.
- *             Can be sent again while PAYMENT_PENDING to change address before pay.
+ *             Optional when `address`/`location` is sent, or when job already has an address.
+ *             While PAYMENT_PENDING, send again to change address before pay (same invoiceId).
+ *           example: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
  *         address:
- *           $ref: '#/components/schemas/InlineJobAddress'
+ *           allOf:
+ *             - $ref: '#/components/schemas/InlineJobAddress'
+ *           description: Inline map-search place (same as `location`).
  *         location:
- *           $ref: '#/components/schemas/InlineJobAddress'
+ *           allOf:
+ *             - $ref: '#/components/schemas/InlineJobAddress'
+ *           description: Alias of `address` for map-search payloads when there is no addressId yet.
  *         serviceCharge:
  *           type: number
  *           minimum: 0
@@ -466,6 +530,16 @@
  *           description: |
  *             Optional SERVICE-path override. Ignored for Site Visit (uses siteVisitFee).
  *             For non-ONSITE Direct Trader, required if job has no serviceCharge/maxBudget.
+ *       example:
+ *         location:
+ *           label: Grafton Street
+ *           addressLine1: 12 Grafton Street
+ *           city: Dublin
+ *           county: Dublin
+ *           eircode: D02 XY45
+ *           country: Ireland
+ *           latitude: 53.342
+ *           longitude: -6.259
  *     PublishJobResponse:
  *       type: object
  *       properties:

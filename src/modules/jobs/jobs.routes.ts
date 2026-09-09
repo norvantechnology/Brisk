@@ -297,20 +297,22 @@ router.patch('/:id', ...customerOnly, validate(updateJobSchema), controller.upda
  * @swagger
  * /jobs/{id}/location:
  *   put:
- *     summary: Select Location — attach saved address to draft job
+ *     summary: Select Location — attach saved address OR inline map-search place
  *     tags: ['Customer / Jobs']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Select Location (saved Home / Work / Other cards).
+ *       **Mobile screen:** Select Location (saved Home / Work / Other **or** map search).
  *
- *       **Auth:** Customer Bearer; job + address must belong to the same customer.
+ *       **Auth:** Customer Bearer; job must belong to the customer.
  *
- *       **Flow:**
- *       1. `GET /addresses` — list cards (`label`, `formattedAddress`, `icon`)
- *       2. Optional `POST /addresses` — Choose Location / search → create then select
- *       3. This `PUT` — set selected `addressId` on the draft job
- *       4. User taps **Publish Job Post** → `POST /jobs/{id}/publish`
+ *       **Request body — pick one:**
+ *       1. `{ "addressId": "<uuid>" }` — from `GET /addresses`
+ *       2. `{ "location": { addressLine1, city, lat, lng, ... } }` — map search (no saved id yet);
+ *          backend **creates** Address then attaches to job
+ *       3. `{ "address": { ... } }` — same as `location` (alias)
+ *
+ *       **Note:** You can skip this call and pass the same fields on `POST /jobs/{id}/publish` instead.
  *
  *       Copies address line, city, eircode, lat/lng onto the job.
  *       After success, `nextSteps.canPublish=true` when status is DRAFT.
@@ -326,15 +328,30 @@ router.patch('/:id', ...customerOnly, validate(updateJobSchema), controller.upda
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/SetJobLocationRequest'
- *           example:
- *             addressId: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
+ *           examples:
+ *             savedAddress:
+ *               summary: Existing saved addressId
+ *               value:
+ *                 addressId: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
+ *             mapSearch:
+ *               summary: Map search — no addressId (backend creates address)
+ *               value:
+ *                 location:
+ *                   label: Grafton Street
+ *                   addressLine1: 12 Grafton Street
+ *                   city: Dublin
+ *                   county: Dublin
+ *                   eircode: D02 XY45
+ *                   country: Ireland
+ *                   latitude: 53.342
+ *                   longitude: -6.259
  *     responses:
  *       200:
- *         description: Job with address fields set; `nextSteps` updated.
+ *         description: Job with address fields set; `nextSteps` updated. Response includes new `addressId` when created from location.
  *       400:
- *         description: Job is not DRAFT.
+ *         description: Missing addressId/location, or job not editable.
  *       404:
- *         description: Job or address not found (address must belong to the customer).
+ *         description: Job or address not found (addressId must belong to the customer).
  */
 router.put(
   '/:id/location',
@@ -393,12 +410,12 @@ router.put(
  *           schema:
  *             $ref: '#/components/schemas/PublishJobRequest'
  *           examples:
- *             siteVisit:
- *               summary: Saved addressId
+ *             savedAddressId:
+ *               summary: "1) Saved addressId"
  *               value:
  *                 addressId: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
- *             mapSearch:
- *               summary: No addressId — send searched location (backend creates address)
+ *             mapSearchLocation:
+ *               summary: "2) Map search — location object (no addressId)"
  *               value:
  *                 location:
  *                   label: Grafton Street
@@ -409,12 +426,24 @@ router.put(
  *                   country: Ireland
  *                   latitude: 53.342
  *                   longitude: -6.259
+ *             mapSearchAddress:
+ *               summary: "2b) Map search — address object (alias of location)"
+ *               value:
+ *                 address:
+ *                   label: Grafton Street
+ *                   addressLine1: 12 Grafton Street
+ *                   city: Dublin
+ *                   county: Dublin
+ *                   eircode: D02 XY45
+ *                   country: Ireland
+ *                   latitude: 53.342
+ *                   longitude: -6.259
  *             changeAddressWhileUnpaid:
- *               summary: Back from Payment Details — change address, same invoice
+ *               summary: "3) Unpaid — change address, same invoiceId"
  *               value:
  *                 addressId: 6bfdd798-371f-4342-a4cd-c874a7392730
  *             alreadyHasAddress:
- *               summary: Address already on job (legacy)
+ *               summary: "4) Job already has addressId"
  *               value: {}
  *     responses:
  *       200:
