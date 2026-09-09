@@ -21,14 +21,6 @@ const envSchema = z.object({
   STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
   /** Apple Pay merchant id returned on POST /payments/intent. */
   STRIPE_MERCHANT_IDENTIFIER: z.string().min(1).optional(),
-  /**
-   * TEMP mobile test: when true, POST /payments/{id}/confirm returns success:false
-   * and marks payment FAILED (same as /fail). Set false to restore normal confirm.
-   */
-  CONFIRM_PAYMENT_FORCE_FAIL: z
-    .enum(['true', 'false', '1', '0'])
-    .optional()
-    .transform((v) => v === 'true' || v === '1'),
 });
 
 const parseEnv = () => {
