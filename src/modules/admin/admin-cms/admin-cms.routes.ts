@@ -930,20 +930,30 @@ router.post(
  *     description: |
  *       **About Us:** `pageSlug=about-brisk`  
  *       **Contact Us:** `pageSlug=contact-brisk`  
- *       **How It Works:** `pageSlug=how-it-works`
+ *       **How It Works:** `pageSlug=how-it-works`  
+ *       **Traders:** `pageSlug=traders`
  *
  *       Seeded About sections: `hero`, `mission`, `vision`, `core_values`  
  *       Seeded Contact sections: `hero`, `contact_info`, `help_desks`, `map`  
  *       Seeded How It Works sections: `hero`, `interactive_roadmap`, `role_workflows`,
- *       `customer_journey`, `trader_journey`, `governance_layer`.
+ *       `customer_journey`, `trader_journey`, `governance_layer`.  
+ *       Seeded Traders sections: `trader_hero`, `trader_benefits`, `trader_workflow`,
+ *       `professional_potential`, `reputation_engine`, `growth_matrix`, `trader_cta`.
  *
- *       **Tailored Journeys (screenshot):**
+ *       **Tailored Journeys (how-it-works screenshot):**
  *       - `role_workflows` — page heading title + description
  *       - `customer_journey` — card title/description + `items[]` steps (`step_number`, `title`, `description`, `sort_order`, `status`)
  *       - `trader_journey` — same for traders
  *
- *       Manage steps via existing section-item CRUD:
- *       `POST/PUT /admin/cms/sections/{sectionId}/items` and `/admin/cms/section-items/{itemId}`.
+ *       **Potential / Reputation & Success (traders screenshot):**
+ *       - `professional_potential` — section heading title + description
+ *       - `reputation_engine` — left card (`subtitle` = badge e.g. REPUTATION ENGINE) + `items[]` steps
+ *       - `growth_matrix` — right card (`subtitle` = GROWTH MATRIX) + `items[]` steps
+ *
+ *       Same item CRUD as journeys:
+ *       `GET/POST /admin/cms/sections/{sectionId}/items`,
+ *       `PUT/DELETE /admin/cms/section-items/{itemId}`.
+ *       Update card title/description/subtitle via `PUT /admin/cms/sections/{sectionId}`.
  *     parameters:
  *       - in: path
  *         name: pageSlug

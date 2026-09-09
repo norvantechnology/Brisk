@@ -69,7 +69,7 @@ router.get(
  *       **Common sectionKey values (how-it-works):** `hero`, `interactive_roadmap`, `role_workflows`,
  *       `customer_journey`, `trader_journey`, `governance_layer`
  *       **Common sectionKey values (customers):** `hero`, `why-customers`, `journey`, `peace-of-mind`, `app-download`
- *       **Common sectionKey values (traders):** `trader_hero`, `trader_benefits`, `trader_workflow`, `professional_potential`, `trader_cta`
+ *       **Common sectionKey values (traders):** `trader_hero`, `trader_benefits`, `trader_workflow`, `professional_potential`, `reputation_engine`, `growth_matrix`, `trader_cta`
  *     parameters:
  *       - in: path
  *         name: pageSlug

@@ -369,45 +369,166 @@ const seedTradersPage = async (prisma: PrismaClient) => {
 
   const potential = await prisma.cmsPageSection.upsert({
     where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'professional_potential' } },
-    update: {},
+    update: {
+      title: 'Potential',
+      description:
+        'We provide tools to build a verified profile, verify credentials and demonstrate expertise.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 4,
+    },
     create: {
       pageId: page.id,
       sectionType: 'professional_potential',
       sectionKey: 'professional_potential',
-      title: 'Unlock Your Professional Potential',
+      title: 'Potential',
       description:
-        'BRISK helps professionals find quality work and build long-term customer relationships.',
+        'We provide tools to build a verified profile, verify credentials and demonstrate expertise.',
       backgroundImage: 'professional-potential.jpg',
       status: CmsPublishStatus.PUBLISHED,
       sortOrder: 4,
     },
   });
 
-  const potentialItems = [
+  // Same CMS pattern as how-it-works customer_journey / trader_journey.
+  const reputationEngine = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'reputation_engine' } },
+    update: {
+      title: 'Build Credibility',
+      subtitle: 'REPUTATION ENGINE',
+      description:
+        'Every review on BRISK is bound to an authenticated job, keeping the feedback loop 100% trustworthy.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 5,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'reputation_engine',
+      sectionKey: 'reputation_engine',
+      title: 'Build Credibility',
+      subtitle: 'REPUTATION ENGINE',
+      description:
+        'Every review on BRISK is bound to an authenticated job, keeping the feedback loop 100% trustworthy.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 5,
+    },
+  });
+
+  const growthMatrix = await prisma.cmsPageSection.upsert({
+    where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'growth_matrix' } },
+    update: {
+      title: 'Statistics & Analytics',
+      subtitle: 'GROWTH MATRIX',
+      description:
+        'Get dashboard reports to help track quotes conversion rates, client views, and business expansion.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 6,
+    },
+    create: {
+      pageId: page.id,
+      sectionType: 'growth_matrix',
+      sectionKey: 'growth_matrix',
+      title: 'Statistics & Analytics',
+      subtitle: 'GROWTH MATRIX',
+      description:
+        'Get dashboard reports to help track quotes conversion rates, client views, and business expansion.',
+      status: CmsPublishStatus.PUBLISHED,
+      sortOrder: 6,
+    },
+  });
+
+  const reputationItems = [
     {
-      title: 'More Local Opportunities',
-      description: 'Access a steady stream of jobs in your service area.',
-      icon: 'opportunities.svg',
+      stepNumber: 1,
+      title: 'Identity Verified Badges',
+      description: 'Profiles display all verified credentials and registration status.',
       sortOrder: 1,
     },
     {
-      title: 'Better Customer Connections',
-      description: 'Communicate directly with customers through BRISK.',
-      icon: 'connections.svg',
+      stepNumber: 2,
+      title: 'More Local Opportunities',
+      description: 'Access a steady stream of jobs in your service area.',
       sortOrder: 2,
     },
     {
-      title: 'Transparent Job Process',
-      description: 'Clear scope, pricing, and milestones from start to finish.',
-      icon: 'transparent.svg',
+      stepNumber: 3,
+      title: 'Verified Project Gallery',
+      description: 'Upload photos directly from completed jobs on to your profile.',
       sortOrder: 3,
     },
     {
-      title: 'Professional Growth',
-      description: 'Build your brand with verified credentials and reviews.',
-      icon: 'growth.svg',
+      stepNumber: 4,
+      title: 'Better Customer Connections',
+      description: 'Communicate directly with customers through BRISK.',
       sortOrder: 4,
     },
+  ];
+
+  const growthItems = [
+    {
+      stepNumber: 1,
+      title: 'Lead Heatmaps',
+      description: 'See locations with high demands for your trade within your set radius.',
+      sortOrder: 1,
+    },
+    {
+      stepNumber: 2,
+      title: 'Transparent Job Process',
+      description: 'Clear scope, pricing, and milestones from start to finish.',
+      sortOrder: 2,
+    },
+    {
+      stepNumber: 3,
+      title: 'Milestone Signoffs',
+      description: 'Receive scheduled payouts for every completed stage of long-term projects.',
+      sortOrder: 3,
+    },
+    {
+      stepNumber: 4,
+      title: 'Professional Growth',
+      description: 'Build your brand with verified credentials and reviews.',
+      sortOrder: 4,
+    },
+  ];
+
+  for (const [section, items] of [
+    [reputationEngine, reputationItems],
+    [growthMatrix, growthItems],
+  ] as const) {
+    for (const item of items) {
+      const existing = await prisma.cmsPageSectionItem.findFirst({
+        where: { sectionId: section.id, stepNumber: item.stepNumber },
+      });
+      if (!existing) {
+        await prisma.cmsPageSectionItem.create({
+          data: { sectionId: section.id, ...item, status: CmsPublishStatus.PUBLISHED },
+        });
+      } else {
+        await prisma.cmsPageSectionItem.update({
+          where: { id: existing.id },
+          data: {
+            title: item.title,
+            description: item.description,
+            sortOrder: item.sortOrder,
+            status: CmsPublishStatus.PUBLISHED,
+          },
+        });
+      }
+    }
+  }
+
+  const potentialItems = [
+    ...reputationItems.map((item) => ({
+      title: item.title,
+      description: item.description,
+      sortOrder: item.sortOrder,
+      stepNumber: item.stepNumber,
+    })),
+    ...growthItems.map((item) => ({
+      title: item.title,
+      description: item.description,
+      sortOrder: item.sortOrder + 4,
+      stepNumber: item.stepNumber + 4,
+    })),
   ];
 
   for (const item of potentialItems) {
@@ -423,7 +544,7 @@ const seedTradersPage = async (prisma: PrismaClient) => {
 
   await prisma.cmsPageSection.upsert({
     where: { pageId_sectionKey: { pageId: page.id, sectionKey: 'trader_cta' } },
-    update: {},
+    update: { sortOrder: 7 },
     create: {
       pageId: page.id,
       sectionType: 'trader_cta',
@@ -436,7 +557,7 @@ const seedTradersPage = async (prisma: PrismaClient) => {
       secondaryButtonUrl: '/download',
       backgroundImage: 'trader-cta.jpg',
       status: CmsPublishStatus.PUBLISHED,
-      sortOrder: 5,
+      sortOrder: 7,
     },
   });
 };
