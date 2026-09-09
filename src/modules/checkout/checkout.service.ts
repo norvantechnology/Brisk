@@ -673,6 +673,15 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     throw new BadRequestError('A completed payment already exists for this invoice.');
   }
 
+  // New Pay Now attempt: supersede older pending/failed intents so mobile uses this paymentId.
+  await prisma.payment.updateMany({
+    where: {
+      invoiceId: invoice.id,
+      status: { in: [PaymentStatus.PENDING, PaymentStatus.FAILED] },
+    },
+    data: { status: PaymentStatus.FAILED },
+  });
+
   const amount = money(invoice.totalAmount);
   const stripePaymentIntentId = `pi_mock_${randomUUID()}`;
 
@@ -740,16 +749,30 @@ export const confirmPayment = async (
   if (payment.status === PaymentStatus.COMPLETED) {
     return buildReceipt(payment.id, userId);
   }
-  // FAILED is retriable while invoice is still UNPAID (e.g. after fail screen → Pay Now again
-  // with the same paymentId, or recovery after temporary test force-fail).
+
+  // Invoice already paid via another intent (fail-test → new intent → success, then
+  // retry confirm on old FAILED paymentId). Return that success receipt — no 400.
+  if (payment.invoice.status === InvoiceStatus.PAID) {
+    const completed = await prisma.payment.findFirst({
+      where: {
+        invoiceId: payment.invoiceId,
+        userId,
+        status: PaymentStatus.COMPLETED,
+      },
+      orderBy: { paidAt: 'desc' },
+    });
+    if (completed) {
+      return buildReceipt(completed.id, userId);
+    }
+    throw new BadRequestError('Invoice is already paid.');
+  }
+
+  // FAILED is retriable while invoice is still UNPAID.
   if (
     payment.status !== PaymentStatus.PENDING &&
     payment.status !== PaymentStatus.FAILED
   ) {
     throw new BadRequestError(`Payment cannot be confirmed from status ${payment.status}.`);
-  }
-  if (payment.invoice.status === InvoiceStatus.PAID) {
-    throw new BadRequestError('Invoice is already paid.');
   }
 
   const paidAt = new Date();
@@ -763,6 +786,15 @@ export const confirmPayment = async (
         cardLast4: input.cardLast4,
         cardBrand: input.cardBrand,
       },
+    });
+
+    await tx.payment.updateMany({
+      where: {
+        invoiceId: payment.invoiceId,
+        id: { not: payment.id },
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.FAILED] },
+      },
+      data: { status: PaymentStatus.FAILED },
     });
 
     await tx.invoice.update({
