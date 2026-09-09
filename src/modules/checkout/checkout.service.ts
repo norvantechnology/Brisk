@@ -540,12 +540,20 @@ export const getInvoice = async (userId: string, invoiceId: string) => {
 
 /** Clear promo when customer changes job location while still unpaid (Payment Details). */
 export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
-  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      booking: {
+        include: {
+          job: { select: { quoteType: true, siteVisitRequested: true } },
+        },
+      },
+    },
+  });
   if (!invoice || invoice.status !== InvoiceStatus.UNPAID) return;
   if (money(invoice.promoDiscount) <= 0) return;
 
-  const purpose =
-    money(invoice.platformFee) === 0 ? ('SITE_VISIT_FEE' as const) : ('SERVICE' as const);
+  const purpose = resolveInvoicePurpose(invoice.booking.job);
   const breakdown = computeInvoiceBreakdown({
     serviceCharge: money(invoice.serviceCharge),
     traderOfferDiscount: money(invoice.traderOfferDiscount),
@@ -614,11 +622,15 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     money(promo.discountValue)
   );
 
+  // Must preserve SITE_VISIT_FEE (platformFee = 0). Omitting purpose defaulted to SERVICE
+  // and added 10% fee, cancelling the promo (e.g. €30 − €3 + €3 = €30).
+  const purpose = resolveInvoicePurpose(invoice.booking.job);
   const breakdown = computeInvoiceBreakdown({
     serviceCharge,
     traderOfferDiscount,
     promoDiscount,
     currencyCode: invoice.currencyCode,
+    purpose,
   });
 
   const updated = await prisma.invoice.update({
