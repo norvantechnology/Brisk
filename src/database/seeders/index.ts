@@ -25,6 +25,8 @@ async function main() {
   await seedDocumentRules(prisma);
   await seedLegalPolicies(prisma);
   await seedPropertyModule(prisma);
+  const { seedBriskOffers } = await import('./brisk-offers.seed');
+  await seedBriskOffers();
   logger.info('✅ Database seeding completed successfully.');
 }
 

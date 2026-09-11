@@ -120,8 +120,11 @@ router.get(
  *       Creates status **DRAFT** (wizard in progress — not live). Same body for every entry point — use
  *       `GET /jobs/form-config` (or Accept `jobFormConfig`) for show/hide.
  *
- *       **Offer path:** send `offerId` (or `appliedTraderOfferId`) + usually `traderId`
+ *       **Offer / Trader path:** send `offerId` (or `appliedTraderOfferId`) + usually `traderId`
  *       from Accept `nextJobPrefill`. Do **not** require a prior claim API.
+ *
+ *       **Sub-category / Home path:** `offerId`, `appliedTraderOfferId`, `claimId`, and `traderId`
+ *       are **optional** — send `null` or omit them. Job still creates as DRAFT.
  *
  *       **Site Visit:** `quoteType=ONSITE` snapshots `siteVisitFee` on the job
  *       from subcategory (0 if admin left fee unset). Next after form: Choose Location.
@@ -137,6 +140,16 @@ router.get(
  *           schema:
  *             $ref: '#/components/schemas/CreateJobRequest'
  *           examples:
+ *             fromSubCategoryNoOffer:
+ *               summary: Sub-category flow — no offer/trader (nulls allowed)
+ *               value:
+ *                 categoryId: e076d231-b0da-46cb-b60d-8aa9fbb8ce26
+ *                 subcategoryId: a1111111-1111-1111-1111-111111111111
+ *                 title: Fix leaking kitchen sink
+ *                 description: Kitchen sink leak under cabinet.
+ *                 quoteType: REMOTE
+ *                 offerId: null
+ *                 traderId: null
  *             fromHomeCategory:
  *               summary: Home category → Remote Quote with budget
  *               value:

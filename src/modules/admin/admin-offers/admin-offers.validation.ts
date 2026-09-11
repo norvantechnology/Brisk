@@ -26,6 +26,9 @@ export const offerIdParamSchema = z.object({
   }),
 });
 
+const emptyToUndefined = (val: unknown) =>
+  val === '' || val === null || val === undefined ? undefined : val;
+
 const offerBodyBase = {
   title: z.string().trim().min(2).max(255),
   couponCode: z.string().trim().min(3).max(40).optional().nullable(),
@@ -35,10 +38,13 @@ const offerBodyBase = {
   fullDescription: z.string().trim().max(4000).optional().nullable(),
   /** Alias of description — same "Description & Terms" text box. */
   termsAndConditions: z.string().trim().max(4000).optional().nullable(),
-  bannerImageUrl: z.string().trim().url().optional().nullable(),
+  bannerImageUrl: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().url().optional().nullable()
+  ),
   badgeTag: z.string().trim().max(80).optional().nullable(),
   discountType: z.enum(['FLAT', 'PERCENTAGE', 'FREE_SERVICE']),
-  discountValue: z.number().min(0),
+  discountValue: z.coerce.number().min(0),
   discountLabel: z.string().trim().max(80).optional().nullable(),
   /** Optional — if omitted/empty, server sets start = now. UI can collect only expiry. */
   validFrom: z.preprocess(
@@ -78,10 +84,13 @@ export const updateOfferSchema = z.object({
     description: z.string().trim().max(4000).optional().nullable(),
     fullDescription: z.string().trim().max(4000).optional().nullable(),
     termsAndConditions: z.string().trim().max(4000).optional().nullable(),
-    bannerImageUrl: z.string().trim().url().optional().nullable(),
+    bannerImageUrl: z.preprocess(
+      (val) => (val === '' || val === null || val === undefined ? undefined : val),
+      z.string().trim().url().optional().nullable()
+    ),
     badgeTag: z.string().trim().max(80).optional().nullable(),
     discountType: z.enum(['FLAT', 'PERCENTAGE', 'FREE_SERVICE']).optional(),
-    discountValue: z.number().min(0).optional(),
+    discountValue: z.coerce.number().min(0).optional(),
     discountLabel: z.string().trim().max(80).optional().nullable(),
     validFrom: z.preprocess(
       (val) => (val === '' || val === null || val === undefined ? undefined : val),

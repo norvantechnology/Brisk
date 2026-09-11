@@ -70,9 +70,13 @@ const router = Router();
  *       - Expiry Date -> validUntil
  *       - Description and Terms -> description
  *
- *       Prefer sending description for Description and Terms.
- *       Aliases also accepted: fullDescription, termsAndConditions (same storage).
- *       Response returns description, fullDescription, and termsAndConditions.
+ *       Prefer sending `termsAndConditions` (or `description`) for Description and Terms.
+ *       Aliases: `fullDescription`, `termsAndConditions` — all store to `fullDescription`.
+ *       Empty `description: ""` will not overwrite a non-empty `termsAndConditions`.
+ *       Response returns `description`, `fullDescription`, and `termsAndConditions` (same value).
+ *
+ *       `bannerImageUrl: ""` is treated as omitted (not a validation error).
+ *       `discountValue` accepts number or numeric string.
  *
  *       Active/Deactive toggle after create: PATCH /traders/offers/{id}/status.
  *     requestBody:

@@ -33,7 +33,24 @@ const resolveFullDescription = (body: {
   description?: string | null;
   fullDescription?: string | null;
   termsAndConditions?: string | null;
-}) => body.fullDescription ?? body.description ?? body.termsAndConditions ?? null;
+}) => {
+  // Prefer dedicated terms field first (mobile Create/Edit Offers).
+  // Treat "" as absent so empty `description` does not wipe `termsAndConditions`.
+  const candidates = [body.termsAndConditions, body.fullDescription, body.description];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  if (
+    body.termsAndConditions === null ||
+    body.fullDescription === null ||
+    body.description === null
+  ) {
+    return null;
+  }
+  return null;
+};
 
 const asDiscountType = (value: OfferWriteInput['discountType']): DiscountType =>
   value as DiscountType;

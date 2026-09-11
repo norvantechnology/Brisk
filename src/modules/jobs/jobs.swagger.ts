@@ -342,26 +342,31 @@
  *         offerId:
  *           type: string
  *           format: uuid
+ *           nullable: true
  *           description: |
  *             Soft-link trader/platform offer. Alias of appliedTraderOfferId.
  *             From Accept `nextJobPrefill.offerId`. Does not claim/lock.
+ *             **Optional / null** for Sub-category / Home flow (no offer selected).
  *         appliedTraderOfferId:
  *           type: string
  *           format: uuid
- *           description: Same as offerId (Accept prefill name). Either field is enough.
+ *           nullable: true
+ *           description: Same as offerId (Accept prefill name). Either field is enough. Null allowed.
  *         claimId:
  *           type: string
  *           format: uuid
+ *           nullable: true
  *           description: |
  *             Optional legacy. Prefer offerId only. Soft CLAIMED rows may be reused;
- *             USED claims are rejected.
+ *             USED claims are rejected. Null allowed for Sub-category flow.
  *         traderId:
  *           type: string
  *           format: uuid
  *           nullable: true
  *           description: |
- *             From Accept `nextJobPrefill.traderId`. **Required to publish Site Visit**
+ *             From Accept `nextJobPrefill.traderId`. **Required later to publish Site Visit**
  *             (Pay Fee needs a trader). Usually auto-filled from offer.traderId.
+ *             **Optional / null** when creating a job from Sub-category without a trader.
  *         serviceCharge:
  *           type: number
  *           minimum: 0
