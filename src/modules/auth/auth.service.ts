@@ -43,6 +43,7 @@ const PUBLIC_USER_SELECT = {
   mobileNumber: true,
   role: true,
   mobileVerified: true,
+  country: true,
   preferredCurrency: true,
   profilePhotoUrl: true,
 } as const;
@@ -56,6 +57,7 @@ const toPublicUser = (
     | 'mobileNumber'
     | 'role'
     | 'mobileVerified'
+    | 'country'
     | 'preferredCurrency'
     | 'profilePhotoUrl'
   >,
@@ -67,6 +69,7 @@ const toPublicUser = (
   mobileNumber: user.mobileNumber,
   role: user.role,
   mobileVerified: mobileVerifiedOverride ?? user.mobileVerified,
+  country: user.country,
   preferredCurrency: user.preferredCurrency,
   profilePhotoUrl: user.profilePhotoUrl,
 });
@@ -100,6 +103,7 @@ const buildSessionPayload = async (
     | 'mobileNumber'
     | 'role'
     | 'mobileVerified'
+    | 'country'
     | 'preferredCurrency'
     | 'profilePhotoUrl'
   > & {
@@ -207,7 +211,7 @@ export const registerUser = async (
   input: RegisterInput,
   options?: { profilePhotoFile?: Express.Multer.File; reqHost?: string }
 ) => {
-  const { fullName, email, mobileNumber, password, role, profilePhotoUrl } = input;
+  const { fullName, email, mobileNumber, password, role, country, profilePhotoUrl } = input;
 
   const [existingEmail, existingMobile] = await Promise.all([
     prisma.user.findUnique({ where: { email }, select: { id: true } }),
@@ -230,6 +234,7 @@ export const registerUser = async (
       mobileNumber,
       passwordHash,
       role,
+      country: country?.trim() || null,
       profilePhotoUrl: profilePhotoUrl ?? null,
       mobileVerified: false,
       emailVerified: true,
@@ -263,6 +268,7 @@ export const registerUser = async (
       mobileNumber: user.mobileNumber,
       email: user.email,
       role: user.role,
+      country: user.country,
       mobileVerified: false,
       requiresOtpVerification: true,
       nextStep: APP_NEXT_STEP.VERIFY_PHONE,

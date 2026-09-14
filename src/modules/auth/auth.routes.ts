@@ -59,6 +59,10 @@ const router = Router();
  *                 type: boolean
  *                 example: true
  *                 description: Must be true — user accepted Terms & Privacy Policy.
+ *               country:
+ *                 type: string
+ *                 example: Ireland
+ *                 description: Country selected during sign-up. Saved on user profile and returned in auth/profile responses.
  *               profilePhotoUrl:
  *                 type: string
  *                 format: uri
@@ -74,6 +78,7 @@ const router = Router();
  *               password: { type: string }
  *               role: { type: string, enum: [CUSTOMER, TRADER] }
  *               acceptedTerms: { type: boolean, example: true }
+ *               country: { type: string, example: Ireland }
  *               profilePhotoUrl: { type: string, format: uri, description: Optional URL instead of file. }
  *               profilePhoto:
  *                 type: string

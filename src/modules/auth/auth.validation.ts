@@ -42,6 +42,8 @@ const registerBodySchema = z.object({
     errorMap: () => ({ message: "Role must be either 'CUSTOMER' or 'TRADER'" }),
   }),
   acceptedTerms: acceptedTermsField,
+  /** Country selected during sign-up (e.g. Ireland, United Kingdom). Saved on user profile. */
+  country: z.string().trim().min(1, 'Country is required').max(100).optional(),
   profilePhotoUrl: optionalProfilePhotoUrl,
 });
 
