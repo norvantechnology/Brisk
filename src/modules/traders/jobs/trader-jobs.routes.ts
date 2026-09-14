@@ -27,7 +27,8 @@ const router = Router();
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Lean list for Discover Nearby Opportunities (total = jobs found count).
+ *       Lean list for Discover Nearby Opportunities.
+ *       Response data is a job array. App shows count from data.length (no total field).
  *
  *       App UI now: use search query only (Search for Services). No filter bottom sheet.
  *       Optional future distance filter: radiusKm, lat, lng (already supported).
@@ -37,7 +38,7 @@ const router = Router();
  *       Matching: PUBLISHED jobs with no assigned trader; category match when trader has categories.
  *
  *       badge: Site Visit | Reschedule | null
- *       priceLabel examples: EUR 100 - 150 style string already formatted with euro sign
+ *       priceLabel: formatted euro string
  *       createdAt: ISO timestamp (app formats Posted 2 mins ago)
  *     parameters:
  *       - in: query
@@ -76,31 +77,21 @@ const router = Router();
  *         description: Optional urgent filter scheduled within 48h (not in current UI).
  *     responses:
  *       200:
- *         description: Lean job cards plus total count.
+ *         description: Job card array in data (use data.length for jobs found).
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Nearby opportunities retrieved successfully.
  *               data:
- *                 total: 3
- *                 jobs:
- *                   - id: 11111111-1111-1111-1111-111111111111
- *                     title: Leaking Kitchen Pipe Repair
- *                     badge: null
- *                     distanceKm: 2.5
- *                     areaName: Dublin 2
- *                     priceLabel: "€100 - €150"
- *                     createdAt: '2026-09-14T10:00:00.000Z'
- *                     isBookmarked: false
- *                   - id: 22222222-2222-2222-2222-222222222222
- *                     title: Full Bathroom Re-tiling
- *                     badge: Reschedule
- *                     distanceKm: 5.1
- *                     areaName: Rathmines
- *                     priceLabel: "€800 - €1,200"
- *                     createdAt: '2026-09-14T09:00:00.000Z'
- *                     isBookmarked: false
+ *                 - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                   title: Sample Job POst
+ *                   badge: null
+ *                   distanceKm: null
+ *                   areaName: Dublin
+ *                   priceLabel: "€120 - €180"
+ *                   createdAt: '2026-09-11T10:46:44.111Z'
+ *                   isBookmarked: false
  *       401:
  *         description: Unauthorized.
  *       403:

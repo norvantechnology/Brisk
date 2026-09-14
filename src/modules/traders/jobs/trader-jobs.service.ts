@@ -294,7 +294,6 @@ export const listDiscoverJobs = async (
       return a.distanceKm - b.distanceKm;
     });
 
-  const total = withDistance.length;
   const slice = withDistance.slice((page - 1) * limit, page * limit);
   const jobIds = slice.map((r) => r.job.id);
 
@@ -308,10 +307,8 @@ export const listDiscoverJobs = async (
 
   const jobs = slice.map(({ job }) => toListItem(job, origin, bookmarkedIds));
 
-  return {
-    total,
-    jobs,
-  };
+  // App shows count from data.length — no total wrapper.
+  return jobs;
 };
 
 export const getDiscoverJob = async (userId: string, jobId: string, query?: { lat?: string; lng?: string }) => {

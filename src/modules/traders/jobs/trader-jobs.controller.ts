@@ -11,12 +11,12 @@ export const listDiscoverJobs = async (
 ): Promise<void> => {
   try {
     await tradersService.ensureTraderProfile(req.user!.id);
-    const data = await service.listDiscoverJobs(req.user!.id, req.query as any);
+    const jobs = await service.listDiscoverJobs(req.user!.id, req.query as any);
     sendResponse({
       res,
       statusCode: 200,
       message: 'Nearby opportunities retrieved successfully.',
-      data,
+      data: jobs,
     });
   } catch (error) {
     next(error);
