@@ -682,27 +682,26 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     existingDiscount > 0 &&
     (storedCode === code || (!storedCode && existingDiscount === breakdown.promoDiscount));
 
+  const promoCode = promo.code.toUpperCase();
+
   if (sameCodeAlreadyApplied) {
     // Idempotent: heal totals / persist missing code, never stack.
-    const healed = await prisma.invoice.update({
+    await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
         promoDiscount: breakdown.promoDiscount,
-        appliedPromoCode: promo.code.toUpperCase(),
+        appliedPromoCode: promoCode,
         platformFee: breakdown.platformFee,
         tax: breakdown.tax,
         totalAmount: breakdown.totalAmount,
       },
-      include: invoiceOwnershipInclude,
     });
 
-    const briskOffers = await loadBriskOffersSheet(healed.booking.job.categoryId);
     return {
-      ...serializeInvoice(healed),
-      promoCode: promo.code.toUpperCase(),
+      invoiceId,
+      promoApplied: true,
       alreadyApplied: true,
-      briskOffers,
-      promoCodes: briskOffers.items,
+      promoCode,
     };
   }
 
@@ -710,25 +709,16 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     where: { id: invoiceId },
     data: {
       promoDiscount: breakdown.promoDiscount,
-      appliedPromoCode: promo.code.toUpperCase(),
+      appliedPromoCode: promoCode,
       platformFee: breakdown.platformFee,
       tax: breakdown.tax,
       totalAmount: breakdown.totalAmount,
     },
-    include: invoiceOwnershipInclude,
   });
 
-  const briskOffers = await loadBriskOffersSheet(updated.booking.job.categoryId);
-  const serialized = {
-    ...serializeInvoice(updated),
-    promoCode: promo.code.toUpperCase(),
-    alreadyApplied: false,
-    briskOffers,
-    promoCodes: briskOffers.items,
-  };
   emitInvoiceUpdated({
     invoiceId: updated.id,
-    jobId: updated.booking.job.id,
+    jobId: invoice.booking.job.id,
     status: updated.status,
     totalAmount: money(updated.totalAmount),
     promoDiscount: money(updated.promoDiscount),
@@ -736,7 +726,13 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     customerId: userId,
     at: new Date().toISOString(),
   });
-  return serialized;
+
+  return {
+    invoiceId,
+    promoApplied: true,
+    alreadyApplied: false,
+    promoCode,
+  };
 };
 
 export const createPaymentIntent = async (userId: string, input: CreatePaymentIntentInput) => {

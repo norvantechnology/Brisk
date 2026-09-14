@@ -182,7 +182,19 @@
  *         latestPaymentId: { type: string, format: uuid, nullable: true }
  *         promoCode:
  *           type: string
- *           description: Present only on apply-promo response
+ *           nullable: true
+ *           description: Currently applied promo code on GET /invoices/{id}
+ *     ApplyPromoResult:
+ *       type: object
+ *       description: |
+ *         Lightweight apply-promo response. Full invoice breakdown is on GET /invoices/{id}.
+ *       properties:
+ *         invoiceId: { type: string, format: uuid }
+ *         promoApplied: { type: boolean, example: true }
+ *         alreadyApplied:
+ *           type: boolean
+ *           description: True when the same code was already on the invoice (idempotent)
+ *         promoCode: { type: string, example: SAVE10 }
  *     ApplyPromoRequest:
  *       type: object
  *       required: [code]

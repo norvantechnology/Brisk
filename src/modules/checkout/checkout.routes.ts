@@ -99,9 +99,10 @@ router.get(
  *             $ref: '#/components/schemas/ApplyPromoRequest'
  *           example:
  *             code: SAVE10
+ *       After success, call `GET /invoices/{id}` for full invoice totals / lineItems.
  *     responses:
  *       200:
- *         description: Updated invoice including promoCode echo and refreshed lineItems.
+ *         description: Promo apply result only (no full invoice payload).
  *         content:
  *           application/json:
  *             schema:
@@ -109,7 +110,7 @@ router.get(
  *               properties:
  *                 success: { type: boolean }
  *                 message: { type: string }
- *                 data: { $ref: '#/components/schemas/Invoice' }
+ *                 data: { $ref: '#/components/schemas/ApplyPromoResult' }
  *       400:
  *         description: Invalid/expired promo, wrong category, or invoice not UNPAID.
  *       403:
