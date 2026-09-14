@@ -13,38 +13,37 @@ const router = Router();
  * tags:
  *   - name: Trader / Discover Jobs
  *     description: |
- *       Trader app **Discover → Nearby Opportunities** (lean job cards + detail).
- *       Auth: trader Bearer. Realtime: listen to `job:published` / `job:created` then refresh this list.
+ *       Trader Discover Nearby Opportunities.
+ *       App UI currently uses search only (no filter bottom sheet).
+ *       Optional later: radiusKm, lat, lng for distance filter.
+ *       Auth: trader Bearer. Refresh list on job:published / job:created.
  */
 
 /**
  * @swagger
  * /traders/jobs/discover:
  *   get:
- *     summary: Nearby Opportunities — job list (Discover tab)
+ *     summary: Nearby Opportunities job list (Discover tab)
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Lean list for Discover → **Nearby Opportunities**.
+ *       Lean list for Discover Nearby Opportunities (total = jobs found count).
  *
- *       Returns only card fields: `id`, `title`, `badge`, `distanceKm`, `areaName`,
- *       `priceLabel`, `createdAt`, `isBookmarked`. Envelope includes `total` ("24 jobs found").
+ *       App UI now: use search query only (Search for Services). No filter bottom sheet.
+ *       Optional future distance filter: radiusKm, lat, lng (already supported).
  *
- *       **Matching rules**
- *       - Status `PUBLISHED` and no assigned trader (open for quotes)
- *       - Category in trader's selected categories (or override with `categoryId`)
- *       - Within `radiusKm` of trader service center (or `lat`/`lng` override)
+ *       Card fields only: id, title, badge, distanceKm, areaName, priceLabel, createdAt, isBookmarked
  *
- *       **Filters (chips)**
- *       - `radiusKm` — e.g. Within 10 km
- *       - `categoryId` — e.g. Plumbing
- *       - `siteVisit=true` — Site Visit jobs
- *       - `urgent=true` — scheduled within next 48 hours
+ *       Matching: PUBLISHED jobs with no assigned trader; category match when trader has categories.
  *
- *       **Badge:** `"Site Visit"` | `"Reschedule"` | `null`
- *       **priceLabel:** e.g. `"€30"` or `"€200 - €350"` (app can show as-is)
- *       **createdAt:** ISO — app formats "Posted 2 mins ago"
+ *       badge: Site Visit | Reschedule | null
+ *       priceLabel examples: EUR 100 - 150 style string already formatted with euro sign
+ *       createdAt: ISO timestamp (app formats Posted 2 mins ago)
  *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, example: Kitchen Pipe }
+ *         description: Primary app filter. Matches title, city/area, description.
  *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
@@ -54,53 +53,54 @@ const router = Router();
  *       - in: query
  *         name: radiusKm
  *         schema: { type: number, example: 10 }
- *         description: Distance chip (default trader serviceRadiusKm or 10)
+ *         description: Optional future distance filter in km. Omit for now.
  *       - in: query
  *         name: lat
  *         schema: { type: number }
- *         description: Optional location override (with lng)
+ *         description: Optional future location override (with lng).
  *       - in: query
  *         name: lng
  *         schema: { type: number }
+ *         description: Optional future location override (with lat).
  *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
+ *         description: Optional category filter (not in current UI).
  *       - in: query
  *         name: siteVisit
  *         schema: { type: boolean }
+ *         description: Optional site-visit-only filter (not in current UI).
  *       - in: query
  *         name: urgent
  *         schema: { type: boolean }
- *       - in: query
- *         name: search
- *         schema: { type: string }
+ *         description: Optional urgent filter scheduled within 48h (not in current UI).
  *     responses:
  *       200:
- *         description: Lean job cards + total count.
+ *         description: Lean job cards plus total count.
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Nearby opportunities retrieved successfully.
  *               data:
- *                 total: 24
+ *                 total: 3
  *                 jobs:
  *                   - id: 11111111-1111-1111-1111-111111111111
- *                     title: Solar Panel Installation
- *                     badge: Site Visit
+ *                     title: Leaking Kitchen Pipe Repair
+ *                     badge: null
  *                     distanceKm: 2.5
  *                     areaName: Dublin 2
- *                     priceLabel: €30
+ *                     priceLabel: "€100 - €150"
  *                     createdAt: '2026-09-14T10:00:00.000Z'
  *                     isBookmarked: false
  *                   - id: 22222222-2222-2222-2222-222222222222
  *                     title: Full Bathroom Re-tiling
- *                     badge: null
+ *                     badge: Reschedule
  *                     distanceKm: 5.1
  *                     areaName: Rathmines
- *                     priceLabel: €800 - €1,200
+ *                     priceLabel: "€800 - €1,200"
  *                     createdAt: '2026-09-14T09:00:00.000Z'
- *                     isBookmarked: true
+ *                     isBookmarked: false
  *       401:
  *         description: Unauthorized.
  *       403:
@@ -116,9 +116,9 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Lean detail for Discover → View Details.
- *       Same card fields plus `description`, `photos`, schedule, category names.
- *       Optional `lat`/`lng` to recompute `distanceKm`.
+ *       Lean detail for Discover View Details.
+ *       Same card fields plus description, photos, schedule, category names.
+ *       Optional lat/lng to recompute distanceKm.
  *     parameters:
  *       - in: path
  *         name: id
@@ -140,21 +140,21 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *               message: Job details retrieved successfully.
  *               data:
  *                 id: 11111111-1111-1111-1111-111111111111
- *                 title: Solar Panel Installation
- *                 badge: Site Visit
+ *                 title: Leaking Kitchen Pipe Repair
+ *                 badge: null
  *                 distanceKm: 2.5
  *                 areaName: Dublin 2
- *                 priceLabel: €30
+ *                 priceLabel: "€100 - €150"
  *                 createdAt: '2026-09-14T10:00:00.000Z'
  *                 isBookmarked: false
- *                 description: Install 8 solar panels on south-facing roof.
+ *                 description: Fix leaking kitchen pipe under sink.
  *                 photos:
  *                   - https://cdn.example.com/jobs/photo1.jpg
  *                 scheduledDate: '2026-09-16T09:00:00.000Z'
  *                 timeSlot: Morning
  *                 durationLabel: 2 Hours
- *                 categoryName: Solar
- *                 subcategoryName: Installation
+ *                 categoryName: Plumbing
+ *                 subcategoryName: Repairs
  *       404:
  *         description: Job not found or no longer available.
  */

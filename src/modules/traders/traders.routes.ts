@@ -36,15 +36,16 @@ router.use('/jobs', traderJobsRoutes);
  *
  *       `data` is a flat object (plus nested `user`, `bankDetails`, `certifications`, `offers`, `notifications`).
  *
- *       **Header card:** `fullName`, `profilePhotoUrl`, `preferredCurrency`, `email`, `mobileCountryCode` + `mobileNumber`
+ *       **Header card:** `fullName`, `profilePhotoUrl`, `preferredCurrency`, `email`, `country`, `mobileCountryCode` + `mobileNumber`
  *       **Completion card:** `profileCompletionPercent`, `profileCompletionHint`, `missingProfileItems`
  *       **Verification badge:** `verificationStatus` (`VERIFIED` / `PENDING` / `REJECTED`)
  *       **Email / phone verify flags:** `emailVerified`, `mobileVerified` (booleans)
+ *       **Country:** `country` (and `user.country`) — set at signup, editable via `PATCH /traders/me/account`
  *       **Support WebViews:** `supportLinks[]` with `key`, `title`, `url` for Help Center, Terms, Privacy
  *       **Bank Details:** `bankDetails` — `status` (`VERIFIED` / `MISSING` / `SKIPPED`), `bankHolderName`,
  *       `bankName`, `accountNumber` (full), `accountNumberMasked` (e.g. `****1234` for display), `ifscCode`
  *       **Business info (Sole/Company):** `businessInfo` — fullLegalName, ppsNumber, companyName, croNumber, etc.
- *       Edit account: `PATCH /traders/me/account`. Edit business: `PUT /traders/me/personal-info` or `/company-info`.
+ *       Edit account: `PATCH /traders/me/account` (`fullName`, `mobileNumber`, `profilePhotoUrl`, `preferredCurrency`, `country`). Edit business: `PUT /traders/me/personal-info` or `/company-info`.
  *       **Certifications row:** `certifications.activeDocumentsCount` ("4 Active Documents")
  *       **Categories row:** `selectedCategories` / `categoriesCount`
  *       **Offers row:** `offers.activeCount` — list via `GET /traders/offers`
@@ -92,17 +93,20 @@ router.patch('/me', validate(updateTraderProfileSchema), tradersController.updat
  * @swagger
  * /traders/me/account:
  *   patch:
- *     summary: Edit account (full name, phone, photo) from Profile
+ *     summary: Edit account (full name, phone, photo, country, currency) from Profile
  *     tags: ['Trader / Profile']
  *     security:
  *       - bearerAuth: []
  *     description: |
  *       **Use on:** Profile → Edit your account.
  *
- *       Editable: `fullName`, `mobileNumber` (E.164 e.g. `+353212121212`), `profilePhotoUrl`, `preferredCurrency` (EUR/GBP).
+ *       Editable: `fullName`, `mobileNumber` (E.164 e.g. `+353212121212`), `profilePhotoUrl`,
+ *       `preferredCurrency` (EUR/GBP), **`country`** (same field as signup `POST /auth/register`).
  *       **Profile photo update:** After login → `POST /uploads` (`purpose: profile_photo`) → pass returned `url` as `profilePhotoUrl` here (JSON only, no file on this endpoint).
  *       **Email is locked** (`emailLocked: true` on GET /traders/me) — do not send `email`.
  *       Changing phone sets `mobileVerified: false` and `mobileReverificationRequired: true`.
+ *
+ *       `GET /traders/me` returns `country` (and `user.country`) for the edit form prefill.
  *     requestBody:
  *       required: true
  *       content:
@@ -114,9 +118,19 @@ router.patch('/me', validate(updateTraderProfileSchema), tradersController.updat
  *               mobileNumber: { type: string, example: "+353212121212" }
  *               profilePhotoUrl: { type: string, format: uri }
  *               preferredCurrency: { type: string, example: "EUR", description: "ISO 4217 — active currencies only (e.g. EUR, GBP)." }
+ *               country: { type: string, example: Ireland, description: "Country from signup country picker — editable here too." }
+ *           examples:
+ *             updateCountry:
+ *               value: { country: Ireland }
+ *             updateAccount:
+ *               value:
+ *                 fullName: John Trader
+ *                 mobileNumber: "+353871234567"
+ *                 country: Ireland
+ *                 preferredCurrency: EUR
  *     responses:
  *       200:
- *         description: Account updated. Full profile in `data`.
+ *         description: Account updated. Full profile in `data` (includes `country`).
  *       400:
  *         description: Validation error (e.g. email change attempted).
  *       409:

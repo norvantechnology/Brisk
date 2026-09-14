@@ -237,7 +237,7 @@ const options: swaggerJSDoc.Options = {
       {
         name: 'Trader / Discover Jobs',
         description:
-          'Discover → Nearby Opportunities. Lean list/detail: GET /traders/jobs/discover, GET /traders/jobs/discover/{id}. Bookmark: POST/DELETE .../bookmark. Filters: radiusKm, categoryId, siteVisit, urgent. Auth: trader Bearer. Refresh on job:published socket.',
+          'Discover → Nearby Opportunities. App UI: search only (no filter sheet). GET /traders/jobs/discover?search=. Optional future distance: radiusKm, lat, lng. Detail + bookmark under same tag. Auth: trader Bearer.',
       },
       { name: 'Trader / Profile', description: 'Trader profile' },
       { name: 'System / Health', description: 'Health check' },

@@ -26,7 +26,7 @@ export const updateTraderProfileSchema = z.object({
   }),
 });
 
-/** Profile → Edit account (fullName, phone, photo). Email is locked. */
+/** Profile → Edit account (fullName, phone, photo, country, currency). Email is locked. */
 export const updateTraderAccountSchema = z.object({
   body: z
     .object({
@@ -34,6 +34,8 @@ export const updateTraderAccountSchema = z.object({
       mobileNumber: mobileNumberSchema.optional(),
       profilePhotoUrl: z.string().url().optional().or(z.literal('').transform(() => undefined)),
       preferredCurrency: currencyCodeSchema.optional(),
+      /** Same country field as signup (`POST /auth/register`). Updates User.country. */
+      country: z.string().trim().min(1).max(100).optional(),
       email: z.string().optional(),
     })
     .superRefine((body, ctx) => {
@@ -48,12 +50,13 @@ export const updateTraderAccountSchema = z.object({
         !body.fullName &&
         !body.mobileNumber &&
         body.profilePhotoUrl === undefined &&
-        body.preferredCurrency === undefined
+        body.preferredCurrency === undefined &&
+        body.country === undefined
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
-            'Provide at least one of fullName, mobileNumber, profilePhotoUrl, or preferredCurrency.',
+            'Provide at least one of fullName, mobileNumber, profilePhotoUrl, preferredCurrency, or country.',
           path: ['fullName'],
         });
       }

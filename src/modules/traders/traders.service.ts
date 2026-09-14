@@ -65,6 +65,7 @@ export const getTraderProfile = async (userId: string) => {
           id: true,
           fullName: true,
           email: true,
+          country: true,
           mobileNumber: true,
           profilePhotoUrl: true,
           preferredCurrency: true,
@@ -143,6 +144,7 @@ export const getTraderProfile = async (userId: string) => {
     bio: trader.bio,
     fullName: trader.user.fullName,
     email: trader.user.email,
+    country: trader.user.country,
     mobileVerified: trader.user.mobileVerified,
     emailVerified: trader.user.emailVerified,
     mobileCountryCode: mobile.mobileCountryCode,
@@ -219,6 +221,7 @@ export const getTraderProfile = async (userId: string) => {
       id: trader.user.id,
       fullName: trader.user.fullName,
       email: trader.user.email,
+      country: trader.user.country,
       mobileNumber: trader.user.mobileNumber,
       profilePhotoUrl,
       preferredCurrency: trader.user.preferredCurrency,
@@ -273,7 +276,7 @@ export const updateTraderProfile = async (userId: string, input: UpdateTraderPro
   return updatedTrader;
 };
 
-/** Profile → Edit account (fullName, phone, photo). Email locked. */
+/** Profile → Edit account (fullName, phone, photo, country, currency). Email locked. */
 export const updateTraderAccount = async (userId: string, input: UpdateTraderAccountInput) => {
   const trader = await prisma.trader.findUnique({
     where: { userId },
@@ -304,6 +307,7 @@ export const updateTraderAccount = async (userId: string, input: UpdateTraderAcc
         mobileNumber: input.mobileNumber,
         profilePhotoUrl: input.profilePhotoUrl,
         preferredCurrency: input.preferredCurrency,
+        country: input.country !== undefined ? input.country.trim() : undefined,
         mobileVerified:
           input.mobileNumber && input.mobileNumber !== trader.user.mobileNumber ? false : undefined,
       },
