@@ -344,6 +344,12 @@ export const updateSeoSchema = z.object({
     metaKeywords: z.string().optional(),
     canonicalBaseUrl: z.string().url(),
     ogImageUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
+    /** Header/navbar logo — upload via POST /uploads?purpose=cms_logo then pass `url` here */
+    logoUrl: optionalNullableUrl,
+    /** Footer logo — upload via POST /uploads?purpose=cms_footer_logo then pass `url` here */
+    footerLogoUrl: optionalNullableUrl,
+    /** Favicon — upload via POST /uploads?purpose=cms_favicon then pass `url` here */
+    faviconUrl: optionalNullableUrl,
     twitterHandle: z.string().optional(),
     gaMeasurementId: z.string().optional(),
     robotsTxt: z.string().optional(),

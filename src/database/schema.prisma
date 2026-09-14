@@ -1420,6 +1420,12 @@ model CmsSeoSettings {
   metaKeywords     String?  @map("meta_keywords") @db.Text
   canonicalBaseUrl String   @map("canonical_base_url")
   ogImageUrl       String?  @map("og_image_url")
+  /// Header / navbar logo (upload purpose: cms_logo)
+  logoUrl          String?  @map("logo_url")
+  /// Footer brand logo (upload purpose: cms_footer_logo)
+  footerLogoUrl    String?  @map("footer_logo_url")
+  /// Browser tab favicon (upload purpose: cms_favicon)
+  faviconUrl       String?  @map("favicon_url")
   twitterHandle    String?  @map("twitter_handle")
   gaMeasurementId  String?  @map("ga_measurement_id")
   robotsTxt        String?  @map("robots_txt") @db.Text

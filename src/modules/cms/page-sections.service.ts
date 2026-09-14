@@ -90,6 +90,9 @@ export const getPublicMarketingPage = async (pageSlug: string) => {
           meta_title: seo.global_site_title,
           meta_description: seo.meta_description,
           og_image: seo.og_image_url,
+          logo_url: seo.logo_url,
+          footer_logo_url: seo.footer_logo_url,
+          favicon_url: seo.favicon_url,
         }
       : null,
     sections: sections.map(serializePublicSection),

@@ -33,6 +33,21 @@ export const PURPOSE_CONFIG: Record<UploadPurpose, PurposeConfig> = {
   cms_item_icon: { maxBytes: 1 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
   cms_avatar: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
   cms_og_image: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
+  cms_logo: {
+    maxBytes: 5 * 1024 * 1024,
+    allowedMime: /^(image\/(png|jpe?g|webp|gif|svg\+xml))$/,
+    visibility: 'public',
+  },
+  cms_footer_logo: {
+    maxBytes: 5 * 1024 * 1024,
+    allowedMime: /^(image\/(png|jpe?g|webp|gif|svg\+xml))$/,
+    visibility: 'public',
+  },
+  cms_favicon: {
+    maxBytes: 1 * 1024 * 1024,
+    allowedMime: /^(image\/(png|jpe?g|webp|gif|svg\+xml|x-icon|vnd\.microsoft\.icon)|image\/ico)$/,
+    visibility: 'public',
+  },
   blog_cover: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
   knowledge_graphic: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
   knowledge_block_image: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },

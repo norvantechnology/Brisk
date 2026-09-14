@@ -437,6 +437,9 @@ router.get('/legal/:slug', cmsController.getLegalBySlug);
  * /cms/seo:
  *   get:
  *     summary: Get public SEO / site head settings
+ *     description: |
+ *       Returns default `<head>` SEO fields plus branding assets for the public website:
+ *       `logo_url` (header), `footer_logo_url`, `favicon_url`.
  *     tags: ['Website / Content']
  *     responses:
  *       200:

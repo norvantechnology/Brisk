@@ -1876,6 +1876,10 @@ router.post(
  * /admin/cms/seo:
  *   get:
  *     summary: Get Global SEO Settings
+ *     description: |
+ *       Singleton SEO + site branding settings.
+ *       Branding URLs (`logoUrl`, `footerLogoUrl`, `faviconUrl`) come from `POST /uploads`
+ *       with purposes `cms_logo`, `cms_footer_logo`, `cms_favicon`.
  *     tags: ['Admin / Website / SEO']
  *     security:
  *       - bearerAuth: []
@@ -1890,6 +1894,18 @@ router.get('/seo', cmsAdminController.getSeoSettings);
  * /admin/cms/seo:
  *   put:
  *     summary: Upsert Global SEO Settings
+ *     description: |
+ *       Upsert singleton SEO metadata and website branding assets.
+ *
+ *       **Branding upload flow**
+ *       1. `POST /uploads` with `file` + `purpose`:
+ *          - `cms_logo` — header / navbar logo
+ *          - `cms_footer_logo` — footer logo
+ *          - `cms_favicon` — browser favicon (png/ico/svg, max 1MB)
+ *       2. Pass returned `url` into this body as `logoUrl` / `footerLogoUrl` / `faviconUrl`.
+ *       3. Omit a branding field to keep the existing value; send `""` or `null` to clear it.
+ *
+ *       Public website reads the same values via `GET /cms/seo` and `GET /cms/bootstrap`.
  *     tags: ['Admin / Website / SEO']
  *     security:
  *       - bearerAuth: []
@@ -1909,6 +1925,9 @@ router.get('/seo', cmsAdminController.getSeoSettings);
  *               metaKeywords: { type: string, example: 'home services, tradespeople, escrow' }
  *               canonicalBaseUrl: { type: string, example: 'https://brisk.com' }
  *               ogImageUrl: { type: string, example: 'https://cdn.brisk.com/og/default.jpg' }
+ *               logoUrl: { type: string, nullable: true, example: 'https://cdn.brisk.com/brand/logo.png' }
+ *               footerLogoUrl: { type: string, nullable: true, example: 'https://cdn.brisk.com/brand/footer-logo.png' }
+ *               faviconUrl: { type: string, nullable: true, example: 'https://cdn.brisk.com/brand/favicon.png' }
  *               twitterHandle: { type: string, example: '@briskapp' }
  *               gaMeasurementId: { type: string, example: 'G-XXXXXXXXXX' }
  *               robotsTxt: { type: string, example: 'User-agent: *\nAllow: /' }

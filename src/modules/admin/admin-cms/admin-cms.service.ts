@@ -119,7 +119,13 @@ export type UpsertSeoSettingsInput = {
   metaDescription: string;
   metaKeywords?: string;
   canonicalBaseUrl: string;
-  ogImageUrl?: string;
+  ogImageUrl?: string | null;
+  /** Header/navbar logo URL from POST /uploads purpose=cms_logo */
+  logoUrl?: string | null;
+  /** Footer logo URL from POST /uploads purpose=cms_footer_logo */
+  footerLogoUrl?: string | null;
+  /** Favicon URL from POST /uploads purpose=cms_favicon */
+  faviconUrl?: string | null;
   twitterHandle?: string;
   gaMeasurementId?: string;
   robotsTxt?: string;
@@ -1560,29 +1566,30 @@ export const upsertSeoSettings = async (
     metaKeywords: input.metaKeywords,
     canonicalBaseUrl: input.canonicalBaseUrl,
     ogImageUrl: input.ogImageUrl,
+    ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
+    ...(input.footerLogoUrl !== undefined ? { footerLogoUrl: input.footerLogoUrl } : {}),
+    ...(input.faviconUrl !== undefined ? { faviconUrl: input.faviconUrl } : {}),
     twitterHandle: input.twitterHandle,
     gaMeasurementId: input.gaMeasurementId,
     robotsTxt: input.robotsTxt,
     updatedById: adminId,
   };
 
+  const include = {
+    updatedBy: {
+      select: { id: true, fullName: true, email: true },
+    },
+  } as const;
+
   const settings = existing
     ? await prisma.cmsSeoSettings.update({
         where: { id: existing.id },
         data,
-        include: {
-          updatedBy: {
-            select: { id: true, fullName: true, email: true },
-          },
-        },
+        include,
       })
     : await prisma.cmsSeoSettings.create({
         data,
-        include: {
-          updatedBy: {
-            select: { id: true, fullName: true, email: true },
-          },
-        },
+        include,
       });
 
   await writeAudit(
