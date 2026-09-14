@@ -40,6 +40,7 @@ const options: swaggerJSDoc.Options = {
         '- **Admin CMS (page sections):** Admin / Website / Marketing Pages — pageSlug = customers | traders | home | about-brisk | contact-brisk',
         '- **Admin Settings → Contact Info:** GET/PUT /admin/cms/settings/contact — generalInquiryEmail, customerSupportPhone, officeAddress, showGeneralInquiryEmail, showCustomerSupportPhone, showOfficeAddress',
         '- **Admin Trader Details tabs:** /admin/traders/{id}/documents|jobs|reviews|payouts|offers (+ /stats or /earnings/summary). Doc approve/reject: PATCH /admin/trader-verification/{traderId}/documents/{documentId} — use data.trader from response',
+        '- **Trader Discover (Nearby Opportunities):** GET /traders/jobs/discover — lean cards + total. Detail GET /traders/jobs/discover/{id}. Bookmark POST/DELETE .../bookmark',
         '- **Contact form submissions CRM:** Admin / Website / Contact — /admin/cms/contact-submissions (separate from contact-brisk page sections)',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
         '- **Mobile Direct Trader UI flow:** Offers list Claim Now → GET /trader-offers/{id} → Accept Offer POST /trader-offers/{id}/accept → Post a New Job (POST /jobs) → Choose Location: either addressId OR inline location on PUT /jobs/{id}/location or POST /jobs/{id}/publish → Payment Details → POST /payments/intent → confirm/fail',
@@ -233,6 +234,11 @@ const options: swaggerJSDoc.Options = {
           'My Property + My Address tabs. Addresses CRUD, property meters/readings, utility subscriptions, MPRN/GPRN help tips with imageUrl. Auth: customer Bearer token.',
       },
       { name: 'Customer / Profile', description: 'Customer profile' },
+      {
+        name: 'Trader / Discover Jobs',
+        description:
+          'Discover → Nearby Opportunities. Lean list/detail: GET /traders/jobs/discover, GET /traders/jobs/discover/{id}. Bookmark: POST/DELETE .../bookmark. Filters: radiusKm, categoryId, siteVisit, urgent. Auth: trader Bearer. Refresh on job:published socket.',
+      },
       { name: 'Trader / Profile', description: 'Trader profile' },
       { name: 'System / Health', description: 'Health check' },
     ],

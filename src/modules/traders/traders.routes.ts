@@ -13,6 +13,7 @@ import {
 } from './onboarding/onboarding.validation';
 import onboardingRoutes from './onboarding/onboarding.routes';
 import traderOffersRoutes from './offers/trader-offers.routes';
+import traderJobsRoutes from './jobs/trader-jobs.routes';
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.use('/onboarding', onboardingRoutes);
 
 router.use(authMiddleware, roleMiddleware(['TRADER']));
 router.use('/offers', traderOffersRoutes);
+router.use('/jobs', traderJobsRoutes);
 
 /**
  * @swagger

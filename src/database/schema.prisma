@@ -378,6 +378,7 @@ model Trader {
   briskOffers     BriskOffer[]
   ratingsReceived RatingReview[]       @relation("TraderReviews")
   savedBy         SavedTrader[]
+  jobBookmarks    TraderJobBookmark[]
   registrations   TraderRegistration[]
 
   @@map("traders")
@@ -630,8 +631,10 @@ model Job {
   quotes       Quote[]
   booking      Booking?
   chatMessages ChatMessage[]
+  bookmarkedBy TraderJobBookmark[]
 
   @@index([customerId, status])
+  @@index([status, categoryId])
   @@map("jobs")
 }
 
@@ -993,6 +996,21 @@ model SavedTrader {
 
   @@unique([userId, traderId])
   @@map("saved_traders")
+}
+
+/// Trader Discover tab — bookmarked / saved nearby jobs.
+model TraderJobBookmark {
+  id        String   @id @default(uuid()) @db.Uuid
+  traderId  String   @map("trader_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([traderId, jobId])
+  @@index([traderId])
+  @@map("trader_job_bookmarks")
 }
 
 model RatingReview {
