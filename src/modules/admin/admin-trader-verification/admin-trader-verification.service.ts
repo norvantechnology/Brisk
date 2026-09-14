@@ -1,7 +1,236 @@
-import { Prisma, TraderOnboardingStatus, VerificationStatus } from '@prisma/client';
+import {
+  Prisma,
+  TraderDocumentStatus,
+  TraderOnboardingStatus,
+  TraderType,
+  VerificationStatus,
+} from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BadRequestError } from '../../../utils/errors';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
+
+type TraderForVerificationSync = {
+  id: string;
+  userId: string;
+  traderType: TraderType;
+  fullLegalName: string | null;
+  businessName: string | null;
+  ppsNumber: string | null;
+  croNumber: string | null;
+  directorFullName: string | null;
+  addressLine1: string | null;
+  city: string | null;
+  postcode: string | null;
+  bankDetailsSkipped: boolean;
+  bankHolderName: string | null;
+  bankName: string | null;
+  accountNumber: string | null;
+  ifscCode: string | null;
+  onboardingStatus: TraderOnboardingStatus;
+  verificationStatus: VerificationStatus;
+  rejectionReason: string | null;
+  categories: Array<{ categoryId: string }>;
+  documents: Array<{
+    id: string;
+    documentRuleId: string;
+    status: TraderDocumentStatus;
+    rejectionReason: string | null;
+    documentRule: { required: boolean; name: string };
+  }>;
+  registrations: Array<{ entityType: TraderType }>;
+};
+
+const REVIEWABLE_ONBOARDING_STATUSES: TraderOnboardingStatus[] = [
+  TraderOnboardingStatus.SUBMITTED,
+  TraderOnboardingStatus.REJECTED,
+];
+
+const isProfileComplete = (trader: TraderForVerificationSync, entityType: TraderType) => {
+  if (entityType === TraderType.SOLO) {
+    if (!trader.fullLegalName || !trader.ppsNumber) return false;
+  } else {
+    if (!trader.businessName || !trader.croNumber || !trader.directorFullName) return false;
+  }
+  return Boolean(trader.addressLine1 && trader.city && trader.postcode);
+};
+
+const isBankComplete = (trader: TraderForVerificationSync) =>
+  trader.bankDetailsSkipped ||
+  Boolean(
+    trader.bankHolderName && trader.bankName && trader.accountNumber && trader.ifscCode
+  );
+
+const buildVerificationSummary = (
+  requiredRules: Array<{ id: string; name: string }>,
+  documents: TraderForVerificationSync['documents']
+) => {
+  const docsByRuleId = new Map(documents.map((doc) => [doc.documentRuleId, doc]));
+  let approvedCount = 0;
+  let pendingCount = 0;
+  let rejectedCount = 0;
+  let missingCount = 0;
+
+  for (const rule of requiredRules) {
+    const doc = docsByRuleId.get(rule.id);
+    if (!doc) {
+      missingCount += 1;
+      continue;
+    }
+    if (doc.status === TraderDocumentStatus.APPROVED) approvedCount += 1;
+    else if (doc.status === TraderDocumentStatus.REJECTED) rejectedCount += 1;
+    else pendingCount += 1;
+  }
+
+  return {
+    requiredTotal: requiredRules.length,
+    approvedCount,
+    pendingCount,
+    rejectedCount,
+    missingCount,
+    allRequiredApproved:
+      requiredRules.length > 0 &&
+      approvedCount === requiredRules.length &&
+      pendingCount === 0 &&
+      rejectedCount === 0 &&
+      missingCount === 0,
+  };
+};
+
+/** Recompute trader verification/onboarding status from document + onboarding checks. */
+export const syncTraderVerificationFromDocuments = async (traderId: string) => {
+  const trader = await prisma.trader.findUnique({
+    where: { id: traderId },
+    include: {
+      categories: { select: { categoryId: true } },
+      documents: {
+        include: { documentRule: { select: { required: true, name: true } } },
+      },
+      registrations: { select: { entityType: true } },
+    },
+  });
+
+  if (!trader || !REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
+    return null;
+  }
+
+  const categoryIds = trader.categories.map((item) => item.categoryId);
+  const requirements = await getDocumentRequirementsForTrader(trader.traderType, categoryIds);
+  const requiredRules = [...requirements.entityRules, ...requirements.categoryRulesFlat].filter(
+    (rule) => rule.required
+  );
+
+  const summary = buildVerificationSummary(requiredRules, trader.documents);
+  const entityType = trader.registrations[0]?.entityType ?? trader.traderType;
+  const profileComplete = isProfileComplete(trader, entityType);
+  const bankComplete = isBankComplete(trader);
+
+  let nextVerificationStatus: VerificationStatus = VerificationStatus.PENDING;
+  let nextOnboardingStatus: TraderOnboardingStatus = TraderOnboardingStatus.SUBMITTED;
+  let nextRejectionReason: string | null = null;
+  let shouldInvalidateSessions = false;
+
+  const rejectedRequiredDoc = trader.documents.find(
+    (doc) =>
+      doc.status === TraderDocumentStatus.REJECTED &&
+      requiredRules.some((rule) => rule.id === doc.documentRuleId)
+  );
+
+  if (rejectedRequiredDoc) {
+    nextVerificationStatus = VerificationStatus.REJECTED;
+    nextOnboardingStatus = TraderOnboardingStatus.REJECTED;
+    nextRejectionReason =
+      rejectedRequiredDoc.rejectionReason?.trim() ||
+      'One or more required documents were rejected.';
+  } else if (summary.allRequiredApproved && profileComplete && bankComplete) {
+    nextVerificationStatus = VerificationStatus.VERIFIED;
+    nextOnboardingStatus = TraderOnboardingStatus.APPROVED;
+    nextRejectionReason = null;
+    shouldInvalidateSessions = trader.verificationStatus !== VerificationStatus.VERIFIED;
+  } else {
+    nextVerificationStatus = VerificationStatus.PENDING;
+    nextOnboardingStatus = TraderOnboardingStatus.SUBMITTED;
+    nextRejectionReason = null;
+  }
+
+  const statusChanged =
+    trader.verificationStatus !== nextVerificationStatus ||
+    trader.onboardingStatus !== nextOnboardingStatus ||
+    trader.rejectionReason !== nextRejectionReason;
+
+  if (statusChanged) {
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      prisma.trader.update({
+        where: { id: traderId },
+        data: {
+          verificationStatus: nextVerificationStatus,
+          onboardingStatus: nextOnboardingStatus,
+          rejectionReason: nextRejectionReason,
+        },
+      }),
+      prisma.traderRegistration.updateMany({
+        where: { traderId },
+        data: {
+          status:
+            nextOnboardingStatus === TraderOnboardingStatus.APPROVED
+              ? 'approved'
+              : nextOnboardingStatus === TraderOnboardingStatus.REJECTED
+                ? 'rejected'
+                : 'submitted',
+        },
+      }),
+    ];
+
+    if (shouldInvalidateSessions) {
+      ops.push(
+        prisma.user.update({
+          where: { id: trader.userId },
+          data: { tokenVersion: { increment: 1 } },
+        })
+      );
+    }
+
+    await prisma.$transaction(ops);
+  }
+
+  return {
+    verificationStatus: nextVerificationStatus,
+    onboardingStatus: nextOnboardingStatus,
+    rejectionReason: nextRejectionReason,
+    statusChanged,
+    verificationSummary: {
+      ...summary,
+      profileComplete,
+      bankComplete,
+      readyForApproval: summary.allRequiredApproved && profileComplete && bankComplete,
+    },
+  };
+};
+
+const serializeTraderDocument = (doc: {
+  id: string;
+  traderId: string;
+  documentRuleId: string;
+  fileUrl: string;
+  fileName: string | null;
+  status: TraderDocumentStatus;
+  rejectionReason: string | null;
+  uploadedAt: Date;
+  reviewedAt: Date | null;
+  reviewedById: string | null;
+  documentRule: { id: string; documentKey: string; name: string; required: boolean };
+}) => ({
+  id: doc.id,
+  traderId: doc.traderId,
+  documentRuleId: doc.documentRuleId,
+  fileUrl: doc.fileUrl,
+  fileName: doc.fileName,
+  status: doc.status,
+  rejectionReason: doc.rejectionReason,
+  uploadedAt: doc.uploadedAt,
+  reviewedAt: doc.reviewedAt,
+  reviewedById: doc.reviewedById,
+  documentRule: doc.documentRule,
+});
 
 export const getVerificationStats = async () => {
   const [pending, verified, rejected, submitted] = await Promise.all([
@@ -199,4 +428,76 @@ export const reviewTraderVerification = async (
   await prisma.$transaction(ops);
 
   return getTraderVerificationDetail(traderId);
+};
+
+export const reviewTraderDocument = async (
+  traderId: string,
+  documentId: string,
+  adminId: string,
+  input: {
+    status: typeof TraderDocumentStatus.APPROVED | typeof TraderDocumentStatus.REJECTED;
+    rejectionReason?: string;
+  }
+) => {
+  const trader = await prisma.trader.findUnique({
+    where: { id: traderId },
+    select: {
+      id: true,
+      onboardingStatus: true,
+      verificationStatus: true,
+      rejectionReason: true,
+    },
+  });
+  if (!trader) {
+    throw new NotFoundError('Trader not found.');
+  }
+
+  if (!REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
+    throw new BadRequestError(
+      'Documents can only be reviewed while the application is submitted or rejected.'
+    );
+  }
+
+  const document = await prisma.traderDocument.findFirst({
+    where: { id: documentId, traderId },
+    include: {
+      documentRule: {
+        select: { id: true, documentKey: true, name: true, required: true },
+      },
+    },
+  });
+  if (!document) {
+    throw new NotFoundError('Document not found for this trader.');
+  }
+
+  const reviewedAt = new Date();
+  const updatedDocument = await prisma.traderDocument.update({
+    where: { id: documentId },
+    data: {
+      status: input.status,
+      rejectionReason:
+        input.status === TraderDocumentStatus.REJECTED ? input.rejectionReason ?? null : null,
+      reviewedAt,
+      reviewedById: adminId,
+    },
+    include: {
+      documentRule: {
+        select: { id: true, documentKey: true, name: true, required: true },
+      },
+    },
+  });
+
+  const syncResult = await syncTraderVerificationFromDocuments(traderId);
+
+  return {
+    document: serializeTraderDocument(updatedDocument),
+    trader: {
+      id: traderId,
+      verificationStatus: syncResult?.verificationStatus ?? trader.verificationStatus,
+      onboardingStatus: syncResult?.onboardingStatus ?? trader.onboardingStatus,
+      rejectionReason: syncResult?.rejectionReason ?? trader.rejectionReason,
+      statusChanged: syncResult?.statusChanged ?? false,
+    },
+    verificationSummary: syncResult?.verificationSummary ?? null,
+  };
 };

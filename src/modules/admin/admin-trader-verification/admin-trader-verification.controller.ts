@@ -75,3 +75,29 @@ export const review = async (
     next(error);
   }
 };
+
+export const reviewDocument = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.reviewTraderDocument(
+      req.params.traderId,
+      req.params.documentId,
+      req.adminUser!.id,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message:
+        req.body.status === 'APPROVED'
+          ? 'Document approved successfully.'
+          : 'Document rejected successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

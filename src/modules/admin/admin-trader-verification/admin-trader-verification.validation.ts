@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { VerificationStatus } from '@prisma/client';
+import { TraderDocumentStatus, VerificationStatus } from '@prisma/client';
 
 export const verificationQueueSchema = z.object({
   query: z.object({
@@ -31,6 +31,27 @@ export const reviewTraderSchema = z.object({
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'rejectionReason is required when rejecting a trader.',
+          path: ['rejectionReason'],
+        });
+      }
+    }),
+});
+
+export const reviewTraderDocumentSchema = z.object({
+  params: z.object({
+    traderId: z.string().uuid(),
+    documentId: z.string().uuid(),
+  }),
+  body: z
+    .object({
+      status: z.enum([TraderDocumentStatus.APPROVED, TraderDocumentStatus.REJECTED]),
+      rejectionReason: z.string().trim().min(1).max(2000).optional(),
+    })
+    .superRefine((body, ctx) => {
+      if (body.status === TraderDocumentStatus.REJECTED && !body.rejectionReason) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'rejectionReason is required when rejecting a document.',
           path: ['rejectionReason'],
         });
       }

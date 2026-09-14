@@ -3,6 +3,7 @@ import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware'
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-trader-verification.controller';
 import {
+  reviewTraderDocumentSchema,
   reviewTraderSchema,
   traderIdParamSchema,
   verificationQueueSchema,
@@ -122,6 +123,97 @@ router.get(
   '/trader-verification/:traderId',
   validate(traderIdParamSchema),
   controller.getDetail
+);
+
+/**
+ * @swagger
+ * /admin/trader-verification/{traderId}/documents/{documentId}:
+ *   patch:
+ *     summary: Approve or reject a single trader document
+ *     tags: ['Admin / Trader Verification']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Review one uploaded document by its `documentId`.
+ *
+ *       **Document status values:** `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`
+ *       (admin can set `APPROVED` or `REJECTED` only).
+ *
+ *       After each action the backend recalculates overall trader status:
+ *       - Any required document `REJECTED` → trader `verificationStatus=REJECTED`, `onboardingStatus=REJECTED`
+ *       - All required documents `APPROVED` + profile + bank complete → `VERIFIED` / `APPROVED`
+ *       - Otherwise stays `PENDING` / `SUBMITTED`
+ *
+ *       Frontend should refresh trader status from this response (or `GET /admin/trader-verification/{traderId}`).
+ *     parameters:
+ *       - in: path
+ *         name: traderId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [APPROVED, REJECTED] }
+ *               rejectionReason:
+ *                 type: string
+ *                 description: Required when status is REJECTED
+ *           examples:
+ *             approve:
+ *               value: { status: APPROVED }
+ *             reject:
+ *               value:
+ *                 status: REJECTED
+ *                 rejectionReason: Document is expired. Please upload a valid certificate.
+ *     responses:
+ *       200:
+ *         description: Document reviewed and trader status recalculated.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Document approved successfully.
+ *               data:
+ *                 document:
+ *                   id: uuid
+ *                   status: APPROVED
+ *                   rejectionReason: null
+ *                   reviewedAt: '2026-09-14T12:00:00.000Z'
+ *                 trader:
+ *                   id: uuid
+ *                   verificationStatus: PENDING
+ *                   onboardingStatus: SUBMITTED
+ *                   rejectionReason: null
+ *                   statusChanged: false
+ *                 verificationSummary:
+ *                   requiredTotal: 3
+ *                   approvedCount: 2
+ *                   pendingCount: 1
+ *                   rejectedCount: 0
+ *                   missingCount: 0
+ *                   allRequiredApproved: false
+ *                   profileComplete: true
+ *                   bankComplete: true
+ *                   readyForApproval: false
+ *       400:
+ *         description: Application not in reviewable state / validation error.
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Trader or document not found.
+ */
+router.patch(
+  '/trader-verification/:traderId/documents/:documentId',
+  validate(reviewTraderDocumentSchema),
+  controller.reviewDocument
 );
 
 /**
