@@ -699,6 +699,8 @@ model Invoice {
   serviceCharge       Decimal       @map("service_charge") @db.Decimal(10, 2)
   traderOfferDiscount Decimal       @default(0.0) @map("trader_offer_discount") @db.Decimal(10, 2)
   promoDiscount       Decimal       @default(0.0) @map("promo_discount") @db.Decimal(10, 2)
+  /// Uppercase promo code currently applied; cleared when promo is reset.
+  appliedPromoCode    String?       @map("applied_promo_code")
   platformFee         Decimal       @default(0.0) @map("platform_fee") @db.Decimal(10, 2)
   tax                 Decimal       @default(0.0) @db.Decimal(10, 2)
   totalAmount         Decimal       @map("total_amount") @db.Decimal(10, 2)

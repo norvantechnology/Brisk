@@ -74,6 +74,15 @@
  *         siteVisitFee: { type: number, description: Alias when purpose=SITE_VISIT_FEE; else 0 }
  *         traderOfferDiscount: { type: number, example: 0 }
  *         promoDiscount: { type: number, example: 0 }
+ *         promoCode:
+ *           type: string
+ *           nullable: true
+ *           description: Currently applied promo code (uppercase), null when none
+ *           example: SAVE10
+ *         promoApplied: { type: boolean }
+ *         alreadyApplied:
+ *           type: boolean
+ *           description: True on apply-promo when the same code was already on the invoice
  *         platformFee:
  *           type: number
  *           example: 0
@@ -371,6 +380,8 @@
  *             serviceCharge: { type: number }
  *             traderOfferDiscount: { type: number }
  *             promoDiscount: { type: number }
+ *             promoCode: { type: string, nullable: true }
+ *             promoApplied: { type: boolean }
  *             platformFee: { type: number }
  *             tax: { type: number }
  *             totalAmount: { type: number }

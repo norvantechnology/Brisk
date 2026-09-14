@@ -78,8 +78,10 @@ router.get(
  *
  *       Recalculates `promoDiscount`, `platformFee`, and `totalAmount`.
  *       Only works while invoice status is UNPAID.
- *       **One promo at a time** (no stacking). Re-apply / replace is allowed while unpaid
- *       (e.g. after the customer changes job location on Payment Details).
+ *       **One promo at a time** (no stacking).
+ *       - Same code already applied → `200` with `alreadyApplied: true` (idempotent, totals unchanged aside from heal).
+ *       - Different code → replaces previous promo.
+ *       Going back to update location / republish while unpaid **clears** the promo so Payment Details starts clean.
  *
  *       Promo must be active and within validity window. Optional `categoryScope` must match job category.
  *

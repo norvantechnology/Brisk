@@ -735,7 +735,6 @@ export const setJobLocation = async (
   }
 
   const address = await resolveJobAddressForPublish(customerId, existing.addressId, input);
-  const addressChanged = existing.addressId !== address.id;
 
   const job = await prisma.job.update({
     where: { id: jobId },
@@ -750,12 +749,9 @@ export const setJobLocation = async (
     include: jobInclude,
   });
 
-  // After location change on unpaid checkout, allow promo apply again.
-  if (
-    addressChanged &&
-    existing.status === JobStatus.PAYMENT_PENDING &&
-    existing.booking?.invoice?.id
-  ) {
+  // Going back from Payment Details → location update always resets promo
+  // (even if the same address is kept) so totals cannot keep a stale discount.
+  if (existing.status === JobStatus.PAYMENT_PENDING && existing.booking?.invoice?.id) {
     const { clearInvoicePromoIfApplied } = await import('../checkout/checkout.service');
     await clearInvoicePromoIfApplied(existing.booking.invoice.id);
   }
@@ -897,10 +893,12 @@ export const publishJob = async (
         },
         include: jobInclude,
       });
-      // Location change resets promo so customer can apply again on Payment Details.
-      const { clearInvoicePromoIfApplied } = await import('../checkout/checkout.service');
-      await clearInvoicePromoIfApplied(existing.booking.invoice.id);
     }
+
+    // Republish from location (same or new address) resets promo so Payment Details
+    // never stacks a previous discount on the same invoice.
+    const { clearInvoicePromoIfApplied } = await import('../checkout/checkout.service');
+    await clearInvoicePromoIfApplied(existing.booking.invoice.id);
 
     const republish = await buildPublishSuccessPayload(
       customerId,

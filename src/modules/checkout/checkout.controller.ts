@@ -31,7 +31,9 @@ export const applyPromo = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Promo code applied successfully.',
+      message: data.alreadyApplied
+        ? 'Promo code already applied.'
+        : 'Promo code applied successfully.',
       data,
     });
   } catch (error) {

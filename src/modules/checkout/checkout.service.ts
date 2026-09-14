@@ -416,8 +416,11 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     ],
     paymentStatus: invoice.payments[0]?.status ?? null,
     latestPaymentId: invoice.payments[0]?.id ?? null,
-    /** True when a promo discount is on the invoice (re-apply still allowed while UNPAID). */
+    /** True when a promo discount is on the invoice. */
     promoApplied: money(invoice.promoDiscount) > 0,
+    /** Currently applied promo code (uppercase), or null if none. */
+    promoCode: invoice.appliedPromoCode ?? null,
+    alreadyApplied: false,
   };
 };
 
@@ -527,6 +530,39 @@ const buildReceipt = async (paymentId: string, userId: string) => {
   };
 };
 
+/** Recompute fee/total from stored line amounts so GET never drifts. */
+const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
+  if (invoice.status !== InvoiceStatus.UNPAID) return invoice;
+
+  const purpose = resolveInvoicePurpose(invoice.booking.job);
+  const breakdown = computeInvoiceBreakdown({
+    serviceCharge: money(invoice.serviceCharge),
+    traderOfferDiscount: money(invoice.traderOfferDiscount),
+    promoDiscount: money(invoice.promoDiscount),
+    currencyCode: invoice.currencyCode,
+    purpose,
+  });
+
+  const drift =
+    money(invoice.platformFee) !== breakdown.platformFee ||
+    money(invoice.tax) !== breakdown.tax ||
+    money(invoice.totalAmount) !== breakdown.totalAmount ||
+    money(invoice.promoDiscount) !== breakdown.promoDiscount;
+
+  if (!drift) return invoice;
+
+  return prisma.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      promoDiscount: breakdown.promoDiscount,
+      platformFee: breakdown.platformFee,
+      tax: breakdown.tax,
+      totalAmount: breakdown.totalAmount,
+    },
+    include: invoiceOwnershipInclude,
+  });
+};
+
 export const getInvoice = async (userId: string, invoiceId: string) => {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -534,8 +570,9 @@ export const getInvoice = async (userId: string, invoiceId: string) => {
   });
   if (!invoice) throw new NotFoundError('Invoice not found.');
   assertInvoiceOwner(invoice, userId);
-  const base = serializeInvoice(invoice);
-  const briskOffers = await loadBriskOffersSheet(invoice.booking.job.categoryId);
+  const consistent = await ensureInvoiceTotalsConsistent(invoice);
+  const base = serializeInvoice(consistent);
+  const briskOffers = await loadBriskOffersSheet(consistent.booking.job.categoryId);
   return {
     ...base,
     briskOffers,
@@ -543,7 +580,7 @@ export const getInvoice = async (userId: string, invoiceId: string) => {
   };
 };
 
-/** Clear promo when customer changes job location while still unpaid (Payment Details). */
+/** Clear promo when customer revisits location / republish while still unpaid. */
 export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -556,7 +593,7 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
     },
   });
   if (!invoice || invoice.status !== InvoiceStatus.UNPAID) return;
-  if (money(invoice.promoDiscount) <= 0) return;
+  if (money(invoice.promoDiscount) <= 0 && !invoice.appliedPromoCode) return;
 
   const purpose = resolveInvoicePurpose(invoice.booking.job);
   const breakdown = computeInvoiceBreakdown({
@@ -571,6 +608,7 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
     where: { id: invoiceId },
     data: {
       promoDiscount: breakdown.promoDiscount,
+      appliedPromoCode: null,
       platformFee: breakdown.platformFee,
       tax: breakdown.tax,
       totalAmount: breakdown.totalAmount,
@@ -590,8 +628,8 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     throw new BadRequestError('Promo codes can only be applied to unpaid invoices.');
   }
 
-  // One promo at a time (no stacking). Re-apply / replace is allowed while UNPAID
-  // (e.g. after location change on Payment Details).
+  // One promo at a time (no stacking). Same code → idempotent "already applied".
+  // Different code while UNPAID → replace previous promo.
   const code = input.code.trim().toUpperCase();
   const promo = await prisma.promoCode.findFirst({
     where: {
@@ -638,10 +676,41 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     purpose,
   });
 
+  const storedCode = invoice.appliedPromoCode?.trim().toUpperCase() ?? null;
+  const existingDiscount = money(invoice.promoDiscount);
+  const sameCodeAlreadyApplied =
+    existingDiscount > 0 &&
+    (storedCode === code || (!storedCode && existingDiscount === breakdown.promoDiscount));
+
+  if (sameCodeAlreadyApplied) {
+    // Idempotent: heal totals / persist missing code, never stack.
+    const healed = await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        promoDiscount: breakdown.promoDiscount,
+        appliedPromoCode: promo.code.toUpperCase(),
+        platformFee: breakdown.platformFee,
+        tax: breakdown.tax,
+        totalAmount: breakdown.totalAmount,
+      },
+      include: invoiceOwnershipInclude,
+    });
+
+    const briskOffers = await loadBriskOffersSheet(healed.booking.job.categoryId);
+    return {
+      ...serializeInvoice(healed),
+      promoCode: promo.code.toUpperCase(),
+      alreadyApplied: true,
+      briskOffers,
+      promoCodes: briskOffers.items,
+    };
+  }
+
   const updated = await prisma.invoice.update({
     where: { id: invoiceId },
     data: {
       promoDiscount: breakdown.promoDiscount,
+      appliedPromoCode: promo.code.toUpperCase(),
       platformFee: breakdown.platformFee,
       tax: breakdown.tax,
       totalAmount: breakdown.totalAmount,
@@ -652,7 +721,8 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
   const briskOffers = await loadBriskOffersSheet(updated.booking.job.categoryId);
   const serialized = {
     ...serializeInvoice(updated),
-    promoCode: promo.code,
+    promoCode: promo.code.toUpperCase(),
+    alreadyApplied: false,
     briskOffers,
     promoCodes: briskOffers.items,
   };
