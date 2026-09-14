@@ -39,6 +39,7 @@ const options: swaggerJSDoc.Options = {
         '- **Admin CMS (Homepage):** Admin / Website / Home — /admin/cms/home/...',
         '- **Admin CMS (page sections):** Admin / Website / Marketing Pages — pageSlug = customers | traders | home | about-brisk | contact-brisk',
         '- **Admin Settings → Contact Info:** GET/PUT /admin/cms/settings/contact — generalInquiryEmail, customerSupportPhone, officeAddress, showGeneralInquiryEmail, showCustomerSupportPhone, showOfficeAddress',
+        '- **Admin Trader Details tabs:** /admin/traders/{id}/documents|jobs|reviews|payouts|offers (+ /stats or /earnings/summary). Doc approve/reject: PATCH /admin/trader-verification/{traderId}/documents/{documentId} — use data.trader from response',
         '- **Contact form submissions CRM:** Admin / Website / Contact — /admin/cms/contact-submissions (separate from contact-brisk page sections)',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
         '- **Mobile Direct Trader UI flow:** Offers list Claim Now → GET /trader-offers/{id} → Accept Offer POST /trader-offers/{id}/accept → Post a New Job (POST /jobs) → Choose Location: either addressId OR inline location on PUT /jobs/{id}/location or POST /jobs/{id}/publish → Payment Details → POST /payments/intent → confirm/fail',
@@ -66,8 +67,15 @@ const options: swaggerJSDoc.Options = {
       },
       {
         name: 'Admin / Trader Details',
-        description:
-          'Trader Details tabs (Documents, Jobs, Reviews, Payouts, Offers) with pagination/filters/search/sort/date range. Profile Overview: GET /admin/traders/{id}. Document approve/reject: PATCH /admin/trader-verification/{traderId}/documents/{documentId}.',
+        description: [
+          'Trader Details tabs (Profile excluded). Base: /admin/traders/{id}/...',
+          'Documents: GET .../documents/stats, GET .../documents (status, scope ENTITY|CATEGORY|ALL).',
+          'Approve/reject doc: PATCH /admin/trader-verification/{traderId}/documents/{documentId} — refresh status from response.',
+          'Jobs: GET .../jobs/stats, GET .../jobs. Reviews: GET .../reviews/stats, GET .../reviews (stars 1–5).',
+          'Payouts: GET .../earnings/summary, GET .../payouts. Offers: GET .../offers/stats, GET .../offers.',
+          'Common filters: page, limit, search, sortBy, sortOrder, from, to. Doc statuses: PENDING|APPROVED|REJECTED|EXPIRED.',
+          'Profile Overview: GET /admin/traders/{id}.',
+        ].join(' '),
       },
       { name: 'Admin / Deletion Requests', description: 'GDPR deletion queue' },
       { name: 'Admin / Payments', description: 'Transactions, invoices, refunds' },
@@ -126,7 +134,11 @@ const options: swaggerJSDoc.Options = {
         ].join('\n'),
       },
       { name: 'Admin / Document Rules', description: 'Admin-configured entity and category document requirements for trader onboarding' },
-      { name: 'Admin / Trader Verification', description: 'Admin review queue for submitted trader onboarding applications' },
+      {
+        name: 'Admin / Trader Verification',
+        description:
+          'Onboarding review queue + detail. Per-document approve/reject: PATCH /admin/trader-verification/{traderId}/documents/{documentId} with status APPROVED|REJECTED (rejectionReason required on reject). Response includes data.trader status — frontend must refresh from API, not calculate locally. Also listed under Admin / Trader Details.',
+      },
       {
         name: 'Admin / Offers',
         description:

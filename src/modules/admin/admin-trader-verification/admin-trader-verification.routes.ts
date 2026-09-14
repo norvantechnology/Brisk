@@ -130,21 +130,30 @@ router.get(
  * /admin/trader-verification/{traderId}/documents/{documentId}:
  *   patch:
  *     summary: Approve or reject a single trader document
- *     tags: ['Admin / Trader Verification']
+ *     tags:
+ *       - Admin / Trader Verification
+ *       - Admin / Trader Details
  *     security:
  *       - bearerAuth: []
  *     description: |
+ *       Used from **Trader Details → Documents** (and the verification queue).
  *       Review one uploaded document by its `documentId`.
  *
+ *       **Body:**
+ *       - Approve: `{ "status": "APPROVED" }`
+ *       - Reject: `{ "status": "REJECTED", "rejectionReason": "..." }` (`rejectionReason` required on reject)
+ *
  *       **Document status values:** `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`
- *       (admin can set `APPROVED` or `REJECTED` only).
+ *       (this endpoint sets `APPROVED` or `REJECTED` only).
  *
  *       After each action the backend recalculates overall trader status:
  *       - Any required document `REJECTED` → trader `verificationStatus=REJECTED`, `onboardingStatus=REJECTED`
  *       - All required documents `APPROVED` + profile + bank complete → `VERIFIED` / `APPROVED`
  *       - Otherwise stays `PENDING` / `SUBMITTED`
  *
- *       Frontend should refresh trader status from this response (or `GET /admin/trader-verification/{traderId}`).
+ *       **Frontend:** refresh trader status from `data.trader` in this response
+ *       (do **not** calculate verification/onboarding status on the client).
+ *       You may also re-fetch `GET /admin/trader-verification/{traderId}` or Documents tab APIs.
  *     parameters:
  *       - in: path
  *         name: traderId
@@ -175,7 +184,7 @@ router.get(
  *                 rejectionReason: Document is expired. Please upload a valid certificate.
  *     responses:
  *       200:
- *         description: Document reviewed and trader status recalculated.
+ *         description: Document reviewed and trader status recalculated. Use `data.trader` to refresh UI status.
  *         content:
  *           application/json:
  *             example:
