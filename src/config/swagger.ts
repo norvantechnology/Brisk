@@ -59,6 +59,11 @@ const options: swaggerJSDoc.Options = {
         description:
           'Traders Management (All Traders): KPI stats, list/search/filters, create, view, edit, status, verification, delete. Auth: admin Bearer. Document review queue is under Admin / Trader Verification.',
       },
+      {
+        name: 'Admin / Trader Details',
+        description:
+          'Trader Details tabs (Documents, Jobs, Reviews, Payouts, Offers) with pagination/filters/search/sort/date range. Profile Overview: GET /admin/traders/{id}. Document approve/reject: PATCH /admin/trader-verification/{traderId}/documents/{documentId}.',
+      },
       { name: 'Admin / Deletion Requests', description: 'GDPR deletion queue' },
       { name: 'Admin / Payments', description: 'Transactions, invoices, refunds' },
       { name: 'Admin / Website / Dashboard', description: 'CMS dashboard' },
