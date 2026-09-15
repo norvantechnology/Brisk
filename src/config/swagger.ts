@@ -403,11 +403,34 @@ const SWAGGER_CSS = `
     opacity: 1 !important;
   }
   .swagger-ui .opblock .opblock-summary-method {
-    min-width: 68px !important;
-    background: var(--brisk-accent) !important;
-    color: #ffffff !important;
+    min-width: 72px !important;
     border-radius: 4px !important;
     font-weight: 700 !important;
+    font-size: 12px !important;
+    text-align: center !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border: none !important;
+  }
+  .swagger-ui .opblock .opblock-summary-method span,
+  .swagger-ui .opblock .opblock-summary-method * {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+  }
+  .swagger-ui .opblock.opblock-get .opblock-summary-method {
+    background: #2563eb !important;
+  }
+  .swagger-ui .opblock.opblock-post .opblock-summary-method {
+    background: #16a34a !important;
+  }
+  .swagger-ui .opblock.opblock-put .opblock-summary-method {
+    background: #ca8a04 !important;
+  }
+  .swagger-ui .opblock.opblock-patch .opblock-summary-method {
+    background: #9333ea !important;
+  }
+  .swagger-ui .opblock.opblock-delete .opblock-summary-method {
+    background: #dc2626 !important;
   }
   .swagger-ui .opblock.opblock-get,
   .swagger-ui .opblock.opblock-post,
@@ -623,24 +646,63 @@ const SWAGGER_CSS = `
   .swagger-ui .btn.authorize svg { fill: #ffffff !important; }
   .swagger-ui .authorization__btn svg { fill: var(--brisk-muted) !important; }
 
-  /* JSON request/response examples only — not description markdown */
+  /* JSON request/response examples — light block, dark text (never dark-on-dark) */
   .swagger-ui .responses-wrapper .highlight-code,
   .swagger-ui .responses-wrapper .microlight,
+  .swagger-ui .responses-wrapper pre,
+  .swagger-ui .responses-wrapper code,
   .swagger-ui .body-param__example,
   .swagger-ui .example,
   .swagger-ui .model-example .highlight-code,
-  .swagger-ui .model-example .microlight {
-    background: #0f172a !important;
-    color: #e2e8f0 !important;
+  .swagger-ui .model-example .microlight,
+  .swagger-ui .response-col_description .highlight-code,
+  .swagger-ui .response-col_description .microlight,
+  .swagger-ui .response-col_description pre,
+  .swagger-ui .highlight-code,
+  .swagger-ui pre.microlight,
+  .swagger-ui .microlight {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
     border-radius: 6px !important;
+    box-shadow: none !important;
   }
   .swagger-ui .responses-wrapper .highlight-code *,
   .swagger-ui .responses-wrapper .microlight *,
+  .swagger-ui .responses-wrapper pre *,
+  .swagger-ui .responses-wrapper code *,
   .swagger-ui .body-param__example *,
   .swagger-ui .example *,
   .swagger-ui .model-example .highlight-code *,
-  .swagger-ui .model-example .microlight * {
-    color: #e2e8f0 !important;
+  .swagger-ui .model-example .microlight *,
+  .swagger-ui .response-col_description .highlight-code *,
+  .swagger-ui .response-col_description .microlight *,
+  .swagger-ui .response-col_description pre *,
+  .swagger-ui .highlight-code *,
+  .swagger-ui pre.microlight *,
+  .swagger-ui .microlight * {
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    background: transparent !important;
+    opacity: 1 !important;
+  }
+
+  /* Keep description inline code distinct from JSON example blocks */
+  .swagger-ui .opblock-description-wrapper .microlight,
+  .swagger-ui .opblock-description-wrapper .highlight-code,
+  .swagger-ui .renderedMarkdown .microlight,
+  .swagger-ui .markdown .microlight {
+    display: inline !important;
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+    padding: 1px 6px !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    box-shadow: none !important;
   }
 
   .swagger-ui .model-toggle:after { background: var(--brisk-muted) !important; }
@@ -700,6 +762,45 @@ const SWAGGER_CSS = `
   .swagger-ui .markdown a {
     color: #0369a1 !important;
     text-decoration: underline !important;
+  }
+
+  /* Final contrast overrides — must win over earlier broad * rules */
+  .swagger-ui .opblock .opblock-summary-method,
+  .swagger-ui .opblock .opblock-summary-method span {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+  }
+  .swagger-ui .opblock.opblock-get .opblock-summary-method { background-color: #2563eb !important; }
+  .swagger-ui .opblock.opblock-post .opblock-summary-method { background-color: #16a34a !important; }
+  .swagger-ui .opblock.opblock-put .opblock-summary-method { background-color: #ca8a04 !important; }
+  .swagger-ui .opblock.opblock-patch .opblock-summary-method { background-color: #9333ea !important; }
+  .swagger-ui .opblock.opblock-delete .opblock-summary-method { background-color: #dc2626 !important; }
+
+  .swagger-ui .highlight-code,
+  .swagger-ui .highlight-code pre,
+  .swagger-ui .microlight,
+  .swagger-ui pre.microlight,
+  .swagger-ui .example,
+  .swagger-ui .body-param__example {
+    background: #f8fafc !important;
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+  }
+  .swagger-ui .highlight-code *,
+  .swagger-ui .microlight *,
+  .swagger-ui pre.microlight *,
+  .swagger-ui .example *,
+  .swagger-ui .body-param__example *,
+  .swagger-ui .hljs-string,
+  .swagger-ui .hljs-number,
+  .swagger-ui .hljs-literal,
+  .swagger-ui .hljs-attr,
+  .swagger-ui span[class^="hljs"] {
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    background: transparent !important;
+    opacity: 1 !important;
   }
 `;
 
