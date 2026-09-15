@@ -2,22 +2,13 @@ import { Router } from 'express';
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './trader-jobs.controller';
 import {
+  discoverJobDetailQuerySchema,
   discoverJobIdParamSchema,
   discoverJobsQuerySchema,
+  siteVisitRequestBodySchema,
 } from './trader-jobs.validation';
 
 const router = Router();
-
-/**
- * @swagger
- * tags:
- *   - name: Trader / Discover Jobs
- *     description: |
- *       Trader Discover Nearby Opportunities.
- *       App UI currently uses search only (no filter bottom sheet).
- *       Optional later: radiusKm, lat, lng for distance filter.
- *       Auth: trader Bearer. Refresh list on job:published / job:created.
- */
 
 /**
  * @swagger
@@ -27,20 +18,12 @@ const router = Router();
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Lean list for Discover Nearby Opportunities.
- *       Response data is a job array. App shows count from data.length (no total field).
- *
- *       App UI now: use search query only (Search for Services). No filter bottom sheet.
- *       Optional future distance filter: radiusKm, lat, lng (already supported).
- *
- *       Card fields: id, title, badge, distanceKm, areaName, priceLabel, createdAt, isBookmarked, isSiteVisit
- *       createdAt: ISO timestamp — app formats relative time (1 min ago / 1 hour ago)
- *       badge: Site Visit | Reschedule | null
+ *       Discover feed cards. data is a job array — use data.length for "X jobs found".
+ *       badge Site Visit | Reschedule | null. Format Posted ago from createdAt on app.
  *     parameters:
  *       - in: query
  *         name: search
- *         schema: { type: string, example: Kitchen Pipe }
- *         description: Primary app filter. Matches title, city/area, description.
+ *         schema: { type: string, example: Solar }
  *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
@@ -50,72 +33,224 @@ const router = Router();
  *       - in: query
  *         name: radiusKm
  *         schema: { type: number, example: 10 }
- *         description: Optional future distance filter in km. Omit for now.
  *       - in: query
  *         name: lat
  *         schema: { type: number }
- *         description: Optional future location override (with lng).
  *       - in: query
  *         name: lng
  *         schema: { type: number }
- *         description: Optional future location override (with lat).
  *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
- *         description: Optional category filter (not in current UI).
  *       - in: query
  *         name: siteVisit
  *         schema: { type: boolean }
- *         description: Optional site-visit-only filter (not in current UI).
+ *         description: When true, only site-visit jobs
  *       - in: query
  *         name: urgent
  *         schema: { type: boolean }
- *         description: Optional urgent filter scheduled within 48h (not in current UI).
  *     responses:
  *       200:
- *         description: Job card array in data (use data.length for jobs found).
+ *         description: Job card array
  *         content:
  *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/TraderDiscoverJobCard' }
  *             example:
  *               success: true
  *               message: Nearby opportunities retrieved successfully.
  *               data:
  *                 - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
- *                   title: Sample Job POst
+ *                   title: Solar Panel Installation
  *                   badge: Site Visit
  *                   distanceKm: 2.5
- *                   areaName: Dublin
+ *                   areaName: Dublin 2
  *                   priceLabel: "€30"
- *                   createdAt: '2026-09-11T10:46:44.111Z'
+ *                   createdAt: '2026-09-15T10:00:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: true
- *                 - id: 319a86dd-02d6-4db7-bcc0-45b604ac8a36
- *                   title: Second Job Post
+ *                 - id: 11111111-1111-1111-1111-111111111112
+ *                   title: Full Bathroom Re-tiling
  *                   badge: Reschedule
  *                   distanceKm: 5.1
  *                   areaName: Rathmines
- *                   priceLabel: "€1,000 - €1,500"
- *                   createdAt: '2026-09-10T12:11:49.000Z'
+ *                   priceLabel: "€800 - €1,200"
+ *                   createdAt: '2026-09-15T09:00:00.000Z'
  *                   isBookmarked: false
- *                   isSiteVisit: false
+ *                   isSiteVisit: true
  *       401:
- *         description: Unauthorized.
+ *         description: Unauthorized
  *       403:
- *         description: Not a trader.
+ *         description: Not a trader
  */
 router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscoverJobs);
 
 /**
  * @swagger
- * /traders/jobs/discover/{id}:
+ * /traders/jobs/discover/{id}/site-visit/slots:
  *   get:
- *     summary: Nearby job detail (View Details)
+ *     summary: Site Visit Date and Time bottom sheet
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Full Job Details for Discover View Details in one response (no extra API calls).
- *       Includes createdAt (app formats relative time), site visit fee, customer, photos, location/map, actions.
- *       Optional lat/lng to recompute distanceKm.
+ *       Opens from Select Date and Time.
+ *       dates = horizontal strip. timeSlots = Morning Afternoon Evening Any time.
+ *       Use mode + submitLabel for Request vs Reschedule CTA on the sheet.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Dates and slots for bottom sheet
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderSiteVisitSlots' }
+ *             example:
+ *               success: true
+ *               message: Site visit slots retrieved successfully.
+ *               data:
+ *                 jobId: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                 title: Site Visit Date & Time
+ *                 dates:
+ *                   - { date: '2026-09-15', month: SEP, day: 15, weekday: TUE }
+ *                   - { date: '2026-09-16', month: SEP, day: 16, weekday: WED }
+ *                 timeSlots:
+ *                   - { id: MORNING, label: Morning, startTime: '08:00', endTime: '12:00', rangeLabel: '08:00 - 12:00', icon: sun }
+ *                   - { id: AFTERNOON, label: Afternoon, startTime: '12:00', endTime: '17:00', rangeLabel: '12:00 - 17:00', icon: sun_cloud }
+ *                   - { id: EVENING, label: Evening, startTime: '17:00', endTime: '21:00', rangeLabel: '17:00 - 21:00', icon: moon }
+ *                   - { id: ANYTIME, label: Any time, startTime: '08:00', endTime: '21:00', rangeLabel: '08:00 - 21:00', icon: clock }
+ *                 selected: null
+ *                 mode: REQUEST
+ *                 submitLabel: Request For Site Visit
+ *       400:
+ *         description: Job is not a site-visit job
+ *       404:
+ *         description: Job not found
+ */
+router.get(
+  '/discover/:id/site-visit/slots',
+  validate(discoverJobIdParamSchema),
+  controller.getSiteVisitSlots
+);
+
+/**
+ * @swagger
+ * /traders/jobs/discover/{id}/site-visit/request:
+ *   post:
+ *     summary: Request For Site Visit
+ *     tags: ['Trader / Discover Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Submit date + timeSlot from bottom sheet.
+ *       MVP auto-confirms. Response is full Job Details with siteVisit.status CONFIRMED
+ *       and primaryAction BACK_TO_JOB.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/TraderSiteVisitRequestBody' }
+ *           example: { date: '2026-09-16', timeSlot: AFTERNOON }
+ *     responses:
+ *       200:
+ *         description: Confirmed — open Confirmed Job Details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderDiscoverJobDetail' }
+ *       409:
+ *         description: Already confirmed — use reschedule endpoint
+ *       400:
+ *         description: Validation or not a site-visit job
+ *       404:
+ *         description: Job not found
+ */
+router.post(
+  '/discover/:id/site-visit/request',
+  validate(siteVisitRequestBodySchema),
+  controller.requestSiteVisit
+);
+
+/**
+ * @swagger
+ * /traders/jobs/discover/{id}/site-visit/reschedule:
+ *   post:
+ *     summary: Request For Reschedule Site Visit
+ *     tags: ['Trader / Discover Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Same body as request. Requires an existing site visit (any non-cancelled).
+ *       Sets CONFIRMED with new slot. Response primaryAction BACK_TO_JOB.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/TraderSiteVisitRequestBody' }
+ *           example: { date: '2026-09-17', timeSlot: MORNING }
+ *     responses:
+ *       200:
+ *         description: Reschedule confirmed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderDiscoverJobDetail' }
+ *       400:
+ *         description: No existing site visit to reschedule
+ *       404:
+ *         description: Job not found
+ */
+router.post(
+  '/discover/:id/site-visit/reschedule',
+  validate(siteVisitRequestBodySchema),
+  controller.rescheduleSiteVisit
+);
+
+/**
+ * @swagger
+ * /traders/jobs/discover/{id}:
+ *   get:
+ *     summary: Job Details (Site Visit / Reschedule / Confirmed)
+ *     tags: ['Trader / Discover Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       One payload for all Job Details screens.
+ *
+ *       UI mapping:
+ *       - siteVisit.status NONE + canSelectDateTime → Select Date and Time + Request For Site Visit
+ *       - siteVisit.status RESCHEDULE_REQUIRED → orange badge + Select Date and Time + Request For Reschedule
+ *       - siteVisit.status CONFIRMED → green CONFIRMED + displayLabel + Back to Job
+ *
+ *       Always present keys listed in TraderDiscoverJobDetail schema.
  *     parameters:
  *       - in: path
  *         name: id
@@ -129,33 +264,56 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *         schema: { type: number }
  *     responses:
  *       200:
- *         description: Full job detail payload.
+ *         description: Full job detail
  *         content:
  *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderDiscoverJobDetail' }
  *             example:
  *               success: true
  *               message: Job details retrieved successfully.
  *               data:
- *                 id: 11111111-1111-1111-1111-111111111111
+ *                 id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
  *                 title: Solar Panel Installation
  *                 badge: Site Visit
- *                 distanceKm: 3.4
- *                 areaName: Dublin 8
+ *                 distanceKm: 1.8
+ *                 areaName: Dublin 6
  *                 priceLabel: "€30"
- *                 createdAt: '2026-09-14T10:00:00.000Z'
+ *                 createdAt: '2026-09-15T10:00:00.000Z'
  *                 isBookmarked: false
  *                 isSiteVisit: true
- *                 isReschedule: false
+ *                 description: Looking for a professional to install solar panels.
+ *                 photos: ['https://cdn.example.com/roof1.jpg']
+ *                 photoCount: 1
+ *                 photosSectionTitle: Customer Photos (1)
+ *                 photosHint: null
+ *                 siteVisitFeeTitle: SITE VISIT FEE
  *                 siteVisitFee: 30
  *                 siteVisitFeeLabel: "€30"
  *                 siteVisitFeeNote: This fee is paid to the platform to secure the visit and ensure high intent for both parties.
+ *                 isReschedule: false
  *                 canSelectDateTime: true
  *                 canRequestSiteVisit: true
+ *                 canRequestReschedule: false
+ *                 selectDateTimeLabel: Select Date & Time
+ *                 primaryAction: REQUEST_SITE_VISIT
  *                 primaryActionLabel: Request For Site Visit
- *                 description: Looking for a professional to install solar panels.
- *                 photos:
- *                   - https://cdn.example.com/jobs/photo1.jpg
- *                 photoCount: 1
+ *                 siteVisit:
+ *                   status: NONE
+ *                   visitDate: null
+ *                   timeSlot: null
+ *                   timeSlotLabel: null
+ *                   startTime: null
+ *                   endTime: null
+ *                   displayLabel: null
+ *                   statusBadge: null
+ *                   sectionTitle: null
+ *                   requestId: null
+ *                 serviceTermsNote: By accepting, you agree to the Service Terms.
  *                 customer:
  *                   id: uuid
  *                   fullName: Sarah Jenkins
@@ -166,22 +324,23 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *                 subcategory: null
  *                 categoryName: Solar
  *                 subcategoryName: null
+ *                 tags: [{ label: Solar, icon: sun }]
  *                 scheduledDate: null
- *                 timeSlot: Morning
- *                 durationLabel: 2 Hours
+ *                 timeSlot: null
+ *                 durationLabel: null
  *                 location:
- *                   areaName: Dublin 8
- *                   distanceKm: 3.4
- *                   distanceLabel: approx. 3.4km away
+ *                   areaName: Dublin 6
+ *                   distanceKm: 1.8
+ *                   distanceLabel: Approx. 1.8 km away
  *                   latitude: 53.34
  *                   longitude: -6.27
  *                   mapPreviewUrl: https://www.openstreetmap.org/export/embed.html?...
  *       404:
- *         description: Job not found or no longer available.
+ *         description: Job not found or no longer available
  */
 router.get(
   '/discover/:id',
-  validate(discoverJobIdParamSchema),
+  validate(discoverJobDetailQuerySchema),
   controller.getDiscoverJob
 );
 
@@ -199,13 +358,13 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Bookmarked.
+ *         description: Bookmarked
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Job bookmarked successfully.
- *               data: { id: uuid, isBookmarked: true }
+ *               data: { id: '8a8fb0e5-a330-4c62-8e76-a358bd792b84', isBookmarked: true }
  *   delete:
  *     summary: Remove job bookmark
  *     tags: ['Trader / Discover Jobs']
@@ -217,13 +376,13 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Bookmark removed.
+ *         description: Bookmark removed
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Job bookmark removed successfully.
- *               data: { id: uuid, isBookmarked: false }
+ *               data: { id: '8a8fb0e5-a330-4c62-8e76-a358bd792b84', isBookmarked: false }
  */
 router.post(
   '/discover/:id/bookmark',

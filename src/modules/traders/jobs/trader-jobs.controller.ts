@@ -79,3 +79,60 @@ export const unbookmarkDiscoverJob = async (
     next(error);
   }
 };
+
+export const getSiteVisitSlots = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.getSiteVisitSlots(req.user!.id, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit slots retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestSiteVisit = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.requestSiteVisit(req.user!.id, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit requested successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rescheduleSiteVisit = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.rescheduleSiteVisit(req.user!.id, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit reschedule requested successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

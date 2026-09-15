@@ -37,3 +37,29 @@ export const discoverJobIdParamSchema = z.object({
     id: z.string().uuid('Invalid job ID.'),
   }),
 });
+
+export const discoverJobDetailQuerySchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid job ID.'),
+  }),
+  query: z.object({
+    lat: z.string().optional(),
+    lng: z.string().optional(),
+  }),
+});
+
+const siteVisitTimeSlotEnum = z.enum(['MORNING', 'AFTERNOON', 'EVENING', 'ANYTIME']);
+
+/** POST Request For Site Visit / Request For Reschedule Site Visit */
+export const siteVisitRequestBodySchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid job ID.'),
+  }),
+  body: z.object({
+    /** YYYY-MM-DD from date strip */
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+    timeSlot: siteVisitTimeSlotEnum,
+  }),
+});

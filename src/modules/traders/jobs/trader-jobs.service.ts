@@ -2,15 +2,37 @@ import {
   JobQuoteType,
   JobStatus,
   Prisma,
+  SiteVisitTimeSlot,
+  TraderSiteVisitStatus,
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
-import { BadRequestError, NotFoundError } from '../../../utils/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 
 const EARTH_RADIUS_KM = 6371;
 const DEFAULT_RADIUS_KM = 50;
 const URGENT_WINDOW_MS = 48 * 60 * 60 * 1000;
+const SITE_VISIT_DATE_DAYS = 14;
 /** Dublin city centre — used when trader has no service center / job missing coords (testing + demo). */
 const DUBLIN_ORIGIN: Origin = { lat: 53.3498, lng: -6.2603 };
+
+/** Figma Site Visit Date & Time bottom sheet — fixed windows. */
+const SITE_VISIT_SLOT_DEFS: Record<
+  SiteVisitTimeSlot,
+  { label: string; startTime: string; endTime: string; icon: string }
+> = {
+  MORNING: { label: 'Morning', startTime: '08:00', endTime: '12:00', icon: 'sun' },
+  AFTERNOON: { label: 'Afternoon', startTime: '12:00', endTime: '17:00', icon: 'sun_cloud' },
+  EVENING: { label: 'Evening', startTime: '17:00', endTime: '21:00', icon: 'moon' },
+  ANYTIME: { label: 'Any time', startTime: '08:00', endTime: '21:00', icon: 'clock' },
+};
+
+const SITE_VISIT_SLOT_ORDER: SiteVisitTimeSlot[] = [
+  'MORNING',
+  'AFTERNOON',
+  'EVENING',
+  'ANYTIME',
+];
+
 
 type Origin = { lat: number; lng: number };
 
@@ -65,17 +87,180 @@ const buildPriceLabel = (job: {
   return null;
 };
 
-const buildBadge = (job: {
+const isSiteVisitJob = (job: {
   siteVisitRequested: boolean;
   quoteType: JobQuoteType | null;
-  scheduledDate?: Date | null;
-  booking?: { status: string } | null;
-}): string | null => {
+}): boolean => job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
+
+const buildBadge = (
+  job: {
+    siteVisitRequested: boolean;
+    quoteType: JobQuoteType | null;
+    scheduledDate?: Date | null;
+    booking?: { status: string } | null;
+  },
+  traderVisitStatus?: TraderSiteVisitStatus | null
+): string | null => {
+  if (traderVisitStatus === TraderSiteVisitStatus.RESCHEDULE_REQUIRED) return 'Reschedule';
+  if (!isSiteVisitJob(job)) return null;
   if (job.booking?.status === 'RESCHEDULED') return 'Reschedule';
-  // Past scheduled date on an open job → customer needs a new slot (Select Date & Time).
+  // Past customer-preferred date on a site-visit job → list shows Reschedule badge.
   if (job.scheduledDate && job.scheduledDate.getTime() < Date.now()) return 'Reschedule';
-  if (job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE) return 'Site Visit';
-  return null;
+  return 'Site Visit';
+};
+
+const parseVisitDateOnly = (dateStr: string): Date => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    throw new BadRequestError('date must be YYYY-MM-DD.');
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (
+    dt.getUTCFullYear() !== y ||
+    dt.getUTCMonth() !== m - 1 ||
+    dt.getUTCDate() !== d
+  ) {
+    throw new BadRequestError('Invalid date.');
+  }
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  if (dt.getTime() < todayUtc) {
+    throw new BadRequestError('Visit date cannot be in the past.');
+  }
+  return dt;
+};
+
+const formatVisitDateKey = (d: Date): string => {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const formatVisitDisplayLabel = (visitDate: Date, timeSlot: SiteVisitTimeSlot): string => {
+  const def = SITE_VISIT_SLOT_DEFS[timeSlot];
+  const label = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(visitDate);
+  return `${label} ${def.startTime} – ${def.endTime}`;
+};
+
+const buildAvailableDates = (days = SITE_VISIT_DATE_DAYS) => {
+  const out: Array<{
+    date: string;
+    month: string;
+    day: number;
+    weekday: string;
+  }> = [];
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    out.push({
+      date,
+      month: d.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
+      day: d.getDate(),
+      weekday: d.toLocaleString('en-US', { weekday: 'short' }).toUpperCase(),
+    });
+  }
+  return out;
+};
+
+type SiteVisitRow = {
+  id: string;
+  visitDate: Date;
+  timeSlot: SiteVisitTimeSlot;
+  status: TraderSiteVisitStatus;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+const toSiteVisitPayload = (row: SiteVisitRow | null) => {
+  if (!row || row.status === TraderSiteVisitStatus.CANCELLED) {
+    return {
+      status: 'NONE' as const,
+      visitDate: null as string | null,
+      timeSlot: null as SiteVisitTimeSlot | null,
+      timeSlotLabel: null as string | null,
+      startTime: null as string | null,
+      endTime: null as string | null,
+      displayLabel: null as string | null,
+      statusBadge: null as string | null,
+      sectionTitle: null as string | null,
+      requestId: null as string | null,
+    };
+  }
+
+  const def = SITE_VISIT_SLOT_DEFS[row.timeSlot];
+  const isRescheduleRequired = row.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED;
+  const wasRescheduled =
+    Boolean(row.createdAt && row.updatedAt) &&
+    row.updatedAt!.getTime() - row.createdAt!.getTime() > 1500;
+  const sectionTitle = isRescheduleRequired || wasRescheduled
+    ? 'RESCHEDULED VISIT DATE & TIME'
+    : 'SCHEDULED VISIT DATE & TIME';
+
+  return {
+    status: row.status as 'CONFIRMED' | 'RESCHEDULE_REQUIRED',
+    visitDate: formatVisitDateKey(row.visitDate),
+    timeSlot: row.timeSlot,
+    timeSlotLabel: def.label,
+    startTime: def.startTime,
+    endTime: def.endTime,
+    displayLabel: formatVisitDisplayLabel(row.visitDate, row.timeSlot),
+    statusBadge: isRescheduleRequired ? 'RESCHEDULE REQUIRED' : 'CONFIRMED',
+    sectionTitle,
+    requestId: row.id,
+  };
+};
+
+const resolvePrimaryActions = (
+  isSiteVisit: boolean,
+  siteVisit: ReturnType<typeof toSiteVisitPayload>
+) => {
+  if (siteVisit.status === 'CONFIRMED') {
+    return {
+      canSelectDateTime: false,
+      canRequestSiteVisit: false,
+      canRequestReschedule: false,
+      selectDateTimeLabel: null as string | null,
+      primaryAction: 'BACK_TO_JOB' as const,
+      primaryActionLabel: 'Back to Job',
+    };
+  }
+  if (siteVisit.status === 'RESCHEDULE_REQUIRED') {
+    return {
+      canSelectDateTime: true,
+      canRequestSiteVisit: false,
+      canRequestReschedule: true,
+      selectDateTimeLabel: 'Select Date & Time',
+      primaryAction: 'REQUEST_RESCHEDULE' as const,
+      primaryActionLabel: 'Request For Reschedule Site Visit',
+    };
+  }
+  if (isSiteVisit) {
+    return {
+      canSelectDateTime: true,
+      canRequestSiteVisit: true,
+      canRequestReschedule: false,
+      selectDateTimeLabel: 'Select Date & Time',
+      primaryAction: 'REQUEST_SITE_VISIT' as const,
+      primaryActionLabel: 'Request For Site Visit',
+    };
+  }
+  return {
+    canSelectDateTime: false,
+    canRequestSiteVisit: false,
+    canRequestReschedule: false,
+    selectDateTimeLabel: null as string | null,
+    primaryAction: 'VIEW_QUOTE' as const,
+    primaryActionLabel: 'View Quote Options',
+  };
 };
 
 const areaNameOf = (job: {
@@ -187,7 +372,8 @@ type ListCardJob = Prisma.JobGetPayload<{ select: typeof listCardSelect }>;
 const toListItem = (
   job: ListCardJob,
   origin: Origin,
-  bookmarkedIds: Set<string>
+  bookmarkedIds: Set<string>,
+  traderVisitStatus?: TraderSiteVisitStatus | null
 ) => {
   const coords = resolveJobCoords(
     {
@@ -198,8 +384,8 @@ const toListItem = (
     origin
   );
   const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
-  const badge = buildBadge(job);
-  const isSiteVisit = badge === 'Site Visit' || job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
+  const badge = buildBadge(job, traderVisitStatus);
+  const isSiteVisit = badge === 'Site Visit' || isSiteVisitJob(job);
 
   return {
     id: job.id,
@@ -319,19 +505,35 @@ export const listDiscoverJobs = async (
   const slice = withDistance.slice((page - 1) * limit, page * limit);
   const jobIds = slice.map((r) => r.job.id);
 
-  const bookmarks = jobIds.length
-    ? await prisma.traderJobBookmark.findMany({
-        where: { traderId: trader.id, jobId: { in: jobIds } },
-        select: { jobId: true },
-      })
-    : [];
+  const [bookmarks, visits] = await Promise.all([
+    jobIds.length
+      ? prisma.traderJobBookmark.findMany({
+          where: { traderId: trader.id, jobId: { in: jobIds } },
+          select: { jobId: true },
+        })
+      : Promise.resolve([] as { jobId: string }[]),
+    jobIds.length
+      ? prisma.traderSiteVisitRequest.findMany({
+          where: {
+            traderId: trader.id,
+            jobId: { in: jobIds },
+            status: { not: TraderSiteVisitStatus.CANCELLED },
+          },
+          select: { jobId: true, status: true },
+        })
+      : Promise.resolve([] as { jobId: string; status: TraderSiteVisitStatus }[]),
+  ]);
   const bookmarkedIds = new Set(bookmarks.map((b) => b.jobId));
+  const visitByJob = new Map(visits.map((v) => [v.jobId, v.status]));
 
-  return slice.map(({ job }) => toListItem(job, origin, bookmarkedIds));
+  return slice.map(({ job }) =>
+    toListItem(job, origin, bookmarkedIds, visitByJob.get(job.id) ?? null)
+  );
 };
 
 /**
  * Full Job Details payload for Discover → View Details (single call — no extra APIs).
+ * Also serves Confirmed / Reschedule Required screens after a trader site-visit request.
  */
 export const getDiscoverJob = async (userId: string, jobId: string, query?: { lat?: string; lng?: string }) => {
   const trader = await getTraderContext(userId);
@@ -340,8 +542,18 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   const job = await prisma.job.findFirst({
     where: {
       id: jobId,
-      status: JobStatus.PUBLISHED,
-      traderId: null,
+      OR: [
+        { status: JobStatus.PUBLISHED, traderId: null },
+        {
+          siteVisitRequests: {
+            some: {
+              traderId: trader.id,
+              status: { not: TraderSiteVisitStatus.CANCELLED },
+            },
+          },
+        },
+        { traderId: trader.id },
+      ],
     },
     include: {
       address: { select: { city: true, county: true, latitude: true, longitude: true } },
@@ -368,12 +580,26 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     throw new NotFoundError('Job not found or no longer available.');
   }
 
-  const bookmark = await prisma.traderJobBookmark.findUnique({
-    where: {
-      traderId_jobId: { traderId: trader.id, jobId },
-    },
-    select: { id: true },
-  });
+  const [bookmark, visitRow] = await Promise.all([
+    prisma.traderJobBookmark.findUnique({
+      where: { traderId_jobId: { traderId: trader.id, jobId } },
+      select: { id: true },
+    }),
+    prisma.traderSiteVisitRequest.findUnique({
+      where: { jobId_traderId: { jobId, traderId: trader.id } },
+      select: {
+        id: true,
+        visitDate: true,
+        timeSlot: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+  ]);
+
+  const activeVisit =
+    visitRow && visitRow.status !== TraderSiteVisitStatus.CANCELLED ? visitRow : null;
 
   const listCard: ListCardJob = {
     id: job.id,
@@ -395,10 +621,18 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     booking: job.booking,
   };
 
-  const list = toListItem(listCard, origin, new Set(bookmark ? [jobId] : []));
+  const list = toListItem(
+    listCard,
+    origin,
+    new Set(bookmark ? [jobId] : []),
+    activeVisit?.status ?? null
+  );
   const fee = money(job.siteVisitFee);
-  const isSiteVisit = list.isSiteVisit;
-  const isReschedule = list.badge === 'Reschedule';
+  const isSiteVisit = list.isSiteVisit || isSiteVisitJob(job);
+  const siteVisit = toSiteVisitPayload(activeVisit);
+  const actions = resolvePrimaryActions(isSiteVisit, siteVisit);
+  const isReschedule =
+    list.badge === 'Reschedule' || siteVisit.status === 'RESCHEDULE_REQUIRED';
   const coords = resolveJobCoords(
     {
       id: job.id,
@@ -410,20 +644,30 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   const customerVerified = Boolean(job.customer.mobileVerified || job.customer.emailVerified);
   const photos = job.photos.map((p) => p.photoUrl);
 
+  const tags = [
+    job.category
+      ? { label: job.category.name, icon: job.category.iconName ?? 'category' }
+      : null,
+    job.subcategory ? { label: job.subcategory.name, icon: 'tag' } : null,
+  ].filter(Boolean);
+
   return {
     ...list,
     description: job.description,
     photos,
     photoCount: photos.length,
+    photosSectionTitle: `Customer Photos (${photos.length})`,
+    photosHint: photos.length > 1 ? 'Swipe for more' : null,
+    siteVisitFeeTitle: isSiteVisit ? 'SITE VISIT FEE' : null,
     siteVisitFee: isSiteVisit ? fee : null,
     siteVisitFeeLabel: isSiteVisit && fee != null ? formatEuro(fee) : null,
     siteVisitFeeNote: isSiteVisit
       ? 'This fee is paid to the platform to secure the visit and ensure high intent for both parties.'
       : null,
     isReschedule,
-    canSelectDateTime: isSiteVisit || isReschedule,
-    canRequestSiteVisit: isSiteVisit,
-    primaryActionLabel: isSiteVisit ? 'Request For Site Visit' : 'View Quote Options',
+    ...actions,
+    siteVisit,
+    serviceTermsNote: 'By accepting, you agree to the Service Terms.',
     customer: {
       id: job.customer.id,
       fullName: job.customer.fullName,
@@ -444,13 +688,14 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       : null,
     categoryName: job.category.name,
     subcategoryName: job.subcategory?.name ?? null,
+    tags,
     scheduledDate: job.scheduledDate,
     timeSlot: job.timeSlot,
     durationLabel: job.durationLabel,
     location: {
       areaName: list.areaName,
       distanceKm: list.distanceKm,
-      distanceLabel: `approx. ${list.distanceKm}km away`,
+      distanceLabel: `Approx. ${list.distanceKm} km away`,
       latitude: coords.lat,
       longitude: coords.lng,
       mapPreviewUrl: `https://www.openstreetmap.org/export/embed.html?bbox=${coords.lng - 0.02}%2C${coords.lat - 0.015}%2C${coords.lng + 0.02}%2C${coords.lat + 0.015}&layer=mapnik&marker=${coords.lat}%2C${coords.lng}`,
@@ -458,11 +703,172 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   };
 };
 
+const assertJobAccessibleForSiteVisit = async (traderId: string, jobId: string) => {
+  const job = await prisma.job.findFirst({
+    where: {
+      id: jobId,
+      OR: [
+        { status: JobStatus.PUBLISHED, traderId: null },
+        {
+          siteVisitRequests: {
+            some: {
+              traderId,
+              status: { not: TraderSiteVisitStatus.CANCELLED },
+            },
+          },
+        },
+        { traderId },
+      ],
+    },
+    select: {
+      id: true,
+      siteVisitRequested: true,
+      quoteType: true,
+      title: true,
+    },
+  });
+  if (!job) {
+    throw new NotFoundError('Job not found or no longer available.');
+  }
+  const existingVisit = await prisma.traderSiteVisitRequest.findFirst({
+    where: {
+      jobId,
+      traderId,
+      status: { not: TraderSiteVisitStatus.CANCELLED },
+    },
+    select: { id: true },
+  });
+  if (!isSiteVisitJob(job) && !existingVisit) {
+    throw new BadRequestError('This job does not require a site visit.');
+  }
+  return job;
+};
+
+/** Bottom sheet: Site Visit Date & Time — available dates + Morning/Afternoon/Evening/Any time. */
+export const getSiteVisitSlots = async (userId: string, jobId: string) => {
+  const trader = await getTraderContext(userId);
+  await assertJobAccessibleForSiteVisit(trader.id, jobId);
+
+  const visit = await prisma.traderSiteVisitRequest.findUnique({
+    where: { jobId_traderId: { jobId, traderId: trader.id } },
+    select: {
+      id: true,
+      visitDate: true,
+      timeSlot: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+  const active = visit && visit.status !== TraderSiteVisitStatus.CANCELLED ? visit : null;
+
+  return {
+    jobId,
+    title: 'Site Visit Date & Time',
+    dates: buildAvailableDates(),
+    timeSlots: SITE_VISIT_SLOT_ORDER.map((id) => ({
+      id,
+      label: SITE_VISIT_SLOT_DEFS[id].label,
+      startTime: SITE_VISIT_SLOT_DEFS[id].startTime,
+      endTime: SITE_VISIT_SLOT_DEFS[id].endTime,
+      rangeLabel: `${SITE_VISIT_SLOT_DEFS[id].startTime} - ${SITE_VISIT_SLOT_DEFS[id].endTime}`,
+      icon: SITE_VISIT_SLOT_DEFS[id].icon,
+    })),
+    selected: active
+      ? {
+          date: formatVisitDateKey(active.visitDate),
+          timeSlot: active.timeSlot,
+        }
+      : null,
+    mode: active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED ? 'RESCHEDULE' : 'REQUEST',
+    submitLabel:
+      active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+        ? 'Request For Reschedule Site Visit'
+        : 'Request For Site Visit',
+  };
+};
+
+const upsertSiteVisit = async (
+  traderId: string,
+  jobId: string,
+  body: { date: string; timeSlot: SiteVisitTimeSlot },
+  mode: 'request' | 'reschedule'
+) => {
+  const visitDate = parseVisitDateOnly(body.date);
+  const existing = await prisma.traderSiteVisitRequest.findUnique({
+    where: { jobId_traderId: { jobId, traderId } },
+  });
+
+  if (mode === 'request') {
+    if (existing && existing.status === TraderSiteVisitStatus.CONFIRMED) {
+      throw new ConflictError('Site visit already confirmed. Use reschedule if a new slot is needed.');
+    }
+  } else {
+    if (!existing || existing.status === TraderSiteVisitStatus.CANCELLED) {
+      throw new BadRequestError('No site visit to reschedule. Request a site visit first.');
+    }
+  }
+
+  const row = await prisma.traderSiteVisitRequest.upsert({
+    where: { jobId_traderId: { jobId, traderId } },
+    create: {
+      jobId,
+      traderId,
+      visitDate,
+      timeSlot: body.timeSlot,
+      status: TraderSiteVisitStatus.CONFIRMED,
+    },
+    update: {
+      visitDate,
+      timeSlot: body.timeSlot,
+      status: TraderSiteVisitStatus.CONFIRMED,
+    },
+  });
+
+  return toSiteVisitPayload(row);
+};
+
+/** CTA: Request For Site Visit (after Select Date & Time). MVP auto-confirms. */
+export const requestSiteVisit = async (
+  userId: string,
+  jobId: string,
+  body: { date: string; timeSlot: SiteVisitTimeSlot }
+) => {
+  const trader = await getTraderContext(userId);
+  await assertJobAccessibleForSiteVisit(trader.id, jobId);
+  const siteVisit = await upsertSiteVisit(trader.id, jobId, body, 'request');
+  const detail = await getDiscoverJob(userId, jobId);
+  return { ...detail, siteVisit };
+};
+
+/** CTA: Request For Reschedule Site Visit. */
+export const rescheduleSiteVisit = async (
+  userId: string,
+  jobId: string,
+  body: { date: string; timeSlot: SiteVisitTimeSlot }
+) => {
+  const trader = await getTraderContext(userId);
+  await assertJobAccessibleForSiteVisit(trader.id, jobId);
+  const siteVisit = await upsertSiteVisit(trader.id, jobId, body, 'reschedule');
+  const detail = await getDiscoverJob(userId, jobId);
+  return { ...detail, siteVisit };
+};
+
 export const bookmarkDiscoverJob = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
 
   const job = await prisma.job.findFirst({
-    where: { id: jobId, status: JobStatus.PUBLISHED, traderId: null },
+    where: {
+      id: jobId,
+      OR: [
+        { status: JobStatus.PUBLISHED, traderId: null },
+        {
+          siteVisitRequests: {
+            some: { traderId: trader.id, status: { not: TraderSiteVisitStatus.CANCELLED } },
+          },
+        },
+      ],
+    },
     select: { id: true },
   });
   if (!job) {

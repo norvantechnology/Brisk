@@ -258,6 +258,8 @@ const options: swaggerJSDoc.Options = {
 
 const swaggerSpec = swaggerJSDoc(options);
 
+export const getSwaggerSpec = () => swaggerSpec;
+
 /**
  * Simple light Swagger theme.
  * Explicitly sets text colors on parameters/responses tables —
@@ -665,6 +667,11 @@ const SWAGGER_CSS = `
 `;
 
 export const setupSwagger = (app: Express): void => {
+  app.get('/api-docs.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+
   app.use(
     '/api-docs',
     swaggerUi.serve,

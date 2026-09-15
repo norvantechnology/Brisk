@@ -379,6 +379,7 @@ model Trader {
   ratingsReceived RatingReview[]       @relation("TraderReviews")
   savedBy         SavedTrader[]
   jobBookmarks    TraderJobBookmark[]
+  siteVisitRequests TraderSiteVisitRequest[]
   registrations   TraderRegistration[]
 
   @@map("traders")
@@ -632,6 +633,7 @@ model Job {
   booking      Booking?
   chatMessages ChatMessage[]
   bookmarkedBy TraderJobBookmark[]
+  siteVisitRequests TraderSiteVisitRequest[]
 
   @@index([customerId, status])
   @@index([status, categoryId])
@@ -1011,6 +1013,41 @@ model TraderJobBookmark {
   @@unique([traderId, jobId])
   @@index([traderId])
   @@map("trader_job_bookmarks")
+}
+
+enum SiteVisitTimeSlot {
+  MORNING
+  AFTERNOON
+  EVENING
+  ANYTIME
+}
+
+enum TraderSiteVisitStatus {
+  /// Trader requested / locked visit
+  CONFIRMED
+  /// Needs a new date/time (Select Date & Time → Request Reschedule)
+  RESCHEDULE_REQUIRED
+  CANCELLED
+}
+
+/// Trader Site Visit / Reschedule (Discover Job Details bottom sheet).
+model TraderSiteVisitRequest {
+  id        String                @id @default(uuid()) @db.Uuid
+  jobId     String                @map("job_id") @db.Uuid
+  traderId  String                @map("trader_id") @db.Uuid
+  visitDate DateTime              @map("visit_date") @db.Date
+  timeSlot  SiteVisitTimeSlot     @map("time_slot")
+  status    TraderSiteVisitStatus @default(CONFIRMED)
+  createdAt DateTime              @default(now()) @map("created_at")
+  updatedAt DateTime              @updatedAt @map("updated_at")
+
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, traderId])
+  @@index([traderId, status])
+  @@index([jobId])
+  @@map("trader_site_visit_requests")
 }
 
 model RatingReview {
