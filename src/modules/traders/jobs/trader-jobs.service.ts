@@ -345,6 +345,7 @@ const resolvePrimaryActions = (
       canSelectDateTime: false,
       canRequestSiteVisit: false,
       canRequestReschedule: false,
+      canSubmitQuote: false,
       selectDateTimeLabel: null as string | null,
       primaryAction: 'BACK_TO_JOB' as const,
       primaryActionLabel: 'Back to Job',
@@ -355,6 +356,7 @@ const resolvePrimaryActions = (
       canSelectDateTime: true,
       canRequestSiteVisit: false,
       canRequestReschedule: true,
+      canSubmitQuote: false,
       selectDateTimeLabel: 'Select Date & Time',
       primaryAction: 'REQUEST_RESCHEDULE' as const,
       primaryActionLabel: 'Request For Reschedule Site Visit',
@@ -365,6 +367,7 @@ const resolvePrimaryActions = (
       canSelectDateTime: true,
       canRequestSiteVisit: true,
       canRequestReschedule: false,
+      canSubmitQuote: false,
       selectDateTimeLabel: 'Select Date & Time',
       primaryAction: 'REQUEST_SITE_VISIT' as const,
       primaryActionLabel: 'Request For Site Visit',
@@ -374,9 +377,10 @@ const resolvePrimaryActions = (
     canSelectDateTime: false,
     canRequestSiteVisit: false,
     canRequestReschedule: false,
+    canSubmitQuote: true,
     selectDateTimeLabel: null as string | null,
-    primaryAction: 'VIEW_QUOTE' as const,
-    primaryActionLabel: 'View Quote Options',
+    primaryAction: 'SUBMIT_QUOTE' as const,
+    primaryActionLabel: 'Submit Quote',
   };
 };
 

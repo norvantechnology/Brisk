@@ -245,6 +245,32 @@ const assertMyJob = async (traderId: string, jobId: string) => {
   return job;
 };
 
+/**
+ * Quote from Discover Job Details OR My Jobs.
+ * Open marketplace (PUBLISHED + unassigned) is allowed; already-linked jobs too.
+ */
+const assertJobForQuote = async (traderId: string, jobId: string) => {
+  const linked = await prisma.job.findFirst({
+    where: { id: jobId, ...traderJobAccessWhere(traderId) },
+    select: { id: true, status: true, traderId: true },
+  });
+  if (linked) {
+    if (linked.traderId && linked.traderId !== traderId) {
+      throw new ConflictError('Job is already assigned to another trader.');
+    }
+    return linked;
+  }
+
+  const open = await prisma.job.findFirst({
+    where: { id: jobId, status: JobStatus.PUBLISHED, traderId: null },
+    select: { id: true, status: true, traderId: true },
+  });
+  if (!open) {
+    throw new NotFoundError('Job not found or no longer available for quoting.');
+  }
+  return open;
+};
+
 type MyJobRow = Awaited<ReturnType<typeof assertMyJob>>;
 
 const materialsSummary = (materials: { price: Prisma.Decimal }[]) => {
@@ -724,7 +750,7 @@ export const upsertQuote = async (
   body: { amount: number; notes?: string }
 ) => {
   const trader = await getTraderContext(userId);
-  await assertMyJob(trader.id, jobId);
+  await assertJobForQuote(trader.id, jobId);
 
   const existing = await prisma.quote.findFirst({
     where: { jobId, traderId: trader.id },
@@ -760,6 +786,7 @@ export const upsertQuote = async (
 
   return {
     id: quote.id,
+    jobId,
     amount: money(quote.quotedAmount),
     amountLabel: formatEuro(money(quote.quotedAmount)),
     notes: quote.notes,

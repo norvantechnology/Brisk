@@ -15,7 +15,7 @@
  *       6. Bookmark → POST/DELETE .../bookmark
  *
  *       Drive CTA from data.primaryAction:
- *       REQUEST_SITE_VISIT | REQUEST_RESCHEDULE | BACK_TO_JOB | VIEW_QUOTE
+ *       REQUEST_SITE_VISIT | REQUEST_RESCHEDULE | BACK_TO_JOB | SUBMIT_QUOTE
  *
  * components:
  *   schemas:
@@ -69,10 +69,11 @@
  *             canSelectDateTime: { type: boolean }
  *             canRequestSiteVisit: { type: boolean }
  *             canRequestReschedule: { type: boolean }
+ *             canSubmitQuote: { type: boolean, description: true when non site-visit Job Details should show Submit Quote }
  *             selectDateTimeLabel: { type: string, nullable: true, example: Select Date & Time }
  *             primaryAction:
  *               type: string
- *               enum: [REQUEST_SITE_VISIT, REQUEST_RESCHEDULE, BACK_TO_JOB, VIEW_QUOTE]
+ *               enum: [REQUEST_SITE_VISIT, REQUEST_RESCHEDULE, BACK_TO_JOB, SUBMIT_QUOTE]
  *             primaryActionLabel: { type: string, example: Request For Site Visit }
  *             siteVisit: { $ref: '#/components/schemas/TraderSiteVisitBlock' }
  *             serviceTermsNote: { type: string, example: By accepting, you agree to the Service Terms. }

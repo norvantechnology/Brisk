@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
 import * as service from './trader-jobs.service';
+import * as myJobsService from './trader-my-jobs.service';
 import * as tradersService from '../traders.service';
 
 export const listDiscoverJobs = async (
@@ -130,6 +131,26 @@ export const rescheduleSiteVisit = async (
       res,
       statusCode: 200,
       message: 'Site visit reschedule requested successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Submit quote from Discover Job Details (same as My Jobs quotes). */
+export const submitDiscoverQuote = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await myJobsService.upsertQuote(req.user!.id, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Quote submitted successfully.',
       data,
     });
   } catch (error) {

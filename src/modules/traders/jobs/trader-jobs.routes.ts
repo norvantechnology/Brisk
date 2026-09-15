@@ -6,6 +6,7 @@ import {
   discoverJobIdParamSchema,
   discoverJobsQuerySchema,
   siteVisitRequestBodySchema,
+  discoverQuoteBodySchema,
 } from './trader-jobs.validation';
 
 const router = Router();
@@ -245,6 +246,41 @@ router.post(
 
 /**
  * @swagger
+ * /traders/jobs/discover/{id}/quotes:
+ *   post:
+ *     summary: Submit Quote from Job Details
+ *     tags: ['Trader / Discover Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Use when Job Details primaryAction is SUBMIT_QUOTE (non site-visit jobs).
+ *       Same as POST /traders/jobs/mine/{id}/quotes.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount]
+ *             properties:
+ *               amount: { type: number, example: 450 }
+ *               notes: { type: string, example: Includes parts and labour }
+ *     responses:
+ *       200:
+ *         description: Quote submitted (PENDING). Job moves to QUOTED.
+ */
+router.post(
+  '/discover/:id/quotes',
+  validate(discoverQuoteBodySchema),
+  controller.submitDiscoverQuote
+);
+
+/**
+ * @swagger
  * /traders/jobs/discover/{id}:
  *   get:
  *     summary: Job Details (Site Visit / Reschedule / Confirmed)
@@ -257,6 +293,7 @@ router.post(
  *       - siteVisit.status NONE + canSelectDateTime → Select Date and Time + Request For Site Visit
  *       - siteVisit.status RESCHEDULE_REQUIRED → orange badge + Select Date and Time + Request For Reschedule
  *       - siteVisit.status CONFIRMED → green CONFIRMED + displayLabel + Back to Job
+ *       - primaryAction SUBMIT_QUOTE / canSubmitQuote true → show Submit Quote (non site-visit)
  *
  *       Always present keys listed in TraderDiscoverJobDetail schema.
  *     parameters:
