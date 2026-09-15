@@ -20,11 +20,6 @@
  *         key:
  *           type: string
  *           enum: [serviceCharge, siteVisitFee, platformFee, traderOfferDiscount, promoDiscount, tax]
- *         label:
- *           type: string
- *           description: |
- *             Exact UI label — Site Visit Fee, Service Charge, Platform Fee, Trader Offer / Free Visit, Promo Code, Tax
- *           example: Site Visit Fee
  *         amount:
  *           type: number
  *           description: Positive for charges/fees; negative for discounts
@@ -40,18 +35,22 @@
  *         subcategoryName: { type: string, nullable: true }
  *         title: { type: string }
  *         orderId: { type: string, example: INV-2026-9C7E }
+ *         jobRef: { type: string, nullable: true }
  *         serviceProvider: { type: string, nullable: true, example: Live Verify Trader }
+ *         scheduledDate: { type: string, format: date-time, nullable: true }
+ *         timeSlot: { type: string, nullable: true }
+ *         timeSlotRange: { type: string, nullable: true }
  *     PaymentMethodOption:
  *       type: object
  *       properties:
  *         key: { type: string, enum: [APPLE_PAY, GOOGLE_PAY, CARD] }
- *         label: { type: string, example: Apple Pay }
  *         enabled: { type: boolean }
+ *         provider: { type: string, example: stripe }
  *     Invoice:
  *       type: object
  *       description: |
  *         Payment Details / Site Visit & Pay Fee payload from GET /invoices/{id}
- *         or publish `data.invoice`.
+ *         or publish `data.invoice`. App owns all UI copy — amounts are numeric.
  *       properties:
  *         id: { type: string, format: uuid }
  *         invoiceNumber: { type: string, example: INV-2026-9C7E }
@@ -64,9 +63,6 @@
  *           type: string
  *           enum: [SERVICE, SITE_VISIT_FEE]
  *           description: SITE_VISIT_FEE → Site Visit & Pay Fee screen; SERVICE → Payment Details
- *         screenTitle:
- *           type: string
- *           description: Empty — mobile owns screen title; use purpose
  *         bookingId: { type: string, format: uuid }
  *         createdAt: { type: string, format: date-time }
  *         updatedAt: { type: string, format: date-time }
@@ -91,14 +87,6 @@
  *         totalAmount: { type: number, description: Total Amount Due Now }
  *         currencyCode: { type: string }
  *         currencySymbol: { type: string }
- *         totalFormatted: { type: string, description: Dynamic amount formatting only }
- *         payNowLabel:
- *           type: string
- *           description: Empty — mobile owns CTA; use totalAmount / totalFormatted
- *         confirmPayLabel: { type: string, description: Empty — mobile owns CTA }
- *         feeNote:
- *           type: string
- *           description: Empty — mobile owns info-box copy
  *         lineItems:
  *           type: array
  *           items: { $ref: '#/components/schemas/InvoiceLineItem' }
@@ -147,8 +135,6 @@
  *             List = `briskOffers.items` (title + couponCode). Apply via
  *             POST /invoices/{id}/apply-promo with `{ "code": "<couponCode>" }`.
  *           properties:
- *             sheetTitle: { type: string }
- *             searchPlaceholder: { type: string }
  *             applyPath: { type: string, example: /invoices/{invoiceId}/apply-promo }
  *             categoryFilters:
  *               type: array
@@ -156,7 +142,7 @@
  *                 type: object
  *                 properties:
  *                   key: { type: string }
- *                   label: { type: string }
+ *                   name: { type: string, description: Category name when key is not ALL }
  *                   categoryId: { type: string }
  *             items:
  *               type: array
@@ -169,7 +155,6 @@
  *                   couponCode: { type: string, example: PEST10BRISK }
  *                   discountType: { type: string }
  *                   discountValue: { type: number }
- *                   discountLabel: { type: string }
  *                   categoryName: { type: string }
  *                   appliesToJobCategory: { type: boolean }
  *             promoCodes:
@@ -262,7 +247,6 @@
  *         publishableKey: { type: string, example: pk_test_brisk_mock_replace_via_env, description: From STRIPE_PUBLISHABLE_KEY env (mobile must not hardcode) }
  *         stripeMerchantIdentifier: { type: string, example: merchant.com.brisk, description: Apple Pay merchant id from STRIPE_MERCHANT_IDENTIFIER }
  *         amount: { type: number, example: 30, description: Amount due now (site visit fee or service total) }
- *         amountFormatted: { type: string, example: "€30.00" }
  *         currencyCode: { type: string, example: EUR }
  *         currencySymbol: { type: string, example: "€" }
  *         method: { $ref: '#/components/schemas/PaymentMethod' }
@@ -274,7 +258,6 @@
  *         billingAddress: { type: object, nullable: true }
  *         invoiceId: { type: string, format: uuid }
  *         orderId: { type: string }
- *         payNowLabel: { type: string, description: Empty — mobile owns CTA; use amount / amountFormatted }
  *     ConfirmPaymentRequest:
  *       type: object
  *       description: Optional card metadata after Stripe success (for receipt display).
@@ -285,7 +268,6 @@
  *       type: object
  *       properties:
  *         key: { type: string, enum: [PAID, CONFIRMED, SERVICE] }
- *         label: { type: string, example: Paid }
  *         completed: { type: boolean }
  *         at: { type: string, format: date-time, nullable: true }
  *     PaymentReceipt:
@@ -299,7 +281,6 @@
  *         method: { $ref: '#/components/schemas/PaymentMethod' }
  *         amount: { type: number }
  *         amountPaid: { type: number }
- *         amountPaidFormatted: { type: string }
  *         currencyCode: { type: string }
  *         currencySymbol: { type: string }
  *         paidAt: { type: string, format: date-time, nullable: true }
@@ -308,11 +289,9 @@
  *         billingType: { $ref: '#/components/schemas/BillingType' }
  *         companyName: { type: string, nullable: true }
  *         purpose: { type: string, enum: [SERVICE, SITE_VISIT_FEE], description: Mobile picks success copy from purpose }
- *         title: { type: string, description: Empty — mobile owns }
- *         message: { type: string, description: Empty — mobile owns }
  *         timeline:
  *           type: array
- *           description: Keys PAID / CONFIRMED / SERVICE; labels empty
+ *           description: Keys PAID / CONFIRMED / SERVICE — app owns step labels
  *           items: { $ref: '#/components/schemas/ReceiptTimelineStep' }
  *         receiptSummary:
  *           type: object
@@ -320,7 +299,6 @@
  *             transactionId: { type: string }
  *             date: { type: string, format: date-time, nullable: true }
  *             amountPaid: { type: number }
- *             amountPaidFormatted: { type: string }
  *         actions:
  *           type: object
  *           properties:
@@ -401,7 +379,6 @@
  *             lineItems:
  *               type: array
  *               items: { $ref: '#/components/schemas/InvoiceLineItem' }
- *             totalFormatted: { type: string }
  *         payment:
  *           type: object
  *           nullable: true

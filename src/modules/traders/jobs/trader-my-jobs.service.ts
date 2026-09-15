@@ -32,13 +32,6 @@ const money = (v: Prisma.Decimal | number | null | undefined): number => {
   return Number(v);
 };
 
-const formatEuro = (amount: number): string =>
-  new Intl.NumberFormat('en-IE', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
-  }).format(amount);
-
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const parsePage = (v?: string) => Math.max(1, Number.parseInt(v || '1', 10) || 1);
@@ -270,7 +263,6 @@ const materialsSummary = (materials: { price: Prisma.Decimal }[]) => {
   return {
     count: materials.length,
     total,
-    totalLabel: formatEuro(total),
   };
 };
 

@@ -131,11 +131,10 @@ const buildLineItems = (
   },
   purpose: 'SERVICE' | 'SITE_VISIT_FEE' = 'SERVICE'
 ) => {
-  /** Labels empty — mobile owns display copy; keys identify the row. */
-  const items: Array<{ key: string; label: string; amount: number; type: 'charge' | 'discount' | 'fee' }> = [
+  /** Keys identify the row — mobile owns display copy. */
+  const items: Array<{ key: string; amount: number; type: 'charge' | 'discount' | 'fee' }> = [
     {
       key: purpose === 'SITE_VISIT_FEE' ? 'siteVisitFee' : 'serviceCharge',
-      label: '',
       amount: money(invoice.serviceCharge),
       type: 'charge',
     },
@@ -143,7 +142,6 @@ const buildLineItems = (
   if (money(invoice.platformFee) > 0) {
     items.push({
       key: 'platformFee',
-      label: '',
       amount: money(invoice.platformFee),
       type: 'fee',
     });
@@ -151,7 +149,6 @@ const buildLineItems = (
   if (money(invoice.traderOfferDiscount) > 0) {
     items.push({
       key: 'traderOfferDiscount',
-      label: '',
       amount: -money(invoice.traderOfferDiscount),
       type: 'discount',
     });
@@ -159,13 +156,12 @@ const buildLineItems = (
   if (money(invoice.promoDiscount) > 0) {
     items.push({
       key: 'promoDiscount',
-      label: '',
       amount: -money(invoice.promoDiscount),
       type: 'discount',
     });
   }
   if (money(invoice.tax) > 0) {
-    items.push({ key: 'tax', label: '', amount: money(invoice.tax), type: 'fee' });
+    items.push({ key: 'tax', amount: money(invoice.tax), type: 'fee' });
   }
   return items;
 };
@@ -185,9 +181,6 @@ const formatTimeSlotRange = (timeSlot?: string | null) => {
 
 const currencySymbol = (code: string) =>
   ({ EUR: '€', GBP: '£', USD: '$', INR: '₹' }[code] ?? code);
-
-const formatMoneyLabel = (amount: number, currencyCode: string) =>
-  `${currencySymbol(currencyCode)}${amount.toFixed(2)}`;
 
 const buildPromoTitle = (input: {
   discountType: DiscountType;
@@ -255,12 +248,6 @@ const loadBriskOffersSheet = async (jobCategoryId?: string | null) => {
       offerTitle: code.offer?.title,
       categoryName,
     });
-    const discountLabel =
-      code.discountType === DiscountType.PERCENTAGE
-        ? `${discountValue}% Off`
-        : code.discountType === DiscountType.FREE_SERVICE
-          ? 'Free'
-          : `${currencySymbol(code.currencyCode)}${discountValue} Off`;
 
     return {
       id: code.id,
@@ -269,7 +256,6 @@ const loadBriskOffersSheet = async (jobCategoryId?: string | null) => {
       couponCode: code.code,
       discountType: code.discountType,
       discountValue,
-      discountLabel,
       currencyCode: code.currencyCode,
       categoryId: primaryCategoryId ?? '',
       categoryIds: scopeIds,
@@ -289,13 +275,11 @@ const loadBriskOffersSheet = async (jobCategoryId?: string | null) => {
   items.sort((a, b) => Number(b.appliesToJobCategory) - Number(a.appliesToJobCategory));
 
   const categoryFilters = [
-    { key: 'ALL', label: 'All', categoryId: '' },
-    ...categories.map((c) => ({ key: c.id, label: c.name, categoryId: c.id })),
+    { key: 'ALL', categoryId: '' },
+    ...categories.map((c) => ({ key: c.id, name: c.name, categoryId: c.id })),
   ];
 
   return {
-    sheetTitle: '',
-    searchPlaceholder: '',
     applyPath: '/invoices/{invoiceId}/apply-promo',
     categoryFilters,
     items,
@@ -312,17 +296,7 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
   const serviceProvider =
     trader?.businessName || trader?.user?.fullName || null;
   const orderId = invoice.invoiceNumber || invoice.booking.bookingRef || invoice.id;
-  const totalFormatted = formatMoneyLabel(breakdown.totalAmount, invoice.currencyCode);
   const slotRange = formatTimeSlotRange(job.timeSlot);
-  const visitSlotLabel =
-    job.scheduledDate && slotRange
-      ? `${new Date(job.scheduledDate).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        })}, ${slotRange}`
-      : job.scheduledDate
-        ? new Date(job.scheduledDate).toISOString()
-        : null;
 
   return {
     id: invoice.id,
@@ -333,14 +307,9 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     createdAt: invoice.createdAt,
     updatedAt: invoice.updatedAt,
     purpose,
-    screenTitle: '',
     ...breakdown,
     siteVisitFee: purpose === 'SITE_VISIT_FEE' ? breakdown.serviceCharge : 0,
     currencySymbol: currencySymbol(invoice.currencyCode),
-    totalFormatted,
-    payNowLabel: '',
-    confirmPayLabel: '',
-    feeNote: '',
     lineItems: buildLineItems(invoice, purpose),
     serviceSummary: {
       categoryName: job.category?.name ?? '',
@@ -352,7 +321,6 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
       scheduledDate: job.scheduledDate,
       timeSlot: job.timeSlot ?? '',
       timeSlotRange: slotRange ?? '',
-      visitSlotLabel: visitSlotLabel ?? '',
     },
     booking: {
       id: invoice.booking.id,
@@ -406,13 +374,13 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
         }
       : null,
     paymentMethods: [
-      { key: 'APPLE_PAY', label: 'Pay with Apple Pay', enabled: true },
-      { key: 'GOOGLE_PAY', label: 'Pay with Google Pay', enabled: true },
-      { key: 'CARD', label: 'Credit/Debit Card', provider: 'stripe', enabled: true },
+      { key: 'APPLE_PAY', enabled: true },
+      { key: 'GOOGLE_PAY', enabled: true },
+      { key: 'CARD', provider: 'stripe', enabled: true },
     ],
     billingTypes: [
-      { key: 'INDIVIDUAL', label: 'Individual/Personal Billing' },
-      { key: 'COMPANY', label: 'Company Billing' },
+      { key: 'INDIVIDUAL' },
+      { key: 'COMPANY' },
     ],
     paymentStatus: invoice.payments[0]?.status ?? null,
     latestPaymentId: invoice.payments[0]?.id ?? null,
@@ -450,7 +418,6 @@ const buildReceipt = async (paymentId: string, userId: string) => {
     method: payment.method,
     amount: amountPaid,
     amountPaid,
-    amountPaidFormatted: formatMoneyLabel(amountPaid, payment.currencyCode),
     currencyCode: payment.currencyCode,
     currencySymbol: currencySymbol(payment.currencyCode),
     paidAt: payment.paidAt,
@@ -459,24 +426,20 @@ const buildReceipt = async (paymentId: string, userId: string) => {
     billingType: payment.billingType,
     companyName: payment.companyName,
     purpose,
-    title: '',
-    message: '',
     /** Success screen steps — keys only; labels owned by mobile. */
     timeline: [
-      { key: 'PAID', label: '', completed: isPaid, at: payment.paidAt },
+      { key: 'PAID', completed: isPaid, at: payment.paidAt },
       {
         key: 'CONFIRMED',
-        label: '',
         completed: isPaid,
         at: isPaid ? payment.paidAt : null,
       },
-      { key: 'SERVICE', label: '', completed: false, at: null },
+      { key: 'SERVICE', completed: false, at: null },
     ],
     receiptSummary: {
       transactionId: payment.transactionRef,
       date: payment.paidAt,
       amountPaid,
-      amountPaidFormatted: formatMoneyLabel(amountPaid, payment.currencyCode),
     },
     actions: {
       viewJob: {
@@ -804,7 +767,6 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     publishableKey,
     stripeMerchantIdentifier,
     amount: money(payment.amount),
-    amountFormatted: formatMoneyLabel(money(payment.amount), payment.currencyCode),
     currencyCode: payment.currencyCode,
     currencySymbol: currencySymbol(payment.currencyCode),
     method: payment.method,
@@ -813,7 +775,6 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     billingAddress: input.billingAddress ?? null,
     invoiceId: invoice.id,
     orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
-    payNowLabel: '',
   };
 };
 
@@ -1030,16 +991,15 @@ export const failPayment = async (
     status: PaymentStatus.FAILED,
     method: payment.method,
     amount,
-    amountFormatted: formatMoneyLabel(amount, payment.currencyCode),
     currencyCode: payment.currencyCode,
     currencySymbol: currencySymbol(payment.currencyCode),
     title: 'Payment Failed',
     message: input.reason || 'Your payment could not be completed. Please try again.',
     reason: input.reason ?? null,
     timeline: [
-      { key: 'PAID', label: 'Paid', completed: false, at: null },
-      { key: 'CONFIRMED', label: 'Confirmed', completed: false, at: null },
-      { key: 'SERVICE', label: 'Service', completed: false, at: null },
+      { key: 'PAID', completed: false, at: null },
+      { key: 'CONFIRMED', completed: false, at: null },
+      { key: 'SERVICE', completed: false, at: null },
     ],
     actions: {
       retryPayment: {
@@ -1182,10 +1142,6 @@ export const getBooking = async (userId: string, bookingId: string) => {
           status: booking.invoice.status,
           ...serializeInvoiceBreakdown(booking.invoice),
           lineItems: buildLineItems(booking.invoice),
-          totalFormatted: formatMoneyLabel(
-            money(booking.invoice.totalAmount),
-            booking.invoice.currencyCode
-          ),
         }
       : null,
     payment: latestPayment

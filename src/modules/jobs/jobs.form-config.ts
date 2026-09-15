@@ -208,34 +208,27 @@ export const buildJobFormConfig = (input: {
     durationOptions: [] as Array<{ key: string; label: string }>,
     priceEnabled,
     priceEnteredBy,
-    /** Navigation keys only — labels/CTAs are owned by the mobile app. */
+    /** Navigation keys only — CTAs owned by the mobile app. */
     flowSteps:
       siteVisitEnabled || offerApplied
         ? [
-            { key: 'POST_NEW_JOB', label: '', cta: '' },
-            { key: 'CHOOSE_LOCATION', label: '', cta: '' },
-            { key: 'SITE_VISIT_PAY_FEE', label: '', cta: '' },
-            { key: 'SUCCESS', label: '', cta: '' },
+            { key: 'POST_NEW_JOB' },
+            { key: 'CHOOSE_LOCATION' },
+            { key: 'SITE_VISIT_PAY_FEE' },
+            { key: 'SUCCESS' },
           ]
         : [
-            { key: 'POST_NEW_JOB', label: '', cta: '' },
-            { key: 'CHOOSE_LOCATION', label: '', cta: '' },
-            { key: 'WAITING_FOR_QUOTES', label: '', cta: '' },
+            { key: 'POST_NEW_JOB' },
+            { key: 'CHOOSE_LOCATION' },
+            { key: 'WAITING_FOR_QUOTES' },
           ],
     nextAfterJobForm: 'CHOOSE_LOCATION',
     nextAfterLocation,
-    publishCtaLabel: '',
-    chooseLocationCtaLabel: '',
     addressesPath: 'GET /addresses',
     createAddressPath: 'POST /addresses',
     payScreen: {
-      title: '',
-      confirmPayLabelTemplate: '',
-      successTitle: '',
-      successMessage: '',
       viewJobPathTemplate: '/jobs/{jobId}',
     },
-    rulesNote: '',
   };
 };
 

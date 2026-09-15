@@ -189,13 +189,13 @@ const options: swaggerJSDoc.Options = {
           '**Auth:** Customer Bearer (must own booking/invoice/payment).',
           '',
           '**Flow:**',
-          '1. GET /invoices/{id} — amounts, purpose, lineItems (keys + amounts; labels empty for app copy)',
+          '1. GET /invoices/{id} — amounts, purpose, lineItems (keys + amounts; app owns copy)',
           '2. POST /payments/intent',
           '3. Success — POST /payments/{id}/confirm (or GET /payments/{id}/receipt)',
           '4. Fail — POST /payments/{id}/fail',
           '',
-          '**Copy:** screenTitle / feeNote / payNowLabel / receipt title+message are empty — mobile owns UI text.',
-          'Use purpose + amounts + timeline keys. Payments currently mock (mock: true).',
+          'Use purpose + numeric amounts + timeline keys. No UI label / formatted-money keys.',
+          'Payments currently mock (mock: true).',
         ].join('\n'),
       },
       {
@@ -283,6 +283,7 @@ const SWAGGER_CSS = `
   .swagger-ui {
     background: var(--brisk-surface) !important;
     color: var(--brisk-text) !important;
+    color-scheme: light only;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif !important;
   }
 
@@ -314,8 +315,11 @@ const SWAGGER_CSS = `
   }
   .swagger-ui .info .description,
   .swagger-ui .info .description p,
-  .swagger-ui .info .description * {
-    color: var(--brisk-muted) !important;
+  .swagger-ui .info .description *,
+  .swagger-ui .info .description li,
+  .swagger-ui .info .description span {
+    color: var(--brisk-text) !important;
+    opacity: 1 !important;
     font-size: 14px !important;
   }
 
@@ -337,12 +341,43 @@ const SWAGGER_CSS = `
     font-size: 15px !important;
     font-weight: 650 !important;
   }
-  .swagger-ui .opblock-tag small {
-    color: var(--brisk-muted) !important;
+  .swagger-ui .opblock-tag small,
+  .swagger-ui .opblock-tag small *,
+  .swagger-ui .opblock-tag .renderedMarkdown,
+  .swagger-ui .opblock-tag .renderedMarkdown *,
+  .swagger-ui .opblock-tag .markdown,
+  .swagger-ui .opblock-tag .markdown *,
+  .swagger-ui h3.opblock-tag small,
+  .swagger-ui h3.opblock-tag small p,
+  .swagger-ui h3.opblock-tag small li,
+  .swagger-ui h3.opblock-tag small span,
+  .swagger-ui h3.opblock-tag small strong,
+  .swagger-ui h3.opblock-tag small code,
+  .swagger-ui .opblock-tag-section > h3 small,
+  .swagger-ui .opblock-tag-section > h3 small * {
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    opacity: 1 !important;
     font-weight: 400 !important;
     font-size: 13px !important;
+    line-height: 1.5 !important;
   }
   .swagger-ui .opblock-tag svg { fill: var(--brisk-muted) !important; }
+
+  /* Ensure expanded tag description blocks stay readable */
+  .swagger-ui .opblock-tag-section,
+  .swagger-ui .opblock-tag-section p,
+  .swagger-ui .opblock-tag-section li,
+  .swagger-ui .opblock-tag-section span,
+  .swagger-ui .opblock-tag-section small,
+  .swagger-ui .opblock-tag-section .renderedMarkdown,
+  .swagger-ui .opblock-tag-section .renderedMarkdown *,
+  .swagger-ui .opblock-tag-section .markdown,
+  .swagger-ui .opblock-tag-section .markdown * {
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    opacity: 1 !important;
+  }
 
   /* Operation cards */
   .swagger-ui .opblock {
@@ -363,7 +398,9 @@ const SWAGGER_CSS = `
     font-weight: 600 !important;
   }
   .swagger-ui .opblock .opblock-summary-description {
-    color: var(--brisk-muted) !important;
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    opacity: 1 !important;
   }
   .swagger-ui .opblock .opblock-summary-method {
     min-width: 68px !important;

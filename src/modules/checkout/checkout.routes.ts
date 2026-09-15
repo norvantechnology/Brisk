@@ -26,21 +26,21 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       - bearerAuth: []
  *     description: |
  *       **Mobile screens:**
- *       - Site Visit & Pay Fee (`data.purpose=SITE_VISIT_FEE`, `screenTitle`)
+ *       - Site Visit & Pay Fee (`data.purpose=SITE_VISIT_FEE`)
  *       - Payment Details (SERVICE invoices)
  *
  *       **Auth:** Customer Bearer; must own the booking.
  *
  *       **When:** After `POST /jobs/{id}/publish` using `data.invoice.id`, or reload before pay.
  *
- *       **Key fields (dynamic amounts; UI copy owned by mobile):**
+ *       **Key fields (numeric amounts; UI copy owned by mobile):**
  *       - `purpose` — SITE_VISIT_FEE vs SERVICE
- *       - `totalAmount` / `siteVisitFee` / `totalFormatted`
+ *       - `totalAmount` / `siteVisitFee`
  *       - `trader` — name, verified, rating, reviewsCount, photo
  *       - `serviceSummary` — category/subcategory/title/scheduledDate/timeSlot from job
- *       - `billingTypes` / `paymentMethods`
+ *       - `billingTypes` / `paymentMethods` — keys only
  *       - `briskOffers` / `promoCodes` — Brisk Offers bottom sheet (title + couponCode)
- *       - `lineItems` — keys + amounts (`label` empty for app mapping)
+ *       - `lineItems` — keys + amounts
  *
  *       Job offer discount is **not** deducted from site-visit fee (unless FREE_SERVICE).
  *     parameters:
@@ -316,8 +316,8 @@ router.post(
  *     description: |
  *       Available only after payment status is COMPLETED.
  *
- *       **UI fields:** `title`, `transactionId`, `amountPaidFormatted`, `timeline`, `receiptSummary`,
- *       `actions.viewJob` → GET /bookings/{id}.
+ *       **Fields:** `transactionId`, `amount` / `amountPaid`, `purpose`, `timeline` (keys),
+ *       `receiptSummary`, `actions.viewJob` → GET /jobs/{id}. App owns success copy.
  *     parameters:
  *       - in: path
  *         name: id

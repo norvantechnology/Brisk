@@ -398,8 +398,6 @@ const serializeJob = (
           job.booking?.invoice?.status === InvoiceStatus.UNPAID),
       invoiceId: str(job.booking?.invoice?.id),
       bookingId: str(job.booking?.id),
-      publishCtaLabel: '',
-      chooseLocationCtaLabel: '',
       nextAfterLocation:
         offerApplied ||
         job.quoteType === JobQuoteType.ONSITE ||
@@ -1229,10 +1227,6 @@ export const publishJob = async (
       purpose: '',
       totalAmount: 0,
       siteVisitFee: 0,
-      screenTitle: '',
-      confirmPayLabel: '',
-      payNowLabel: '',
-      feeNote: '',
     },
   };
 };

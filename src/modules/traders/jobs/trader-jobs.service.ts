@@ -21,12 +21,12 @@ const DUBLIN_ORIGIN: Origin = { lat: 53.3498, lng: -6.2603 };
 /** Figma Site Visit Date & Time bottom sheet — fixed windows. */
 const SITE_VISIT_SLOT_DEFS: Record<
   SiteVisitTimeSlot,
-  { label: string; startTime: string; endTime: string; icon: string }
+  { startTime: string; endTime: string; icon: string }
 > = {
-  MORNING: { label: 'Morning', startTime: '08:00', endTime: '12:00', icon: 'sun' },
-  AFTERNOON: { label: 'Afternoon', startTime: '12:00', endTime: '17:00', icon: 'sun_cloud' },
-  EVENING: { label: 'Evening', startTime: '17:00', endTime: '21:00', icon: 'moon' },
-  ANYTIME: { label: 'Any time', startTime: '08:00', endTime: '21:00', icon: 'clock' },
+  MORNING: { startTime: '08:00', endTime: '12:00', icon: 'sun' },
+  AFTERNOON: { startTime: '12:00', endTime: '17:00', icon: 'sun_cloud' },
+  EVENING: { startTime: '17:00', endTime: '21:00', icon: 'moon' },
+  ANYTIME: { startTime: '08:00', endTime: '21:00', icon: 'clock' },
 };
 
 const SITE_VISIT_SLOT_ORDER: SiteVisitTimeSlot[] = [
@@ -54,40 +54,6 @@ const haversineKm = (a: Origin, b: Origin): number => {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-};
-
-const formatEuro = (amount: number): string =>
-  new Intl.NumberFormat('en-IE', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
-  }).format(amount);
-
-const buildPriceLabel = (job: {
-  siteVisitRequested: boolean;
-  siteVisitFee: Prisma.Decimal | number | null;
-  minBudget: Prisma.Decimal | number | null;
-  maxBudget: Prisma.Decimal | number | null;
-  serviceCharge: Prisma.Decimal | number | null;
-  quoteType: JobQuoteType | null;
-}): string | null => {
-  const fee = money(job.siteVisitFee);
-  if ((job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE) && fee != null && fee > 0) {
-    return formatEuro(fee);
-  }
-
-  const min = money(job.minBudget);
-  const max = money(job.maxBudget);
-  if (min != null && max != null) {
-    return min === max ? formatEuro(min) : `${formatEuro(min)} - ${formatEuro(max)}`;
-  }
-  if (min != null) return formatEuro(min);
-  if (max != null) return formatEuro(max);
-
-  const charge = money(job.serviceCharge);
-  if (charge != null && charge > 0) return formatEuro(charge);
-
-  return null;
 };
 
 const isSiteVisitJob = (job: {
@@ -526,7 +492,10 @@ const toListItem = (
     badge,
     distanceKm,
     areaName: areaNameOf(job),
-    priceLabel: buildPriceLabel(job),
+    siteVisitFee: money(job.siteVisitFee),
+    minBudget: money(job.minBudget),
+    maxBudget: money(job.maxBudget),
+    serviceCharge: money(job.serviceCharge),
     createdAt: job.createdAt,
     isBookmarked: bookmarkedIds.has(job.id),
     isSiteVisit,

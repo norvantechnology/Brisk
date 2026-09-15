@@ -73,7 +73,10 @@ const router = Router();
  *                   badge: Site Visit
  *                   distanceKm: 2.5
  *                   areaName: Dublin 2
- *                   priceLabel: "€30"
+ *                   siteVisitFee: 30
+ *                   minBudget: null
+ *                   maxBudget: null
+ *                   serviceCharge: null
  *                   createdAt: '2026-09-15T10:00:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: true
@@ -88,7 +91,10 @@ const router = Router();
  *                   badge: null
  *                   distanceKm: 5.1
  *                   areaName: Rathmines
- *                   priceLabel: "€800 - €1,200"
+ *                   siteVisitFee: null
+ *                   minBudget: 800
+ *                   maxBudget: 1200
+ *                   serviceCharge: null
  *                   createdAt: '2026-09-15T09:00:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: false
@@ -482,7 +488,10 @@ router.post(
  *                 badge: Site Visit
  *                 distanceKm: 1.8
  *                 areaName: Dublin 6
- *                 priceLabel: "€30"
+ *                 siteVisitFee: null
+ *                 minBudget: null
+ *                 maxBudget: null
+ *                 serviceCharge: null
  *                 createdAt: '2026-09-15T10:00:00.000Z'
  *                 isBookmarked: false
  *                 isSiteVisit: false
@@ -499,7 +508,6 @@ router.post(
  *                 description: Looking for a professional to install solar panels.
  *                 photos: ['https://cdn.example.com/roof1.jpg']
  *                 photoCount: 1
- *                 siteVisitFee: null
  *                 isReschedule: false
  *                 canSelectDateTime: false
  *                 canRequestSiteVisit: false
@@ -511,8 +519,9 @@ router.post(
  *                   timeSlot: null
  *                   startTime: null
  *                   endTime: null
- *                   statusBadge: null
  *                   requestId: null
+ *                   slots: []
+ *                   slotCount: 0
  *                 customer:
  *                   id: uuid
  *                   fullName: Sarah Jenkins

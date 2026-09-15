@@ -3,11 +3,9 @@
  * tags:
  *   - name: Trader / Discover Jobs
  *     description: |
- *       Trader Discover + Site Visit flow. Auth: trader Bearer.
- *
- *       Button/CTA text is owned by the app. Use `primaryAction` + boolean flags only.
- *
- *       Flow: Discover → Quote → Update Quote → Request Job → Waiting → Customer Confirms → My Jobs
+ *       Discover + site visit + quote + request-job flow. Auth trader Bearer.
+ *       App owns all button/currency text. Use flags + numeric amounts only.
+ *       Flow Discover → Quote → Request Job → Waiting → Customer Confirms → My Jobs.
  *
  * components:
  *   schemas:
@@ -19,436 +17,285 @@
  *         id:
  *           type: string
  *           format: uuid
- *           description: Job id — use in detail, quote, request, and site-visit paths
+ *           description: Job id for detail/quote/request/site-visit paths
  *         title:
  *           type: string
  *           example: Solar Panel Installation
- *           description: Job title shown on the Discover card
+ *           description: Job title
  *         badge:
  *           type: string
  *           nullable: true
  *           enum: [Site Visit, Reschedule]
- *           description: List badge. Site Visit = site-visit job; Reschedule = trader visit needs new slot; null = normal quote job
+ *           description: List badge code. null = normal quote job
  *         distanceKm:
  *           type: number
  *           example: 2.5
- *           description: Distance from trader location (or service centre) in kilometres
+ *           description: Distance in km
  *         areaName:
  *           type: string
  *           example: Dublin 2
- *           description: Area / city label for the job location
- *         priceLabel:
- *           type: string
+ *           description: Area/city label
+ *         siteVisitFee:
+ *           type: number
  *           nullable: true
- *           example: "€30"
- *           description: Optional preformatted price for list display (fee or budget). App may format from other fields instead
+ *           description: Site visit fee EUR (null if not applicable). App formats currency.
+ *         minBudget:
+ *           type: number
+ *           nullable: true
+ *           description: Min budget EUR if set
+ *         maxBudget:
+ *           type: number
+ *           nullable: true
+ *           description: Max budget EUR if set
+ *         serviceCharge:
+ *           type: number
+ *           nullable: true
+ *           description: Service charge EUR if set
  *         createdAt:
  *           type: string
  *           format: date-time
- *           description: Job created/published time — app formats as relative Posted X ago
+ *           description: Job created/published time
  *         isBookmarked:
  *           type: boolean
- *           description: true if this trader bookmarked the job
+ *           description: true if bookmarked by this trader
  *         isSiteVisit:
  *           type: boolean
- *           description: true when job requires / offers site visit (use site-visit APIs instead of quote-only CTA)
+ *           description: true when site-visit APIs apply
  *         hasSubmittedQuote:
  *           type: boolean
- *           description: true if this trader already submitted a quotation for this job
+ *           description: true if this trader already quoted
  *         canUpdateQuote:
  *           type: boolean
- *           description: true if app should show Update Quotation (trader already quoted; POST quotes again to upsert)
+ *           description: true → Update Quotation via POST quotes
  *         canSubmitQuote:
  *           type: boolean
- *           description: true if app should show Submit Quotation (no quote yet from this trader)
+ *           description: true → Submit Quotation via POST quotes
  *         isJobRequested:
  *           type: boolean
- *           description: true if trader already tapped Request/Accept Job and is waiting on the customer
+ *           description: true after Request Job, waiting on customer
  *         isWaitingForCustomerConfirmation:
  *           type: boolean
- *           description: true while waiting for customer to confirm — show Home Waiting (blue) card; job is NOT in My Jobs ACTIVE yet
+ *           description: true while waiting — Home blue Waiting card; not My Jobs ACTIVE yet
  *         quoteAmount:
  *           type: number
  *           nullable: true
- *           description: This trader's latest quoted amount in EUR (null if not quoted yet)
+ *           description: This trader latest quote amount EUR
  *     TraderSiteVisitBlock:
  *       type: object
- *       description: Nested site-visit state on Discover Job Details
+ *       description: Site-visit state on Discover Job Details
  *       properties:
  *         status:
  *           type: string
  *           enum: [NONE, PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED]
- *           description: |
- *             NONE = no slots submitted yet;
- *             PENDING = trader proposed slots, waiting customer confirm (can update again);
- *             CONFIRMED = customer locked visit;
- *             RESCHEDULE_REQUIRED = needs new slots;
- *             COMPLETED = visit finished
+ *           description: NONE none yet; PENDING proposed (can update); CONFIRMED locked; RESCHEDULE_REQUIRED needs new slots; COMPLETED done
  *         visitDate:
  *           type: string
  *           nullable: true
  *           example: '2026-10-24'
- *           description: Primary proposed/selected visit date (YYYY-MM-DD)
+ *           description: Primary visit date YYYY-MM-DD
  *         timeSlot:
  *           type: string
  *           nullable: true
  *           enum: [MORNING, AFTERNOON, EVENING, ANYTIME]
- *           description: Primary time window code for the selected/proposed slot
- *         startTime:
- *           type: string
- *           nullable: true
- *           example: '12:00'
- *           description: Window start HH:mm (UTC/local as returned)
- *         endTime:
- *           type: string
- *           nullable: true
- *           example: '17:00'
- *           description: Window end HH:mm
- *         requestId:
- *           type: string
- *           format: uuid
- *           nullable: true
- *           description: TraderSiteVisitRequest id when a request exists
+ *           description: Primary time window code
+ *         startTime: { type: string, nullable: true, example: '12:00', description: HH:mm start }
+ *         endTime: { type: string, nullable: true, example: '17:00', description: HH:mm end }
+ *         requestId: { type: string, format: uuid, nullable: true, description: Site visit request id }
  *         slots:
  *           type: array
- *           description: All proposed slots for this trader+job (SITE VISIT SLOTS list)
+ *           description: Proposed slots list
  *           items:
  *             type: object
  *             properties:
- *               id: { type: string, description: Slot row id }
+ *               id: { type: string, description: Slot id }
  *               date: { type: string, description: YYYY-MM-DD }
- *               timeSlot: { type: string, description: MORNING | AFTERNOON | EVENING | ANYTIME }
- *               startTime: { type: string, description: HH:mm }
- *               endTime: { type: string, description: HH:mm }
- *               isSelected: { type: boolean, description: true for the primary/selected slot }
- *         slotCount:
- *           type: integer
- *           description: Number of proposed slots
+ *               timeSlot: { type: string, description: MORNING|AFTERNOON|EVENING|ANYTIME }
+ *               startTime: { type: string }
+ *               endTime: { type: string }
+ *               isSelected: { type: boolean }
+ *         slotCount: { type: integer, description: Number of proposed slots }
  *     TraderWaitingJobCard:
  *       type: object
- *       description: Home Active/Waiting (blue) card from GET /traders/jobs/waiting
+ *       description: Home Waiting (blue) card from GET /traders/jobs/waiting
  *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *           description: Job id
+ *         id: { type: string, format: uuid, description: Job id }
  *         title: { type: string, description: Job title }
- *         customerName: { type: string, description: Customer display name }
- *         areaName: { type: string, description: Job area }
- *         distanceKm: { type: number, description: Distance in km }
- *         quoteAmount: { type: number, description: Submitted quote amount EUR }
- *         statusBadge:
- *           type: string
- *           example: Waiting
- *           description: Short badge code for waiting state (app maps to UI text/colour)
- *         colorHint:
- *           type: string
- *           example: blue
- *           description: Suggested card colour token — render Waiting card in blue
- *         isJobRequested:
- *           type: boolean
- *           description: Always true on this list — trader has requested the job
- *         isWaitingForCustomerConfirmation:
- *           type: boolean
- *           description: Always true on this list — customer has not confirmed yet
- *         hasSubmittedQuote:
- *           type: boolean
- *           description: true when a quote exists for this request
- *         requestedAt:
- *           type: string
- *           format: date-time
- *           description: When trader requested/accepted the job
- *         primaryAction:
- *           type: string
- *           example: WAITING_FOR_CUSTOMER
- *           description: CTA code — app shows waiting UI (no running-job actions yet)
+ *         customerName: { type: string, description: Customer name }
+ *         areaName: { type: string, description: Area }
+ *         distanceKm: { type: number, description: Distance km }
+ *         quoteAmount: { type: number, description: Quote amount EUR }
+ *         statusBadge: { type: string, example: Waiting, description: Badge code for waiting UI }
+ *         colorHint: { type: string, example: blue, description: Suggested card colour token }
+ *         isJobRequested: { type: boolean, description: Trader has requested the job }
+ *         isWaitingForCustomerConfirmation: { type: boolean, description: Awaiting customer confirm }
+ *         hasSubmittedQuote: { type: boolean, description: Quote exists }
+ *         requestedAt: { type: string, format: date-time, description: When trader requested }
+ *         primaryAction: { type: string, example: WAITING_FOR_CUSTOMER, description: CTA code for waiting UI }
  *     TraderWaitingJobsResponse:
  *       type: object
  *       properties:
  *         items:
  *           type: array
- *           description: Waiting cards for Home
  *           items: { $ref: '#/components/schemas/TraderWaitingJobCard' }
- *         count:
- *           type: integer
- *           description: Number of waiting jobs
+ *         count: { type: integer, description: Waiting job count }
  *     TraderDiscoverJobDetail:
  *       allOf:
  *         - $ref: '#/components/schemas/TraderDiscoverJobCard'
  *         - type: object
- *           description: Full Job Details from GET /traders/jobs/discover/{id}
+ *           description: GET /traders/jobs/discover/{id} full payload
  *           properties:
- *             description:
- *               type: string
- *               description: Full job description from customer
+ *             description: { type: string, description: Job description }
  *             photos:
  *               type: array
  *               items: { type: string, format: uri }
  *               description: Customer photo URLs
- *             photoCount:
- *               type: integer
- *               description: Count of customer photos
- *             siteVisitFee:
- *               type: number
- *               nullable: true
- *               description: Site visit fee EUR from subcategory/job snapshot (null if not site-visit)
- *             isReschedule:
- *               type: boolean
- *               description: true when UI should treat this as a reschedule flow
- *             canSelectDateTime:
- *               type: boolean
- *               description: true → show Select Date & Time sheet (GET .../site-visit/slots)
- *             canRequestSiteVisit:
- *               type: boolean
- *               description: true → allow POST .../site-visit/request (create or update PENDING slots)
- *             canRequestReschedule:
- *               type: boolean
- *               description: true → allow POST .../site-visit/reschedule
- *             canSubmitQuote:
- *               type: boolean
- *               description: true → show Submit Quotation; POST .../quotes
- *             canUpdateQuote:
- *               type: boolean
- *               description: true → show Update Quotation; same POST .../quotes upserts amount
- *             canRequestJob:
- *               type: boolean
- *               description: true → show Request/Accept Job; POST .../request (does NOT assign trader)
- *             hasSubmittedQuote:
- *               type: boolean
- *               description: true if this trader already has a quote on this job
- *             isJobRequested:
- *               type: boolean
- *               description: true after Request Job until customer confirms
- *             isWaitingForCustomerConfirmation:
- *               type: boolean
- *               description: true while awaiting customer confirm — stay on Discover / Home Waiting
- *             quoteId:
- *               type: string
- *               format: uuid
- *               nullable: true
- *               description: Latest quote id for this trader (needed for customer accept path)
- *             quoteAmount:
- *               type: number
- *               nullable: true
- *               description: Latest quoted amount EUR
- *             quoteNotes:
- *               type: string
- *               nullable: true
- *               description: Notes on the latest quote
- *             quoteStatus:
- *               type: string
- *               nullable: true
- *               description: Quote status e.g. PENDING | ACCEPTED | REJECTED
+ *             photoCount: { type: integer, description: Photo count }
+ *             siteVisitFee: { type: number, nullable: true, description: Site visit fee EUR }
+ *             isReschedule: { type: boolean, description: Reschedule flow }
+ *             canSelectDateTime: { type: boolean, description: Show date/time sheet }
+ *             canRequestSiteVisit: { type: boolean, description: Allow POST site-visit/request }
+ *             canRequestReschedule: { type: boolean, description: Allow POST site-visit/reschedule }
+ *             canSubmitQuote: { type: boolean, description: Show Submit Quotation }
+ *             canUpdateQuote: { type: boolean, description: Show Update Quotation }
+ *             canRequestJob: { type: boolean, description: Show Request Job; POST .../request }
+ *             hasSubmittedQuote: { type: boolean, description: Trader already quoted }
+ *             isJobRequested: { type: boolean, description: Request Job already done }
+ *             isWaitingForCustomerConfirmation: { type: boolean, description: Waiting on customer }
+ *             quoteId: { type: string, format: uuid, nullable: true, description: Latest quote id }
+ *             quoteAmount: { type: number, nullable: true, description: Quote amount EUR }
+ *             quoteNotes: { type: string, nullable: true, description: Quote notes }
+ *             quoteStatus: { type: string, nullable: true, description: PENDING|ACCEPTED|REJECTED }
  *             primaryAction:
  *               type: string
  *               enum: [REQUEST_SITE_VISIT, UPDATE_SITE_VISIT, REQUEST_RESCHEDULE, BACK_TO_JOB, SUBMIT_QUOTE, UPDATE_QUOTE, REQUEST_JOB, WAITING_FOR_CUSTOMER]
- *               description: |
- *                 Main CTA code for Job Details (app owns button text).
- *                 REQUEST_SITE_VISIT / UPDATE_SITE_VISIT → site visit sheet;
- *                 SUBMIT_QUOTE / UPDATE_QUOTE → quote API;
- *                 REQUEST_JOB → request API then Home Waiting;
- *                 WAITING_FOR_CUSTOMER → waiting UI only;
- *                 BACK_TO_JOB → leave detail
- *             siteVisit:
- *               $ref: '#/components/schemas/TraderSiteVisitBlock'
+ *               description: Main CTA code (app owns button text)
+ *             siteVisit: { $ref: '#/components/schemas/TraderSiteVisitBlock' }
  *             customer:
  *               type: object
- *               description: Customer summary on the job
  *               properties:
- *                 id: { type: string, format: uuid, description: Customer user id }
- *                 fullName: { type: string, description: Display name }
- *                 profilePhotoUrl: { type: string, nullable: true, description: Profile image URL }
- *                 isVerified: { type: boolean, description: true if mobile or email verified }
+ *                 id: { type: string, format: uuid }
+ *                 fullName: { type: string }
+ *                 profilePhotoUrl: { type: string, nullable: true }
+ *                 isVerified: { type: boolean, description: Verified customer }
  *             category:
  *               type: object
  *               properties:
  *                 id: { type: string, format: uuid }
- *                 name: { type: string, description: Category name }
- *                 iconName: { type: string, nullable: true, description: Optional icon key; prefer iconUrl }
- *                 iconUrl: { type: string, nullable: true, description: Fetchable category icon URL }
+ *                 name: { type: string }
+ *                 iconName: { type: string, nullable: true }
+ *                 iconUrl: { type: string, nullable: true, description: Icon image URL }
  *             subcategory:
  *               type: object
  *               nullable: true
  *               properties:
  *                 id: { type: string, format: uuid }
  *                 name: { type: string }
- *                 iconUrl: { type: string, nullable: true, description: Fetchable subcategory icon URL }
+ *                 iconUrl: { type: string, nullable: true }
  *             tags:
  *               type: array
- *               description: Category/subcategory chips for UI
+ *               description: Category chips
  *               items:
  *                 type: object
  *                 properties:
- *                   label: { type: string, description: Chip text (category/subcategory name) }
+ *                   label: { type: string, description: Chip name text }
  *                   icon: { type: string, nullable: true, description: Same as iconUrl }
- *                   iconUrl: { type: string, nullable: true, description: Image URL for chip icon }
- *                   iconName: { type: string, nullable: true, description: Raw name key; prefer iconUrl }
- *             scheduledDate:
- *               type: string
- *               format: date-time
- *               nullable: true
- *               description: Customer preferred scheduled datetime if set
- *             timeSlot:
+ *                   iconUrl: { type: string, nullable: true }
+ *                   iconName: { type: string, nullable: true }
+ *             scheduledDate: { type: string, format: date-time, nullable: true }
+ *             timeSlot: { type: string, nullable: true, description: Customer preferred slot text }
+ *             duration:
  *               type: string
  *               nullable: true
- *               description: Customer preferred slot text on the job (not trader site-visit enum)
- *             durationLabel:
- *               type: string
- *               nullable: true
- *               description: Optional duration text from job e.g. 1 Hour
+ *               description: Optional duration text from job (DB duration_label)
  *             location:
  *               type: object
- *               description: Map / distance block
  *               properties:
  *                 areaName: { type: string }
- *                 distanceKm: { type: number, description: Distance in km }
+ *                 distanceKm: { type: number }
  *                 latitude: { type: number }
  *                 longitude: { type: number }
- *                 mapPreviewUrl: { type: string, description: Embeddable map preview URL }
+ *                 mapPreviewUrl: { type: string }
  *     TraderSiteVisitSlots:
  *       type: object
- *       description: Response of GET /traders/jobs/discover/{id}/site-visit/slots (bottom sheet data)
+ *       description: GET .../site-visit/slots bottom sheet data
  *       properties:
- *         jobId:
- *           type: string
- *           format: uuid
- *           description: Job id
- *         title:
- *           type: string
- *           example: Site Visit Date & Time
- *           description: Optional screen title hint; app may ignore and use local copy
+ *         jobId: { type: string, format: uuid }
  *         dates:
  *           type: array
- *           description: Selectable calendar dates (next ~14 days)
+ *           description: Selectable dates
  *           items:
  *             type: object
  *             properties:
  *               date: { type: string, description: YYYY-MM-DD }
- *               month: { type: string, description: Short month e.g. OCT }
- *               day: { type: integer, description: Day of month }
- *               weekday: { type: string, description: Short weekday e.g. THU }
+ *               month: { type: string }
+ *               day: { type: integer }
+ *               weekday: { type: string }
  *         timeSlots:
  *           type: array
- *           description: Fixed time windows — app maps id to button labels
+ *           description: Fixed windows — app maps id to UI labels
  *           items:
  *             type: object
  *             properties:
- *               id:
- *                 type: string
- *                 enum: [MORNING, AFTERNOON, EVENING, ANYTIME]
- *                 description: Slot code to send in POST body timeSlot
- *               startTime: { type: string, description: HH:mm start }
- *               endTime: { type: string, description: HH:mm end }
- *               icon: { type: string, description: Icon key for UI e.g. sun, moon, clock }
+ *               id: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
+ *               startTime: { type: string }
+ *               endTime: { type: string }
+ *               icon: { type: string }
  *         selected:
  *           type: object
  *           nullable: true
- *           description: Currently selected date+slot if any
  *           properties:
- *             date: { type: string, description: YYYY-MM-DD }
- *             timeSlot: { type: string, description: MORNING | AFTERNOON | EVENING | ANYTIME }
+ *             date: { type: string }
+ *             timeSlot: { type: string }
  *         proposedSlots:
  *           type: array
- *           description: Saved SITE VISIT SLOTS list for this trader (edit/delete locally then resubmit full slots[])
+ *           description: Saved slots for this trader
  *           items:
  *             type: object
  *             properties:
- *               id: { type: string, description: Slot id }
- *               date: { type: string, description: YYYY-MM-DD }
- *               timeSlot: { type: string, description: Slot code }
+ *               id: { type: string }
+ *               date: { type: string }
+ *               timeSlot: { type: string }
  *               startTime: { type: string }
  *               endTime: { type: string }
  *               isSelected: { type: boolean }
- *         mode:
- *           type: string
- *           enum: [REQUEST, RESCHEDULE]
- *           description: REQUEST = first/update proposal; RESCHEDULE = reschedule flow. App chooses CTA copy
+ *         mode: { type: string, enum: [REQUEST, RESCHEDULE], description: Flow mode }
  *     TraderSiteVisitRequestBody:
  *       type: object
- *       description: |
- *         Body for POST site-visit/request or reschedule.
- *         Prefer slots[]. Legacy single date + timeSlot still accepted.
+ *       description: Prefer slots[]. Legacy date+timeSlot accepted.
  *       properties:
  *         slots:
  *           type: array
- *           description: Full list of preferred slots to save (replaces previous proposed slots)
  *           items:
  *             type: object
  *             required: [date, timeSlot]
  *             properties:
- *               date:
- *                 type: string
- *                 example: '2026-10-24'
- *                 description: Visit date YYYY-MM-DD
- *               timeSlot:
- *                 type: string
- *                 enum: [MORNING, AFTERNOON, EVENING, ANYTIME]
- *                 description: Time window code from GET slots timeSlots[].id
- *         date:
- *           type: string
- *           description: Legacy single-slot date YYYY-MM-DD (use with timeSlot)
- *         timeSlot:
- *           type: string
- *           enum: [MORNING, AFTERNOON, EVENING, ANYTIME]
- *           description: Legacy single-slot time window
+ *               date: { type: string, example: '2026-10-24', description: YYYY-MM-DD }
+ *               timeSlot: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
+ *         date: { type: string, description: Legacy single date }
+ *         timeSlot: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
  *     TraderQuoteRequestBody:
  *       type: object
  *       required: [amount]
- *       description: Body for POST .../quotes (submit or update)
  *       properties:
- *         amount:
- *           type: number
- *           example: 450
- *           description: Quotation amount in EUR (must be positive)
- *         notes:
- *           type: string
- *           example: Includes parts and labour
- *           description: Optional notes shown to the customer
+ *         amount: { type: number, example: 450, description: Quote amount EUR }
+ *         notes: { type: string, description: Optional notes }
  *     TraderQuoteResponse:
  *       type: object
- *       description: Quote upsert result — job stays on Discover until customer confirms
+ *       description: Quote upsert — job stays on Discover
  *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *           description: Quote id
- *         jobId:
- *           type: string
- *           format: uuid
- *           description: Job id
- *         amount:
- *           type: number
- *           example: 450
- *           description: Saved quoted amount EUR
- *         notes:
- *           type: string
- *           nullable: true
- *           description: Saved notes
- *         status:
- *           type: string
- *           example: PENDING
- *           description: Quote status after save (PENDING until customer accepts)
- *         hasSubmittedQuote:
- *           type: boolean
- *           description: Always true after a successful quote submit/update
- *         canUpdateQuote:
- *           type: boolean
- *           description: true if trader may call quotes again to change amount
- *         isJobRequested:
- *           type: boolean
- *           description: true if Request Job was already called
- *         isWaitingForCustomerConfirmation:
- *           type: boolean
- *           description: true if waiting on customer after Request Job
+ *         id: { type: string, format: uuid }
+ *         jobId: { type: string, format: uuid }
+ *         amount: { type: number, example: 450, description: Saved amount EUR }
+ *         notes: { type: string, nullable: true }
+ *         status: { type: string, example: PENDING }
+ *         hasSubmittedQuote: { type: boolean }
+ *         canUpdateQuote: { type: boolean }
+ *         isJobRequested: { type: boolean }
+ *         isWaitingForCustomerConfirmation: { type: boolean }
  *     TraderRequestJobBody:
  *       type: object
- *       description: Optional body for POST /traders/jobs/discover/{id}/request
  *       properties:
- *         amount:
- *           type: number
- *           description: Optional if quote already exists; otherwise required to create quote + request
- *         notes:
- *           type: string
- *           description: Optional notes when creating/updating quote during request
+ *         amount: { type: number, description: Optional if quote exists }
+ *         notes: { type: string }
  */
 export {};

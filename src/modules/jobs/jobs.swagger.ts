@@ -109,12 +109,9 @@
  *         nextAfterLocation:
  *           type: string
  *           enum: [SITE_VISIT_PAY_FEE, WAITING_FOR_QUOTES]
- *         publishCtaLabel: { type: string }
- *         chooseLocationCtaLabel: { type: string }
  *         addressesPath: { type: string }
  *         createAddressPath: { type: string }
  *         payScreen: { type: object }
- *         rulesNote: { type: string }
  *     JobOfferBanner:
  *       type: object
  *       description: Offer Applied banner on Post a New Job / job detail. Empty strings when no offer.
@@ -180,8 +177,6 @@
  *         canPay: { type: boolean, description: "True after publish creates an invoice" }
  *         invoiceId: { type: string, description: Empty string when no invoice yet }
  *         bookingId: { type: string, description: Empty string when no booking yet }
- *         publishCtaLabel: { type: string }
- *         chooseLocationCtaLabel: { type: string }
  *         nextAfterLocation: { type: string }
  *         paymentScreen: { type: string }
  *         nextScreen: { type: string }

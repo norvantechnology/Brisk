@@ -205,9 +205,12 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *                 id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
  *                 jobId: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
  *                 amount: 450
- *                 amountLabel: "€450"
  *                 notes: Includes parts and labour
  *                 status: PENDING
+ *                 hasSubmittedQuote: true
+ *                 canUpdateQuote: true
+ *                 isJobRequested: false
+ *                 isWaitingForCustomerConfirmation: false
  *       404:
  *         description: Job not found or no longer available for quoting
  *       409:
