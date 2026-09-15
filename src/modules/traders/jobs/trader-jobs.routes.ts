@@ -33,13 +33,9 @@ const router = Router();
  *       App UI now: use search query only (Search for Services). No filter bottom sheet.
  *       Optional future distance filter: radiusKm, lat, lng (already supported).
  *
- *       Card fields only: id, title, badge, distanceKm, areaName, priceLabel, createdAt, isBookmarked
- *
- *       Matching: PUBLISHED jobs with no assigned trader; category match when trader has categories.
- *
+ *       Card fields: id, title, badge, distanceKm, areaName, priceLabel, createdAt, postedAgo, isBookmarked, isSiteVisit
+ *       postedAgo examples: 5 mins ago, 1 hour ago, 2 hours ago
  *       badge: Site Visit | Reschedule | null
- *       priceLabel: formatted euro string
- *       createdAt: ISO timestamp (app formats Posted 2 mins ago)
  *     parameters:
  *       - in: query
  *         name: search
@@ -86,12 +82,24 @@ const router = Router();
  *               data:
  *                 - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
  *                   title: Sample Job POst
- *                   badge: null
- *                   distanceKm: null
+ *                   badge: Site Visit
+ *                   distanceKm: 2.5
  *                   areaName: Dublin
- *                   priceLabel: "€120 - €180"
+ *                   priceLabel: "€30"
  *                   createdAt: '2026-09-11T10:46:44.111Z'
+ *                   postedAgo: 1 hour ago
  *                   isBookmarked: false
+ *                   isSiteVisit: true
+ *                 - id: 319a86dd-02d6-4db7-bcc0-45b604ac8a36
+ *                   title: Second Job Post
+ *                   badge: Reschedule
+ *                   distanceKm: 5.1
+ *                   areaName: Rathmines
+ *                   priceLabel: "€1,000 - €1,500"
+ *                   createdAt: '2026-09-10T12:11:49.000Z'
+ *                   postedAgo: 2 hours ago
+ *                   isBookmarked: false
+ *                   isSiteVisit: false
  *       401:
  *         description: Unauthorized.
  *       403:
@@ -107,8 +115,8 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Lean detail for Discover View Details.
- *       Same card fields plus description, photos, schedule, category names.
+ *       Full Job Details for Discover View Details in one response (no extra API calls).
+ *       Includes postedAgo/postedLabel, site visit fee, customer, photos, location/map, actions.
  *       Optional lat/lng to recompute distanceKm.
  *     parameters:
  *       - in: path
@@ -123,7 +131,7 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *         schema: { type: number }
  *     responses:
  *       200:
- *         description: Lean job detail.
+ *         description: Full job detail payload.
  *         content:
  *           application/json:
  *             example:
@@ -131,21 +139,47 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *               message: Job details retrieved successfully.
  *               data:
  *                 id: 11111111-1111-1111-1111-111111111111
- *                 title: Leaking Kitchen Pipe Repair
- *                 badge: null
- *                 distanceKm: 2.5
- *                 areaName: Dublin 2
- *                 priceLabel: "€100 - €150"
+ *                 title: Solar Panel Installation
+ *                 badge: Site Visit
+ *                 distanceKm: 3.4
+ *                 areaName: Dublin 8
+ *                 priceLabel: "€30"
  *                 createdAt: '2026-09-14T10:00:00.000Z'
+ *                 postedAgo: 5 mins ago
+ *                 postedLabel: Posted 5 mins ago from your area
  *                 isBookmarked: false
- *                 description: Fix leaking kitchen pipe under sink.
+ *                 isSiteVisit: true
+ *                 isReschedule: false
+ *                 siteVisitFee: 30
+ *                 siteVisitFeeLabel: "€30"
+ *                 siteVisitFeeNote: This fee is paid to the platform to secure the visit and ensure high intent for both parties.
+ *                 canSelectDateTime: true
+ *                 canRequestSiteVisit: true
+ *                 primaryActionLabel: Request For Site Visit
+ *                 description: Looking for a professional to install solar panels.
  *                 photos:
  *                   - https://cdn.example.com/jobs/photo1.jpg
- *                 scheduledDate: '2026-09-16T09:00:00.000Z'
+ *                 photoCount: 1
+ *                 customer:
+ *                   id: uuid
+ *                   fullName: Sarah Jenkins
+ *                   profilePhotoUrl: null
+ *                   isVerified: true
+ *                   verifiedLabel: Verified Customer
+ *                 category: { id: uuid, name: Solar, iconName: sun }
+ *                 subcategory: null
+ *                 categoryName: Solar
+ *                 subcategoryName: null
+ *                 scheduledDate: null
  *                 timeSlot: Morning
  *                 durationLabel: 2 Hours
- *                 categoryName: Plumbing
- *                 subcategoryName: Repairs
+ *                 location:
+ *                   areaName: Dublin 8
+ *                   distanceKm: 3.4
+ *                   distanceLabel: approx. 3.4km away
+ *                   latitude: 53.34
+ *                   longitude: -6.27
+ *                   mapPreviewUrl: https://www.openstreetmap.org/export/embed.html?...
  *       404:
  *         description: Job not found or no longer available.
  */

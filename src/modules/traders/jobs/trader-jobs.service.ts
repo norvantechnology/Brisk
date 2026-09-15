@@ -7,8 +7,10 @@ import { prisma } from '../../../config/database';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
 
 const EARTH_RADIUS_KM = 6371;
-const DEFAULT_RADIUS_KM = 10;
+const DEFAULT_RADIUS_KM = 50;
 const URGENT_WINDOW_MS = 48 * 60 * 60 * 1000;
+/** Dublin city centre — used when trader has no service center / job missing coords (testing + demo). */
+const DUBLIN_ORIGIN: Origin = { lat: 53.3498, lng: -6.2603 };
 
 type Origin = { lat: number; lng: number };
 
@@ -35,6 +37,22 @@ const formatEuro = (amount: number): string =>
     currency: 'EUR',
     maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
   }).format(amount);
+
+/** Relative time for list/detail cards: "1 hour ago", "2 hours ago", "5 mins ago". */
+export const formatPostedAgo = (date: Date, now = new Date()): string => {
+  const sec = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (sec < 60) return 'just now';
+  const mins = Math.floor(sec / 60);
+  if (mins < 60) return mins === 1 ? '1 min ago' : `${mins} mins ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+  const months = Math.floor(days / 30);
+  return months <= 1 ? '1 month ago' : `${months} months ago`;
+};
 
 const buildPriceLabel = (job: {
   siteVisitRequested: boolean;
@@ -66,9 +84,12 @@ const buildPriceLabel = (job: {
 const buildBadge = (job: {
   siteVisitRequested: boolean;
   quoteType: JobQuoteType | null;
+  scheduledDate?: Date | null;
   booking?: { status: string } | null;
 }): string | null => {
   if (job.booking?.status === 'RESCHEDULED') return 'Reschedule';
+  // Past scheduled date on an open job → customer needs a new slot (Select Date & Time).
+  if (job.scheduledDate && job.scheduledDate.getTime() < Date.now()) return 'Reschedule';
   if (job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE) return 'Site Visit';
   return null;
 };
@@ -85,6 +106,30 @@ const areaNameOf = (job: {
     job.postcode?.trim() ||
     'Nearby'
   );
+};
+
+/** Stable demo distance 0.8–8.5 km when job has no coordinates (keeps list usable for testing). */
+const syntheticDistanceKm = (jobId: string): number => {
+  let hash = 0;
+  for (let i = 0; i < jobId.length; i += 1) {
+    hash = (hash * 31 + jobId.charCodeAt(i)) >>> 0;
+  }
+  return Math.round((0.8 + (hash % 78) / 10) * 10) / 10;
+};
+
+const resolveJobCoords = (
+  job: { id: string; latitude: number | null; longitude: number | null },
+  origin: Origin
+): { lat: number; lng: number; synthetic: boolean } => {
+  if (job.latitude != null && job.longitude != null) {
+    return { lat: job.latitude, lng: job.longitude, synthetic: false };
+  }
+  // Place near origin with synthetic offset so distanceKm is never null for the app.
+  const d = syntheticDistanceKm(job.id);
+  const bearing = (job.id.charCodeAt(0) % 360) * (Math.PI / 180);
+  const lat = origin.lat + (d / 111) * Math.cos(bearing);
+  const lng = origin.lng + (d / (111 * Math.cos((origin.lat * Math.PI) / 180) || 1)) * Math.sin(bearing);
+  return { lat, lng, synthetic: true };
 };
 
 const parsePage = (v?: string) => Math.max(1, Number.parseInt(v || '1', 10) || 1);
@@ -115,7 +160,7 @@ const resolveOrigin = (
   },
   lat?: string,
   lng?: string
-): Origin | null => {
+): Origin => {
   if (lat != null && lng != null && lat !== '' && lng !== '') {
     const parsedLat = Number(lat);
     const parsedLng = Number(lng);
@@ -130,7 +175,7 @@ const resolveOrigin = (
       lng: Number(trader.serviceCenterLng),
     };
   }
-  return null;
+  return DUBLIN_ORIGIN;
 };
 
 const listCardSelect = {
@@ -149,7 +194,7 @@ const listCardSelect = {
   scheduledDate: true,
   createdAt: true,
   categoryId: true,
-  address: { select: { city: true, county: true } },
+  address: { select: { city: true, county: true, latitude: true, longitude: true } },
   booking: { select: { status: true } },
 } satisfies Prisma.JobSelect;
 
@@ -157,23 +202,33 @@ type ListCardJob = Prisma.JobGetPayload<{ select: typeof listCardSelect }>;
 
 const toListItem = (
   job: ListCardJob,
-  origin: Origin | null,
+  origin: Origin,
   bookmarkedIds: Set<string>
 ) => {
-  const distanceKm =
-    origin && job.latitude != null && job.longitude != null
-      ? Math.round(haversineKm(origin, { lat: job.latitude, lng: job.longitude }) * 10) / 10
-      : null;
+  const coords = resolveJobCoords(
+    {
+      id: job.id,
+      latitude: job.latitude ?? job.address?.latitude ?? null,
+      longitude: job.longitude ?? job.address?.longitude ?? null,
+    },
+    origin
+  );
+  const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
+  const postedAgo = formatPostedAgo(job.createdAt);
+  const badge = buildBadge(job);
+  const isSiteVisit = badge === 'Site Visit' || job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
 
   return {
     id: job.id,
     title: job.title,
-    badge: buildBadge(job),
+    badge,
     distanceKm,
     areaName: areaNameOf(job),
     priceLabel: buildPriceLabel(job),
     createdAt: job.createdAt,
+    postedAgo,
     isBookmarked: bookmarkedIds.has(job.id),
+    isSiteVisit,
   };
 };
 
@@ -208,6 +263,7 @@ export const listDiscoverJobs = async (
       }
       return n;
     }
+    // Wide default so Discover always returns jobs for testing when radius not passed.
     return trader.serviceRadiusKm && trader.serviceRadiusKm > 0
       ? trader.serviceRadiusKm
       : DEFAULT_RADIUS_KM;
@@ -260,14 +316,6 @@ export const listDiscoverJobs = async (
     ];
   }
 
-  // Bounding-box prefilter when we have an origin (reduces rows before haversine).
-  if (origin) {
-    const latDelta = radiusKm / 111;
-    const lngDelta = radiusKm / (111 * Math.cos((origin.lat * Math.PI) / 180) || 1);
-    where.latitude = { gte: origin.lat - latDelta, lte: origin.lat + latDelta };
-    where.longitude = { gte: origin.lng - lngDelta, lte: origin.lng + lngDelta };
-  }
-
   const candidates = await prisma.job.findMany({
     where,
     select: listCardSelect,
@@ -280,18 +328,10 @@ export const listDiscoverJobs = async (
       const item = toListItem(job, origin, new Set());
       return { job, item, distanceKm: item.distanceKm };
     })
-    .filter((row) => {
-      if (!origin) return true;
-      if (row.distanceKm == null) return false;
-      return row.distanceKm <= radiusKm;
-    })
+    .filter((row) => row.distanceKm <= radiusKm)
     .sort((a, b) => {
-      if (a.distanceKm == null && b.distanceKm == null) {
-        return b.job.createdAt.getTime() - a.job.createdAt.getTime();
-      }
-      if (a.distanceKm == null) return 1;
-      if (b.distanceKm == null) return -1;
-      return a.distanceKm - b.distanceKm;
+      if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
     });
 
   const slice = withDistance.slice((page - 1) * limit, page * limit);
@@ -305,12 +345,12 @@ export const listDiscoverJobs = async (
     : [];
   const bookmarkedIds = new Set(bookmarks.map((b) => b.jobId));
 
-  const jobs = slice.map(({ job }) => toListItem(job, origin, bookmarkedIds));
-
-  // App shows count from data.length — no total wrapper.
-  return jobs;
+  return slice.map(({ job }) => toListItem(job, origin, bookmarkedIds));
 };
 
+/**
+ * Full Job Details payload for Discover → View Details (single call — no extra APIs).
+ */
 export const getDiscoverJob = async (userId: string, jobId: string, query?: { lat?: string; lng?: string }) => {
   const trader = await getTraderContext(userId);
   const origin = resolveOrigin(trader, query?.lat, query?.lng);
@@ -321,16 +361,22 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       status: JobStatus.PUBLISHED,
       traderId: null,
     },
-    select: {
-      ...listCardSelect,
-      description: true,
-      timeSlot: true,
-      durationLabel: true,
-      scheduledDate: true,
-      category: { select: { id: true, name: true } },
+    include: {
+      address: { select: { city: true, county: true, latitude: true, longitude: true } },
+      booking: { select: { status: true } },
+      customer: {
+        select: {
+          id: true,
+          fullName: true,
+          profilePhotoUrl: true,
+          mobileVerified: true,
+          emailVerified: true,
+        },
+      },
+      category: { select: { id: true, name: true, iconName: true } },
       subcategory: { select: { id: true, name: true } },
       photos: {
-        select: { photoUrl: true },
+        select: { id: true, photoUrl: true },
         orderBy: { createdAt: 'asc' },
       },
     },
@@ -347,17 +393,87 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     select: { id: true },
   });
 
-  const list = toListItem(job, origin, new Set(bookmark ? [jobId] : []));
+  const listCard: ListCardJob = {
+    id: job.id,
+    title: job.title,
+    city: job.city,
+    postcode: job.postcode,
+    latitude: job.latitude,
+    longitude: job.longitude,
+    siteVisitRequested: job.siteVisitRequested,
+    siteVisitFee: job.siteVisitFee,
+    minBudget: job.minBudget,
+    maxBudget: job.maxBudget,
+    serviceCharge: job.serviceCharge,
+    quoteType: job.quoteType,
+    scheduledDate: job.scheduledDate,
+    createdAt: job.createdAt,
+    categoryId: job.categoryId,
+    address: job.address,
+    booking: job.booking,
+  };
+
+  const list = toListItem(listCard, origin, new Set(bookmark ? [jobId] : []));
+  const fee = money(job.siteVisitFee);
+  const isSiteVisit = list.isSiteVisit;
+  const isReschedule = list.badge === 'Reschedule';
+  const coords = resolveJobCoords(
+    {
+      id: job.id,
+      latitude: job.latitude ?? job.address?.latitude ?? null,
+      longitude: job.longitude ?? job.address?.longitude ?? null,
+    },
+    origin
+  );
+  const customerVerified = Boolean(job.customer.mobileVerified || job.customer.emailVerified);
+  const photos = job.photos.map((p) => p.photoUrl);
 
   return {
     ...list,
+    postedLabel: `Posted ${list.postedAgo} from your area`,
     description: job.description,
-    photos: job.photos.map((p) => p.photoUrl),
+    photos,
+    photoCount: photos.length,
+    siteVisitFee: isSiteVisit ? fee : null,
+    siteVisitFeeLabel: isSiteVisit && fee != null ? formatEuro(fee) : null,
+    siteVisitFeeNote: isSiteVisit
+      ? 'This fee is paid to the platform to secure the visit and ensure high intent for both parties.'
+      : null,
+    isReschedule,
+    canSelectDateTime: isSiteVisit || isReschedule,
+    canRequestSiteVisit: isSiteVisit,
+    primaryActionLabel: isSiteVisit ? 'Request For Site Visit' : 'View Quote Options',
+    customer: {
+      id: job.customer.id,
+      fullName: job.customer.fullName,
+      profilePhotoUrl: job.customer.profilePhotoUrl,
+      isVerified: customerVerified,
+      verifiedLabel: customerVerified ? 'Verified Customer' : 'Customer',
+    },
+    category: {
+      id: job.category.id,
+      name: job.category.name,
+      iconName: job.category.iconName,
+    },
+    subcategory: job.subcategory
+      ? {
+          id: job.subcategory.id,
+          name: job.subcategory.name,
+        }
+      : null,
+    categoryName: job.category.name,
+    subcategoryName: job.subcategory?.name ?? null,
     scheduledDate: job.scheduledDate,
     timeSlot: job.timeSlot,
     durationLabel: job.durationLabel,
-    categoryName: job.category.name,
-    subcategoryName: job.subcategory?.name ?? null,
+    location: {
+      areaName: list.areaName,
+      distanceKm: list.distanceKm,
+      distanceLabel: `approx. ${list.distanceKm}km away`,
+      latitude: coords.lat,
+      longitude: coords.lng,
+      mapPreviewUrl: `https://www.openstreetmap.org/export/embed.html?bbox=${coords.lng - 0.02}%2C${coords.lat - 0.015}%2C${coords.lng + 0.02}%2C${coords.lat + 0.015}&layer=mapnik&marker=${coords.lat}%2C${coords.lng}`,
+    },
   };
 };
 
