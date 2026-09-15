@@ -171,9 +171,8 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Upserts quote as PENDING and sets job status to QUOTED when still PUBLISHED/DRAFT.
- *       Works for My Jobs linked jobs and open Discover PUBLISHED unassigned jobs.
- *       Discover Job Details alias: POST /traders/jobs/discover/{id}/quotes
+ *       Upserts quote as PENDING. Job stays PUBLISHED on Discover until customer confirms.
+ *       Discover alias: POST /traders/jobs/discover/{id}/quotes
  *     parameters:
  *       - in: path
  *         name: id
@@ -220,9 +219,14 @@ router.post('/mine/:id/quotes', validate(myJobQuoteBodySchema), controller.upser
  * @swagger
  * /traders/jobs/mine/{id}/accept:
  *   post:
- *     summary: Accept job at quote or service charge
+ *     summary: Request job (marketplace) or confirm assigned Direct Trader job
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Marketplace (PUBLISHED, unassigned): same as POST /traders/jobs/discover/{id}/request —
+ *       sets waiting-for-customer flags; does NOT assign trader.
+ *       Prefer Discover request endpoint from Job Details.
+ *       Already-assigned Direct Trader jobs: ensures booking / ACCEPTED state.
  *     parameters:
  *       - in: path
  *         name: id

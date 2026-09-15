@@ -135,3 +135,29 @@ export const getJobFormConfig = async (
     next(error);
   }
 };
+
+/** Customer confirms a trader quotation → job becomes Active in My Jobs. */
+export const acceptJobQuote = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { confirmQuoteAssignment } = await import(
+      '../traders/jobs/trader-my-jobs.service'
+    );
+    const data = await confirmQuoteAssignment({
+      customerId: req.user!.id,
+      jobId: req.params.id,
+      quoteId: req.params.quoteId,
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Trader confirmed successfully. Job is now active.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

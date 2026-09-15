@@ -8,18 +8,22 @@
  *
  *       Screen map:
  *       1. Discover feed → GET /traders/jobs/discover
- *       2. Job Details (NONE / RESCHEDULE_REQUIRED / CONFIRMED / SUBMIT_QUOTE) → GET /traders/jobs/discover/{id}
- *       3. Select Date and Time bottom sheet → GET .../site-visit/slots
- *       4. Request For Site Visit → POST .../site-visit/request
- *       5. Request For Reschedule Site Visit → POST .../site-visit/reschedule
- *       6. Submit Quote (non site-visit Job Details) → POST /traders/jobs/discover/{id}/quotes
- *          Alias: POST /traders/jobs/mine/{id}/quotes (same body/response)
- *       7. Bookmark → POST/DELETE .../bookmark
+ *       2. Job Details → GET /traders/jobs/discover/{id}
+ *       3. Site Visit slots (optional) → GET/POST .../site-visit/*
+ *       4. Submit / Update Quotation → POST /traders/jobs/discover/{id}/quotes
+ *       5. Request Job → POST /traders/jobs/discover/{id}/request
+ *       6. Home Waiting (blue) → GET /traders/jobs/waiting
+ *       7. Customer confirms → POST /jobs/{id}/quotes/{quoteId}/accept → My Jobs ACTIVE
+ *       8. Bookmark → POST/DELETE .../bookmark
+ *
+ *       Flow: Discover → Quote → Update Quote → Request Job → Waiting → Customer Confirms → My Jobs
  *
  *       Drive CTA from data.primaryAction:
- *       REQUEST_SITE_VISIT | REQUEST_RESCHEDULE | BACK_TO_JOB | SUBMIT_QUOTE
+ *       REQUEST_SITE_VISIT | UPDATE_SITE_VISIT | REQUEST_RESCHEDULE | SUBMIT_QUOTE |
+ *       UPDATE_QUOTE | REQUEST_JOB | WAITING_FOR_CUSTOMER | BACK_TO_JOB
  *
- *       Submit Quote when canSubmitQuote=true (non site-visit open jobs).
+ *       Flags: hasSubmittedQuote, canUpdateQuote, canRequestJob,
+ *       isJobRequested, isWaitingForCustomerConfirmation
  *
  * components:
  *   schemas:
@@ -41,11 +45,18 @@
  *         createdAt: { type: string, format: date-time, description: App formats relative Posted X ago }
  *         isBookmarked: { type: boolean }
  *         isSiteVisit: { type: boolean }
+ *         hasSubmittedQuote: { type: boolean }
+ *         canUpdateQuote: { type: boolean }
+ *         canSubmitQuote: { type: boolean }
+ *         isJobRequested: { type: boolean }
+ *         isWaitingForCustomerConfirmation: { type: boolean }
+ *         quoteAmount: { type: number, nullable: true }
+ *         quoteAmountLabel: { type: string, nullable: true }
  *     TraderSiteVisitBlock:
  *       type: object
  *       description: Nested on Job Details. status NONE means no trader request yet.
  *       properties:
- *         status: { type: string, enum: [NONE, CONFIRMED, RESCHEDULE_REQUIRED] }
+ *         status: { type: string, enum: [NONE, PENDING, CONFIRMED, RESCHEDULE_REQUIRED] }
  *         visitDate: { type: string, nullable: true, example: '2026-10-24', description: YYYY-MM-DD }
  *         timeSlot: { type: string, nullable: true, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
  *         timeSlotLabel: { type: string, nullable: true, example: Afternoon }
@@ -73,11 +84,21 @@
  *             canSelectDateTime: { type: boolean }
  *             canRequestSiteVisit: { type: boolean }
  *             canRequestReschedule: { type: boolean }
- *             canSubmitQuote: { type: boolean, description: true when non site-visit Job Details should show Submit Quote }
+ *             canSubmitQuote: { type: boolean }
+ *             canUpdateQuote: { type: boolean }
+ *             canRequestJob: { type: boolean }
+ *             hasSubmittedQuote: { type: boolean }
+ *             isJobRequested: { type: boolean }
+ *             isWaitingForCustomerConfirmation: { type: boolean }
+ *             quoteId: { type: string, format: uuid, nullable: true }
+ *             quoteAmount: { type: number, nullable: true }
+ *             quoteAmountLabel: { type: string, nullable: true }
+ *             quoteNotes: { type: string, nullable: true }
+ *             quoteStatus: { type: string, nullable: true }
  *             selectDateTimeLabel: { type: string, nullable: true, example: Select Date & Time }
  *             primaryAction:
  *               type: string
- *               enum: [REQUEST_SITE_VISIT, REQUEST_RESCHEDULE, BACK_TO_JOB, SUBMIT_QUOTE]
+ *               enum: [REQUEST_SITE_VISIT, UPDATE_SITE_VISIT, REQUEST_RESCHEDULE, BACK_TO_JOB, SUBMIT_QUOTE, UPDATE_QUOTE, REQUEST_JOB, WAITING_FOR_CUSTOMER]
  *             primaryActionLabel: { type: string, example: Request For Site Visit }
  *             siteVisit: { $ref: '#/components/schemas/TraderSiteVisitBlock' }
  *             serviceTermsNote: { type: string, example: By accepting, you agree to the Service Terms. }

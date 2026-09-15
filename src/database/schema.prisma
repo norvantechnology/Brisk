@@ -674,6 +674,8 @@ model Quote {
   notes         String?     @db.Text
   estimatedDays Int?        @map("estimated_days")
   status        QuoteStatus @default(PENDING)
+  /// Trader tapped Request/Accept Job — waiting for customer confirmation (still Discover).
+  requestedAt   DateTime?   @map("requested_at")
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
@@ -1038,7 +1040,9 @@ enum SiteVisitTimeSlot {
 }
 
 enum TraderSiteVisitStatus {
-  /// Trader proposed slots / locked visit
+  /// Trader proposed slots — waiting for customer confirmation (can update freely)
+  PENDING
+  /// Customer confirmed / visit locked
   CONFIRMED
   /// Needs a new date/time (Select Date & Time → Request Reschedule)
   RESCHEDULE_REQUIRED
@@ -1067,7 +1071,7 @@ model TraderSiteVisitRequest {
   /// Confirmed/selected slot (first proposed until customer picks)
   visitDate       DateTime?             @map("visit_date") @db.Date
   timeSlot        SiteVisitTimeSlot?    @map("time_slot")
-  status          TraderSiteVisitStatus @default(CONFIRMED)
+  status          TraderSiteVisitStatus @default(PENDING)
   arrivedAt       DateTime?             @map("arrived_at")
   completedAt     DateTime?             @map("completed_at")
   durationMinutes Int?                  @map("duration_minutes")

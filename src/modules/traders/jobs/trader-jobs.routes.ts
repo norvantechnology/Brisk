@@ -7,6 +7,7 @@ import {
   discoverJobsQuerySchema,
   siteVisitRequestBodySchema,
   discoverQuoteBodySchema,
+  discoverRequestJobBodySchema,
 } from './trader-jobs.validation';
 
 const router = Router();
@@ -91,6 +92,23 @@ const router = Router();
  *         description: Not a trader
  */
 router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscoverJobs);
+
+/**
+ * @swagger
+ * /traders/jobs/waiting:
+ *   get:
+ *     summary: Home Active/Waiting cards (awaiting customer confirmation)
+ *     tags: ['Trader / Discover Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Blue Waiting cards for Home. Jobs this trader requested via Request Job
+ *       that are still PUBLISHED and unassigned (customer has not confirmed yet).
+ *       After customer confirms, job leaves this list and appears in My Jobs ACTIVE.
+ *     responses:
+ *       200:
+ *         description: Waiting job cards
+ */
+router.get('/waiting', controller.listWaitingJobs);
 
 /**
  * @swagger
@@ -252,11 +270,10 @@ router.post(
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Use when Discover Job Details has canSubmitQuote=true / primaryAction=SUBMIT_QUOTE
- *       (non site-visit PUBLISHED open jobs). Creates or updates quote as PENDING and
- *       moves job status to QUOTED (then visible under My Jobs).
- *
- *       Alias (identical body/response): POST /traders/jobs/mine/{id}/quotes
+ *       Use when Discover Job Details has canSubmitQuote or canUpdateQuote.
+ *       Job stays PUBLISHED on Discover (does not move to My Jobs).
+ *       Response includes hasSubmittedQuote / canUpdateQuote flags.
+ *       Alias: POST /traders/jobs/mine/{id}/quotes
  *     parameters:
  *       - in: path
  *         name: id
@@ -274,7 +291,7 @@ router.post(
  *             notes: Includes parts and labour
  *     responses:
  *       200:
- *         description: Quote submitted (PENDING). Job moves to QUOTED.
+ *         description: Quote submitted (PENDING). Job stays on Discover.
  *         content:
  *           application/json:
  *             schema:
@@ -282,7 +299,15 @@ router.post(
  *               properties:
  *                 success: { type: boolean, example: true }
  *                 message: { type: string, example: Quote submitted successfully. }
- *                 data: { $ref: '#/components/schemas/TraderQuoteResponse' }
+ *                 data:
+ *                   allOf:
+ *                     - { $ref: '#/components/schemas/TraderQuoteResponse' }
+ *                     - type: object
+ *                       properties:
+ *                         hasSubmittedQuote: { type: boolean, example: true }
+ *                         canUpdateQuote: { type: boolean, example: true }
+ *                         isJobRequested: { type: boolean, example: false }
+ *                         isWaitingForCustomerConfirmation: { type: boolean, example: false }
  *             example:
  *               success: true
  *               message: Quote submitted successfully.
@@ -293,6 +318,10 @@ router.post(
  *                 amountLabel: "€450"
  *                 notes: Includes parts and labour
  *                 status: PENDING
+ *                 hasSubmittedQuote: true
+ *                 canUpdateQuote: true
+ *                 isJobRequested: false
+ *                 isWaitingForCustomerConfirmation: false
  *       400:
  *         description: Invalid amount
  *       404:
@@ -308,22 +337,61 @@ router.post(
 
 /**
  * @swagger
+ * /traders/jobs/discover/{id}/request:
+ *   post:
+ *     summary: Request / Accept Job (wait for customer confirmation)
+ *     tags: ['Trader / Discover Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       After quotation (and site-visit slots if required), trader requests the job.
+ *       Does NOT assign the trader. Job stays on Discover with
+ *       isJobRequested / isWaitingForCustomerConfirmation = true.
+ *       App should return to Home and show blue Waiting card (GET /traders/jobs/waiting).
+ *       Only customer confirm moves the job to My Jobs ACTIVE.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               amount: { type: number, description: Optional if quote already submitted }
+ *               notes: { type: string }
+ *     responses:
+ *       200:
+ *         description: Job requested — waiting for customer
+ *       400:
+ *         description: Missing quote amount or site-visit slots
+ */
+router.post(
+  '/discover/:id/request',
+  validate(discoverRequestJobBodySchema),
+  controller.requestDiscoverJob
+);
+
+/**
+ * @swagger
  * /traders/jobs/discover/{id}:
  *   get:
- *     summary: Job Details (Site Visit / Reschedule / Confirmed / Submit Quote)
+ *     summary: Job Details (Site Visit / Quote / Request / Waiting)
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       One payload for all Job Details screens.
  *
  *       UI mapping:
- *       - siteVisit.status NONE + canSelectDateTime → Select Date and Time + Request For Site Visit
- *       - siteVisit.status RESCHEDULE_REQUIRED → orange badge + Select Date and Time + Request For Reschedule
- *       - siteVisit.status CONFIRMED → green CONFIRMED + displayLabel + Back to Job
- *       - canSubmitQuote true / primaryAction SUBMIT_QUOTE → Submit Quote CTA
- *         then POST /traders/jobs/discover/{id}/quotes
- *
- *       Always present keys listed in TraderDiscoverJobDetail schema.
+ *       - canSubmitQuote → Submit Quotation → POST .../quotes
+ *       - hasSubmittedQuote / canUpdateQuote → Update Quotation → POST .../quotes
+ *       - canRequestJob / primaryAction REQUEST_JOB → POST .../request
+ *       - isWaitingForCustomerConfirmation → Home Waiting card (blue)
+ *       - siteVisit.status PENDING → trader can update date/time until customer confirms
+ *       - siteVisit.status RESCHEDULE_REQUIRED → Request For Reschedule
+ *       - After customer confirms → use My Jobs APIs
  *     parameters:
  *       - in: path
  *         name: id

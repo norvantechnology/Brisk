@@ -2,12 +2,14 @@ import {
   JobQuoteType,
   JobStatus,
   Prisma,
+  QuoteStatus,
   SiteVisitTimeSlot,
   TraderSiteVisitStatus,
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
+import { requestJob } from './trader-my-jobs.service';
 
 const EARTH_RADIUS_KM = 6371;
 const DEFAULT_RADIUS_KM = 50;
@@ -308,15 +310,18 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
   const def = SITE_VISIT_SLOT_DEFS[primary.timeSlot];
   const isRescheduleRequired = row.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED;
   const isCompleted = row.status === TraderSiteVisitStatus.COMPLETED;
+  const isPending = row.status === TraderSiteVisitStatus.PENDING;
   const wasRescheduled =
     Boolean(row.createdAt && row.updatedAt) &&
     row.updatedAt!.getTime() - row.createdAt!.getTime() > 1500;
   const sectionTitle = isRescheduleRequired || wasRescheduled
     ? 'RESCHEDULED VISIT DATE & TIME'
-    : 'SCHEDULED VISIT DATE & TIME';
+    : isPending
+      ? 'PROPOSED VISIT DATE & TIME'
+      : 'SCHEDULED VISIT DATE & TIME';
 
   return {
-    status: row.status as 'CONFIRMED' | 'RESCHEDULE_REQUIRED' | 'COMPLETED',
+    status: row.status as 'PENDING' | 'CONFIRMED' | 'RESCHEDULE_REQUIRED' | 'COMPLETED',
     visitDate: formatVisitDateKey(primary.visitDate),
     timeSlot: primary.timeSlot,
     timeSlotLabel: def.label,
@@ -327,7 +332,9 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
       ? 'RESCHEDULE REQUIRED'
       : isCompleted
         ? 'COMPLETED'
-        : 'CONFIRMED',
+        : isPending
+          ? 'WAITING CONFIRMATION'
+          : 'CONFIRMED',
     sectionTitle,
     requestId: row.id,
     slots,
@@ -336,51 +343,135 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
   };
 };
 
+type DiscoverQuoteState = {
+  hasSubmittedQuote: boolean;
+  canUpdateQuote: boolean;
+  canSubmitQuote: boolean;
+  canRequestJob: boolean;
+  isJobRequested: boolean;
+  isWaitingForCustomerConfirmation: boolean;
+  quoteId: string | null;
+  quoteAmount: number | null;
+  quoteAmountLabel: string | null;
+  quoteNotes: string | null;
+  quoteStatus: string | null;
+};
+
+const emptyQuoteState = (): DiscoverQuoteState => ({
+  hasSubmittedQuote: false,
+  canUpdateQuote: false,
+  canSubmitQuote: true,
+  canRequestJob: false,
+  isJobRequested: false,
+  isWaitingForCustomerConfirmation: false,
+  quoteId: null,
+  quoteAmount: null,
+  quoteAmountLabel: null,
+  quoteNotes: null,
+  quoteStatus: null,
+});
+
 const resolvePrimaryActions = (
   isSiteVisit: boolean,
-  siteVisit: ReturnType<typeof toSiteVisitPayload>
+  siteVisit: ReturnType<typeof toSiteVisitPayload>,
+  quote: DiscoverQuoteState
 ) => {
+  if (quote.isWaitingForCustomerConfirmation) {
+    return {
+      canSelectDateTime: isSiteVisit && siteVisit.status === 'PENDING',
+      canRequestSiteVisit: isSiteVisit && (siteVisit.status === 'NONE' || siteVisit.status === 'PENDING'),
+      canRequestReschedule: siteVisit.status === 'RESCHEDULE_REQUIRED',
+      canSubmitQuote: false,
+      canUpdateQuote: quote.canUpdateQuote,
+      canRequestJob: false,
+      selectDateTimeLabel:
+        isSiteVisit && (siteVisit.status === 'NONE' || siteVisit.status === 'PENDING')
+          ? 'Select Date & Time'
+          : null,
+      primaryAction: 'WAITING_FOR_CUSTOMER' as const,
+      primaryActionLabel: 'Waiting for Customer Confirmation',
+    };
+  }
+
   if (siteVisit.status === 'CONFIRMED' || siteVisit.status === 'COMPLETED') {
     return {
       canSelectDateTime: false,
       canRequestSiteVisit: false,
       canRequestReschedule: false,
       canSubmitQuote: false,
+      canUpdateQuote: quote.canUpdateQuote,
+      canRequestJob: quote.canRequestJob,
       selectDateTimeLabel: null as string | null,
-      primaryAction: 'BACK_TO_JOB' as const,
-      primaryActionLabel: 'Back to Job',
+      primaryAction: quote.canRequestJob
+        ? ('REQUEST_JOB' as const)
+        : ('BACK_TO_JOB' as const),
+      primaryActionLabel: quote.canRequestJob ? 'Request Job' : 'Back to Job',
     };
   }
+
   if (siteVisit.status === 'RESCHEDULE_REQUIRED') {
     return {
       canSelectDateTime: true,
       canRequestSiteVisit: false,
       canRequestReschedule: true,
       canSubmitQuote: false,
+      canUpdateQuote: false,
+      canRequestJob: false,
       selectDateTimeLabel: 'Select Date & Time',
       primaryAction: 'REQUEST_RESCHEDULE' as const,
       primaryActionLabel: 'Request For Reschedule Site Visit',
     };
   }
-  if (isSiteVisit) {
+
+  if (isSiteVisit && (siteVisit.status === 'NONE' || siteVisit.status === 'PENDING')) {
+    const hasSlots = siteVisit.status === 'PENDING';
     return {
       canSelectDateTime: true,
       canRequestSiteVisit: true,
       canRequestReschedule: false,
       canSubmitQuote: false,
+      canUpdateQuote: quote.canUpdateQuote,
+      canRequestJob: quote.canRequestJob,
       selectDateTimeLabel: 'Select Date & Time',
-      primaryAction: 'REQUEST_SITE_VISIT' as const,
-      primaryActionLabel: 'Request For Site Visit',
+      primaryAction: hasSlots
+        ? quote.canRequestJob
+          ? ('REQUEST_JOB' as const)
+          : ('UPDATE_SITE_VISIT' as const)
+        : ('REQUEST_SITE_VISIT' as const),
+      primaryActionLabel: hasSlots
+        ? quote.canRequestJob
+          ? 'Request Job'
+          : 'Update Site Visit'
+        : 'Request For Site Visit',
     };
   }
+
+  if (quote.hasSubmittedQuote) {
+    return {
+      canSelectDateTime: false,
+      canRequestSiteVisit: false,
+      canRequestReschedule: false,
+      canSubmitQuote: false,
+      canUpdateQuote: true,
+      canRequestJob: quote.canRequestJob,
+      selectDateTimeLabel: null as string | null,
+      primaryAction: quote.canRequestJob
+        ? ('REQUEST_JOB' as const)
+        : ('UPDATE_QUOTE' as const),
+      primaryActionLabel: quote.canRequestJob ? 'Request Job' : 'Update Quotation',
+    };
+  }
+
   return {
     canSelectDateTime: false,
     canRequestSiteVisit: false,
     canRequestReschedule: false,
     canSubmitQuote: true,
+    canUpdateQuote: false,
+    canRequestJob: false,
     selectDateTimeLabel: null as string | null,
     primaryAction: 'SUBMIT_QUOTE' as const,
-    primaryActionLabel: 'Submit Quote',
+    primaryActionLabel: 'Submit Quotation',
   };
 };
 
@@ -494,7 +585,8 @@ const toListItem = (
   job: ListCardJob,
   origin: Origin,
   bookmarkedIds: Set<string>,
-  traderVisitStatus?: TraderSiteVisitStatus | null
+  traderVisitStatus?: TraderSiteVisitStatus | null,
+  quoteFlags?: Partial<DiscoverQuoteState>
 ) => {
   const coords = resolveJobCoords(
     {
@@ -507,6 +599,11 @@ const toListItem = (
   const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
   const badge = buildBadge(job, traderVisitStatus);
   const isSiteVisit = badge === 'Site Visit' || isSiteVisitJob(job);
+  const hasSubmittedQuote = Boolean(quoteFlags?.hasSubmittedQuote);
+  const isJobRequested = Boolean(quoteFlags?.isJobRequested);
+  const isWaitingForCustomerConfirmation = Boolean(
+    quoteFlags?.isWaitingForCustomerConfirmation
+  );
 
   return {
     id: job.id,
@@ -518,6 +615,13 @@ const toListItem = (
     createdAt: job.createdAt,
     isBookmarked: bookmarkedIds.has(job.id),
     isSiteVisit,
+    hasSubmittedQuote,
+    canUpdateQuote: Boolean(quoteFlags?.canUpdateQuote),
+    canSubmitQuote: quoteFlags?.canSubmitQuote ?? !hasSubmittedQuote,
+    isJobRequested,
+    isWaitingForCustomerConfirmation,
+    quoteAmount: quoteFlags?.quoteAmount ?? null,
+    quoteAmountLabel: quoteFlags?.quoteAmountLabel ?? null,
   };
 };
 
@@ -626,7 +730,7 @@ export const listDiscoverJobs = async (
   const slice = withDistance.slice((page - 1) * limit, page * limit);
   const jobIds = slice.map((r) => r.job.id);
 
-  const [bookmarks, visits] = await Promise.all([
+  const [bookmarks, visits, quotes] = await Promise.all([
     jobIds.length
       ? prisma.traderJobBookmark.findMany({
           where: { traderId: trader.id, jobId: { in: jobIds } },
@@ -643,13 +747,52 @@ export const listDiscoverJobs = async (
           select: { jobId: true, status: true },
         })
       : Promise.resolve([] as { jobId: string; status: TraderSiteVisitStatus }[]),
+    jobIds.length
+      ? prisma.quote.findMany({
+          where: { traderId: trader.id, jobId: { in: jobIds } },
+          select: {
+            id: true,
+            jobId: true,
+            quotedAmount: true,
+            notes: true,
+            status: true,
+            requestedAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      : Promise.resolve(
+          [] as Array<{
+            id: string;
+            jobId: string;
+            quotedAmount: Prisma.Decimal;
+            notes: string | null;
+            status: string;
+            requestedAt: Date | null;
+          }>
+        ),
   ]);
   const bookmarkedIds = new Set(bookmarks.map((b) => b.jobId));
   const visitByJob = new Map(visits.map((v) => [v.jobId, v.status]));
+  const quoteByJob = new Map<string, (typeof quotes)[number]>();
+  for (const q of quotes) {
+    if (!quoteByJob.has(q.jobId)) quoteByJob.set(q.jobId, q);
+  }
 
-  return slice.map(({ job }) =>
-    toListItem(job, origin, bookmarkedIds, visitByJob.get(job.id) ?? null)
-  );
+  return slice.map(({ job }) => {
+    const q = quoteByJob.get(job.id);
+    const amount = q ? money(q.quotedAmount) : null;
+    const isJobRequested = Boolean(q?.requestedAt);
+    const hasSubmittedQuote = Boolean(q);
+    return toListItem(job, origin, bookmarkedIds, visitByJob.get(job.id) ?? null, {
+      hasSubmittedQuote,
+      canUpdateQuote: hasSubmittedQuote,
+      canSubmitQuote: !hasSubmittedQuote,
+      isJobRequested,
+      isWaitingForCustomerConfirmation: isJobRequested,
+      quoteAmount: amount,
+      quoteAmountLabel: amount != null ? formatEuro(amount) : null,
+    });
+  });
 };
 
 /**
@@ -673,6 +816,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
             },
           },
         },
+        { quotes: { some: { traderId: trader.id } } },
         { traderId: trader.id },
       ],
     },
@@ -702,7 +846,12 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     throw new NotFoundError('Job not found or no longer available.');
   }
 
-  const [bookmark, visitRow] = await Promise.all([
+  // Once customer confirmed & assigned, Discover detail redirects traders to My Jobs flow.
+  if (job.traderId && job.traderId !== trader.id) {
+    throw new NotFoundError('Job not found or no longer available.');
+  }
+
+  const [bookmark, visitRow, quoteRow] = await Promise.all([
     prisma.traderJobBookmark.findUnique({
       where: { traderId_jobId: { traderId: trader.id, jobId } },
       select: { id: true },
@@ -730,10 +879,51 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
         },
       },
     }),
+    prisma.quote.findFirst({
+      where: { jobId, traderId: trader.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        quotedAmount: true,
+        notes: true,
+        status: true,
+        requestedAt: true,
+      },
+    }),
   ]);
 
   const activeVisit =
     visitRow && visitRow.status !== TraderSiteVisitStatus.CANCELLED ? visitRow : null;
+
+  const quoteAmount = quoteRow ? money(quoteRow.quotedAmount) : null;
+  const hasSubmittedQuote = Boolean(quoteRow);
+  const isJobRequested = Boolean(quoteRow?.requestedAt);
+  const isAssignedToThis = job.traderId === trader.id;
+  const isWaitingForCustomerConfirmation =
+    isJobRequested && !isAssignedToThis && job.status === JobStatus.PUBLISHED;
+  const quoteState: DiscoverQuoteState = hasSubmittedQuote
+    ? {
+        hasSubmittedQuote: true,
+        canUpdateQuote: quoteRow!.status === 'PENDING' && !isAssignedToThis,
+        canSubmitQuote: false,
+        canRequestJob:
+          !isJobRequested &&
+          !isAssignedToThis &&
+          job.status === JobStatus.PUBLISHED &&
+          quoteRow!.status === 'PENDING',
+        isJobRequested,
+        isWaitingForCustomerConfirmation,
+        quoteId: quoteRow!.id,
+        quoteAmount,
+        quoteAmountLabel: quoteAmount != null ? formatEuro(quoteAmount) : null,
+        quoteNotes: quoteRow!.notes,
+        quoteStatus: quoteRow!.status,
+      }
+    : {
+        ...emptyQuoteState(),
+        canSubmitQuote: !isSiteVisitJob(job) || Boolean(activeVisit),
+        canRequestJob: false,
+      };
 
   const listCard: ListCardJob = {
     id: job.id,
@@ -759,12 +949,18 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     listCard,
     origin,
     new Set(bookmark ? [jobId] : []),
-    activeVisit?.status ?? null
+    activeVisit?.status ?? null,
+    quoteState
   );
   const fee = money(job.siteVisitFee);
   const isSiteVisit = list.isSiteVisit || isSiteVisitJob(job);
   const siteVisit = toSiteVisitPayload(activeVisit);
-  const actions = resolvePrimaryActions(isSiteVisit, siteVisit);
+  // Site-visit jobs: allow request job after slots proposed (optional quote for fee jobs).
+  if (isSiteVisit && !quoteState.hasSubmittedQuote && siteVisit.status === 'PENDING') {
+    quoteState.canRequestJob =
+      !isJobRequested && !isAssignedToThis && job.status === JobStatus.PUBLISHED;
+  }
+  const actions = resolvePrimaryActions(isSiteVisit, siteVisit, quoteState);
   const isReschedule =
     list.badge === 'Reschedule' || siteVisit.status === 'RESCHEDULE_REQUIRED';
   const coords = resolveJobCoords(
@@ -826,6 +1022,16 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       : null,
     isReschedule,
     ...actions,
+    hasSubmittedQuote: quoteState.hasSubmittedQuote,
+    canUpdateQuote: actions.canUpdateQuote,
+    canRequestJob: actions.canRequestJob,
+    isJobRequested: quoteState.isJobRequested,
+    isWaitingForCustomerConfirmation: quoteState.isWaitingForCustomerConfirmation,
+    quoteId: quoteState.quoteId,
+    quoteAmount: quoteState.quoteAmount,
+    quoteAmountLabel: quoteState.quoteAmountLabel,
+    quoteNotes: quoteState.quoteNotes,
+    quoteStatus: quoteState.quoteStatus,
     siteVisit,
     serviceTermsNote: 'By accepting, you agree to the Service Terms.',
     customer: {
@@ -965,7 +1171,9 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
     submitLabel:
       active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
         ? 'Request For Reschedule Site Visit'
-        : 'Request For Site Visit',
+        : active?.status === TraderSiteVisitStatus.PENDING
+          ? 'Update Site Visit'
+          : 'Request For Site Visit',
   };
 };
 
@@ -993,12 +1201,24 @@ const upsertSiteVisit = async (
   });
 
   if (mode === 'request') {
+    // Allow create/update while pending; only block once customer confirmed.
     if (existing && existing.status === TraderSiteVisitStatus.CONFIRMED) {
       throw new ConflictError('Site visit already confirmed. Use reschedule if a new slot is needed.');
+    }
+    if (existing && existing.status === TraderSiteVisitStatus.COMPLETED) {
+      throw new ConflictError('Site visit is already completed.');
     }
   } else if (!existing || existing.status === TraderSiteVisitStatus.CANCELLED) {
     throw new BadRequestError('No site visit to reschedule. Request a site visit first.');
   }
+
+  const nextStatus =
+    mode === 'reschedule' ||
+    existing?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+      ? TraderSiteVisitStatus.PENDING
+      : existing?.status === TraderSiteVisitStatus.CONFIRMED
+        ? TraderSiteVisitStatus.CONFIRMED
+        : TraderSiteVisitStatus.PENDING;
 
   const row = await prisma.$transaction(async (tx) => {
     const request = await tx.traderSiteVisitRequest.upsert({
@@ -1008,12 +1228,12 @@ const upsertSiteVisit = async (
         traderId,
         visitDate: primary.visitDate,
         timeSlot: primary.timeSlot,
-        status: TraderSiteVisitStatus.CONFIRMED,
+        status: TraderSiteVisitStatus.PENDING,
       },
       update: {
         visitDate: primary.visitDate,
         timeSlot: primary.timeSlot,
-        status: TraderSiteVisitStatus.CONFIRMED,
+        status: nextStatus,
       },
     });
 
@@ -1111,4 +1331,80 @@ export const unbookmarkDiscoverJob = async (userId: string, jobId: string) => {
   });
 
   return { id: jobId, isBookmarked: false };
+};
+
+/**
+ * Request / Accept Job from Discover Job Details.
+ * Does NOT assign trader — sets waiting-for-customer flags. Job stays on Discover.
+ */
+export const requestDiscoverJob = async (
+  userId: string,
+  jobId: string,
+  body?: { amount?: number; notes?: string }
+) => {
+  await requestJob(userId, jobId, body);
+  return getDiscoverJob(userId, jobId);
+};
+
+/**
+ * Home Active/Waiting card — jobs this trader requested, awaiting customer confirmation.
+ */
+export const listWaitingJobs = async (userId: string) => {
+  const trader = await getTraderContext(userId);
+  const origin = resolveOrigin(trader);
+
+  const quotes = await prisma.quote.findMany({
+    where: {
+      traderId: trader.id,
+      status: QuoteStatus.PENDING,
+      requestedAt: { not: null },
+      job: { status: JobStatus.PUBLISHED, traderId: null },
+    },
+    orderBy: { requestedAt: 'desc' },
+    select: {
+      id: true,
+      quotedAmount: true,
+      requestedAt: true,
+      job: {
+        select: {
+          id: true,
+          title: true,
+          city: true,
+          postcode: true,
+          latitude: true,
+          longitude: true,
+          createdAt: true,
+          address: { select: { city: true, county: true } },
+          customer: { select: { fullName: true } },
+        },
+      },
+    },
+  });
+
+  return {
+    items: quotes.map((q) => {
+      const amount = money(q.quotedAmount) ?? 0;
+      const coords = resolveJobCoords(q.job, origin);
+      const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
+      return {
+        id: q.job.id,
+        title: q.job.title,
+        customerName: q.job.customer.fullName,
+        areaName: areaNameOf(q.job),
+        distanceKm,
+        quoteAmount: amount,
+        quoteAmountLabel: formatEuro(amount),
+        statusBadge: 'Waiting',
+        statusLabel: 'Waiting for Customer Confirmation',
+        colorHint: 'blue',
+        isJobRequested: true,
+        isWaitingForCustomerConfirmation: true,
+        hasSubmittedQuote: true,
+        requestedAt: q.requestedAt,
+        primaryAction: 'WAITING_FOR_CUSTOMER',
+        primaryActionLabel: 'Waiting for Customer Confirmation',
+      };
+    }),
+    count: quotes.length,
+  };
 };

@@ -150,6 +150,13 @@ export const publishJobSchema = z.object({
     .default({}),
 });
 
+export const acceptJobQuoteSchema = z.object({
+  params: z.object({
+    id: uuid,
+    quoteId: uuid,
+  }),
+});
+
 export type CreateJobInput = z.infer<typeof createJobSchema>['body'];
 export type UpdateJobInput = z.infer<typeof updateJobSchema>['body'];
 export type SetJobLocationInput = z.infer<typeof setJobLocationSchema>['body'];

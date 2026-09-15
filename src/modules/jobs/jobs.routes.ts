@@ -11,6 +11,7 @@ import {
   publishJobSchema,
   setJobLocationSchema,
   updateJobSchema,
+  acceptJobQuoteSchema,
 } from './jobs.validation';
 
 const router = Router();
@@ -475,6 +476,41 @@ router.post(
   ...customerOnly,
   validate(publishJobSchema),
   controller.publishJob
+);
+
+/**
+ * @swagger
+ * /jobs/{id}/quotes/{quoteId}/accept:
+ *   post:
+ *     summary: Confirm trader quotation (customer)
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Customer confirms a trader who requested the job.
+ *       Assigns trader, accepts quote, confirms pending site visit, creates booking.
+ *       Trader then sees the job in My Jobs ACTIVE (leaves Discover / Waiting).
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: quoteId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Trader confirmed — job ACCEPTED/SCHEDULED
+ *       404:
+ *         description: Job or quote not found
+ *       409:
+ *         description: Trader already confirmed
+ */
+router.post(
+  '/:id/quotes/:quoteId/accept',
+  ...customerOnly,
+  validate(acceptJobQuoteSchema),
+  controller.acceptJobQuote
 );
 
 export default router;

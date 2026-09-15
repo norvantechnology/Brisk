@@ -95,3 +95,17 @@ export const discoverQuoteBodySchema = z.object({
     notes: z.string().max(2000).optional(),
   }),
 });
+
+/** POST Request / Accept Job from Discover Job Details */
+export const discoverRequestJobBodySchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid job ID.'),
+  }),
+  body: z
+    .object({
+      amount: z.number().positive('amount must be a positive number.').optional(),
+      notes: z.string().max(2000).optional(),
+    })
+    .optional()
+    .default({}),
+});

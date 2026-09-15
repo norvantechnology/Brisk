@@ -150,7 +150,49 @@ export const submitDiscoverQuote = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Quote submitted successfully.',
+      message: data.hasSubmittedQuote && data.canUpdateQuote
+        ? 'Quote submitted successfully.'
+        : 'Quote submitted successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Request / Accept Job — waiting for customer confirmation (stays on Discover). */
+export const requestDiscoverJob = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.requestDiscoverJob(req.user!.id, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job requested. Waiting for customer confirmation.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Home Active/Waiting (blue) cards — awaiting customer confirmation. */
+export const listWaitingJobs = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.listWaitingJobs(req.user!.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Waiting jobs retrieved successfully.',
       data,
     });
   } catch (error) {
