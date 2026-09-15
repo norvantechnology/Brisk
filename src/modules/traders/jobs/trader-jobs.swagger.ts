@@ -8,14 +8,18 @@
  *
  *       Screen map:
  *       1. Discover feed → GET /traders/jobs/discover
- *       2. Job Details (NONE / RESCHEDULE_REQUIRED / CONFIRMED) → GET /traders/jobs/discover/{id}
+ *       2. Job Details (NONE / RESCHEDULE_REQUIRED / CONFIRMED / SUBMIT_QUOTE) → GET /traders/jobs/discover/{id}
  *       3. Select Date and Time bottom sheet → GET .../site-visit/slots
  *       4. Request For Site Visit → POST .../site-visit/request
  *       5. Request For Reschedule Site Visit → POST .../site-visit/reschedule
- *       6. Bookmark → POST/DELETE .../bookmark
+ *       6. Submit Quote (non site-visit Job Details) → POST /traders/jobs/discover/{id}/quotes
+ *          Alias: POST /traders/jobs/mine/{id}/quotes (same body/response)
+ *       7. Bookmark → POST/DELETE .../bookmark
  *
  *       Drive CTA from data.primaryAction:
  *       REQUEST_SITE_VISIT | REQUEST_RESCHEDULE | BACK_TO_JOB | SUBMIT_QUOTE
+ *
+ *       Submit Quote when canSubmitQuote=true (non site-visit open jobs).
  *
  * components:
  *   schemas:
@@ -183,5 +187,20 @@
  *               timeSlot: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
  *         date: { type: string, example: '2026-10-24', description: Legacy single-slot }
  *         timeSlot: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
+ *     TraderQuoteRequestBody:
+ *       type: object
+ *       required: [amount]
+ *       properties:
+ *         amount: { type: number, example: 450, description: Quote amount in EUR }
+ *         notes: { type: string, example: Includes parts and labour, maxLength: 2000 }
+ *     TraderQuoteResponse:
+ *       type: object
+ *       properties:
+ *         id: { type: string, format: uuid }
+ *         jobId: { type: string, format: uuid }
+ *         amount: { type: number, example: 450 }
+ *         amountLabel: { type: string, example: "€450" }
+ *         notes: { type: string, nullable: true }
+ *         status: { type: string, example: PENDING, description: Quote status after submit }
  */
 export {};

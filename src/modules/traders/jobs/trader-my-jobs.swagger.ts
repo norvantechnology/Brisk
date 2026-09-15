@@ -14,7 +14,8 @@
  *       5. Materials → GET/POST .../materials, DELETE .../materials/{materialId}
  *       6. Proof photos → POST .../proof-photos (upload purpose job_proof first)
  *       7. Messages → GET/POST .../messages
- *       8. Quotes → POST .../quotes
+ *       8. Quotes → POST /traders/jobs/mine/{id}/quotes
+ *          (also from Discover: POST /traders/jobs/discover/{id}/quotes)
  *       9. Accept job → POST .../accept
  *       10. Payment summary → GET .../payment-summary
  *       11. Request payment → POST .../request-payment

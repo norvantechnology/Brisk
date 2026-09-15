@@ -252,26 +252,53 @@ router.post(
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Use when Job Details primaryAction is SUBMIT_QUOTE (non site-visit jobs).
- *       Same as POST /traders/jobs/mine/{id}/quotes.
+ *       Use when Discover Job Details has canSubmitQuote=true / primaryAction=SUBMIT_QUOTE
+ *       (non site-visit PUBLISHED open jobs). Creates or updates quote as PENDING and
+ *       moves job status to QUOTED (then visible under My Jobs).
+ *
+ *       Alias (identical body/response): POST /traders/jobs/mine/{id}/quotes
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *         description: Job id from Discover Job Details
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [amount]
- *             properties:
- *               amount: { type: number, example: 450 }
- *               notes: { type: string, example: Includes parts and labour }
+ *             $ref: '#/components/schemas/TraderQuoteRequestBody'
+ *           example:
+ *             amount: 450
+ *             notes: Includes parts and labour
  *     responses:
  *       200:
  *         description: Quote submitted (PENDING). Job moves to QUOTED.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Quote submitted successfully. }
+ *                 data: { $ref: '#/components/schemas/TraderQuoteResponse' }
+ *             example:
+ *               success: true
+ *               message: Quote submitted successfully.
+ *               data:
+ *                 id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+ *                 jobId: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                 amount: 450
+ *                 amountLabel: "€450"
+ *                 notes: Includes parts and labour
+ *                 status: PENDING
+ *       400:
+ *         description: Invalid amount
+ *       404:
+ *         description: Job not found or no longer available for quoting
+ *       409:
+ *         description: Job already assigned to another trader
  */
 router.post(
   '/discover/:id/quotes',
@@ -283,7 +310,7 @@ router.post(
  * @swagger
  * /traders/jobs/discover/{id}:
  *   get:
- *     summary: Job Details (Site Visit / Reschedule / Confirmed)
+ *     summary: Job Details (Site Visit / Reschedule / Confirmed / Submit Quote)
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
@@ -293,7 +320,8 @@ router.post(
  *       - siteVisit.status NONE + canSelectDateTime → Select Date and Time + Request For Site Visit
  *       - siteVisit.status RESCHEDULE_REQUIRED → orange badge + Select Date and Time + Request For Reschedule
  *       - siteVisit.status CONFIRMED → green CONFIRMED + displayLabel + Back to Job
- *       - primaryAction SUBMIT_QUOTE / canSubmitQuote true → show Submit Quote (non site-visit)
+ *       - canSubmitQuote true / primaryAction SUBMIT_QUOTE → Submit Quote CTA
+ *         then POST /traders/jobs/discover/{id}/quotes
  *
  *       Always present keys listed in TraderDiscoverJobDetail schema.
  *     parameters:
@@ -344,6 +372,7 @@ router.post(
  *                 canSelectDateTime: true
  *                 canRequestSiteVisit: true
  *                 canRequestReschedule: false
+ *                 canSubmitQuote: false
  *                 selectDateTimeLabel: Select Date & Time
  *                 primaryAction: REQUEST_SITE_VISIT
  *                 primaryActionLabel: Request For Site Visit

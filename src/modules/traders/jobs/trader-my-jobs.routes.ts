@@ -170,6 +170,10 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *     summary: Submit or update quote
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Upserts quote as PENDING and sets job status to QUOTED when still PUBLISHED/DRAFT.
+ *       Works for My Jobs linked jobs and open Discover PUBLISHED unassigned jobs.
+ *       Discover Job Details alias: POST /traders/jobs/discover/{id}/quotes
  *     parameters:
  *       - in: path
  *         name: id
@@ -180,14 +184,35 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [amount]
- *             properties:
- *               amount: { type: number, example: 450 }
- *               notes: { type: string }
+ *             $ref: '#/components/schemas/TraderQuoteRequestBody'
+ *           example:
+ *             amount: 450
+ *             notes: Includes parts and labour
  *     responses:
  *       200:
  *         description: Quote upserted as PENDING
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderQuoteResponse' }
+ *             example:
+ *               success: true
+ *               message: Quote submitted successfully.
+ *               data:
+ *                 id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+ *                 jobId: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                 amount: 450
+ *                 amountLabel: "€450"
+ *                 notes: Includes parts and labour
+ *                 status: PENDING
+ *       404:
+ *         description: Job not found or no longer available for quoting
+ *       409:
+ *         description: Job already assigned to another trader
  */
 router.post('/mine/:id/quotes', validate(myJobQuoteBodySchema), controller.upsertQuote);
 
