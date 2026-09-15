@@ -470,7 +470,7 @@ const SWAGGER_CSS = `
     color: var(--brisk-text) !important;
   }
 
-  /* Parameters / responses body text — force readable contrast */
+  /* Parameters / responses body text — force readable contrast (exclude JSON examples) */
   .swagger-ui .opblock-description-wrapper,
   .swagger-ui .opblock-description-wrapper p,
   .swagger-ui .opblock-external-docs-wrapper,
@@ -486,11 +486,8 @@ const SWAGGER_CSS = `
   .swagger-ui .response-col_status,
   .swagger-ui .response-col_links,
   .swagger-ui .response-col_description,
-  .swagger-ui .response-col_description *,
   .swagger-ui .parameters-col_description,
-  .swagger-ui .parameters-col_description *,
   .swagger-ui .parameters-col_name,
-  .swagger-ui .parameters-col_name *,
   .swagger-ui .response .markdown,
   .swagger-ui .response .markdown p,
   .swagger-ui .markdown p,
@@ -502,6 +499,14 @@ const SWAGGER_CSS = `
   .swagger-ui .response-controls,
   .swagger-ui .renderedMarkdown,
   .swagger-ui .renderedMarkdown p {
+    color: var(--brisk-text) !important;
+    opacity: 1 !important;
+  }
+
+  /* Do NOT paint JSON example tokens dark — those use the dark panel styles below */
+  .swagger-ui .response-col_description > *:not(.highlight-code):not(pre):not(.microlight),
+  .swagger-ui .parameters-col_description > *,
+  .swagger-ui .parameters-col_name > * {
     color: var(--brisk-text) !important;
     opacity: 1 !important;
   }
@@ -646,49 +651,41 @@ const SWAGGER_CSS = `
   .swagger-ui .btn.authorize svg { fill: #ffffff !important; }
   .swagger-ui .authorization__btn svg { fill: var(--brisk-muted) !important; }
 
-  /* JSON request/response examples — light block, dark text (never dark-on-dark) */
-  .swagger-ui .responses-wrapper .highlight-code,
-  .swagger-ui .responses-wrapper .microlight,
-  .swagger-ui .responses-wrapper pre,
-  .swagger-ui .responses-wrapper code,
+  /* JSON request/response examples — match Swagger default dark panel with LIGHT text */
+  .swagger-ui .opblock-body pre.microlight,
+  .swagger-ui .opblock-body .highlight-code pre.microlight,
+  .swagger-ui .highlight-code > pre.microlight,
+  .swagger-ui .highlight-code > .microlight,
+  .swagger-ui .responses-wrapper pre.microlight,
+  .swagger-ui .response-col_description pre.microlight,
   .swagger-ui .body-param__example,
-  .swagger-ui .example,
-  .swagger-ui .model-example .highlight-code,
-  .swagger-ui .model-example .microlight,
-  .swagger-ui .response-col_description .highlight-code,
-  .swagger-ui .response-col_description .microlight,
-  .swagger-ui .response-col_description pre,
-  .swagger-ui .highlight-code,
-  .swagger-ui pre.microlight,
-  .swagger-ui .microlight {
-    background: #f8fafc !important;
-    color: #0f172a !important;
-    -webkit-text-fill-color: #0f172a !important;
-    border: 1px solid #e2e8f0 !important;
+  .swagger-ui .example {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+    -webkit-text-fill-color: #f8fafc !important;
+    border: 1px solid #334155 !important;
     border-radius: 6px !important;
     box-shadow: none !important;
   }
-  .swagger-ui .responses-wrapper .highlight-code *,
-  .swagger-ui .responses-wrapper .microlight *,
-  .swagger-ui .responses-wrapper pre *,
-  .swagger-ui .responses-wrapper code *,
+  .swagger-ui .opblock-body pre.microlight,
+  .swagger-ui .opblock-body pre.microlight code,
+  .swagger-ui .opblock-body pre.microlight span,
+  .swagger-ui .opblock-body .highlight-code pre.microlight *,
+  .swagger-ui .highlight-code > pre.microlight *,
+  .swagger-ui .highlight-code > .microlight *,
+  .swagger-ui .responses-wrapper pre.microlight *,
+  .swagger-ui .response-col_description pre.microlight *,
   .swagger-ui .body-param__example *,
-  .swagger-ui .example *,
-  .swagger-ui .model-example .highlight-code *,
-  .swagger-ui .model-example .microlight *,
-  .swagger-ui .response-col_description .highlight-code *,
-  .swagger-ui .response-col_description .microlight *,
-  .swagger-ui .response-col_description pre *,
-  .swagger-ui .highlight-code *,
-  .swagger-ui pre.microlight *,
-  .swagger-ui .microlight * {
-    color: #0f172a !important;
-    -webkit-text-fill-color: #0f172a !important;
+  .swagger-ui .example * {
+    color: #f8fafc !important;
+    -webkit-text-fill-color: #f8fafc !important;
     background: transparent !important;
+    background-color: transparent !important;
     opacity: 1 !important;
   }
 
-  /* Keep description inline code distinct from JSON example blocks */
+  /* Keep description inline code on light page (not dark JSON panels) */
   .swagger-ui .opblock-description-wrapper .microlight,
   .swagger-ui .opblock-description-wrapper .highlight-code,
   .swagger-ui .renderedMarkdown .microlight,
@@ -703,6 +700,13 @@ const SWAGGER_CSS = `
     font-size: 13px !important;
     line-height: 1.5 !important;
     box-shadow: none !important;
+  }
+  .swagger-ui .opblock-description-wrapper .microlight *,
+  .swagger-ui .renderedMarkdown .microlight *,
+  .swagger-ui .markdown .microlight * {
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    background: transparent !important;
   }
 
   .swagger-ui .model-toggle:after { background: var(--brisk-muted) !important; }
@@ -776,29 +780,24 @@ const SWAGGER_CSS = `
   .swagger-ui .opblock.opblock-patch .opblock-summary-method { background-color: #9333ea !important; }
   .swagger-ui .opblock.opblock-delete .opblock-summary-method { background-color: #dc2626 !important; }
 
-  .swagger-ui .highlight-code,
-  .swagger-ui .highlight-code pre,
-  .swagger-ui .microlight,
-  .swagger-ui pre.microlight,
-  .swagger-ui .example,
-  .swagger-ui .body-param__example {
-    background: #f8fafc !important;
-    background-color: #f8fafc !important;
-    color: #0f172a !important;
-    -webkit-text-fill-color: #0f172a !important;
+  /* Response Example Value — Swagger uses pre.microlight with #333; force light text */
+  .swagger-ui .opblock-body pre.microlight,
+  .swagger-ui .opblock .opblock-body pre.microlight,
+  .swagger-ui .opblock-body .highlight-code pre.microlight,
+  .swagger-ui .opblock-body .highlight-code > .microlight {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+    -webkit-text-fill-color: #f8fafc !important;
   }
-  .swagger-ui .highlight-code *,
-  .swagger-ui .microlight *,
-  .swagger-ui pre.microlight *,
-  .swagger-ui .example *,
-  .swagger-ui .body-param__example *,
-  .swagger-ui .hljs-string,
-  .swagger-ui .hljs-number,
-  .swagger-ui .hljs-literal,
-  .swagger-ui .hljs-attr,
-  .swagger-ui span[class^="hljs"] {
-    color: #0f172a !important;
-    -webkit-text-fill-color: #0f172a !important;
+  .swagger-ui .opblock-body pre.microlight *,
+  .swagger-ui .opblock .opblock-body pre.microlight *,
+  .swagger-ui .opblock-body .highlight-code pre.microlight *,
+  .swagger-ui .opblock-body .highlight-code > .microlight *,
+  .swagger-ui .opblock-body pre.microlight code,
+  .swagger-ui .opblock-body pre.microlight span {
+    color: #f8fafc !important;
+    -webkit-text-fill-color: #f8fafc !important;
     background: transparent !important;
     opacity: 1 !important;
   }
@@ -810,13 +809,20 @@ export const setupSwagger = (app: Express): void => {
     res.send(swaggerSpec);
   });
 
+  // Served as a real stylesheet so example-panel contrast is not lost to cache / inject order
+  app.get('/api-docs-theme.css', (_req, res) => {
+    res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(SWAGGER_CSS);
+  });
+
   app.use(
     '/api-docs',
     swaggerUi.serve,
     swaggerUi.setup(swaggerSpec, {
       customCss: SWAGGER_CSS,
+      customCssUrl: '/api-docs-theme.css',
       customSiteTitle: 'BRISK API',
-      customCssUrl: undefined,
       swaggerOptions: {
         docExpansion: 'none',
         tagsSorter: 'none',
