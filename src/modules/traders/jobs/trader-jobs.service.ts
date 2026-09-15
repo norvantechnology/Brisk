@@ -38,22 +38,6 @@ const formatEuro = (amount: number): string =>
     maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
   }).format(amount);
 
-/** Relative time for list/detail cards: "1 hour ago", "2 hours ago", "5 mins ago". */
-export const formatPostedAgo = (date: Date, now = new Date()): string => {
-  const sec = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
-  if (sec < 60) return 'just now';
-  const mins = Math.floor(sec / 60);
-  if (mins < 60) return mins === 1 ? '1 min ago' : `${mins} mins ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`;
-  const weeks = Math.floor(days / 7);
-  if (weeks < 5) return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
-  const months = Math.floor(days / 30);
-  return months <= 1 ? '1 month ago' : `${months} months ago`;
-};
-
 const buildPriceLabel = (job: {
   siteVisitRequested: boolean;
   siteVisitFee: Prisma.Decimal | number | null;
@@ -214,7 +198,6 @@ const toListItem = (
     origin
   );
   const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
-  const postedAgo = formatPostedAgo(job.createdAt);
   const badge = buildBadge(job);
   const isSiteVisit = badge === 'Site Visit' || job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
 
@@ -226,7 +209,6 @@ const toListItem = (
     areaName: areaNameOf(job),
     priceLabel: buildPriceLabel(job),
     createdAt: job.createdAt,
-    postedAgo,
     isBookmarked: bookmarkedIds.has(job.id),
     isSiteVisit,
   };
@@ -430,7 +412,6 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
 
   return {
     ...list,
-    postedLabel: `Posted ${list.postedAgo} from your area`,
     description: job.description,
     photos,
     photoCount: photos.length,

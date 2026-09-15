@@ -33,8 +33,8 @@ const router = Router();
  *       App UI now: use search query only (Search for Services). No filter bottom sheet.
  *       Optional future distance filter: radiusKm, lat, lng (already supported).
  *
- *       Card fields: id, title, badge, distanceKm, areaName, priceLabel, createdAt, postedAgo, isBookmarked, isSiteVisit
- *       postedAgo examples: 5 mins ago, 1 hour ago, 2 hours ago
+ *       Card fields: id, title, badge, distanceKm, areaName, priceLabel, createdAt, isBookmarked, isSiteVisit
+ *       createdAt: ISO timestamp — app formats relative time (1 min ago / 1 hour ago)
  *       badge: Site Visit | Reschedule | null
  *     parameters:
  *       - in: query
@@ -87,7 +87,6 @@ const router = Router();
  *                   areaName: Dublin
  *                   priceLabel: "€30"
  *                   createdAt: '2026-09-11T10:46:44.111Z'
- *                   postedAgo: 1 hour ago
  *                   isBookmarked: false
  *                   isSiteVisit: true
  *                 - id: 319a86dd-02d6-4db7-bcc0-45b604ac8a36
@@ -97,7 +96,6 @@ const router = Router();
  *                   areaName: Rathmines
  *                   priceLabel: "€1,000 - €1,500"
  *                   createdAt: '2026-09-10T12:11:49.000Z'
- *                   postedAgo: 2 hours ago
  *                   isBookmarked: false
  *                   isSiteVisit: false
  *       401:
@@ -116,7 +114,7 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       Full Job Details for Discover View Details in one response (no extra API calls).
- *       Includes postedAgo/postedLabel, site visit fee, customer, photos, location/map, actions.
+ *       Includes createdAt (app formats relative time), site visit fee, customer, photos, location/map, actions.
  *       Optional lat/lng to recompute distanceKm.
  *     parameters:
  *       - in: path
@@ -145,8 +143,6 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *                 areaName: Dublin 8
  *                 priceLabel: "€30"
  *                 createdAt: '2026-09-14T10:00:00.000Z'
- *                 postedAgo: 5 mins ago
- *                 postedLabel: Posted 5 mins ago from your area
  *                 isBookmarked: false
  *                 isSiteVisit: true
  *                 isReschedule: false
