@@ -104,7 +104,9 @@
  *                 type: object
  *                 properties:
  *                   label: { type: string }
- *                   icon: { type: string }
+ *                   icon: { type: string, nullable: true, description: Same as iconUrl — fetchable image URL }
+ *                   iconUrl: { type: string, nullable: true, description: Category/subcategory icon URL for mobile }
+ *                   iconName: { type: string, nullable: true, description: Optional raw name key; prefer iconUrl }
  *             scheduledDate: { type: string, format: date-time, nullable: true }
  *             timeSlot: { type: string, nullable: true, description: Customer preferred slot text on job }
  *             durationLabel: { type: string, nullable: true }

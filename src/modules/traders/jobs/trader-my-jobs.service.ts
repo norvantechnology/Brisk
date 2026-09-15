@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
+import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 
 const EARTH_RADIUS_KM = 6371;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
@@ -215,8 +216,8 @@ const assertMyJob = async (traderId: string, jobId: string) => {
           _count: { select: { jobs: true } },
         },
       },
-      category: { select: { id: true, name: true, iconName: true } },
-      subcategory: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true, iconName: true, urlSlug: true } },
+      subcategory: { select: { id: true, name: true, urlSlug: true } },
       photos: { orderBy: { createdAt: 'asc' } },
       materials: {
         where: { traderId },
@@ -573,11 +574,36 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     readLabel: m.senderId === trader.userId ? 'Sent' : 'Received',
   }));
 
+  const categoryIconUrl = job.category
+    ? resolveCategoryIconUrl({
+        iconName: job.category.iconName,
+        urlSlug: job.category.urlSlug,
+      })
+    : null;
+  const subcategoryIconUrl = job.subcategory
+    ? resolveCategoryIconUrl({
+        iconName: null,
+        urlSlug: job.subcategory.urlSlug,
+      })
+    : null;
+
   const tags = [
     job.category
-      ? { label: job.category.name, icon: job.category.iconName ?? 'category' }
+      ? {
+          label: job.category.name,
+          icon: categoryIconUrl,
+          iconUrl: categoryIconUrl,
+          iconName: job.category.iconName,
+        }
       : null,
-    job.subcategory ? { label: job.subcategory.name, icon: 'tag' } : null,
+    job.subcategory
+      ? {
+          label: job.subcategory.name,
+          icon: subcategoryIconUrl,
+          iconUrl: subcategoryIconUrl,
+          iconName: null as string | null,
+        }
+      : null,
   ].filter(Boolean);
 
   const estimatedEarnings =

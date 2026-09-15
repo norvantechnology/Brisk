@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
+import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 
 const EARTH_RADIUS_KM = 6371;
 const DEFAULT_RADIUS_KM = 50;
@@ -683,8 +684,8 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
           emailVerified: true,
         },
       },
-      category: { select: { id: true, name: true, iconName: true } },
-      subcategory: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true, iconName: true, urlSlug: true } },
+      subcategory: { select: { id: true, name: true, urlSlug: true } },
       photos: {
         where: { kind: 'CUSTOMER' },
         select: { id: true, photoUrl: true },
@@ -773,11 +774,37 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   const customerVerified = Boolean(job.customer.mobileVerified || job.customer.emailVerified);
   const photos = job.photos.map((p) => p.photoUrl);
 
+  const categoryIconUrl = job.category
+    ? resolveCategoryIconUrl({
+        iconName: job.category.iconName,
+        urlSlug: job.category.urlSlug,
+      })
+    : null;
+  const subcategoryIconUrl = job.subcategory
+    ? resolveCategoryIconUrl({
+        iconName: null,
+        urlSlug: job.subcategory.urlSlug,
+      })
+    : null;
+
   const tags = [
     job.category
-      ? { label: job.category.name, icon: job.category.iconName ?? 'category' }
+      ? {
+          label: job.category.name,
+          /** Fetchable icon URL for mobile (not a Lucide/name key). */
+          icon: categoryIconUrl,
+          iconUrl: categoryIconUrl,
+          iconName: job.category.iconName,
+        }
       : null,
-    job.subcategory ? { label: job.subcategory.name, icon: 'tag' } : null,
+    job.subcategory
+      ? {
+          label: job.subcategory.name,
+          icon: subcategoryIconUrl,
+          iconUrl: subcategoryIconUrl,
+          iconName: null as string | null,
+        }
+      : null,
   ].filter(Boolean);
 
   return {
@@ -808,11 +835,13 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       id: job.category.id,
       name: job.category.name,
       iconName: job.category.iconName,
+      iconUrl: categoryIconUrl,
     },
     subcategory: job.subcategory
       ? {
           id: job.subcategory.id,
           name: job.subcategory.name,
+          iconUrl: subcategoryIconUrl,
         }
       : null,
     categoryName: job.category.name,
