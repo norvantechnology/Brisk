@@ -524,10 +524,11 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
   const siteVisitRequested =
     input.siteVisitRequested ?? quoteType === JobQuoteType.ONSITE;
 
-  // Site Visit always needs a trader (from offer or explicit selection).
-  if ((siteVisitRequested || quoteType === JobQuoteType.ONSITE) && !traderId) {
+  // Direct Trader / ONSITE always needs a selected trader.
+  // Marketplace REMOTE + siteVisitRequested is open Discover (no trader yet).
+  if (quoteType === JobQuoteType.ONSITE && !traderId) {
     throw new BadRequestError(
-      'Site Visit jobs require traderId (or offerId with a trader). Pass nextJobPrefill.traderId and offerId from GET /trader-offers/{id} on POST /jobs.'
+      'ONSITE / Direct Trader jobs require traderId (or offerId with a trader). Pass nextJobPrefill.traderId and offerId from GET /trader-offers/{id} on POST /jobs.'
     );
   }
 
@@ -958,9 +959,11 @@ export const publishJob = async (
       (existing.serviceCharge != null ? money(existing.serviceCharge) : null) ??
       (existing.maxBudget != null ? money(existing.maxBudget) : null);
 
-  if (isSiteVisit && !traderId) {
+  // Marketplace site-visit (REMOTE + siteVisitRequested) can publish without trader.
+  // Direct Trader ONSITE still requires traderId.
+  if (existing.quoteType === JobQuoteType.ONSITE && !traderId) {
     throw new BadRequestError(
-      'A trader is required to publish a Site Visit job (from offer or trader selection).'
+      'A trader is required to publish an ONSITE / Direct Trader job (from offer or trader selection).'
     );
   }
 

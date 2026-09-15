@@ -63,9 +63,36 @@
  *         startTime: { type: string, nullable: true, example: '12:00' }
  *         endTime: { type: string, nullable: true, example: '17:00' }
  *         displayLabel: { type: string, nullable: true, example: 'Oct 24, 2026 12:00 – 17:00' }
- *         statusBadge: { type: string, nullable: true, example: CONFIRMED, description: CONFIRMED or RESCHEDULE REQUIRED }
- *         sectionTitle: { type: string, nullable: true, example: SCHEDULED VISIT DATE & TIME }
+ *         statusBadge: { type: string, nullable: true, example: WAITING CONFIRMATION, description: WAITING CONFIRMATION | CONFIRMED | RESCHEDULE REQUIRED | COMPLETED }
+ *         sectionTitle: { type: string, nullable: true, example: PROPOSED VISIT DATE & TIME }
  *         requestId: { type: string, format: uuid, nullable: true }
+ *     TraderWaitingJobCard:
+ *       type: object
+ *       description: Home Active/Waiting (blue) card while awaiting customer confirmation
+ *       properties:
+ *         id: { type: string, format: uuid }
+ *         title: { type: string, example: Bathroom re-tiling }
+ *         customerName: { type: string, example: Jane Customer }
+ *         areaName: { type: string, example: Dublin }
+ *         distanceKm: { type: number, example: 2.1 }
+ *         quoteAmount: { type: number, example: 420 }
+ *         quoteAmountLabel: { type: string, example: "€420" }
+ *         statusBadge: { type: string, example: Waiting }
+ *         statusLabel: { type: string, example: Waiting for Customer Confirmation }
+ *         colorHint: { type: string, example: blue, description: App should render blue Waiting card }
+ *         isJobRequested: { type: boolean, example: true }
+ *         isWaitingForCustomerConfirmation: { type: boolean, example: true }
+ *         hasSubmittedQuote: { type: boolean, example: true }
+ *         requestedAt: { type: string, format: date-time }
+ *         primaryAction: { type: string, example: WAITING_FOR_CUSTOMER }
+ *         primaryActionLabel: { type: string, example: Waiting for Customer Confirmation }
+ *     TraderWaitingJobsResponse:
+ *       type: object
+ *       properties:
+ *         items:
+ *           type: array
+ *           items: { $ref: '#/components/schemas/TraderWaitingJobCard' }
+ *         count: { type: integer, example: 1 }
  *     TraderDiscoverJobDetail:
  *       allOf:
  *         - $ref: '#/components/schemas/TraderDiscoverJobCard'

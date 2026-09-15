@@ -77,15 +77,29 @@ const router = Router();
  *                   createdAt: '2026-09-15T10:00:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: true
+ *                   hasSubmittedQuote: false
+ *                   canUpdateQuote: false
+ *                   canSubmitQuote: false
+ *                   isJobRequested: false
+ *                   isWaitingForCustomerConfirmation: false
+ *                   quoteAmount: null
+ *                   quoteAmountLabel: null
  *                 - id: 11111111-1111-1111-1111-111111111112
  *                   title: Full Bathroom Re-tiling
- *                   badge: Reschedule
+ *                   badge: null
  *                   distanceKm: 5.1
  *                   areaName: Rathmines
  *                   priceLabel: "€800 - €1,200"
  *                   createdAt: '2026-09-15T09:00:00.000Z'
  *                   isBookmarked: false
- *                   isSiteVisit: true
+ *                   isSiteVisit: false
+ *                   hasSubmittedQuote: true
+ *                   canUpdateQuote: true
+ *                   canSubmitQuote: false
+ *                   isJobRequested: false
+ *                   isWaitingForCustomerConfirmation: false
+ *                   quoteAmount: 420
+ *                   quoteAmountLabel: "€420"
  *       401:
  *         description: Unauthorized
  *       403:
@@ -107,6 +121,36 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *     responses:
  *       200:
  *         description: Waiting job cards
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderWaitingJobsResponse' }
+ *             example:
+ *               success: true
+ *               message: Waiting jobs retrieved successfully.
+ *               data:
+ *                 count: 1
+ *                 items:
+ *                   - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     title: Full Bathroom Re-tiling
+ *                     customerName: Jane Customer
+ *                     areaName: Dublin
+ *                     distanceKm: 2.1
+ *                     quoteAmount: 420
+ *                     quoteAmountLabel: "€420"
+ *                     statusBadge: Waiting
+ *                     statusLabel: Waiting for Customer Confirmation
+ *                     colorHint: blue
+ *                     isJobRequested: true
+ *                     isWaitingForCustomerConfirmation: true
+ *                     hasSubmittedQuote: true
+ *                     requestedAt: '2026-09-15T12:00:00.000Z'
+ *                     primaryAction: WAITING_FOR_CUSTOMER
+ *                     primaryActionLabel: Waiting for Customer Confirmation
  */
 router.get('/waiting', controller.listWaitingJobs);
 
@@ -365,6 +409,30 @@ router.post(
  *     responses:
  *       200:
  *         description: Job requested — waiting for customer
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Job requested. Waiting for customer confirmation. }
+ *                 data: { $ref: '#/components/schemas/TraderDiscoverJobDetail' }
+ *             example:
+ *               success: true
+ *               message: Job requested. Waiting for customer confirmation.
+ *               data:
+ *                 id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                 title: Full Bathroom Re-tiling
+ *                 hasSubmittedQuote: true
+ *                 canUpdateQuote: true
+ *                 canSubmitQuote: false
+ *                 canRequestJob: false
+ *                 isJobRequested: true
+ *                 isWaitingForCustomerConfirmation: true
+ *                 quoteAmount: 420
+ *                 quoteAmountLabel: "€420"
+ *                 primaryAction: WAITING_FOR_CUSTOMER
+ *                 primaryActionLabel: Waiting for Customer Confirmation
  *       400:
  *         description: Missing quote amount or site-visit slots
  */
@@ -426,24 +494,34 @@ router.post(
  *                 priceLabel: "€30"
  *                 createdAt: '2026-09-15T10:00:00.000Z'
  *                 isBookmarked: false
- *                 isSiteVisit: true
+ *                 isSiteVisit: false
+ *                 hasSubmittedQuote: true
+ *                 canUpdateQuote: true
+ *                 canSubmitQuote: false
+ *                 canRequestJob: true
+ *                 isJobRequested: false
+ *                 isWaitingForCustomerConfirmation: false
+ *                 quoteId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+ *                 quoteAmount: 420
+ *                 quoteAmountLabel: "€420"
+ *                 quoteNotes: Includes parts and labour
+ *                 quoteStatus: PENDING
  *                 description: Looking for a professional to install solar panels.
  *                 photos: ['https://cdn.example.com/roof1.jpg']
  *                 photoCount: 1
  *                 photosSectionTitle: Customer Photos (1)
  *                 photosHint: null
- *                 siteVisitFeeTitle: SITE VISIT FEE
- *                 siteVisitFee: 30
- *                 siteVisitFeeLabel: "€30"
- *                 siteVisitFeeNote: This fee is paid to the platform to secure the visit and ensure high intent for both parties.
+ *                 siteVisitFeeTitle: null
+ *                 siteVisitFee: null
+ *                 siteVisitFeeLabel: null
+ *                 siteVisitFeeNote: null
  *                 isReschedule: false
- *                 canSelectDateTime: true
- *                 canRequestSiteVisit: true
+ *                 canSelectDateTime: false
+ *                 canRequestSiteVisit: false
  *                 canRequestReschedule: false
- *                 canSubmitQuote: false
- *                 selectDateTimeLabel: Select Date & Time
- *                 primaryAction: REQUEST_SITE_VISIT
- *                 primaryActionLabel: Request For Site Visit
+ *                 selectDateTimeLabel: null
+ *                 primaryAction: REQUEST_JOB
+ *                 primaryActionLabel: Request Job
  *                 siteVisit:
  *                   status: NONE
  *                   visitDate: null
