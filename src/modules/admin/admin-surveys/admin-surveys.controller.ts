@@ -82,6 +82,46 @@ export const updateConsumer = async (
   }
 };
 
+export const deleteConsumer = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const result = await surveyAdminService.deleteConsumer(adminId, adminLabel, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Survey consumer registration deleted successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const bulkDeleteConsumers = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const result = await surveyAdminService.bulkDeleteConsumers(adminId, adminLabel, req.body.ids);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Survey consumer registrations deleted successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const exportConsumers = async (
   req: AuthenticatedAdminRequest,
   res: Response,
@@ -171,6 +211,46 @@ export const updateTrader = async (
       statusCode: 200,
       message: 'Survey trader registration updated successfully.',
       data: { registration },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteTrader = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const result = await surveyAdminService.deleteTrader(adminId, adminLabel, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Survey trader registration deleted successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const bulkDeleteTraders = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const result = await surveyAdminService.bulkDeleteTraders(adminId, adminLabel, req.body.ids);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Survey trader registrations deleted successfully.',
+      data: result,
     });
   } catch (error) {
     next(error);

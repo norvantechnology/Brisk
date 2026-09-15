@@ -481,6 +481,57 @@ export const updateConsumer = async (
   return registration;
 };
 
+export const deleteConsumer = async (adminId: string, adminLabel: string, id: string) => {
+  const existing = await prisma.surveyConsumerRegistration.findUnique({
+    where: { id },
+    select: { id: true, registrationCode: true, fullName: true },
+  });
+  if (!existing) {
+    throw new NotFoundError('Survey consumer registration not found.');
+  }
+
+  await prisma.surveyConsumerRegistration.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: 'SURVEY_CONSUMER_DELETED',
+      actorType: ActorType.ADMIN,
+      actorId: adminId,
+      actorLabel: adminLabel,
+      subjectType: 'SurveyConsumerRegistration',
+      subjectId: existing.id,
+      description: `Deleted survey consumer ${existing.registrationCode} (${existing.fullName}).`,
+    },
+  });
+
+  return { id: existing.id, deleted: true };
+};
+
+export const bulkDeleteConsumers = async (
+  adminId: string,
+  adminLabel: string,
+  ids: string[]
+) => {
+  const uniqueIds = [...new Set(ids)];
+  const result = await prisma.surveyConsumerRegistration.deleteMany({
+    where: { id: { in: uniqueIds } },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: 'SURVEY_CONSUMER_BULK_DELETED',
+      actorType: ActorType.ADMIN,
+      actorId: adminId,
+      actorLabel: adminLabel,
+      subjectType: 'SurveyConsumerRegistration',
+      subjectId: uniqueIds[0],
+      description: `Bulk-deleted ${result.count} survey consumer registration(s).`,
+    },
+  });
+
+  return { deleted: result.count, ids: uniqueIds };
+};
+
 export const exportConsumersCsv = async (filters: SurveyConsumerFilters): Promise<string> => {
   const where = buildConsumerWhere(filters);
   const orderBy = buildConsumerOrderBy(filters);
@@ -799,6 +850,57 @@ export const updateTrader = async (
   });
 
   return registration;
+};
+
+export const deleteTrader = async (adminId: string, adminLabel: string, id: string) => {
+  const existing = await prisma.surveyTraderRegistration.findUnique({
+    where: { id },
+    select: { id: true, registrationCode: true, fullName: true },
+  });
+  if (!existing) {
+    throw new NotFoundError('Survey trader registration not found.');
+  }
+
+  await prisma.surveyTraderRegistration.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: 'SURVEY_TRADER_DELETED',
+      actorType: ActorType.ADMIN,
+      actorId: adminId,
+      actorLabel: adminLabel,
+      subjectType: 'SurveyTraderRegistration',
+      subjectId: existing.id,
+      description: `Deleted survey trader ${existing.registrationCode} (${existing.fullName}).`,
+    },
+  });
+
+  return { id: existing.id, deleted: true };
+};
+
+export const bulkDeleteTraders = async (
+  adminId: string,
+  adminLabel: string,
+  ids: string[]
+) => {
+  const uniqueIds = [...new Set(ids)];
+  const result = await prisma.surveyTraderRegistration.deleteMany({
+    where: { id: { in: uniqueIds } },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: 'SURVEY_TRADER_BULK_DELETED',
+      actorType: ActorType.ADMIN,
+      actorId: adminId,
+      actorLabel: adminLabel,
+      subjectType: 'SurveyTraderRegistration',
+      subjectId: uniqueIds[0],
+      description: `Bulk-deleted ${result.count} survey trader registration(s).`,
+    },
+  });
+
+  return { deleted: result.count, ids: uniqueIds };
 };
 
 export const exportTradersCsv = async (filters: SurveyTraderFilters): Promise<string> => {

@@ -6,6 +6,7 @@ import {
   surveyFilterSchema,
   updateSurveyConsumerSchema,
   updateSurveyTraderSchema,
+  bulkDeleteSurveyRegistrationsSchema,
   idParamSchema,
 } from '../admin-cms/admin-cms.validation';
 
@@ -255,6 +256,37 @@ router.get('/consumer/:id', validate(idParamSchema), surveyAdminController.getCo
 
 /**
  * @swagger
+ * /admin/surveys/consumer/bulk-delete:
+ *   post:
+ *     summary: Consumer survey — bulk delete registrations
+ *     tags: ['Admin / Surveys']
+ *     description: Delete multiple consumer survey registrations by ID array.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 example: ['11111111-1111-1111-1111-111111111111']
+ *     responses:
+ *       200:
+ *         description: Deleted count returned.
+ */
+router.post(
+  '/consumer/bulk-delete',
+  validate(bulkDeleteSurveyRegistrationsSchema),
+  surveyAdminController.bulkDeleteConsumers
+);
+
+/**
+ * @swagger
  * /admin/surveys/consumer/{id}:
  *   patch:
  *     summary: Consumer survey — update status or add notes
@@ -291,8 +323,25 @@ router.get('/consumer/:id', validate(idParamSchema), surveyAdminController.getCo
  *         description: Registration updated successfully.
  *       404:
  *         description: Registration not found.
+ *   delete:
+ *     summary: Consumer survey — delete one registration
+ *     tags: ['Admin / Surveys']
+ *     description: Single delete by unique registration ID.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Registration deleted.
+ *       404:
+ *         description: Registration not found.
  */
 router.patch('/consumer/:id', validate(updateSurveyConsumerSchema), surveyAdminController.updateConsumer);
+router.delete('/consumer/:id', validate(idParamSchema), surveyAdminController.deleteConsumer);
 
 /**
  * @swagger
@@ -483,6 +532,36 @@ router.get('/trader/:id', validate(idParamSchema), surveyAdminController.getTrad
 
 /**
  * @swagger
+ * /admin/surveys/trader/bulk-delete:
+ *   post:
+ *     summary: Trader survey — bulk delete registrations
+ *     tags: ['Admin / Surveys']
+ *     description: Delete multiple trader survey registrations by ID array.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Deleted count returned.
+ */
+router.post(
+  '/trader/bulk-delete',
+  validate(bulkDeleteSurveyRegistrationsSchema),
+  surveyAdminController.bulkDeleteTraders
+);
+
+/**
+ * @swagger
  * /admin/surveys/trader/{id}:
  *   patch:
  *     summary: Trader survey — update status or add notes
@@ -518,7 +597,24 @@ router.get('/trader/:id', validate(idParamSchema), surveyAdminController.getTrad
  *         description: Registration updated successfully.
  *       404:
  *         description: Registration not found.
+ *   delete:
+ *     summary: Trader survey — delete one registration
+ *     tags: ['Admin / Surveys']
+ *     description: Single delete by unique registration ID.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Registration deleted.
+ *       404:
+ *         description: Registration not found.
  */
 router.patch('/trader/:id', validate(updateSurveyTraderSchema), surveyAdminController.updateTrader);
+router.delete('/trader/:id', validate(idParamSchema), surveyAdminController.deleteTrader);
 
 export default router;

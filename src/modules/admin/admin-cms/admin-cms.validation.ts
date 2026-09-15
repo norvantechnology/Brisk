@@ -414,6 +414,13 @@ export const updateSurveyTraderSchema = z.object({
   }),
 });
 
+/** Bulk delete survey registrations — body: { ids: uuid[] } */
+export const bulkDeleteSurveyRegistrationsSchema = z.object({
+  body: z.object({
+    ids: z.array(z.string().uuid('Invalid registration ID.')).min(1, 'At least one ID is required.'),
+  }),
+});
+
 export const createSurveyConsumerPublicSchema = z.object({
   body: z
     .object({
