@@ -14,6 +14,7 @@ import {
 import onboardingRoutes from './onboarding/onboarding.routes';
 import traderOffersRoutes from './offers/trader-offers.routes';
 import traderJobsRoutes from './jobs/trader-jobs.routes';
+import traderMyJobsRoutes from './jobs/trader-my-jobs.routes';
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.use('/onboarding', onboardingRoutes);
 
 router.use(authMiddleware, roleMiddleware(['TRADER']));
 router.use('/offers', traderOffersRoutes);
+router.use('/jobs', traderMyJobsRoutes);
 router.use('/jobs', traderJobsRoutes);
 
 /**

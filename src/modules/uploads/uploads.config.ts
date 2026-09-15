@@ -54,6 +54,8 @@ export const PURPOSE_CONFIG: Record<UploadPurpose, PurposeConfig> = {
   address_map_snapshot: { maxBytes: 2 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
   meter_reading_photo: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
   job_photo: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
+  job_proof: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
+  job_material: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
 };
 
 const CUSTOMER_PURPOSES: UploadPurpose[] = [
@@ -63,7 +65,13 @@ const CUSTOMER_PURPOSES: UploadPurpose[] = [
   'job_photo',
 ];
 
-const TRADER_EXTRA: UploadPurpose[] = ['trader_cover', 'trader_document', 'offer_banner'];
+const TRADER_EXTRA: UploadPurpose[] = [
+  'trader_cover',
+  'trader_document',
+  'offer_banner',
+  'job_proof',
+  'job_material',
+];
 
 export const isPurposeAllowed = (
   purpose: UploadPurpose,

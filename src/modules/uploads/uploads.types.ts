@@ -22,6 +22,8 @@ export const UPLOAD_PURPOSES = [
   'address_map_snapshot',
   'meter_reading_photo',
   'job_photo',
+  'job_proof',
+  'job_material',
 ] as const;
 
 export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];

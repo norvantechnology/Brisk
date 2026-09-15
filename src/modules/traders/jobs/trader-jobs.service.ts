@@ -171,13 +171,51 @@ const buildAvailableDates = (days = SITE_VISIT_DATE_DAYS) => {
   return out;
 };
 
-type SiteVisitRow = {
+type SiteVisitSlotRow = {
   id: string;
   visitDate: Date;
   timeSlot: SiteVisitTimeSlot;
+  startTime: string;
+  endTime: string;
+  sortOrder: number;
+  isSelected: boolean;
+};
+
+type SiteVisitRow = {
+  id: string;
+  visitDate: Date | null;
+  timeSlot: SiteVisitTimeSlot | null;
   status: TraderSiteVisitStatus;
   createdAt?: Date;
   updatedAt?: Date;
+  slots?: SiteVisitSlotRow[];
+};
+
+const formatSlotListLabel = (visitDate: Date, startTime: string, endTime: string): string => {
+  const day = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(visitDate);
+  const toAmPm = (hhmm: string) => {
+    const [hStr, mStr] = hhmm.split(':');
+    let h = Number(hStr);
+    const m = mStr || '00';
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${String(h12).padStart(2, '0')}:${m}${suffix}`;
+  };
+  return `${day}, ${toAmPm(startTime)} - ${toAmPm(endTime)}`;
+};
+
+const normalizeSlotsInput = (body: {
+  date?: string;
+  timeSlot?: SiteVisitTimeSlot;
+  slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
+}): Array<{ date: string; timeSlot: SiteVisitTimeSlot }> => {
+  if (body.slots && body.slots.length > 0) return body.slots;
+  if (body.date && body.timeSlot) return [{ date: body.date, timeSlot: body.timeSlot }];
+  throw new BadRequestError('Provide slots: [{ date, timeSlot }] or date + timeSlot.');
 };
 
 const toSiteVisitPayload = (row: SiteVisitRow | null) => {
@@ -193,11 +231,82 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
       statusBadge: null as string | null,
       sectionTitle: null as string | null,
       requestId: null as string | null,
+      slots: [] as Array<{
+        id: string;
+        date: string;
+        timeSlot: SiteVisitTimeSlot;
+        timeSlotLabel: string;
+        startTime: string;
+        endTime: string;
+        displayLabel: string;
+        isSelected: boolean;
+      }>,
+      slotsSectionTitle: 'SITE VISIT SLOTS',
+      slotCount: 0,
     };
   }
 
-  const def = SITE_VISIT_SLOT_DEFS[row.timeSlot];
+  const slotRows =
+    row.slots && row.slots.length > 0
+      ? [...row.slots].sort((a, b) => a.sortOrder - b.sortOrder)
+      : row.visitDate && row.timeSlot
+        ? [
+            {
+              id: row.id,
+              visitDate: row.visitDate,
+              timeSlot: row.timeSlot,
+              startTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].startTime,
+              endTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].endTime,
+              sortOrder: 0,
+              isSelected: true,
+            },
+          ]
+        : [];
+
+  const slots = slotRows.map((s) => ({
+    id: s.id,
+    date: formatVisitDateKey(s.visitDate),
+    timeSlot: s.timeSlot,
+    timeSlotLabel: SITE_VISIT_SLOT_DEFS[s.timeSlot].label,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    displayLabel: formatSlotListLabel(s.visitDate, s.startTime, s.endTime),
+    isSelected: s.isSelected,
+  }));
+
+  const primary =
+    slotRows.find((s) => s.isSelected) ||
+    (row.visitDate && row.timeSlot
+      ? {
+          visitDate: row.visitDate,
+          timeSlot: row.timeSlot,
+          startTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].startTime,
+          endTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].endTime,
+        }
+      : slotRows[0]) ||
+    null;
+
+  if (!primary) {
+    return {
+      status: 'NONE' as const,
+      visitDate: null,
+      timeSlot: null,
+      timeSlotLabel: null,
+      startTime: null,
+      endTime: null,
+      displayLabel: null,
+      statusBadge: null,
+      sectionTitle: null,
+      requestId: row.id,
+      slots: [],
+      slotsSectionTitle: 'SITE VISIT SLOTS',
+      slotCount: 0,
+    };
+  }
+
+  const def = SITE_VISIT_SLOT_DEFS[primary.timeSlot];
   const isRescheduleRequired = row.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED;
+  const isCompleted = row.status === TraderSiteVisitStatus.COMPLETED;
   const wasRescheduled =
     Boolean(row.createdAt && row.updatedAt) &&
     row.updatedAt!.getTime() - row.createdAt!.getTime() > 1500;
@@ -206,16 +315,23 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
     : 'SCHEDULED VISIT DATE & TIME';
 
   return {
-    status: row.status as 'CONFIRMED' | 'RESCHEDULE_REQUIRED',
-    visitDate: formatVisitDateKey(row.visitDate),
-    timeSlot: row.timeSlot,
+    status: row.status as 'CONFIRMED' | 'RESCHEDULE_REQUIRED' | 'COMPLETED',
+    visitDate: formatVisitDateKey(primary.visitDate),
+    timeSlot: primary.timeSlot,
     timeSlotLabel: def.label,
-    startTime: def.startTime,
-    endTime: def.endTime,
-    displayLabel: formatVisitDisplayLabel(row.visitDate, row.timeSlot),
-    statusBadge: isRescheduleRequired ? 'RESCHEDULE REQUIRED' : 'CONFIRMED',
+    startTime: primary.startTime || def.startTime,
+    endTime: primary.endTime || def.endTime,
+    displayLabel: formatVisitDisplayLabel(primary.visitDate, primary.timeSlot),
+    statusBadge: isRescheduleRequired
+      ? 'RESCHEDULE REQUIRED'
+      : isCompleted
+        ? 'COMPLETED'
+        : 'CONFIRMED',
     sectionTitle,
     requestId: row.id,
+    slots,
+    slotsSectionTitle: 'SITE VISIT SLOTS',
+    slotCount: slots.length,
   };
 };
 
@@ -223,7 +339,7 @@ const resolvePrimaryActions = (
   isSiteVisit: boolean,
   siteVisit: ReturnType<typeof toSiteVisitPayload>
 ) => {
-  if (siteVisit.status === 'CONFIRMED') {
+  if (siteVisit.status === 'CONFIRMED' || siteVisit.status === 'COMPLETED') {
     return {
       canSelectDateTime: false,
       canRequestSiteVisit: false,
@@ -570,6 +686,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       category: { select: { id: true, name: true, iconName: true } },
       subcategory: { select: { id: true, name: true } },
       photos: {
+        where: { kind: 'CUSTOMER' },
         select: { id: true, photoUrl: true },
         orderBy: { createdAt: 'asc' },
       },
@@ -594,6 +711,18 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
         status: true,
         createdAt: true,
         updatedAt: true,
+        slots: {
+          select: {
+            id: true,
+            visitDate: true,
+            timeSlot: true,
+            startTime: true,
+            endTime: true,
+            sortOrder: true,
+            isSelected: true,
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
       },
     }),
   ]);
@@ -744,7 +873,7 @@ const assertJobAccessibleForSiteVisit = async (traderId: string, jobId: string) 
   return job;
 };
 
-/** Bottom sheet: Site Visit Date & Time — available dates + Morning/Afternoon/Evening/Any time. */
+/** Bottom sheet: Site Visit Date & Time — dates + periods + proposed multi-slots list. */
 export const getSiteVisitSlots = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   await assertJobAccessibleForSiteVisit(trader.id, jobId);
@@ -758,9 +887,22 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
       status: true,
       createdAt: true,
       updatedAt: true,
+      slots: {
+        select: {
+          id: true,
+          visitDate: true,
+          timeSlot: true,
+          startTime: true,
+          endTime: true,
+          sortOrder: true,
+          isSelected: true,
+        },
+        orderBy: { sortOrder: 'asc' },
+      },
     },
   });
   const active = visit && visit.status !== TraderSiteVisitStatus.CANCELLED ? visit : null;
+  const payload = toSiteVisitPayload(active);
 
   return {
     jobId,
@@ -774,12 +916,18 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
       rangeLabel: `${SITE_VISIT_SLOT_DEFS[id].startTime} - ${SITE_VISIT_SLOT_DEFS[id].endTime}`,
       icon: SITE_VISIT_SLOT_DEFS[id].icon,
     })),
-    selected: active
-      ? {
-          date: formatVisitDateKey(active.visitDate),
-          timeSlot: active.timeSlot,
-        }
-      : null,
+    proposedSlots: payload.slots,
+    slotsSectionTitle: 'SITE VISIT SLOTS',
+    addAnotherSlotLabel: 'Add Another Slot',
+    selected:
+      active && active.visitDate != null && active.timeSlot != null
+        ? {
+            date: formatVisitDateKey(active.visitDate),
+            timeSlot: active.timeSlot,
+          }
+        : payload.slots[0]
+          ? { date: payload.slots[0].date, timeSlot: payload.slots[0].timeSlot }
+          : null,
     mode: active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED ? 'RESCHEDULE' : 'REQUEST',
     submitLabel:
       active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
@@ -791,10 +939,22 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
 const upsertSiteVisit = async (
   traderId: string,
   jobId: string,
-  body: { date: string; timeSlot: SiteVisitTimeSlot },
+  body: {
+    date?: string;
+    timeSlot?: SiteVisitTimeSlot;
+    slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
+  },
   mode: 'request' | 'reschedule'
 ) => {
-  const visitDate = parseVisitDateOnly(body.date);
+  const slotsInput = normalizeSlotsInput(body);
+  const parsed = slotsInput.map((s) => ({
+    visitDate: parseVisitDateOnly(s.date),
+    timeSlot: s.timeSlot,
+    startTime: SITE_VISIT_SLOT_DEFS[s.timeSlot].startTime,
+    endTime: SITE_VISIT_SLOT_DEFS[s.timeSlot].endTime,
+  }));
+  const primary = parsed[0];
+
   const existing = await prisma.traderSiteVisitRequest.findUnique({
     where: { jobId_traderId: { jobId, traderId } },
   });
@@ -803,36 +963,58 @@ const upsertSiteVisit = async (
     if (existing && existing.status === TraderSiteVisitStatus.CONFIRMED) {
       throw new ConflictError('Site visit already confirmed. Use reschedule if a new slot is needed.');
     }
-  } else {
-    if (!existing || existing.status === TraderSiteVisitStatus.CANCELLED) {
-      throw new BadRequestError('No site visit to reschedule. Request a site visit first.');
-    }
+  } else if (!existing || existing.status === TraderSiteVisitStatus.CANCELLED) {
+    throw new BadRequestError('No site visit to reschedule. Request a site visit first.');
   }
 
-  const row = await prisma.traderSiteVisitRequest.upsert({
-    where: { jobId_traderId: { jobId, traderId } },
-    create: {
-      jobId,
-      traderId,
-      visitDate,
-      timeSlot: body.timeSlot,
-      status: TraderSiteVisitStatus.CONFIRMED,
-    },
-    update: {
-      visitDate,
-      timeSlot: body.timeSlot,
-      status: TraderSiteVisitStatus.CONFIRMED,
-    },
+  const row = await prisma.$transaction(async (tx) => {
+    const request = await tx.traderSiteVisitRequest.upsert({
+      where: { jobId_traderId: { jobId, traderId } },
+      create: {
+        jobId,
+        traderId,
+        visitDate: primary.visitDate,
+        timeSlot: primary.timeSlot,
+        status: TraderSiteVisitStatus.CONFIRMED,
+      },
+      update: {
+        visitDate: primary.visitDate,
+        timeSlot: primary.timeSlot,
+        status: TraderSiteVisitStatus.CONFIRMED,
+      },
+    });
+
+    await tx.traderSiteVisitSlot.deleteMany({ where: { requestId: request.id } });
+    await tx.traderSiteVisitSlot.createMany({
+      data: parsed.map((s, index) => ({
+        requestId: request.id,
+        visitDate: s.visitDate,
+        timeSlot: s.timeSlot,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        sortOrder: index,
+        isSelected: index === 0,
+      })),
+    });
+
+    return tx.traderSiteVisitRequest.findUniqueOrThrow({
+      where: { id: request.id },
+      include: { slots: { orderBy: { sortOrder: 'asc' } } },
+    });
   });
 
   return toSiteVisitPayload(row);
 };
 
-/** CTA: Request For Site Visit (after Select Date & Time). MVP auto-confirms. */
+/** CTA: Request For Site Visit — multi-slot `slots[]` or legacy date+timeSlot. */
 export const requestSiteVisit = async (
   userId: string,
   jobId: string,
-  body: { date: string; timeSlot: SiteVisitTimeSlot }
+  body: {
+    date?: string;
+    timeSlot?: SiteVisitTimeSlot;
+    slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
+  }
 ) => {
   const trader = await getTraderContext(userId);
   await assertJobAccessibleForSiteVisit(trader.id, jobId);
@@ -841,11 +1023,15 @@ export const requestSiteVisit = async (
   return { ...detail, siteVisit };
 };
 
-/** CTA: Request For Reschedule Site Visit. */
+/** CTA: Request For Reschedule Site Visit — replaces proposed slots. */
 export const rescheduleSiteVisit = async (
   userId: string,
   jobId: string,
-  body: { date: string; timeSlot: SiteVisitTimeSlot }
+  body: {
+    date?: string;
+    timeSlot?: SiteVisitTimeSlot;
+    slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
+  }
 ) => {
   const trader = await getTraderContext(userId);
   await assertJobAccessibleForSiteVisit(trader.id, jobId);

@@ -167,7 +167,11 @@ router.get(
  *       content:
  *         application/json:
  *           schema: { $ref: '#/components/schemas/TraderSiteVisitRequestBody' }
- *           example: { date: '2026-09-16', timeSlot: AFTERNOON }
+ *           example:
+ *             slots:
+ *               - { date: '2026-09-16', timeSlot: AFTERNOON }
+ *               - { date: '2026-09-17', timeSlot: MORNING }
+
  *     responses:
  *       200:
  *         description: Confirmed — open Confirmed Job Details
@@ -212,7 +216,11 @@ router.post(
  *       content:
  *         application/json:
  *           schema: { $ref: '#/components/schemas/TraderSiteVisitRequestBody' }
- *           example: { date: '2026-09-17', timeSlot: MORNING }
+ *           example:
+ *             slots:
+ *               - { date: '2026-09-18', timeSlot: MORNING }
+ *               - { date: '2026-09-19', timeSlot: EVENING }
+
  *     responses:
  *       200:
  *         description: Reschedule confirmed

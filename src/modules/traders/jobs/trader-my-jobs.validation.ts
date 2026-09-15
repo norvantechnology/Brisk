@@ -1,0 +1,70 @@
+import { z } from 'zod';
+
+const jobIdParam = z.object({
+  id: z.string().uuid('Invalid job ID.'),
+});
+
+export const myJobsListQuerySchema = z.object({
+  query: z.object({
+    tab: z.enum(['ACTIVE', 'COMPLETED', 'OTHER']).optional().default('ACTIVE'),
+    page: z.string().optional(),
+    limit: z.string().optional(),
+  }),
+});
+
+export const myJobIdParamSchema = z.object({
+  params: jobIdParam,
+});
+
+export const myJobQuoteBodySchema = z.object({
+  params: jobIdParam,
+  body: z.object({
+    amount: z.number().positive('amount must be a positive number.'),
+    notes: z.string().max(2000).optional(),
+  }),
+});
+
+export const myJobAcceptBodySchema = z.object({
+  params: jobIdParam,
+  body: z
+    .object({
+      amount: z.number().positive().optional(),
+    })
+    .optional()
+    .default({}),
+});
+
+export const myJobMaterialBodySchema = z.object({
+  params: jobIdParam,
+  body: z.object({
+    name: z.string().min(1).max(200),
+    detail: z.string().max(1000).optional(),
+    price: z.number().nonnegative('price must be >= 0.'),
+    photoUrl: z.string().url().optional(),
+  }),
+});
+
+export const myJobMaterialIdParamSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid job ID.'),
+    materialId: z.string().uuid('Invalid material ID.'),
+  }),
+});
+
+export const myJobProofPhotoBodySchema = z.object({
+  params: jobIdParam,
+  body: z.object({
+    photoUrl: z.string().url('photoUrl must be a valid URL.'),
+  }),
+});
+
+export const myJobMessageBodySchema = z.object({
+  params: jobIdParam,
+  body: z.object({
+    message: z.string().min(1).max(4000),
+  }),
+});
+
+export const incomingJobIdParamSchema = z.object({
+  params: jobIdParam,
+});

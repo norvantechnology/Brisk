@@ -50,16 +50,37 @@ export const discoverJobDetailQuerySchema = z.object({
 
 const siteVisitTimeSlotEnum = z.enum(['MORNING', 'AFTERNOON', 'EVENING', 'ANYTIME']);
 
-/** POST Request For Site Visit / Request For Reschedule Site Visit */
+const siteVisitSlotItemSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  timeSlot: siteVisitTimeSlotEnum,
+});
+
+/**
+ * POST Request / Reschedule Site Visit.
+ * Multi-slot Figma: prefer `slots: [{ date, timeSlot }, ...]`.
+ * Legacy single: `{ date, timeSlot }` still accepted.
+ */
 export const siteVisitRequestBodySchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid job ID.'),
   }),
-  body: z.object({
-    /** YYYY-MM-DD from date strip */
-    date: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
-    timeSlot: siteVisitTimeSlotEnum,
-  }),
+  body: z
+    .object({
+      date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
+        .optional(),
+      timeSlot: siteVisitTimeSlotEnum.optional(),
+      slots: z.array(siteVisitSlotItemSchema).min(1).max(20).optional(),
+    })
+    .superRefine((body, ctx) => {
+      const hasSlots = Array.isArray(body.slots) && body.slots.length > 0;
+      const hasSingle = Boolean(body.date && body.timeSlot);
+      if (!hasSlots && !hasSingle) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Provide slots: [{ date, timeSlot }] or date + timeSlot.',
+        });
+      }
+    }),
 });

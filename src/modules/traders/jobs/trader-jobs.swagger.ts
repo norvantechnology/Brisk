@@ -148,13 +148,37 @@
  *           properties:
  *             date: { type: string }
  *             timeSlot: { type: string }
+ *         proposedSlots:
+ *           type: array
+ *           description: SITE VISIT SLOTS list (app adds locally then submits all)
+ *           items:
+ *             type: object
+ *             properties:
+ *               id: { type: string }
+ *               date: { type: string }
+ *               timeSlot: { type: string }
+ *               displayLabel: { type: string, example: 'Jul 25, 08:00AM - 12:00PM' }
+ *               startTime: { type: string }
+ *               endTime: { type: string }
+ *               isSelected: { type: boolean }
+ *         slotsSectionTitle: { type: string, example: SITE VISIT SLOTS }
+ *         addAnotherSlotLabel: { type: string, example: Add Another Slot }
  *         mode: { type: string, enum: [REQUEST, RESCHEDULE] }
  *         submitLabel: { type: string, example: Request For Site Visit }
  *     TraderSiteVisitRequestBody:
  *       type: object
- *       required: [date, timeSlot]
+ *       description: Prefer slots array for multi-slot flow. Legacy date+timeSlot still works.
  *       properties:
- *         date: { type: string, example: '2026-10-24', description: YYYY-MM-DD from dates strip }
+ *         slots:
+ *           type: array
+ *           minItems: 1
+ *           items:
+ *             type: object
+ *             required: [date, timeSlot]
+ *             properties:
+ *               date: { type: string, example: '2026-10-24' }
+ *               timeSlot: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
+ *         date: { type: string, example: '2026-10-24', description: Legacy single-slot }
  *         timeSlot: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
  */
 export {};

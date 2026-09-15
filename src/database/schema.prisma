@@ -380,6 +380,8 @@ model Trader {
   savedBy         SavedTrader[]
   jobBookmarks    TraderJobBookmark[]
   siteVisitRequests TraderSiteVisitRequest[]
+  jobMaterials    JobMaterial[]
+  paymentRequests TraderPaymentRequest[]
   registrations   TraderRegistration[]
 
   @@map("traders")
@@ -634,6 +636,8 @@ model Job {
   chatMessages ChatMessage[]
   bookmarkedBy TraderJobBookmark[]
   siteVisitRequests TraderSiteVisitRequest[]
+  materials    JobMaterial[]
+  paymentRequests TraderPaymentRequest[]
 
   @@index([customerId, status])
   @@index([status, categoryId])
@@ -641,15 +645,24 @@ model Job {
 }
 
 model JobPhoto {
-  id        String   @id @default(uuid()) @db.Uuid
-  jobId     String   @map("job_id") @db.Uuid
-  photoUrl  String   @map("photo_url")
-  createdAt DateTime @default(now()) @map("created_at")
+  id        String       @id @default(uuid()) @db.Uuid
+  jobId     String       @map("job_id") @db.Uuid
+  photoUrl  String       @map("photo_url")
+  /// CUSTOMER = post photos; PROOF = trader job-proof uploads
+  kind      JobPhotoKind @default(CUSTOMER)
+  uploadedById String?   @map("uploaded_by_id") @db.Uuid
+  createdAt DateTime     @default(now()) @map("created_at")
 
   // Relationships
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
+  @@index([jobId, kind])
   @@map("job_photos")
+}
+
+enum JobPhotoKind {
+  CUSTOMER
+  PROOF
 }
 
 model Quote {
@@ -683,6 +696,8 @@ model Booking {
   customerId    String        @map("customer_id") @db.Uuid
   scheduledDate DateTime      @map("scheduled_date")
   status        BookingStatus @default(SCHEDULED)
+  arrivedAt     DateTime?     @map("arrived_at")
+  finishedAt    DateTime?     @map("finished_at")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
@@ -1023,31 +1038,115 @@ enum SiteVisitTimeSlot {
 }
 
 enum TraderSiteVisitStatus {
-  /// Trader requested / locked visit
+  /// Trader proposed slots / locked visit
   CONFIRMED
   /// Needs a new date/time (Select Date & Time → Request Reschedule)
   RESCHEDULE_REQUIRED
+  /// Trader finished the on-site visit
+  COMPLETED
   CANCELLED
 }
 
-/// Trader Site Visit / Reschedule (Discover Job Details bottom sheet).
+enum TraderPaymentRequestStatus {
+  PENDING
+  SENT
+  PAID
+  CANCELLED
+}
+
+enum TraderPaymentRequestType {
+  FULL_JOB
+  SITE_VISIT_FEE
+}
+
+/// Trader Site Visit / Reschedule — one request per job+trader; many proposed slots.
 model TraderSiteVisitRequest {
-  id        String                @id @default(uuid()) @db.Uuid
-  jobId     String                @map("job_id") @db.Uuid
-  traderId  String                @map("trader_id") @db.Uuid
-  visitDate DateTime              @map("visit_date") @db.Date
-  timeSlot  SiteVisitTimeSlot     @map("time_slot")
-  status    TraderSiteVisitStatus @default(CONFIRMED)
-  createdAt DateTime              @default(now()) @map("created_at")
-  updatedAt DateTime              @updatedAt @map("updated_at")
+  id              String                @id @default(uuid()) @db.Uuid
+  jobId           String                @map("job_id") @db.Uuid
+  traderId        String                @map("trader_id") @db.Uuid
+  /// Confirmed/selected slot (first proposed until customer picks)
+  visitDate       DateTime?             @map("visit_date") @db.Date
+  timeSlot        SiteVisitTimeSlot?    @map("time_slot")
+  status          TraderSiteVisitStatus @default(CONFIRMED)
+  arrivedAt       DateTime?             @map("arrived_at")
+  completedAt     DateTime?             @map("completed_at")
+  durationMinutes Int?                  @map("duration_minutes")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
 
   job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
   trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  slots  TraderSiteVisitSlot[]
 
   @@unique([jobId, traderId])
   @@index([traderId, status])
   @@index([jobId])
   @@map("trader_site_visit_requests")
+}
+
+/// Proposed / selected windows under a site-visit request (multi-slot Figma flow).
+model TraderSiteVisitSlot {
+  id         String            @id @default(uuid()) @db.Uuid
+  requestId  String            @map("request_id") @db.Uuid
+  visitDate  DateTime          @map("visit_date") @db.Date
+  timeSlot   SiteVisitTimeSlot @map("time_slot")
+  startTime  String            @map("start_time")
+  endTime    String            @map("end_time")
+  sortOrder  Int               @default(0) @map("sort_order")
+  isSelected Boolean           @default(false) @map("is_selected")
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+
+  request TraderSiteVisitRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("trader_site_visit_slots")
+}
+
+/// Materials/parts a trader adds on an active job.
+model JobMaterial {
+  id        String   @id @default(uuid()) @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  traderId  String   @map("trader_id") @db.Uuid
+  name      String
+  detail    String?
+  price     Decimal  @db.Decimal(10, 2)
+  photoUrl  String?  @map("photo_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_materials")
+}
+
+/// Trader → customer payment request (full job or site-visit fee).
+model TraderPaymentRequest {
+  id              String                     @id @default(uuid()) @db.Uuid
+  jobId           String                     @map("job_id") @db.Uuid
+  traderId        String                     @map("trader_id") @db.Uuid
+  customerId      String                     @map("customer_id") @db.Uuid
+  type            TraderPaymentRequestType   @default(FULL_JOB)
+  status          TraderPaymentRequestStatus @default(SENT)
+  serviceCharge   Decimal                    @default(0) @map("service_charge") @db.Decimal(10, 2)
+  materialsTotal  Decimal                    @default(0) @map("materials_total") @db.Decimal(10, 2)
+  siteVisitFee    Decimal                    @default(0) @map("site_visit_fee") @db.Decimal(10, 2)
+  platformFee     Decimal                    @default(0) @map("platform_fee") @db.Decimal(10, 2)
+  vatRate         Decimal                    @default(0.2) @map("vat_rate") @db.Decimal(5, 4)
+  vatAmount       Decimal                    @default(0) @map("vat_amount") @db.Decimal(10, 2)
+  totalAmount     Decimal                    @map("total_amount") @db.Decimal(10, 2)
+  currencyCode    String                     @default("EUR") @map("currency_code")
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  updatedAt       DateTime                   @updatedAt @map("updated_at")
+
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, type])
+  @@index([traderId, status])
+  @@map("trader_payment_requests")
 }
 
 model RatingReview {
