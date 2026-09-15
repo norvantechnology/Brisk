@@ -190,15 +190,6 @@ const formatFullAddress = (job: {
   return [job.addressLine, job.city, job.postcode].filter(Boolean).join(', ') || 'Address TBD';
 };
 
-const relativeUpdatedLabel = (d: Date): string => {
-  const mins = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
-  if (mins < 1) return 'Updated just now';
-  if (mins < 60) return `Updated ${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `Updated ${hrs}h ago`;
-  return `Updated ${Math.floor(hrs / 24)}d ago`;
-};
-
 /** Ensure job is accessible to this trader (assigned, site visit, or quote). */
 const assertMyJob = async (traderId: string, jobId: string) => {
   const job = await prisma.job.findFirst({
@@ -362,34 +353,17 @@ const buildActions = (job: MyJobRow, traderId: string) => {
 const resolvePrimaryAction = (
   actions: ReturnType<typeof buildActions>,
   job: MyJobRow
-): { primaryAction: string; primaryActionLabel: string } => {
-  if (actions.canArrive) return { primaryAction: 'ARRIVE', primaryActionLabel: 'I Have Arrived' };
-  if (actions.canFinish) return { primaryAction: 'FINISH', primaryActionLabel: 'Finish Job' };
-  if (actions.canCompleteSiteVisit) {
-    return { primaryAction: 'COMPLETE_SITE_VISIT', primaryActionLabel: 'Complete Site Visit' };
-  }
-  if (actions.canRequestSiteVisitPayment) {
-    return {
-      primaryAction: 'REQUEST_SITE_VISIT_PAYMENT',
-      primaryActionLabel: 'Request Site Visit Payment',
-    };
-  }
-  if (actions.canRequestPayment) {
-    return { primaryAction: 'REQUEST_PAYMENT', primaryActionLabel: 'Request Payment' };
-  }
-  if (actions.canAcceptJob) {
-    return { primaryAction: 'ACCEPT_JOB', primaryActionLabel: 'Accept Job' };
-  }
-  if (actions.canSubmitQuote) {
-    return { primaryAction: 'SUBMIT_QUOTE', primaryActionLabel: 'Submit Quote' };
-  }
-  if (actions.canAddMaterials) {
-    return { primaryAction: 'ADD_MATERIALS', primaryActionLabel: 'Add Materials' };
-  }
-  if (job.status === JobStatus.PAYMENT_PENDING) {
-    return { primaryAction: 'AWAITING_PAYOUT', primaryActionLabel: 'Awaiting Payout' };
-  }
-  return { primaryAction: 'VIEW_DETAILS', primaryActionLabel: 'View Details' };
+): { primaryAction: string } => {
+  if (actions.canArrive) return { primaryAction: 'ARRIVE' };
+  if (actions.canFinish) return { primaryAction: 'FINISH' };
+  if (actions.canCompleteSiteVisit) return { primaryAction: 'COMPLETE_SITE_VISIT' };
+  if (actions.canRequestSiteVisitPayment) return { primaryAction: 'REQUEST_SITE_VISIT_PAYMENT' };
+  if (actions.canRequestPayment) return { primaryAction: 'REQUEST_PAYMENT' };
+  if (actions.canAcceptJob) return { primaryAction: 'ACCEPT_JOB' };
+  if (actions.canSubmitQuote) return { primaryAction: 'SUBMIT_QUOTE' };
+  if (actions.canAddMaterials) return { primaryAction: 'ADD_MATERIALS' };
+  if (job.status === JobStatus.PAYMENT_PENDING) return { primaryAction: 'AWAITING_PAYOUT' };
+  return { primaryAction: 'VIEW_DETAILS' };
 };
 
 const siteVisitBlock = (job: MyJobRow) => {
@@ -398,53 +372,27 @@ const siteVisitBlock = (job: MyJobRow) => {
   if (!visit && !job.siteVisitRequested) {
     return {
       status: 'NONE' as const,
-      displayLabel: null as string | null,
       fee: null as number | null,
-      feeLabel: null as string | null,
-      deductibleNote: null as string | null,
     };
   }
-  const status = visit?.status ?? 'NONE';
-  let displayLabel: string | null = null;
-  if (visit?.status === TraderSiteVisitStatus.COMPLETED) displayLabel = 'Site Visited';
-  else if (visit?.status === TraderSiteVisitStatus.CONFIRMED) displayLabel = 'Site Visit Confirmed';
-  else if (visit?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED) {
-    displayLabel = 'Reschedule Required';
-  } else if (job.siteVisitRequested) displayLabel = 'Site Visit Requested';
 
   return {
-    status,
-    displayLabel,
+    status: visit?.status ?? 'NONE',
     fee: fee > 0 ? fee : null,
-    feeLabel: fee > 0 ? formatEuro(fee) : null,
-    deductibleNote:
-      fee > 0 ? 'Site visit fee is deductible from the final job total when you proceed.' : null,
   };
 };
 
 const arrivalBlock = (job: MyJobRow) => {
   const booking = job.booking;
-  if (!booking) return { status: null as string | null, etaLabel: null as string | null };
-  if (booking.arrivedAt) return { status: 'ARRIVED' as const, etaLabel: 'You have arrived' };
+  if (!booking) return { status: null as string | null };
+  if (booking.arrivedAt) return { status: 'ARRIVED' as const };
   if (
     booking.status === BookingStatus.SCHEDULED ||
     booking.status === BookingStatus.IN_PROGRESS
   ) {
-    return { status: 'ARRIVING_SOON' as const, etaLabel: 'Arriving soon' };
+    return { status: 'ARRIVING_SOON' as const };
   }
-  return { status: null, etaLabel: null };
-};
-
-const statusLabelFor = (job: MyJobRow): string => {
-  const visit = job.siteVisitRequests[0];
-  if (visit?.status === TraderSiteVisitStatus.COMPLETED && !job.booking?.arrivedAt) {
-    return 'Site Visited';
-  }
-  if (job.status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
-  if (job.status === JobStatus.COMPLETED) return 'Completed';
-  if (job.status === JobStatus.IN_PROGRESS) return 'ACTIVE JOB';
-  if (job.status === JobStatus.SCHEDULED || job.status === JobStatus.ACCEPTED) return 'ACTIVE JOB';
-  return statusBadgeFor(job.status).toUpperCase();
+  return { status: null };
 };
 
 const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean }) => {
@@ -465,12 +413,6 @@ const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean
       vatRate: VAT_RATE,
       vatAmount,
       totalAmount,
-      serviceChargeLabel: formatEuro(0),
-      materialsTotalLabel: formatEuro(0),
-      siteVisitFeeLabel: formatEuro(siteVisitFee),
-      platformFeeLabel: formatEuro(0),
-      vatAmountLabel: formatEuro(vatAmount),
-      totalAmountLabel: formatEuro(totalAmount),
     };
   }
 
@@ -488,12 +430,6 @@ const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean
     vatRate: VAT_RATE,
     vatAmount,
     totalAmount,
-    serviceChargeLabel: formatEuro(serviceCharge),
-    materialsTotalLabel: formatEuro(materialsTotal),
-    siteVisitFeeLabel: formatEuro(siteVisitFee),
-    platformFeeLabel: formatEuro(platformFee),
-    vatAmountLabel: formatEuro(vatAmount),
-    totalAmountLabel: formatEuro(totalAmount),
   };
 };
 
@@ -546,7 +482,6 @@ export const listMyJobs = async (
       statusBadge: statusBadgeFor(job.status),
       siteVisitedBadge: Boolean(siteVisitedBadge),
       customerName: job.customer.fullName,
-      primaryActionLabel: 'View Details',
     };
   });
 
@@ -598,7 +533,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     senderName: m.sender.fullName,
     message: m.message,
     sentAt: m.sentAt,
-    readLabel: m.senderId === trader.userId ? 'Sent' : 'Received',
+    isMine: m.senderId === trader.userId,
   }));
 
   const categoryIconUrl = job.category
@@ -643,7 +578,6 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     jobRef: job.jobRef,
     description: job.description,
     status: job.status,
-    statusLabel: statusLabelFor(job),
     photos: customerPhotos.map((p) => p.photoUrl),
     proofPhotos: proofPhotos.map((p) => ({ id: p.id, photoUrl: p.photoUrl })),
     tags,
@@ -651,39 +585,27 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
       fullAddress: formatFullAddress(job),
       areaName: job.city || job.address?.city || job.postcode || 'Nearby',
       distanceKm,
-      distanceLabel: `Approx. ${distanceKm} km away`,
       latitude: coords.lat,
       longitude: coords.lng,
     },
     distanceKm,
     quotePrice,
-    quotePriceLabel: quotePrice != null ? formatEuro(quotePrice) : null,
     customer: {
       fullName: job.customer.fullName,
       profilePhotoUrl: job.customer.profilePhotoUrl,
       isVerified: customerVerified,
-      verifiedLabel: customerVerified ? 'Verified Customer' : 'Customer',
       phoneNumber: job.phoneNumber || job.customer.mobileNumber || null,
       rating: null as number | null,
       jobsPosted: job.customer._count.jobs,
     },
     siteVisit: siteVisitBlock(job),
-    materials: {
-      ...materials,
-      statusLabel: materials.count > 0 ? 'Trader is adding parts' : null,
-    },
+    materials,
     negotiationMessages,
     ...actions,
     ...primary,
     estimatedEarnings,
-    estimatedEarningsLabel: estimatedEarnings != null ? formatEuro(estimatedEarnings) : null,
     durationLabel: job.durationLabel,
     arrival: arrivalBlock(job),
-    serviceTermsNote: 'By continuing, you agree to the Service Terms.',
-    policyNotes: [
-      'Payment requests notify the customer via the app.',
-      'Site visit fees may be deducted from the final job total.',
-    ],
   };
 };
 
@@ -782,7 +704,6 @@ export const upsertQuote = async (
     id: quote.id,
     jobId,
     amount: money(quote.quotedAmount),
-    amountLabel: formatEuro(money(quote.quotedAmount)),
     notes: quote.notes,
     status: quote.status,
     hasSubmittedQuote: true,
@@ -909,10 +830,7 @@ export const acceptJob = async (
       id: jobId,
       isJobRequested: true,
       isWaitingForCustomerConfirmation: true,
-      statusLabel: 'Waiting for Customer Confirmation',
       primaryAction: 'WAITING_FOR_CUSTOMER',
-      primaryActionLabel: 'Waiting for Customer Confirmation',
-      messageHint: 'Waiting for customer confirmation. Job remains on Discover until confirmed.',
     };
   }
 
@@ -1067,7 +985,6 @@ export const confirmQuoteAssignment = async (params: {
     quoteId: quote.id,
     status: job.scheduledDate ? JobStatus.SCHEDULED : JobStatus.ACCEPTED,
     amount,
-    amountLabel: formatEuro(amount),
   };
 };
 
@@ -1080,7 +997,6 @@ export const listMaterials = async (userId: string, jobId: string) => {
     name: m.name,
     detail: m.detail,
     price: money(m.price),
-    priceLabel: formatEuro(money(m.price)),
     photoUrl: m.photoUrl,
   }));
   const total = round2(items.reduce((s, i) => s + i.price, 0));
@@ -1090,11 +1006,7 @@ export const listMaterials = async (userId: string, jobId: string) => {
     items,
     count: items.length,
     total,
-    totalLabel: formatEuro(total),
-    statusLabel: 'Trader is adding parts',
-    lastUpdatedLabel: last ? relativeUpdatedLabel(last) : null,
-    live: true,
-    runningTotalLabel: `Running total ${formatEuro(total)}`,
+    lastUpdatedAt: last,
   };
 };
 
@@ -1170,7 +1082,6 @@ export const listMessages = async (userId: string, jobId: string) => {
       senderName: m.sender.fullName,
       message: m.message,
       sentAt: m.sentAt,
-      readLabel: m.senderId === trader.userId ? 'Sent' : 'Received',
       isMine: m.senderId === trader.userId,
     })),
   };
@@ -1198,7 +1109,6 @@ export const sendMessage = async (userId: string, jobId: string, message: string
     senderName: created.sender.fullName,
     message: created.message,
     sentAt: created.sentAt,
-    readLabel: 'Sent',
     isMine: true,
   };
 };
@@ -1213,15 +1123,6 @@ export const getPaymentSummary = async (userId: string, jobId: string) => {
     jobRef: job.jobRef,
     completedDate: job.booking?.finishedAt ?? job.updatedAt,
     address: formatFullAddress(job),
-    viewMaterialsHref: `/traders/jobs/mine/${job.id}/materials`,
-    labels: {
-      serviceCharge: 'Service charge',
-      materials: 'Materials',
-      siteVisitFee: 'Site visit fee',
-      platformFee: 'Platform fee',
-      vat: `VAT (${Math.round(VAT_RATE * 100)}%)`,
-      total: 'Total',
-    },
   };
 };
 
@@ -1263,8 +1164,6 @@ export const requestPayment = async (userId: string, jobId: string) => {
   });
 
   return {
-    successTitle: 'Payment Request Sent',
-    successMessage: 'The customer has been notified to pay for this job.',
     paymentRequestId: paymentRequest.id,
     jobRef: job.jobRef,
     ...breakdown,
@@ -1304,18 +1203,13 @@ export const completeSiteVisit = async (userId: string, jobId: string) => {
   const fee = money(job.siteVisitFee);
 
   return {
-    successTitle: 'Site Visit Completed',
-    successMessage: 'Great work — you can request the site visit fee from the customer.',
     visitId: updated.id,
     status: updated.status,
     completedAt: updated.completedAt,
     durationMinutes: updated.durationMinutes,
-    durationLabel: `${updated.durationMinutes} min`,
     siteVisitFee: fee,
-    siteVisitFeeLabel: fee > 0 ? formatEuro(fee) : null,
     canRequestSiteVisitPayment: true,
     primaryAction: 'REQUEST_SITE_VISIT_PAYMENT',
-    primaryActionLabel: 'Request Site Visit Payment',
   };
 };
 
@@ -1360,17 +1254,12 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
   });
 
   return {
-    successTitle: 'Payment Request Sent',
-    successMessage: 'The customer has been notified to pay the site visit fee.',
     paymentRequestId: paymentRequest.id,
     type: TraderPaymentRequestType.SITE_VISIT_FEE,
     jobRef: job.jobRef,
     siteVisitFee: breakdown.siteVisitFee,
-    siteVisitFeeLabel: breakdown.siteVisitFeeLabel,
     vatAmount: breakdown.vatAmount,
-    vatAmountLabel: breakdown.vatAmountLabel,
     totalAmount: breakdown.totalAmount,
-    totalAmountLabel: breakdown.totalAmountLabel,
     status: 'SENT',
   };
 };
@@ -1430,13 +1319,12 @@ export const getIncomingLatest = async (userId: string) => {
     customerPhotoUrl: job.customer.profilePhotoUrl,
     areaName: job.city || job.address?.city || job.postcode || 'Nearby',
     distanceKm,
-    distanceLabel: `${distanceKm} km away`,
     isSiteVisit: job.siteVisitRequested,
-    priceLabel:
+    price:
       job.siteVisitRequested && fee > 0
-        ? formatEuro(fee)
+        ? fee
         : job.serviceCharge != null
-          ? formatEuro(money(job.serviceCharge))
+          ? money(job.serviceCharge)
           : null,
     createdAt: job.createdAt,
     latitude: coords.lat,
@@ -1444,8 +1332,6 @@ export const getIncomingLatest = async (userId: string) => {
     actions: {
       canAccept: true,
       canDecline: true,
-      acceptLabel: 'Accept',
-      declineLabel: 'Decline',
     },
   };
 };
@@ -1486,7 +1372,6 @@ export const acceptIncomingJob = async (userId: string, jobId: string) => {
       path: 'SITE_VISIT',
       nextStep: 'SELECT_DATE_TIME',
       redirectHint: `/traders/jobs/discover/${jobId}/site-visit/slots`,
-      message: 'Express interest recorded. Select a site visit date and time.',
     };
   }
 
@@ -1517,7 +1402,6 @@ export const acceptIncomingJob = async (userId: string, jobId: string) => {
     path: 'QUOTE',
     nextStep: 'SUBMIT_QUOTE',
     redirectHint: `/traders/jobs/mine/${jobId}`,
-    message: 'Interest recorded. Submit or confirm your quote.',
   };
 };
 
@@ -1527,6 +1411,5 @@ export const declineIncomingJob = async (userId: string, jobId: string) => {
   return {
     jobId,
     declined: true,
-    message: 'Job declined.',
   };
 };

@@ -83,7 +83,6 @@ const router = Router();
  *                   isJobRequested: false
  *                   isWaitingForCustomerConfirmation: false
  *                   quoteAmount: null
- *                   quoteAmountLabel: null
  *                 - id: 11111111-1111-1111-1111-111111111112
  *                   title: Full Bathroom Re-tiling
  *                   badge: null
@@ -99,7 +98,6 @@ const router = Router();
  *                   isJobRequested: false
  *                   isWaitingForCustomerConfirmation: false
  *                   quoteAmount: 420
- *                   quoteAmountLabel: "€420"
  *       401:
  *         description: Unauthorized
  *       403:
@@ -141,16 +139,13 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *                     areaName: Dublin
  *                     distanceKm: 2.1
  *                     quoteAmount: 420
- *                     quoteAmountLabel: "€420"
  *                     statusBadge: Waiting
- *                     statusLabel: Waiting for Customer Confirmation
  *                     colorHint: blue
  *                     isJobRequested: true
  *                     isWaitingForCustomerConfirmation: true
  *                     hasSubmittedQuote: true
  *                     requestedAt: '2026-09-15T12:00:00.000Z'
  *                     primaryAction: WAITING_FOR_CUSTOMER
- *                     primaryActionLabel: Waiting for Customer Confirmation
  */
 router.get('/waiting', controller.listWaitingJobs);
 
@@ -164,7 +159,7 @@ router.get('/waiting', controller.listWaitingJobs);
  *     description: |
  *       Opens from Select Date and Time.
  *       dates = horizontal strip. timeSlots = Morning Afternoon Evening Any time.
- *       Use mode + submitLabel for Request vs Reschedule CTA on the sheet.
+ *       Use mode REQUEST | RESCHEDULE; button copy is owned by the app.
  *     parameters:
  *       - in: path
  *         name: id
@@ -191,13 +186,12 @@ router.get('/waiting', controller.listWaitingJobs);
  *                   - { date: '2026-09-15', month: SEP, day: 15, weekday: TUE }
  *                   - { date: '2026-09-16', month: SEP, day: 16, weekday: WED }
  *                 timeSlots:
- *                   - { id: MORNING, label: Morning, startTime: '08:00', endTime: '12:00', rangeLabel: '08:00 - 12:00', icon: sun }
- *                   - { id: AFTERNOON, label: Afternoon, startTime: '12:00', endTime: '17:00', rangeLabel: '12:00 - 17:00', icon: sun_cloud }
- *                   - { id: EVENING, label: Evening, startTime: '17:00', endTime: '21:00', rangeLabel: '17:00 - 21:00', icon: moon }
- *                   - { id: ANYTIME, label: Any time, startTime: '08:00', endTime: '21:00', rangeLabel: '08:00 - 21:00', icon: clock }
+ *                   - { id: MORNING, startTime: '08:00', endTime: '12:00', icon: sun }
+ *                   - { id: AFTERNOON, startTime: '12:00', endTime: '17:00', icon: sun_cloud }
+ *                   - { id: EVENING, startTime: '17:00', endTime: '21:00', icon: moon }
+ *                   - { id: ANYTIME, startTime: '08:00', endTime: '21:00', icon: clock }
  *                 selected: null
  *                 mode: REQUEST
- *                 submitLabel: Request For Site Visit
  *       400:
  *         description: Job is not a site-visit job
  *       404:
@@ -359,7 +353,6 @@ router.post(
  *                 id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
  *                 jobId: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
  *                 amount: 450
- *                 amountLabel: "€450"
  *                 notes: Includes parts and labour
  *                 status: PENDING
  *                 hasSubmittedQuote: true
@@ -430,9 +423,7 @@ router.post(
  *                 isJobRequested: true
  *                 isWaitingForCustomerConfirmation: true
  *                 quoteAmount: 420
- *                 quoteAmountLabel: "€420"
  *                 primaryAction: WAITING_FOR_CUSTOMER
- *                 primaryActionLabel: Waiting for Customer Confirmation
  *       400:
  *         description: Missing quote amount or site-visit slots
  */
@@ -503,43 +494,30 @@ router.post(
  *                 isWaitingForCustomerConfirmation: false
  *                 quoteId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
  *                 quoteAmount: 420
- *                 quoteAmountLabel: "€420"
  *                 quoteNotes: Includes parts and labour
  *                 quoteStatus: PENDING
  *                 description: Looking for a professional to install solar panels.
  *                 photos: ['https://cdn.example.com/roof1.jpg']
  *                 photoCount: 1
- *                 photosSectionTitle: Customer Photos (1)
- *                 photosHint: null
- *                 siteVisitFeeTitle: null
  *                 siteVisitFee: null
- *                 siteVisitFeeLabel: null
- *                 siteVisitFeeNote: null
  *                 isReschedule: false
  *                 canSelectDateTime: false
  *                 canRequestSiteVisit: false
  *                 canRequestReschedule: false
- *                 selectDateTimeLabel: null
  *                 primaryAction: REQUEST_JOB
- *                 primaryActionLabel: Request Job
  *                 siteVisit:
  *                   status: NONE
  *                   visitDate: null
  *                   timeSlot: null
- *                   timeSlotLabel: null
  *                   startTime: null
  *                   endTime: null
- *                   displayLabel: null
  *                   statusBadge: null
- *                   sectionTitle: null
  *                   requestId: null
- *                 serviceTermsNote: By accepting, you agree to the Service Terms.
  *                 customer:
  *                   id: uuid
  *                   fullName: Sarah Jenkins
  *                   profilePhotoUrl: null
  *                   isVerified: true
- *                   verifiedLabel: Verified Customer
  *                 category: { id: uuid, name: Solar, iconName: sun }
  *                 subcategory: null
  *                 categoryName: Solar
@@ -551,7 +529,6 @@ router.post(
  *                 location:
  *                   areaName: Dublin 6
  *                   distanceKm: 1.8
- *                   distanceLabel: Approx. 1.8 km away
  *                   latitude: 53.34
  *                   longitude: -6.27
  *                   mapPreviewUrl: https://www.openstreetmap.org/export/embed.html?...

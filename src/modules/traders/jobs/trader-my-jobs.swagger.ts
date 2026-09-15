@@ -3,157 +3,205 @@
  * tags:
  *   - name: Trader / My Jobs
  *     description: |
- *       Trader My Jobs lifecycle (Figma multi site-visit / active job flow).
- *       Auth trader Bearer.
+ *       Trader My Jobs lifecycle after customer confirmation (running / completed jobs).
+ *       Auth: trader Bearer.
+ *       Button/CTA text is owned by the app — use primaryAction + can* flags.
  *
  *       Screen map:
- *       1. My Jobs tabs → GET /traders/jobs/mine?tab=ACTIVE|COMPLETED|OTHER
- *       2. Job Details → GET /traders/jobs/mine/{id}
- *       3. Arrive → POST .../arrive
- *       4. Finish → POST .../finish
- *       5. Materials → GET/POST .../materials, DELETE .../materials/{materialId}
- *       6. Proof photos → POST .../proof-photos (upload purpose job_proof first)
- *       7. Messages → GET/POST .../messages
- *       8. Quotes → POST /traders/jobs/mine/{id}/quotes
- *          (also from Discover: POST /traders/jobs/discover/{id}/quotes)
- *       9. Accept job → POST .../accept
- *       10. Payment summary → GET .../payment-summary
- *       11. Request payment → POST .../request-payment
- *       12. Complete site visit → POST .../site-visit/complete
- *       13. Request site visit fee → POST .../site-visit/request-payment
- *       14. Incoming map sheet → GET /traders/jobs/incoming/latest
- *       15. Incoming accept/decline → POST /traders/jobs/incoming/{id}/accept|decline
- *
- *       Drive CTA from data.primaryAction on detail:
- *       ARRIVE | FINISH | COMPLETE_SITE_VISIT | REQUEST_SITE_VISIT_PAYMENT |
- *       REQUEST_PAYMENT | ACCEPT_JOB | SUBMIT_QUOTE | ADD_MATERIALS | AWAITING_PAYOUT | VIEW_DETAILS
+ *       1. Tabs → GET /traders/jobs/mine?tab=ACTIVE|COMPLETED|OTHER
+ *       2. Detail → GET /traders/jobs/mine/{id}
+ *       3. Arrive / Finish → POST .../arrive | .../finish
+ *       4. Materials / proof / messages / payment / site-visit complete
+ *       5. Quotes / request from Discover stay on Discover until customer confirms
  *
  * components:
  *   schemas:
  *     TraderMyJobCard:
  *       type: object
+ *       description: Card in My Jobs list
  *       properties:
- *         id: { type: string, format: uuid }
- *         jobRef: { type: string, nullable: true }
- *         title: { type: string }
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: Job id
+ *         jobRef:
+ *           type: string
+ *           nullable: true
+ *           description: Human-readable job reference e.g. JOB-XXXX
+ *         title:
+ *           type: string
+ *           description: Job title
  *         statusBadge:
  *           type: string
  *           enum: [Active, Completed, Awaiting Payout]
- *         siteVisitedBadge: { type: boolean }
- *         customerName: { type: string }
- *         primaryActionLabel: { type: string, example: View Details }
+ *           description: List badge code — app maps to UI text/colour
+ *         siteVisitedBadge:
+ *           type: boolean
+ *           description: true if site visit is confirmed or completed for this trader
+ *         customerName:
+ *           type: string
+ *           description: Customer display name
  *     TraderMyJobsList:
  *       type: object
+ *       description: Paginated My Jobs tab response
  *       properties:
- *         tab: { type: string, enum: [ACTIVE, COMPLETED, OTHER] }
+ *         tab:
+ *           type: string
+ *           enum: [ACTIVE, COMPLETED, OTHER]
+ *           description: Requested tab filter
  *         items:
  *           type: array
+ *           description: Jobs for this tab (ACTIVE = customer-confirmed / assigned only)
  *           items: { $ref: '#/components/schemas/TraderMyJobCard' }
- *         page: { type: integer }
- *         limit: { type: integer }
- *         total: { type: integer }
- *         hasMore: { type: boolean }
+ *         page: { type: integer, description: Current page (1-based) }
+ *         limit: { type: integer, description: Page size }
+ *         total: { type: integer, description: Total matching jobs }
+ *         hasMore: { type: boolean, description: true if another page exists }
  *     TraderMyJobDetail:
  *       type: object
- *       description: Payload for Active Job / Site Visited / Completed detail screens
+ *       description: My Jobs detail — only after customer confirmed / trader assigned
  *       properties:
- *         id: { type: string, format: uuid }
- *         title: { type: string }
- *         createdAt: { type: string, format: date-time }
- *         jobRef: { type: string, nullable: true }
- *         description: { type: string }
- *         status: { type: string }
- *         statusLabel: { type: string, example: ACTIVE JOB }
+ *         id: { type: string, format: uuid, description: Job id }
+ *         title: { type: string, description: Job title }
+ *         createdAt: { type: string, format: date-time, description: Job created at }
+ *         jobRef: { type: string, nullable: true, description: Job reference code }
+ *         description: { type: string, description: Full description }
+ *         status:
+ *           type: string
+ *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS | COMPLETED | PAYMENT_PENDING
  *         photos:
  *           type: array
  *           items: { type: string, format: uri }
+ *           description: Customer photos
  *         proofPhotos:
  *           type: array
+ *           description: Trader proof photos after work
  *           items:
  *             type: object
  *             properties:
  *               id: { type: string, format: uuid }
  *               photoUrl: { type: string, format: uri }
- *         quotePrice: { type: number, nullable: true }
- *         quotePriceLabel: { type: string, nullable: true, example: "€450" }
- *         canArrive: { type: boolean }
- *         canFinish: { type: boolean }
- *         canAddMaterials: { type: boolean }
- *         canSubmitQuote: { type: boolean }
- *         canAcceptJob: { type: boolean }
- *         canRequestPayment: { type: boolean }
- *         canCompleteSiteVisit: { type: boolean }
- *         canRequestSiteVisitPayment: { type: boolean }
- *         primaryAction: { type: string }
- *         primaryActionLabel: { type: string }
- *         estimatedEarnings: { type: number, nullable: true }
- *         durationLabel: { type: string, nullable: true }
+ *         quotePrice:
+ *           type: number
+ *           nullable: true
+ *           description: Agreed / quoted price EUR
+ *         canArrive:
+ *           type: boolean
+ *           description: true → show I Have Arrived; POST .../arrive
+ *         canFinish:
+ *           type: boolean
+ *           description: true → show Finish Job; POST .../finish
+ *         canAddMaterials:
+ *           type: boolean
+ *           description: true → allow materials APIs
+ *         canSubmitQuote:
+ *           type: boolean
+ *           description: true → quote can still be submitted/updated (rare on assigned jobs)
+ *         canAcceptJob:
+ *           type: boolean
+ *           description: true → Request/Accept still available (marketplace waiting path if unassigned)
+ *         canRequestPayment:
+ *           type: boolean
+ *           description: true → POST .../request-payment
+ *         canCompleteSiteVisit:
+ *           type: boolean
+ *           description: true → POST .../site-visit/complete
+ *         canRequestSiteVisitPayment:
+ *           type: boolean
+ *           description: true → POST .../site-visit/request-payment
+ *         primaryAction:
+ *           type: string
+ *           description: |
+ *             Main CTA code (app owns button text).
+ *             ARRIVE | FINISH | COMPLETE_SITE_VISIT | REQUEST_SITE_VISIT_PAYMENT |
+ *             REQUEST_PAYMENT | ACCEPT_JOB | SUBMIT_QUOTE | ADD_MATERIALS | AWAITING_PAYOUT | VIEW_DETAILS
+ *         estimatedEarnings:
+ *           type: number
+ *           nullable: true
+ *           description: Estimated earnings EUR
+ *         durationLabel:
+ *           type: string
+ *           nullable: true
+ *           description: Optional duration from job
  *         arrival:
  *           type: object
+ *           description: Arrival state for active job
  *           properties:
  *             status:
  *               type: string
  *               nullable: true
  *               enum: [ARRIVING_SOON, ARRIVED]
- *             etaLabel: { type: string, nullable: true }
+ *               description: ARRIVING_SOON before arrive; ARRIVED after POST arrive
  *         materials:
  *           type: object
+ *           description: Materials summary
  *           properties:
- *             count: { type: integer }
- *             total: { type: number }
- *             totalLabel: { type: string }
+ *             count: { type: integer, description: Number of material lines }
+ *             total: { type: number, description: Materials total EUR }
  *         siteVisit:
  *           type: object
+ *           description: Site visit summary on My Jobs detail
  *           properties:
- *             status: { type: string }
- *             displayLabel: { type: string, nullable: true }
- *             fee: { type: number, nullable: true }
- *             feeLabel: { type: string, nullable: true }
- *             deductibleNote: { type: string, nullable: true }
+ *             status: { type: string, description: Site visit status code }
+ *             fee: { type: number, nullable: true, description: Site visit fee EUR }
  *     TraderMaterialsList:
  *       type: object
+ *       description: GET/POST materials response
  *       properties:
  *         items:
  *           type: array
  *           items:
  *             type: object
  *             properties:
- *               id: { type: string, format: uuid }
- *               name: { type: string }
- *               detail: { type: string, nullable: true }
- *               price: { type: number }
- *               priceLabel: { type: string }
- *               photoUrl: { type: string, nullable: true }
- *         count: { type: integer }
- *         total: { type: number }
- *         totalLabel: { type: string }
- *         statusLabel: { type: string, example: Trader is adding parts }
- *         lastUpdatedLabel: { type: string, nullable: true }
- *         live: { type: boolean }
- *         runningTotalLabel: { type: string }
+ *               id: { type: string, format: uuid, description: Material id }
+ *               name: { type: string, description: Material name }
+ *               detail: { type: string, nullable: true, description: Optional detail }
+ *               price: { type: number, description: Line price EUR }
+ *               photoUrl: { type: string, nullable: true, description: Optional photo URL }
+ *         count: { type: integer, description: Item count }
+ *         total: { type: number, description: Sum of prices EUR }
+ *         lastUpdatedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *           description: Latest material updatedAt
  *     TraderPaymentSummary:
  *       type: object
+ *       description: Payment breakdown numbers (app formats labels)
  *       properties:
- *         serviceCharge: { type: number }
- *         materialsTotal: { type: number }
- *         siteVisitFee: { type: number }
- *         platformFee: { type: number, example: 10 }
- *         vatRate: { type: number, example: 0.2 }
- *         vatAmount: { type: number }
- *         totalAmount: { type: number }
- *         jobRef: { type: string, nullable: true }
- *         completedDate: { type: string, format: date-time }
- *         address: { type: string }
- *         viewMaterialsHref: { type: string }
+ *         serviceCharge: { type: number, description: Service / quote charge EUR }
+ *         materialsTotal: { type: number, description: Materials total EUR }
+ *         siteVisitFee: { type: number, description: Site visit fee EUR }
+ *         platformFee: { type: number, example: 10, description: Platform fee EUR }
+ *         vatRate: { type: number, example: 0.2, description: VAT rate e.g. 0.2 = 20% }
+ *         vatAmount: { type: number, description: VAT amount EUR }
+ *         totalAmount: { type: number, description: Grand total EUR }
+ *         jobRef: { type: string, nullable: true, description: Job reference }
+ *         completedDate: { type: string, format: date-time, description: Completion / finish timestamp }
+ *         address: { type: string, description: Full job address string }
  *     TraderIncomingJob:
  *       type: object
  *       nullable: true
+ *       description: Latest open marketplace job for map incoming sheet (null if none)
  *       properties:
- *         id: { type: string, format: uuid }
- *         title: { type: string }
- *         distanceKm: { type: number }
- *         customerName: { type: string }
- *         isSiteVisit: { type: boolean }
- *         priceLabel: { type: string, nullable: true }
+ *         id: { type: string, format: uuid, description: Job id }
+ *         title: { type: string, description: Job title }
+ *         distanceKm: { type: number, description: Distance km }
+ *         customerName: { type: string, description: Customer name }
+ *         isSiteVisit: { type: boolean, description: true if site-visit job }
+ *         price:
+ *           type: number
+ *           nullable: true
+ *           description: Display price amount EUR (fee or service charge)
+ *         actions:
+ *           type: object
+ *           description: Soft accept/decline availability on map sheet
+ *           properties:
+ *             canAccept:
+ *               type: boolean
+ *               description: true means POST incoming accept is allowed
+ *             canDecline:
+ *               type: boolean
+ *               description: true means POST incoming decline is allowed
  */
 export {};

@@ -140,17 +140,6 @@ const formatVisitDateKey = (d: Date): string => {
   return `${y}-${m}-${day}`;
 };
 
-const formatVisitDisplayLabel = (visitDate: Date, timeSlot: SiteVisitTimeSlot): string => {
-  const def = SITE_VISIT_SLOT_DEFS[timeSlot];
-  const label = new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(visitDate);
-  return `${label} ${def.startTime} – ${def.endTime}`;
-};
-
 const buildAvailableDates = (days = SITE_VISIT_DATE_DAYS) => {
   const out: Array<{
     date: string;
@@ -194,23 +183,6 @@ type SiteVisitRow = {
   slots?: SiteVisitSlotRow[];
 };
 
-const formatSlotListLabel = (visitDate: Date, startTime: string, endTime: string): string => {
-  const day = new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(visitDate);
-  const toAmPm = (hhmm: string) => {
-    const [hStr, mStr] = hhmm.split(':');
-    let h = Number(hStr);
-    const m = mStr || '00';
-    const suffix = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${String(h12).padStart(2, '0')}:${m}${suffix}`;
-  };
-  return `${day}, ${toAmPm(startTime)} - ${toAmPm(endTime)}`;
-};
-
 const normalizeSlotsInput = (body: {
   date?: string;
   timeSlot?: SiteVisitTimeSlot;
@@ -227,24 +199,17 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
       status: 'NONE' as const,
       visitDate: null as string | null,
       timeSlot: null as SiteVisitTimeSlot | null,
-      timeSlotLabel: null as string | null,
       startTime: null as string | null,
       endTime: null as string | null,
-      displayLabel: null as string | null,
-      statusBadge: null as string | null,
-      sectionTitle: null as string | null,
       requestId: null as string | null,
       slots: [] as Array<{
         id: string;
         date: string;
         timeSlot: SiteVisitTimeSlot;
-        timeSlotLabel: string;
         startTime: string;
         endTime: string;
-        displayLabel: string;
         isSelected: boolean;
       }>,
-      slotsSectionTitle: 'SITE VISIT SLOTS',
       slotCount: 0,
     };
   }
@@ -270,10 +235,8 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
     id: s.id,
     date: formatVisitDateKey(s.visitDate),
     timeSlot: s.timeSlot,
-    timeSlotLabel: SITE_VISIT_SLOT_DEFS[s.timeSlot].label,
     startTime: s.startTime,
     endTime: s.endTime,
-    displayLabel: formatSlotListLabel(s.visitDate, s.startTime, s.endTime),
     isSelected: s.isSelected,
   }));
 
@@ -294,51 +257,24 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
       status: 'NONE' as const,
       visitDate: null,
       timeSlot: null,
-      timeSlotLabel: null,
       startTime: null,
       endTime: null,
-      displayLabel: null,
-      statusBadge: null,
-      sectionTitle: null,
       requestId: row.id,
       slots: [],
-      slotsSectionTitle: 'SITE VISIT SLOTS',
       slotCount: 0,
     };
   }
 
   const def = SITE_VISIT_SLOT_DEFS[primary.timeSlot];
-  const isRescheduleRequired = row.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED;
-  const isCompleted = row.status === TraderSiteVisitStatus.COMPLETED;
-  const isPending = row.status === TraderSiteVisitStatus.PENDING;
-  const wasRescheduled =
-    Boolean(row.createdAt && row.updatedAt) &&
-    row.updatedAt!.getTime() - row.createdAt!.getTime() > 1500;
-  const sectionTitle = isRescheduleRequired || wasRescheduled
-    ? 'RESCHEDULED VISIT DATE & TIME'
-    : isPending
-      ? 'PROPOSED VISIT DATE & TIME'
-      : 'SCHEDULED VISIT DATE & TIME';
 
   return {
     status: row.status as 'PENDING' | 'CONFIRMED' | 'RESCHEDULE_REQUIRED' | 'COMPLETED',
     visitDate: formatVisitDateKey(primary.visitDate),
     timeSlot: primary.timeSlot,
-    timeSlotLabel: def.label,
     startTime: primary.startTime || def.startTime,
     endTime: primary.endTime || def.endTime,
-    displayLabel: formatVisitDisplayLabel(primary.visitDate, primary.timeSlot),
-    statusBadge: isRescheduleRequired
-      ? 'RESCHEDULE REQUIRED'
-      : isCompleted
-        ? 'COMPLETED'
-        : isPending
-          ? 'WAITING CONFIRMATION'
-          : 'CONFIRMED',
-    sectionTitle,
     requestId: row.id,
     slots,
-    slotsSectionTitle: 'SITE VISIT SLOTS',
     slotCount: slots.length,
   };
 };
@@ -352,7 +288,6 @@ type DiscoverQuoteState = {
   isWaitingForCustomerConfirmation: boolean;
   quoteId: string | null;
   quoteAmount: number | null;
-  quoteAmountLabel: string | null;
   quoteNotes: string | null;
   quoteStatus: string | null;
 };
@@ -366,7 +301,6 @@ const emptyQuoteState = (): DiscoverQuoteState => ({
   isWaitingForCustomerConfirmation: false,
   quoteId: null,
   quoteAmount: null,
-  quoteAmountLabel: null,
   quoteNotes: null,
   quoteStatus: null,
 });
@@ -384,12 +318,7 @@ const resolvePrimaryActions = (
       canSubmitQuote: false,
       canUpdateQuote: quote.canUpdateQuote,
       canRequestJob: false,
-      selectDateTimeLabel:
-        isSiteVisit && (siteVisit.status === 'NONE' || siteVisit.status === 'PENDING')
-          ? 'Select Date & Time'
-          : null,
       primaryAction: 'WAITING_FOR_CUSTOMER' as const,
-      primaryActionLabel: 'Waiting for Customer Confirmation',
     };
   }
 
@@ -401,11 +330,9 @@ const resolvePrimaryActions = (
       canSubmitQuote: false,
       canUpdateQuote: quote.canUpdateQuote,
       canRequestJob: quote.canRequestJob,
-      selectDateTimeLabel: null as string | null,
       primaryAction: quote.canRequestJob
         ? ('REQUEST_JOB' as const)
         : ('BACK_TO_JOB' as const),
-      primaryActionLabel: quote.canRequestJob ? 'Request Job' : 'Back to Job',
     };
   }
 
@@ -417,9 +344,7 @@ const resolvePrimaryActions = (
       canSubmitQuote: false,
       canUpdateQuote: false,
       canRequestJob: false,
-      selectDateTimeLabel: 'Select Date & Time',
       primaryAction: 'REQUEST_RESCHEDULE' as const,
-      primaryActionLabel: 'Request For Reschedule Site Visit',
     };
   }
 
@@ -432,17 +357,11 @@ const resolvePrimaryActions = (
       canSubmitQuote: false,
       canUpdateQuote: quote.canUpdateQuote,
       canRequestJob: quote.canRequestJob,
-      selectDateTimeLabel: 'Select Date & Time',
       primaryAction: hasSlots
         ? quote.canRequestJob
           ? ('REQUEST_JOB' as const)
           : ('UPDATE_SITE_VISIT' as const)
         : ('REQUEST_SITE_VISIT' as const),
-      primaryActionLabel: hasSlots
-        ? quote.canRequestJob
-          ? 'Request Job'
-          : 'Update Site Visit'
-        : 'Request For Site Visit',
     };
   }
 
@@ -454,11 +373,9 @@ const resolvePrimaryActions = (
       canSubmitQuote: false,
       canUpdateQuote: true,
       canRequestJob: quote.canRequestJob,
-      selectDateTimeLabel: null as string | null,
       primaryAction: quote.canRequestJob
         ? ('REQUEST_JOB' as const)
         : ('UPDATE_QUOTE' as const),
-      primaryActionLabel: quote.canRequestJob ? 'Request Job' : 'Update Quotation',
     };
   }
 
@@ -469,9 +386,7 @@ const resolvePrimaryActions = (
     canSubmitQuote: true,
     canUpdateQuote: false,
     canRequestJob: false,
-    selectDateTimeLabel: null as string | null,
     primaryAction: 'SUBMIT_QUOTE' as const,
-    primaryActionLabel: 'Submit Quotation',
   };
 };
 
@@ -621,7 +536,6 @@ const toListItem = (
     isJobRequested,
     isWaitingForCustomerConfirmation,
     quoteAmount: quoteFlags?.quoteAmount ?? null,
-    quoteAmountLabel: quoteFlags?.quoteAmountLabel ?? null,
   };
 };
 
@@ -790,7 +704,8 @@ export const listDiscoverJobs = async (
       isJobRequested,
       isWaitingForCustomerConfirmation: isJobRequested,
       quoteAmount: amount,
-      quoteAmountLabel: amount != null ? formatEuro(amount) : null,
+      quoteNotes: null,
+      quoteStatus: null,
     });
   });
 };
@@ -915,7 +830,6 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
         isWaitingForCustomerConfirmation,
         quoteId: quoteRow!.id,
         quoteAmount,
-        quoteAmountLabel: quoteAmount != null ? formatEuro(quoteAmount) : null,
         quoteNotes: quoteRow!.notes,
         quoteStatus: quoteRow!.status,
       }
@@ -1012,14 +926,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     description: job.description,
     photos,
     photoCount: photos.length,
-    photosSectionTitle: `Customer Photos (${photos.length})`,
-    photosHint: photos.length > 1 ? 'Swipe for more' : null,
-    siteVisitFeeTitle: isSiteVisit ? 'SITE VISIT FEE' : null,
     siteVisitFee: isSiteVisit ? fee : null,
-    siteVisitFeeLabel: isSiteVisit && fee != null ? formatEuro(fee) : null,
-    siteVisitFeeNote: isSiteVisit
-      ? 'This fee is paid to the platform to secure the visit and ensure high intent for both parties.'
-      : null,
     isReschedule,
     ...actions,
     hasSubmittedQuote: quoteState.hasSubmittedQuote,
@@ -1029,17 +936,14 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     isWaitingForCustomerConfirmation: quoteState.isWaitingForCustomerConfirmation,
     quoteId: quoteState.quoteId,
     quoteAmount: quoteState.quoteAmount,
-    quoteAmountLabel: quoteState.quoteAmountLabel,
     quoteNotes: quoteState.quoteNotes,
     quoteStatus: quoteState.quoteStatus,
     siteVisit,
-    serviceTermsNote: 'By accepting, you agree to the Service Terms.',
     customer: {
       id: job.customer.id,
       fullName: job.customer.fullName,
       profilePhotoUrl: job.customer.profilePhotoUrl,
       isVerified: customerVerified,
-      verifiedLabel: customerVerified ? 'Verified Customer' : 'Customer',
     },
     category: {
       id: job.category.id,
@@ -1063,7 +967,6 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     location: {
       areaName: list.areaName,
       distanceKm: list.distanceKm,
-      distanceLabel: `Approx. ${list.distanceKm} km away`,
       latitude: coords.lat,
       longitude: coords.lng,
       mapPreviewUrl: `https://www.openstreetmap.org/export/embed.html?bbox=${coords.lng - 0.02}%2C${coords.lat - 0.015}%2C${coords.lng + 0.02}%2C${coords.lat + 0.015}&layer=mapnik&marker=${coords.lat}%2C${coords.lng}`,
@@ -1149,15 +1052,11 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
     dates: buildAvailableDates(),
     timeSlots: SITE_VISIT_SLOT_ORDER.map((id) => ({
       id,
-      label: SITE_VISIT_SLOT_DEFS[id].label,
       startTime: SITE_VISIT_SLOT_DEFS[id].startTime,
       endTime: SITE_VISIT_SLOT_DEFS[id].endTime,
-      rangeLabel: `${SITE_VISIT_SLOT_DEFS[id].startTime} - ${SITE_VISIT_SLOT_DEFS[id].endTime}`,
       icon: SITE_VISIT_SLOT_DEFS[id].icon,
     })),
     proposedSlots: payload.slots,
-    slotsSectionTitle: 'SITE VISIT SLOTS',
-    addAnotherSlotLabel: 'Add Another Slot',
     selected:
       active && active.visitDate != null && active.timeSlot != null
         ? {
@@ -1168,12 +1067,6 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
           ? { date: payload.slots[0].date, timeSlot: payload.slots[0].timeSlot }
           : null,
     mode: active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED ? 'RESCHEDULE' : 'REQUEST',
-    submitLabel:
-      active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
-        ? 'Request For Reschedule Site Visit'
-        : active?.status === TraderSiteVisitStatus.PENDING
-          ? 'Update Site Visit'
-          : 'Request For Site Visit',
   };
 };
 
@@ -1393,16 +1286,13 @@ export const listWaitingJobs = async (userId: string) => {
         areaName: areaNameOf(q.job),
         distanceKm,
         quoteAmount: amount,
-        quoteAmountLabel: formatEuro(amount),
         statusBadge: 'Waiting',
-        statusLabel: 'Waiting for Customer Confirmation',
         colorHint: 'blue',
         isJobRequested: true,
         isWaitingForCustomerConfirmation: true,
         hasSubmittedQuote: true,
         requestedAt: q.requestedAt,
         primaryAction: 'WAITING_FOR_CUSTOMER',
-        primaryActionLabel: 'Waiting for Customer Confirmation',
       };
     }),
     count: quotes.length,
