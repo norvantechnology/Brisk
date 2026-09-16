@@ -77,8 +77,8 @@ const router = Router();
  *                   minBudget: null
  *                   maxBudget: null
  *                   serviceCharge: null
- *                   currencyCode: INR
- *                   currencySymbol: ₹
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
  *                   createdAt: '2026-09-15T10:00:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: true
@@ -97,8 +97,8 @@ const router = Router();
  *                   minBudget: 800
  *                   maxBudget: 1200
  *                   serviceCharge: null
- *                   currencyCode: INR
- *                   currencySymbol: ₹
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
  *                   createdAt: '2026-09-15T09:00:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: false
@@ -496,8 +496,8 @@ router.post(
  *                 minBudget: null
  *                 maxBudget: null
  *                 serviceCharge: null
- *                 currencyCode: INR
- *                 currencySymbol: ₹
+ *                 currencyCode: EUR
+ *                 currencySymbol: €
  *                 createdAt: '2026-09-15T10:00:00.000Z'
  *                 isBookmarked: false
  *                 isSiteVisit: false

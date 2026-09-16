@@ -10,7 +10,7 @@ import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { requestJob } from './trader-my-jobs.service';
-import { resolveCurrencyForCoords } from '../../../services/currency.service';
+import { resolveDiscoverCurrency } from '../../../services/currency.service';
 
 const EARTH_RADIUS_KM = 6371;
 const DEFAULT_RADIUS_KM = 50;
@@ -407,7 +407,9 @@ const getTraderContext = async (userId: string) => {
       serviceRadiusKm: true,
       serviceCenterLat: true,
       serviceCenterLng: true,
+      country: true,
       categories: { select: { categoryId: true } },
+      user: { select: { preferredCurrency: true, country: true } },
     },
   });
   if (!trader) {
@@ -457,7 +459,10 @@ const listCardSelect = {
   scheduledDate: true,
   createdAt: true,
   categoryId: true,
-  address: { select: { city: true, county: true, latitude: true, longitude: true } },
+  address: {
+    select: { city: true, county: true, country: true, latitude: true, longitude: true },
+  },
+  customer: { select: { preferredCurrency: true, country: true } },
   booking: { select: { status: true } },
 } satisfies Prisma.JobSelect;
 
@@ -512,14 +517,19 @@ const toListItem = (
   };
 };
 
-const currencyForJobNearOrigin = async (
+const currencyForDiscoverJob = async (
   job: ListCardJob,
-  origin: Origin
-): Promise<{ currencyCode: string; currencySymbol: string }> => {
-  const lat = job.latitude ?? job.address?.latitude ?? origin.lat;
-  const lng = job.longitude ?? job.address?.longitude ?? origin.lng;
-  return resolveCurrencyForCoords(lat, lng);
-};
+  trader: {
+    country: string | null;
+    user: { preferredCurrency: string; country: string | null };
+  }
+): Promise<{ currencyCode: string; currencySymbol: string }> =>
+  resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer?.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer?.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
 
 /**
  * Discover / Nearby Opportunities — open marketplace jobs for traders.
@@ -615,7 +625,7 @@ export const listDiscoverJobs = async (
   const withDistance = (
     await Promise.all(
       candidates.map(async (job) => {
-        const currency = await currencyForJobNearOrigin(job, origin);
+        const currency = await currencyForDiscoverJob(job, trader);
         const item = toListItem(job, origin, new Set(), null, undefined, currency);
         return { job, item, distanceKm: item.distanceKm, currency };
       })
@@ -722,7 +732,9 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       ],
     },
     include: {
-      address: { select: { city: true, county: true, latitude: true, longitude: true } },
+      address: {
+        select: { city: true, county: true, country: true, latitude: true, longitude: true },
+      },
       booking: { select: { status: true } },
       customer: {
         select: {
@@ -731,6 +743,8 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
           profilePhotoUrl: true,
           mobileVerified: true,
           emailVerified: true,
+          preferredCurrency: true,
+          country: true,
         },
       },
       category: { select: { id: true, name: true, iconName: true, urlSlug: true } },
@@ -842,10 +856,14 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     createdAt: job.createdAt,
     categoryId: job.categoryId,
     address: job.address,
+    customer: {
+      preferredCurrency: job.customer.preferredCurrency,
+      country: job.customer.country,
+    },
     booking: job.booking,
   };
 
-  const currency = await currencyForJobNearOrigin(listCard, origin);
+  const currency = await currencyForDiscoverJob(listCard, trader);
   const list = toListItem(
     listCard,
     origin,

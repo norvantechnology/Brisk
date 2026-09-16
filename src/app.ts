@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import path from 'path';
 import helmet from 'helmet';
 import cors from 'cors';
 import { errorMiddleware } from './middlewares/error.middleware';
@@ -75,6 +76,9 @@ app.use('/uploads/files', express.static(getUploadRoot()));
 app.use('/uploads/files', (_req, res) => {
   res.status(404).json({ success: false, message: 'File not found.' });
 });
+
+// Public brand assets (email logo, etc.)
+app.use('/assets', express.static(path.join(__dirname, '../public')));
 
 // Mount Swagger Documentation UI
 setupSwagger(app);

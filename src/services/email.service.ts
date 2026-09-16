@@ -1,9 +1,29 @@
+import fs from 'fs';
+import path from 'path';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { logger } from '../utils/logger';
 
 const DEFAULT_ADMIN_EMAIL = 'support@brisk.ie';
 /** Manager: survey + transactional from-address */
 const DEFAULT_FROM_EMAIL = 'noreply@brisk.ie';
+const EMAIL_LOGO_CID = 'brisk-logo@brisk.ie';
+const EMAIL_LOGO_DIR = path.join(__dirname, '../../public/email');
+const EMAIL_LOGOS = {
+  consumer: {
+    filename: 'brisk-logo.png',
+    path: path.join(EMAIL_LOGO_DIR, 'brisk-logo.png'),
+    width: 231,
+    height: 88,
+  },
+  trader: {
+    filename: 'brisk-logo-trader.png',
+    path: path.join(EMAIL_LOGO_DIR, 'brisk-logo-trader.png'),
+    width: 231,
+    height: 88,
+  },
+} as const;
+
+type EmailLogoKind = keyof typeof EMAIL_LOGOS;
 
 export type ContactEmailPayload = {
   referenceCode: string;
@@ -45,13 +65,26 @@ const escapeHtml = (value: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-const wrapHtmlEmail = (title: string, paragraphs: string[]): string => {
-  const body = paragraphs.map((p) => `<p style="margin:0 0 16px;line-height:1.6;color:#1e293b;">${p}</p>`).join('');
+const wrapHtmlEmail = (
+  title: string,
+  paragraphs: string[],
+  options?: { logo?: EmailLogoKind }
+): string => {
+  const body = paragraphs
+    .map((p) => `<p style="margin:0 0 16px;line-height:1.6;color:#1e293b;">${p}</p>`)
+    .join('');
+  const logo = options?.logo ? EMAIL_LOGOS[options.logo] : null;
+  const logoBlock = logo
+    ? `<div style="text-align:center;margin:0 0 24px;padding:0;">
+        <img src="cid:${EMAIL_LOGO_CID}" alt="BRISK — Making Things Quicker" width="${logo.width}" height="${logo.height}" style="max-width:${logo.width}px;width:100%;height:auto;display:inline-block;border:0;outline:none;text-decoration:none;" />
+      </div>`
+    : '';
   return `<!DOCTYPE html>
 <html>
   <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;">
     <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:28px;">
-      <h1 style="margin:0 0 20px;font-size:20px;color:#0f172a;">${title}</h1>
+      ${logoBlock}
+      <h1 style="margin:0 0 20px;font-size:20px;color:#0f172a;text-align:${logo ? 'center' : 'left'};">${title}</h1>
       ${body}
       <p style="margin:24px 0 0;line-height:1.6;color:#64748b;font-size:14px;">Brisk — Making things Quicker.</p>
     </div>
@@ -64,6 +97,8 @@ type SendMailInput = {
   subject: string;
   text: string;
   html?: string;
+  /** Embed BRISK logo via CID (consumer green / trader blue). */
+  attachLogo?: EmailLogoKind;
 };
 
 const getSmtpTransport = (): Transporter | null => {
@@ -110,6 +145,26 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
   const useEnvelope =
     Boolean(smtpUser) && smtpUser!.toLowerCase() !== fromAddress.toLowerCase();
 
+  const logoAsset = input.attachLogo ? EMAIL_LOGOS[input.attachLogo] : null;
+  const attachments =
+    logoAsset && fs.existsSync(logoAsset.path)
+      ? [
+          {
+            filename: logoAsset.filename,
+            path: logoAsset.path,
+            cid: EMAIL_LOGO_CID,
+            contentDisposition: 'inline' as const,
+          },
+        ]
+      : undefined;
+
+  if (input.attachLogo && !attachments) {
+    logger.warn('[EMAIL] Logo file missing — sending without logo', {
+      kind: input.attachLogo,
+      path: logoAsset?.path,
+    });
+  }
+
   await transport.sendMail({
     from: `Brisk <${fromAddress}>`,
     to: input.to,
@@ -117,6 +172,7 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
     text: input.text,
     html: input.html ?? input.text.replace(/\n/g, '<br/>'),
     replyTo: fromAddress,
+    ...(attachments ? { attachments } : {}),
     ...(useEnvelope
       ? {
           sender: smtpUser,
@@ -213,12 +269,17 @@ Brisk — Making things Quicker.`;
     to: payload.email,
     subject,
     text,
-    html: wrapHtmlEmail('You’re on the Brisk Waitlist', [
-      'Thanks for your interest in Brisk.',
-      'We’re currently building Brisk — a new way to make finding a trusted tradesperson for your home simpler, easier and less stressful.',
-      'By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right tradesperson for your home.',
-      'We’ll keep you updated as we get closer.',
-    ]),
+    attachLogo: 'consumer',
+    html: wrapHtmlEmail(
+      'You’re on the Brisk Waitlist',
+      [
+        'Thanks for your interest in Brisk.',
+        'We’re currently building Brisk — a new way to make finding a trusted tradesperson for your home simpler, easier and less stressful.',
+        'By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right tradesperson for your home.',
+        'We’ll keep you updated as we get closer.',
+      ],
+      { logo: 'consumer' }
+    ),
   });
 };
 
@@ -241,12 +302,17 @@ Brisk — Making things Quicker.`;
     to: payload.email,
     subject,
     text,
-    html: wrapHtmlEmail('You’re on the Brisk Trader Waitlist', [
-      'Thanks for your interest in Brisk.',
-      'We’re currently building Brisk — a new platform designed to make it easier for tradespeople to find new customers, manage jobs and grow their business.',
-      'By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.',
-      'We’ll keep you updated as we get closer.',
-    ]),
+    attachLogo: 'trader',
+    html: wrapHtmlEmail(
+      'You’re on the Brisk Trader Waitlist',
+      [
+        'Thanks for your interest in Brisk.',
+        'We’re currently building Brisk — a new platform designed to make it easier for tradespeople to find new customers, manage jobs and grow their business.',
+        'By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.',
+        'We’ll keep you updated as we get closer.',
+      ],
+      { logo: 'trader' }
+    ),
   });
 };
 

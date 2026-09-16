@@ -53,12 +53,16 @@
  *           description: Service charge amount if set
  *         currencyCode:
  *           type: string
- *           example: INR
- *           description: ISO currency from job/trader location (e.g. INR near 24.17,72.43; EUR in Ireland)
+ *           enum: [EUR, GBP]
+ *           example: EUR
+ *           description: |
+ *             Dynamic display currency (EUR or GBP only).
+ *             Priority: customer preferredCurrency → trader preferredCurrency →
+ *             job/address country (Ireland=EUR, UK=GBP) → trader country → platform base.
  *         currencySymbol:
  *           type: string
- *           example: ₹
- *           description: Symbol for price inputs / display
+ *           example: €
+ *           description: Symbol for price inputs / display (€ or £)
  *         createdAt:
  *           type: string
  *           format: date-time

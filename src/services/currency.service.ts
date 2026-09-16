@@ -189,21 +189,69 @@ export const resolveUserCurrency = async (userId?: string | null) => {
   return user?.preferredCurrency ?? (await getBaseCurrencyCode());
 };
 
+/** Brisk marketplace supports EUR (Ireland) and GBP (UK) only. */
+export const BRISK_DISPLAY_CURRENCIES = ['EUR', 'GBP'] as const;
+export type BriskDisplayCurrency = (typeof BRISK_DISPLAY_CURRENCIES)[number];
+
+const asBriskCurrency = (code?: string | null): BriskDisplayCurrency | null => {
+  const c = code?.trim().toUpperCase();
+  if (c === 'EUR' || c === 'GBP') return c;
+  return null;
+};
+
+/** Map country name/code → EUR | GBP (null if unknown). */
+export const currencyCodeFromCountry = (country?: string | null): BriskDisplayCurrency | null => {
+  if (!country?.trim()) return null;
+  const c = country.trim().toLowerCase();
+  if (
+    c === 'gb' ||
+    c === 'uk' ||
+    c === 'united kingdom' ||
+    c === 'great britain' ||
+    c === 'england' ||
+    c === 'scotland' ||
+    c === 'wales' ||
+    c === 'northern ireland'
+  ) {
+    return 'GBP';
+  }
+  if (c === 'ie' || c === 'ireland' || c === 'republic of ireland' || c === 'eire' || c === 'éire') {
+    return 'EUR';
+  }
+  return null;
+};
+
 /**
- * Infer display currency from lat/lng (job or trader origin).
- * Used by Discover so Flutter can show the right price symbol.
+ * Discover / price display currency — dynamic, not lat/lng based.
+ * Priority: customer preferred → trader preferred → job/address country → trader country → platform base (EUR/GBP only).
+ */
+export const resolveDiscoverCurrency = async (input: {
+  customerPreferredCurrency?: string | null;
+  traderPreferredCurrency?: string | null;
+  jobCountry?: string | null;
+  traderCountry?: string | null;
+}): Promise<{ currencyCode: string; currencySymbol: string }> => {
+  let code =
+    asBriskCurrency(input.customerPreferredCurrency) ||
+    asBriskCurrency(input.traderPreferredCurrency) ||
+    currencyCodeFromCountry(input.jobCountry) ||
+    currencyCodeFromCountry(input.traderCountry) ||
+    asBriskCurrency(await getBaseCurrencyCode()) ||
+    'EUR';
+
+  const meta = await getCurrencyMeta(code);
+  return { currencyCode: meta.code, currencySymbol: meta.symbol };
+};
+
+/**
+ * @deprecated Prefer resolveDiscoverCurrency — lat/lng must not invent INR/USD for Brisk.
+ * Kept for any legacy callers; only returns EUR/GBP.
  */
 export const inferCurrencyCodeFromCoords = (lat: number, lng: number): string => {
   // Ireland
   if (lat >= 51.2 && lat <= 55.6 && lng >= -11 && lng <= -5.2) return 'EUR';
   // United Kingdom (approx)
   if (lat >= 49.8 && lat <= 61 && lng >= -8.5 && lng <= 2) return 'GBP';
-  // India
-  if (lat >= 6 && lat <= 36 && lng >= 68 && lng <= 98) return 'INR';
-  // Contiguous United States (approx)
-  if (lat >= 24 && lat <= 49.5 && lng >= -125 && lng <= -66) return 'USD';
-  // Eurozone rough mainland (excl. UK/IE handled above)
-  if (lat >= 36 && lat <= 71 && lng >= -10 && lng <= 32) return 'EUR';
   return 'EUR';
 };
 
@@ -217,8 +265,8 @@ export const resolveCurrencyForCoords = async (
     Number.isFinite(lat) &&
     Number.isFinite(lng)
       ? inferCurrencyCodeFromCoords(lat, lng)
-      : await getBaseCurrencyCode();
-  const meta = await getCurrencyMeta(code);
+      : 'EUR';
+  const meta = await getCurrencyMeta(asBriskCurrency(code) || 'EUR');
   return { currencyCode: meta.code, currencySymbol: meta.symbol };
 };
 
