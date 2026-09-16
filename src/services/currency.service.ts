@@ -189,6 +189,39 @@ export const resolveUserCurrency = async (userId?: string | null) => {
   return user?.preferredCurrency ?? (await getBaseCurrencyCode());
 };
 
+/**
+ * Infer display currency from lat/lng (job or trader origin).
+ * Used by Discover so Flutter can show the right price symbol.
+ */
+export const inferCurrencyCodeFromCoords = (lat: number, lng: number): string => {
+  // Ireland
+  if (lat >= 51.2 && lat <= 55.6 && lng >= -11 && lng <= -5.2) return 'EUR';
+  // United Kingdom (approx)
+  if (lat >= 49.8 && lat <= 61 && lng >= -8.5 && lng <= 2) return 'GBP';
+  // India
+  if (lat >= 6 && lat <= 36 && lng >= 68 && lng <= 98) return 'INR';
+  // Contiguous United States (approx)
+  if (lat >= 24 && lat <= 49.5 && lng >= -125 && lng <= -66) return 'USD';
+  // Eurozone rough mainland (excl. UK/IE handled above)
+  if (lat >= 36 && lat <= 71 && lng >= -10 && lng <= 32) return 'EUR';
+  return 'EUR';
+};
+
+export const resolveCurrencyForCoords = async (
+  lat?: number | null,
+  lng?: number | null
+): Promise<{ currencyCode: string; currencySymbol: string }> => {
+  const code =
+    lat != null &&
+    lng != null &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng)
+      ? inferCurrencyCodeFromCoords(lat, lng)
+      : await getBaseCurrencyCode();
+  const meta = await getCurrencyMeta(code);
+  return { currencyCode: meta.code, currencySymbol: meta.symbol };
+};
+
 export const listActiveCurrencies = async () => {
   return prisma.currency.findMany({
     where: { isActive: true },

@@ -38,19 +38,27 @@
  *         siteVisitFee:
  *           type: number
  *           nullable: true
- *           description: Site visit fee EUR (null if not applicable). App formats currency.
+ *           description: Site visit fee amount (null if not applicable). App formats with currencySymbol.
  *         minBudget:
  *           type: number
  *           nullable: true
- *           description: Min budget EUR if set
+ *           description: Min budget amount if set
  *         maxBudget:
  *           type: number
  *           nullable: true
- *           description: Max budget EUR if set
+ *           description: Max budget amount if set
  *         serviceCharge:
  *           type: number
  *           nullable: true
- *           description: Service charge EUR if set
+ *           description: Service charge amount if set
+ *         currencyCode:
+ *           type: string
+ *           example: INR
+ *           description: ISO currency from job/trader location (e.g. INR near 24.17,72.43; EUR in Ireland)
+ *         currencySymbol:
+ *           type: string
+ *           example: ₹
+ *           description: Symbol for price inputs / display
  *         createdAt:
  *           type: string
  *           format: date-time

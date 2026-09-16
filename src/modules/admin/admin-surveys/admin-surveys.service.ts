@@ -5,6 +5,7 @@ import {
   Prisma,
   SurveyRegistrationStatus,
 } from '@prisma/client';
+import { sendSurveyWaitlistEmailSafe } from '../../../services/email.service';
 
 // ==========================================
 // TYPES
@@ -609,6 +610,12 @@ export const createConsumerRegistration = async (input: CreateSurveyConsumerPubl
     },
   });
 
+  await sendSurveyWaitlistEmailSafe('consumer', {
+    fullName: registration.fullName,
+    email: registration.email,
+    registrationCode: registration.registrationCode,
+  });
+
   const { notes: _notes, ...publicRegistration } = registration;
   return publicRegistration;
 };
@@ -975,6 +982,12 @@ export const createTraderRegistration = async (input: CreateSurveyTraderPublicIn
       agreementAccepted: true,
       status: SurveyRegistrationStatus.NEW,
     },
+  });
+
+  await sendSurveyWaitlistEmailSafe('trader', {
+    fullName: registration.fullName,
+    email: registration.email,
+    registrationCode: registration.registrationCode,
   });
 
   const { notes: _notes, ...publicRegistration } = registration;

@@ -1,7 +1,9 @@
+import nodemailer, { type Transporter } from 'nodemailer';
 import { logger } from '../utils/logger';
 
-const DEFAULT_ADMIN_EMAIL = 'support@briskmarket.com';
-const DEFAULT_FROM_EMAIL = 'noreply@briskmarket.com';
+const DEFAULT_ADMIN_EMAIL = 'support@brisk.ie';
+/** Manager: survey + transactional from-address */
+const DEFAULT_FROM_EMAIL = 'noreply@brisk.ie';
 
 export type ContactEmailPayload = {
   referenceCode: string;
@@ -12,35 +14,160 @@ export type ContactEmailPayload = {
   message: string;
 };
 
+export type SurveyWaitlistEmailPayload = {
+  fullName: string;
+  email: string;
+  registrationCode?: string;
+};
+
 const getAdminEmail = (): string =>
   process.env.CONTACT_ADMIN_EMAIL?.trim() || DEFAULT_ADMIN_EMAIL;
 
 const getFromEmail = (): string =>
-  process.env.CONTACT_FROM_EMAIL?.trim() || DEFAULT_FROM_EMAIL;
+  process.env.CONTACT_FROM_EMAIL?.trim() ||
+  process.env.MAIL_FROM?.trim() ||
+  DEFAULT_FROM_EMAIL;
+
+/** Auth mailbox (may differ from visible From). Hostinger often requires SMTP_USER to send. */
+const getSmtpUser = (): string | undefined => process.env.SMTP_USER?.trim() || undefined;
+
+const getSmtpPass = (): string | undefined => {
+  const raw = process.env.SMTP_PASS;
+  if (raw == null) return undefined;
+  // Strip wrapping quotes from .env values like 'pass&word'
+  return raw.trim().replace(/^['"]|['"]$/g, '');
+};
+
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const wrapHtmlEmail = (title: string, paragraphs: string[]): string => {
+  const body = paragraphs.map((p) => `<p style="margin:0 0 16px;line-height:1.6;color:#1e293b;">${p}</p>`).join('');
+  return `<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:28px;">
+      <h1 style="margin:0 0 20px;font-size:20px;color:#0f172a;">${title}</h1>
+      ${body}
+      <p style="margin:24px 0 0;line-height:1.6;color:#64748b;font-size:14px;">Brisk — Making things Quicker.</p>
+    </div>
+  </body>
+</html>`;
+};
+
+type SendMailInput = {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+};
+
+const getSmtpTransport = (): Transporter | null => {
+  const host = process.env.SMTP_HOST?.trim();
+  if (!host) return null;
+
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = getSmtpUser();
+  const pass = getSmtpPass();
+  const secure =
+    process.env.SMTP_SECURE === 'true' ||
+    process.env.SMTP_SECURE === '1' ||
+    port === 465;
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    ...(user && pass ? { auth: { user, pass } } : {}),
+  });
+};
 
 /**
- * v1 mock email — logs payload until SMTP/SES is wired.
- * Submission is still saved even if this throws (caller catches).
+ * Sends email via SMTP when SMTP_HOST is set; otherwise logs.
+ * Visible From header is always noreply@brisk.ie (MAIL_FROM).
+ * When SMTP auth mailbox differs, use envelope/sender = SMTP_USER so Hostinger
+ * accepts the message while the recipient still sees noreply@brisk.ie.
  */
+export const sendMail = async (input: SendMailInput): Promise<void> => {
+  const fromAddress = getFromEmail();
+  const smtpUser = getSmtpUser();
+  const transport = getSmtpTransport();
+
+  if (!transport) {
+    logger.info('[EMAIL] SMTP not configured — logging outbound mail', {
+      to: input.to,
+      from: fromAddress,
+      subject: input.subject,
+      text: input.text,
+    });
+    return;
+  }
+
+  const useEnvelope =
+    Boolean(smtpUser) && smtpUser!.toLowerCase() !== fromAddress.toLowerCase();
+
+  await transport.sendMail({
+    from: `Brisk <${fromAddress}>`,
+    to: input.to,
+    subject: input.subject,
+    text: input.text,
+    html: input.html ?? input.text.replace(/\n/g, '<br/>'),
+    replyTo: fromAddress,
+    ...(useEnvelope
+      ? {
+          sender: smtpUser,
+          envelope: { from: smtpUser!, to: input.to },
+        }
+      : {}),
+  });
+
+  logger.info('[EMAIL] Sent', {
+    to: input.to,
+    from: fromAddress,
+    envelopeFrom: useEnvelope ? smtpUser : fromAddress,
+    subject: input.subject,
+  });
+};
+
 export const sendContactConfirmationToUser = async (
   payload: ContactEmailPayload
 ): Promise<void> => {
-  logger.info('[EMAIL MOCK] Contact confirmation → user', {
+  const subject = `We received your message (${payload.referenceCode})`;
+  const text = `Hi ${payload.fullName},
+
+Thank you for contacting BRISK. Reference: ${payload.referenceCode}.
+We will reply within 24–48 hours.
+
+Brisk — Making things Quicker.`;
+
+  await sendMail({
     to: payload.email,
-    from: getFromEmail(),
-    subject: `We received your message (${payload.referenceCode})`,
-    body: `Hi ${payload.fullName}, thank you for contacting BRISK. Reference: ${payload.referenceCode}. We will reply within 24–48 hours.`,
+    subject,
+    text,
+    html: wrapHtmlEmail('We received your message', [
+      `Hi ${escapeHtml(payload.fullName)},`,
+      `Thank you for contacting BRISK. Reference: <strong>${escapeHtml(payload.referenceCode)}</strong>.`,
+      'We will reply within 24–48 hours.',
+    ]),
   });
 };
 
 export const sendContactNotificationToAdmin = async (
   payload: ContactEmailPayload
 ): Promise<void> => {
-  logger.info('[EMAIL MOCK] Contact notification → admin', {
+  const subject = `New Contact Us submission (${payload.referenceCode}) — ${payload.subject}`;
+  const text = `${payload.fullName} <${payload.email}> | ${payload.phone ?? 'no phone'}
+
+${payload.message}`;
+
+  await sendMail({
     to: getAdminEmail(),
-    from: getFromEmail(),
-    subject: `New Contact Us submission (${payload.referenceCode}) — ${payload.subject}`,
-    body: `${payload.fullName} <${payload.email}> | ${payload.phone ?? 'no phone'}\n\n${payload.message}`,
+    subject,
+    text,
   });
 };
 
@@ -65,4 +192,77 @@ export const sendContactEmails = async (
   }
 
   return { userEmailSent, adminEmailSent };
+};
+
+/** Website consumer survey / waitlist confirmation */
+export const sendConsumerSurveyWaitlistEmail = async (
+  payload: SurveyWaitlistEmailPayload
+): Promise<void> => {
+  const subject = '🏠 You’re on the Brisk Waitlist';
+  const text = `Thanks for your interest in Brisk.
+
+We’re currently building Brisk — a new way to make finding a trusted tradesperson for your home simpler, easier and less stressful.
+
+By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right tradesperson for your home.
+
+We’ll keep you updated as we get closer.
+
+Brisk — Making things Quicker.`;
+
+  await sendMail({
+    to: payload.email,
+    subject,
+    text,
+    html: wrapHtmlEmail('You’re on the Brisk Waitlist', [
+      'Thanks for your interest in Brisk.',
+      'We’re currently building Brisk — a new way to make finding a trusted tradesperson for your home simpler, easier and less stressful.',
+      'By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right tradesperson for your home.',
+      'We’ll keep you updated as we get closer.',
+    ]),
+  });
+};
+
+/** Website trader survey / waitlist confirmation */
+export const sendTraderSurveyWaitlistEmail = async (
+  payload: SurveyWaitlistEmailPayload
+): Promise<void> => {
+  const subject = '🔨 You’re on the Brisk Trader Waitlist';
+  const text = `Thanks for your interest in Brisk.
+
+We’re currently building Brisk — a new platform designed to make it easier for tradespeople to find new customers, manage jobs and grow their business.
+
+By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.
+
+We’ll keep you updated as we get closer.
+
+Brisk — Making things Quicker.`;
+
+  await sendMail({
+    to: payload.email,
+    subject,
+    text,
+    html: wrapHtmlEmail('You’re on the Brisk Trader Waitlist', [
+      'Thanks for your interest in Brisk.',
+      'We’re currently building Brisk — a new platform designed to make it easier for tradespeople to find new customers, manage jobs and grow their business.',
+      'By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.',
+      'We’ll keep you updated as we get closer.',
+    ]),
+  });
+};
+
+export const sendSurveyWaitlistEmailSafe = async (
+  kind: 'consumer' | 'trader',
+  payload: SurveyWaitlistEmailPayload
+): Promise<boolean> => {
+  try {
+    if (kind === 'consumer') {
+      await sendConsumerSurveyWaitlistEmail(payload);
+    } else {
+      await sendTraderSurveyWaitlistEmail(payload);
+    }
+    return true;
+  } catch (error) {
+    logger.warn(`Failed to send ${kind} survey waitlist email`, { error, email: payload.email });
+    return false;
+  }
 };

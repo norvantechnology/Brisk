@@ -10,6 +10,7 @@ import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { requestJob } from './trader-my-jobs.service';
+import { resolveCurrencyForCoords } from '../../../services/currency.service';
 
 const EARTH_RADIUS_KM = 6371;
 const DEFAULT_RADIUS_KM = 50;
@@ -467,7 +468,8 @@ const toListItem = (
   origin: Origin,
   bookmarkedIds: Set<string>,
   traderVisitStatus?: TraderSiteVisitStatus | null,
-  quoteFlags?: Partial<DiscoverQuoteState>
+  quoteFlags?: Partial<DiscoverQuoteState>,
+  currency?: { currencyCode: string; currencySymbol: string }
 ) => {
   const coords = resolveJobCoords(
     {
@@ -496,6 +498,8 @@ const toListItem = (
     minBudget: money(job.minBudget),
     maxBudget: money(job.maxBudget),
     serviceCharge: money(job.serviceCharge),
+    currencyCode: currency?.currencyCode ?? 'EUR',
+    currencySymbol: currency?.currencySymbol ?? '€',
     createdAt: job.createdAt,
     isBookmarked: bookmarkedIds.has(job.id),
     isSiteVisit,
@@ -506,6 +510,15 @@ const toListItem = (
     isWaitingForCustomerConfirmation,
     quoteAmount: quoteFlags?.quoteAmount ?? null,
   };
+};
+
+const currencyForJobNearOrigin = async (
+  job: ListCardJob,
+  origin: Origin
+): Promise<{ currencyCode: string; currencySymbol: string }> => {
+  const lat = job.latitude ?? job.address?.latitude ?? origin.lat;
+  const lng = job.longitude ?? job.address?.longitude ?? origin.lng;
+  return resolveCurrencyForCoords(lat, lng);
 };
 
 /**
@@ -599,11 +612,15 @@ export const listDiscoverJobs = async (
     take: 500,
   });
 
-  const withDistance = candidates
-    .map((job) => {
-      const item = toListItem(job, origin, new Set());
-      return { job, item, distanceKm: item.distanceKm };
-    })
+  const withDistance = (
+    await Promise.all(
+      candidates.map(async (job) => {
+        const currency = await currencyForJobNearOrigin(job, origin);
+        const item = toListItem(job, origin, new Set(), null, undefined, currency);
+        return { job, item, distanceKm: item.distanceKm, currency };
+      })
+    )
+  )
     .filter((row) => row.distanceKm <= radiusKm)
     .sort((a, b) => {
       if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
@@ -661,7 +678,7 @@ export const listDiscoverJobs = async (
     if (!quoteByJob.has(q.jobId)) quoteByJob.set(q.jobId, q);
   }
 
-  return slice.map(({ job }) => {
+  return slice.map(({ job, currency }) => {
     const q = quoteByJob.get(job.id);
     const amount = q ? money(q.quotedAmount) : null;
     const isJobRequested = Boolean(q?.requestedAt);
@@ -675,7 +692,7 @@ export const listDiscoverJobs = async (
       quoteAmount: amount,
       quoteNotes: null,
       quoteStatus: null,
-    });
+    }, currency);
   });
 };
 
@@ -828,12 +845,14 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     booking: job.booking,
   };
 
+  const currency = await currencyForJobNearOrigin(listCard, origin);
   const list = toListItem(
     listCard,
     origin,
     new Set(bookmark ? [jobId] : []),
     activeVisit?.status ?? null,
-    quoteState
+    quoteState,
+    currency
   );
   const fee = money(job.siteVisitFee);
   const isSiteVisit = list.isSiteVisit || isSiteVisitJob(job);

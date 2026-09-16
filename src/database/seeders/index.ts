@@ -27,6 +27,8 @@ async function main() {
   await seedPropertyModule(prisma);
   const { seedBriskOffers } = await import('./brisk-offers.seed');
   await seedBriskOffers();
+  const { seedDiscoverJobs } = await import('./discover-jobs.seed');
+  await seedDiscoverJobs(prisma);
   logger.info('✅ Database seeding completed successfully.');
 }
 
