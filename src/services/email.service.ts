@@ -108,8 +108,10 @@ const wrapHtmlEmail = (
                 </tr>
                 ${body}
                 <tr>
-                  <td style="padding:8px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#64748b;">
-                    Brisk - Making things Quicker.
+                  <td style="padding:16px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1e293b;">
+                    Regards,<br/>
+                    <strong>BRISK</strong><br/>
+                    <span style="color:#64748b;font-size:14px;">Brisk - Making things Quicker.</span>
                   </td>
                 </tr>
               </table>
@@ -265,12 +267,14 @@ export const sendConsumerSurveyWaitlistEmail = async (
   const subject = '🏠 You’re on the Brisk Waitlist';
   const text = `Thanks for your interest in Brisk.
 
-We’re currently building Brisk - a new way to make finding a trusted tradesperson for your home simpler, easier and less stressful.
+We’re currently building Brisk - a new way to make finding a trusted trades person for your home simpler, easier and less stressful.
 
-By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right tradesperson for your home.
+By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right trades person for your home.
 
 We’ll keep you updated as we get closer.
 
+Regards,
+BRISK
 Brisk - Making things Quicker.`;
 
   await sendMail({
@@ -281,8 +285,8 @@ Brisk - Making things Quicker.`;
       'You’re on the Brisk Waitlist',
       [
         'Thanks for your interest in Brisk.',
-        'We’re currently building Brisk - a new way to make finding a trusted tradesperson for your home simpler, easier and less stressful.',
-        'By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right tradesperson for your home.',
+        'We’re currently building Brisk - a new way to make finding a trusted trades person for your home simpler, easier and less stressful.',
+        'By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right trades person for your home.',
         'We’ll keep you updated as we get closer.',
       ],
       { logo: 'consumer' }
@@ -297,12 +301,14 @@ export const sendTraderSurveyWaitlistEmail = async (
   const subject = '🔨 You’re on the Brisk Trader Waitlist';
   const text = `Thanks for your interest in Brisk.
 
-We’re currently building Brisk - a new platform designed to make it easier for tradespeople to find new customers, manage jobs and grow their business.
+We’re currently building Brisk - a new platform designed to make it easier for trades people to find new customers, manage jobs and grow their business.
 
 By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.
 
 We’ll keep you updated as we get closer.
 
+Regards,
+BRISK
 Brisk - Making things Quicker.`;
 
   await sendMail({
@@ -313,7 +319,7 @@ Brisk - Making things Quicker.`;
       'You’re on the Brisk Trader Waitlist',
       [
         'Thanks for your interest in Brisk.',
-        'We’re currently building Brisk - a new platform designed to make it easier for tradespeople to find new customers, manage jobs and grow their business.',
+        'We’re currently building Brisk - a new platform designed to make it easier for trades people to find new customers, manage jobs and grow their business.',
         'By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.',
         'We’ll keep you updated as we get closer.',
       ],
