@@ -10,7 +10,7 @@ import { logger } from '../../utils/logger';
 const ORIGIN = { lat: 24.1724333, lng: 72.43458 };
 
 /**
- * Seeds 3 PUBLISHED Discover jobs within ~5km of ORIGIN:
+ * Seeds 3 PUBLISHED Discover jobs at ORIGIN (same lat/lng for all QA jobs):
  * 1) Normal (quote / budget) — badge null
  * 2) Site Visit — badge "Site Visit"
  * 3) Reschedule — site visit with past scheduledDate → badge "Reschedule"
@@ -98,8 +98,8 @@ export async function seedDiscoverJobs(prisma: PrismaClient): Promise<void> {
       maxBudget: 1500,
       serviceCharge: null as number | null,
       scheduledDate: futureDate,
-      latitude: ORIGIN.lat + 0.008, // ~0.9 km
-      longitude: ORIGIN.lng + 0.006,
+      latitude: ORIGIN.lat,
+      longitude: ORIGIN.lng,
       city: 'Himmatnagar',
       addressLine: '12 Station Road',
       postcode: '383001',
@@ -119,8 +119,8 @@ export async function seedDiscoverJobs(prisma: PrismaClient): Promise<void> {
       maxBudget: null,
       serviceCharge: null,
       scheduledDate: futureDate,
-      latitude: ORIGIN.lat - 0.01, // ~1.1 km
-      longitude: ORIGIN.lng + 0.012,
+      latitude: ORIGIN.lat,
+      longitude: ORIGIN.lng,
       city: 'Himmatnagar',
       addressLine: '45 Civil Hospital Road',
       postcode: '383001',
@@ -140,8 +140,8 @@ export async function seedDiscoverJobs(prisma: PrismaClient): Promise<void> {
       maxBudget: null,
       serviceCharge: null,
       scheduledDate: pastDate,
-      latitude: ORIGIN.lat + 0.015, // ~1.7 km
-      longitude: ORIGIN.lng - 0.008,
+      latitude: ORIGIN.lat,
+      longitude: ORIGIN.lng,
       city: 'Idar Road',
       addressLine: '8 Bypass Circle',
       postcode: '383110',

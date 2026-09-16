@@ -62,6 +62,23 @@ const isSiteVisitJob = (job: {
   quoteType: JobQuoteType | null;
 }): boolean => job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
 
+/** True when trader must pick a new visit slot (past preferred date, booking rescheduled, or visit status). */
+const jobNeedsReschedule = (
+  job: {
+    siteVisitRequested: boolean;
+    quoteType: JobQuoteType | null;
+    scheduledDate?: Date | null;
+    booking?: { status: string } | null;
+  },
+  traderVisitStatus?: TraderSiteVisitStatus | null
+): boolean => {
+  if (traderVisitStatus === TraderSiteVisitStatus.RESCHEDULE_REQUIRED) return true;
+  if (!isSiteVisitJob(job)) return false;
+  if (job.booking?.status === 'RESCHEDULED') return true;
+  if (job.scheduledDate && job.scheduledDate.getTime() < Date.now()) return true;
+  return false;
+};
+
 const buildBadge = (
   job: {
     siteVisitRequested: boolean;
@@ -71,11 +88,8 @@ const buildBadge = (
   },
   traderVisitStatus?: TraderSiteVisitStatus | null
 ): string | null => {
-  if (traderVisitStatus === TraderSiteVisitStatus.RESCHEDULE_REQUIRED) return 'Reschedule';
+  if (jobNeedsReschedule(job, traderVisitStatus)) return 'Reschedule';
   if (!isSiteVisitJob(job)) return null;
-  if (job.booking?.status === 'RESCHEDULED') return 'Reschedule';
-  // Past customer-preferred date on a site-visit job → list shows Reschedule badge.
-  if (job.scheduledDate && job.scheduledDate.getTime() < Date.now()) return 'Reschedule';
   return 'Site Visit';
 };
 
@@ -359,13 +373,14 @@ const resolveDiscoverQuoteFlags = (params: {
 const resolvePrimaryActions = (
   isSiteVisit: boolean,
   siteVisit: ReturnType<typeof toSiteVisitPayload>,
-  quote: DiscoverQuoteState
+  quote: DiscoverQuoteState,
+  needsReschedule = false
 ) => {
   if (quote.isWaitingForCustomerConfirmation) {
     return {
       canSelectDateTime: isSiteVisit && siteVisit.status === 'PENDING',
       canRequestSiteVisit: isSiteVisit && (siteVisit.status === 'NONE' || siteVisit.status === 'PENDING'),
-      canRequestReschedule: siteVisit.status === 'RESCHEDULE_REQUIRED',
+      canRequestReschedule: siteVisit.status === 'RESCHEDULE_REQUIRED' || needsReschedule,
       canSubmitQuote: false,
       canUpdateQuote: quote.canUpdateQuote,
       canRequestJob: false,
@@ -387,7 +402,8 @@ const resolvePrimaryActions = (
     };
   }
 
-  if (siteVisit.status === 'RESCHEDULE_REQUIRED') {
+  // Past preferred date / RESCHEDULE_REQUIRED visit — same UI as Figma reschedule card
+  if (siteVisit.status === 'RESCHEDULE_REQUIRED' || needsReschedule) {
     return {
       canSelectDateTime: true,
       canRequestSiteVisit: false,
@@ -957,7 +973,14 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   );
   const fee = money(job.siteVisitFee);
   const isSiteVisit = list.isSiteVisit || isSiteVisitPreview;
-  const siteVisit = toSiteVisitPayload(activeVisit);
+  const baseSiteVisit = toSiteVisitPayload(activeVisit);
+  const needsReschedule = jobNeedsReschedule(job, activeVisit?.status);
+  // Align siteVisit.status with list badge when job needs reschedule but trader has no visit yet
+  const siteVisit = (
+    needsReschedule && baseSiteVisit.status === 'NONE'
+      ? { ...baseSiteVisit, status: 'RESCHEDULE_REQUIRED' as const }
+      : baseSiteVisit
+  ) as ReturnType<typeof toSiteVisitPayload>;
   // Site-visit jobs: allow request job after slots proposed (optional quote for fee jobs).
   if (isSiteVisit && !quoteState.hasSubmittedQuote && siteVisit.status === 'PENDING') {
     quoteState = {
@@ -969,9 +992,8 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
         job.traderId == null,
     };
   }
-  const actions = resolvePrimaryActions(isSiteVisit, siteVisit, quoteState);
-  const isReschedule =
-    list.badge === 'Reschedule' || siteVisit.status === 'RESCHEDULE_REQUIRED';
+  const actions = resolvePrimaryActions(isSiteVisit, siteVisit, quoteState, needsReschedule);
+  const isReschedule = needsReschedule || siteVisit.status === 'RESCHEDULE_REQUIRED';
   const coords = resolveJobCoords(
     {
       id: job.id,
@@ -1092,6 +1114,8 @@ const assertJobAccessibleForSiteVisit = async (traderId: string, jobId: string) 
       siteVisitRequested: true,
       quoteType: true,
       title: true,
+      scheduledDate: true,
+      booking: { select: { status: true } },
     },
   });
   if (!job) {
@@ -1103,18 +1127,18 @@ const assertJobAccessibleForSiteVisit = async (traderId: string, jobId: string) 
       traderId,
       status: { not: TraderSiteVisitStatus.CANCELLED },
     },
-    select: { id: true },
+    select: { id: true, status: true },
   });
   if (!isSiteVisitJob(job) && !existingVisit) {
     throw new BadRequestError('This job does not require a site visit.');
   }
-  return job;
+  return { job, existingVisit };
 };
 
 /** Bottom sheet: Site Visit Date & Time — dates + periods + proposed multi-slots list. */
 export const getSiteVisitSlots = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
-  await assertJobAccessibleForSiteVisit(trader.id, jobId);
+  const { job, existingVisit } = await assertJobAccessibleForSiteVisit(trader.id, jobId);
 
   const visit = await prisma.traderSiteVisitRequest.findUnique({
     where: { jobId_traderId: { jobId, traderId: trader.id } },
@@ -1141,10 +1165,11 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
   });
   const active = visit && visit.status !== TraderSiteVisitStatus.CANCELLED ? visit : null;
   const payload = toSiteVisitPayload(active);
+  const needsReschedule = jobNeedsReschedule(job, active?.status ?? existingVisit?.status ?? null);
 
   return {
     jobId,
-    title: 'Site Visit Date & Time',
+    title: needsReschedule ? 'Reschedule Visit Date & Time' : 'Site Visit Date & Time',
     dates: buildAvailableDates(),
     timeSlots: SITE_VISIT_SLOT_ORDER.map((id) => ({
       id,
@@ -1162,7 +1187,7 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
         : payload.slots[0]
           ? { date: payload.slots[0].date, timeSlot: payload.slots[0].timeSlot }
           : null,
-    mode: active?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED ? 'RESCHEDULE' : 'REQUEST',
+    mode: needsReschedule ? 'RESCHEDULE' : 'REQUEST',
   };
 };
 
@@ -1185,6 +1210,16 @@ const upsertSiteVisit = async (
   }));
   const primary = parsed[0];
 
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: {
+      siteVisitRequested: true,
+      quoteType: true,
+      scheduledDate: true,
+      booking: { select: { status: true } },
+    },
+  });
+
   const existing = await prisma.traderSiteVisitRequest.findUnique({
     where: { jobId_traderId: { jobId, traderId } },
   });
@@ -1198,7 +1233,12 @@ const upsertSiteVisit = async (
       throw new ConflictError('Site visit is already completed.');
     }
   } else if (!existing || existing.status === TraderSiteVisitStatus.CANCELLED) {
-    throw new BadRequestError('No site visit to reschedule. Request a site visit first.');
+    // Allow first slot proposal via reschedule when job itself needs reschedule (past preferred date).
+    const allowCreate =
+      job != null && jobNeedsReschedule(job, existing?.status ?? null);
+    if (!allowCreate) {
+      throw new BadRequestError('No site visit to reschedule. Request a site visit first.');
+    }
   }
 
   const nextStatus =
