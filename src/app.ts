@@ -77,8 +77,15 @@ app.use('/uploads/files', (_req, res) => {
   res.status(404).json({ success: false, message: 'File not found.' });
 });
 
-// Public brand assets (email logo, etc.)
-app.use('/assets', express.static(path.join(__dirname, '../public')));
+// Public brand assets (email logo, etc.) — CORP cross-origin so Gmail/Outlook can load imgs
+app.use(
+  '/assets',
+  (_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  },
+  express.static(path.join(__dirname, '../public'))
+);
 
 // Mount Swagger Documentation UI
 setupSwagger(app);
