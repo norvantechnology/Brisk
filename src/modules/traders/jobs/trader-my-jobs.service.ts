@@ -692,16 +692,23 @@ export const upsertQuote = async (
       });
 
   // Keep job PUBLISHED on Discover until customer confirms the trader.
+  const isJobRequested = Boolean(quote.requestedAt);
+  const isWaitingForCustomerConfirmation = isJobRequested; // open marketplace only at this point
   return {
     id: quote.id,
     jobId,
     amount: money(quote.quotedAmount),
     notes: quote.notes,
     status: quote.status,
+    jobStatus: JobStatus.PUBLISHED,
+    assignmentStatus: isWaitingForCustomerConfirmation
+      ? 'WAITING_FOR_CUSTOMER'
+      : 'QUOTED',
     hasSubmittedQuote: true,
     canUpdateQuote: true,
-    isJobRequested: Boolean(quote.requestedAt),
-    isWaitingForCustomerConfirmation: Boolean(quote.requestedAt),
+    canSubmitQuote: false,
+    isJobRequested,
+    isWaitingForCustomerConfirmation,
   };
 };
 
@@ -765,6 +772,9 @@ export const requestJob = async (
       jobId,
       quoteId: existingQuote.id,
       amount: money(existingQuote.quotedAmount),
+      jobStatus: JobStatus.PUBLISHED,
+      assignmentStatus: 'WAITING_FOR_CUSTOMER' as const,
+      hasSubmittedQuote: true,
       isJobRequested: true,
       isWaitingForCustomerConfirmation: true,
     };
@@ -795,6 +805,9 @@ export const requestJob = async (
     jobId,
     quoteId: quote.id,
     amount: money(quote.quotedAmount),
+    jobStatus: JobStatus.PUBLISHED,
+    assignmentStatus: 'WAITING_FOR_CUSTOMER' as const,
+    hasSubmittedQuote: true,
     isJobRequested: true,
     isWaitingForCustomerConfirmation: true,
   };
@@ -822,6 +835,8 @@ export const acceptJob = async (
       id: jobId,
       isJobRequested: true,
       isWaitingForCustomerConfirmation: true,
+      assignmentStatus: 'WAITING_FOR_CUSTOMER',
+      jobStatus: JobStatus.PUBLISHED,
       primaryAction: 'WAITING_FOR_CUSTOMER',
     };
   }

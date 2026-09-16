@@ -253,6 +253,8 @@ type DiscoverQuoteState = {
   canRequestJob: boolean;
   isJobRequested: boolean;
   isWaitingForCustomerConfirmation: boolean;
+  /** NONE | QUOTED | WAITING_FOR_CUSTOMER | ASSIGNED — never treat WAITING as My Jobs ACTIVE */
+  assignmentStatus: 'NONE' | 'QUOTED' | 'WAITING_FOR_CUSTOMER' | 'ASSIGNED';
   quoteId: string | null;
   quoteAmount: number | null;
   quoteNotes: string | null;
@@ -266,11 +268,93 @@ const emptyQuoteState = (): DiscoverQuoteState => ({
   canRequestJob: false,
   isJobRequested: false,
   isWaitingForCustomerConfirmation: false,
+  assignmentStatus: 'NONE',
   quoteId: null,
   quoteAmount: null,
   quoteNotes: null,
   quoteStatus: null,
 });
+
+type QuoteFlagRow = {
+  id: string;
+  quotedAmount: Prisma.Decimal | number;
+  notes: string | null;
+  status: string;
+  requestedAt: Date | null;
+};
+
+/**
+ * Single source of truth for Discover quote / request / waiting flags.
+ *
+ * Flow:
+ *  1) Submit quote → QUOTED (hasSubmittedQuote=true, waiting=false) — still Discover, not Active
+ *  2) Request Job → WAITING_FOR_CUSTOMER (isJobRequested + isWaitingForCustomerConfirmation)
+ *     Job stays PUBLISHED + unassigned — NOT My Jobs ACTIVE
+ *  3) Customer confirms → ASSIGNED (traderId set, status ACCEPTED/SCHEDULED) → My Jobs ACTIVE
+ */
+const resolveDiscoverQuoteFlags = (params: {
+  quote: QuoteFlagRow | null | undefined;
+  jobStatus: JobStatus;
+  jobTraderId: string | null;
+  traderId: string;
+  isSiteVisit?: boolean;
+  hasActiveVisit?: boolean;
+}): DiscoverQuoteState => {
+  const isAssignedToThis = params.jobTraderId === params.traderId;
+  const isOpenMarketplace =
+    params.jobStatus === JobStatus.PUBLISHED && params.jobTraderId == null;
+  const quote = params.quote ?? null;
+  const hasSubmittedQuote = Boolean(quote);
+  const isJobRequested = Boolean(quote?.requestedAt);
+
+  // Waiting = trader requested AND customer has not confirmed (still open marketplace).
+  // This is NOT the Active / assigned job state.
+  const isWaitingForCustomerConfirmation =
+    isJobRequested && !isAssignedToThis && isOpenMarketplace;
+
+  if (isAssignedToThis && params.jobTraderId) {
+    return {
+      hasSubmittedQuote,
+      canUpdateQuote: false,
+      canSubmitQuote: false,
+      canRequestJob: false,
+      isJobRequested,
+      isWaitingForCustomerConfirmation: false,
+      assignmentStatus: 'ASSIGNED',
+      quoteId: quote?.id ?? null,
+      quoteAmount: quote ? money(quote.quotedAmount) : null,
+      quoteNotes: quote?.notes ?? null,
+      quoteStatus: quote?.status ?? null,
+    };
+  }
+
+  if (!hasSubmittedQuote || !quote) {
+    return {
+      ...emptyQuoteState(),
+      canSubmitQuote: !(params.isSiteVisit ?? false) || Boolean(params.hasActiveVisit),
+      canRequestJob: false,
+      assignmentStatus: 'NONE',
+    };
+  }
+
+  const pending = quote.status === QuoteStatus.PENDING || quote.status === 'PENDING';
+
+  return {
+    hasSubmittedQuote: true,
+    canUpdateQuote: pending && isOpenMarketplace,
+    canSubmitQuote: false,
+    canRequestJob: !isJobRequested && isOpenMarketplace && pending,
+    isJobRequested,
+    isWaitingForCustomerConfirmation,
+    assignmentStatus: isWaitingForCustomerConfirmation
+      ? 'WAITING_FOR_CUSTOMER'
+      : 'QUOTED',
+    quoteId: quote.id,
+    quoteAmount: money(quote.quotedAmount),
+    quoteNotes: quote.notes,
+    quoteStatus: quote.status,
+  };
+};
 
 const resolvePrimaryActions = (
   isSiteVisit: boolean,
@@ -338,7 +422,7 @@ const resolvePrimaryActions = (
       canRequestSiteVisit: false,
       canRequestReschedule: false,
       canSubmitQuote: false,
-      canUpdateQuote: true,
+      canUpdateQuote: quote.canUpdateQuote,
       canRequestJob: quote.canRequestJob,
       primaryAction: quote.canRequestJob
         ? ('REQUEST_JOB' as const)
@@ -350,7 +434,7 @@ const resolvePrimaryActions = (
     canSelectDateTime: false,
     canRequestSiteVisit: false,
     canRequestReschedule: false,
-    canSubmitQuote: true,
+    canSubmitQuote: quote.canSubmitQuote,
     canUpdateQuote: false,
     canRequestJob: false,
     primaryAction: 'SUBMIT_QUOTE' as const,
@@ -459,6 +543,8 @@ const listCardSelect = {
   scheduledDate: true,
   createdAt: true,
   categoryId: true,
+  status: true,
+  traderId: true,
   address: {
     select: { city: true, county: true, country: true, latitude: true, longitude: true },
   },
@@ -492,6 +578,13 @@ const toListItem = (
   const isWaitingForCustomerConfirmation = Boolean(
     quoteFlags?.isWaitingForCustomerConfirmation
   );
+  const assignmentStatus =
+    quoteFlags?.assignmentStatus ??
+    (isWaitingForCustomerConfirmation
+      ? 'WAITING_FOR_CUSTOMER'
+      : hasSubmittedQuote
+        ? 'QUOTED'
+        : 'NONE');
 
   return {
     id: job.id,
@@ -508,6 +601,15 @@ const toListItem = (
     createdAt: job.createdAt,
     isBookmarked: bookmarkedIds.has(job.id),
     isSiteVisit,
+    /** Actual DB job status — Discover open jobs are PUBLISHED until customer confirms. */
+    jobStatus: job.status,
+    /**
+     * NONE → no quote yet
+     * QUOTED → quote submitted, not requested (still Discover, not Active)
+     * WAITING_FOR_CUSTOMER → Request Job done, pending customer confirm (NOT My Jobs ACTIVE)
+     * ASSIGNED → customer confirmed (normally leaves Discover → My Jobs ACTIVE)
+     */
+    assignmentStatus,
     hasSubmittedQuote,
     canUpdateQuote: Boolean(quoteFlags?.canUpdateQuote),
     canSubmitQuote: quoteFlags?.canSubmitQuote ?? !hasSubmittedQuote,
@@ -689,20 +791,18 @@ export const listDiscoverJobs = async (
   }
 
   return slice.map(({ job, currency }) => {
-    const q = quoteByJob.get(job.id);
-    const amount = q ? money(q.quotedAmount) : null;
-    const isJobRequested = Boolean(q?.requestedAt);
-    const hasSubmittedQuote = Boolean(q);
-    return toListItem(job, origin, bookmarkedIds, visitByJob.get(job.id) ?? null, {
-      hasSubmittedQuote,
-      canUpdateQuote: hasSubmittedQuote,
-      canSubmitQuote: !hasSubmittedQuote,
-      isJobRequested,
-      isWaitingForCustomerConfirmation: isJobRequested,
-      quoteAmount: amount,
-      quoteNotes: null,
-      quoteStatus: null,
-    }, currency);
+    const q = quoteByJob.get(job.id) ?? null;
+    const visitStatus = visitByJob.get(job.id) ?? null;
+    const isSiteVisit = isSiteVisitJob(job) || buildBadge(job, visitStatus) === 'Site Visit';
+    const quoteFlags = resolveDiscoverQuoteFlags({
+      quote: q,
+      jobStatus: job.status,
+      jobTraderId: job.traderId ?? null,
+      traderId: trader.id,
+      isSiteVisit,
+      hasActiveVisit: Boolean(visitStatus),
+    });
+    return toListItem(job, origin, bookmarkedIds, visitStatus, quoteFlags, currency);
   });
 };
 
@@ -810,34 +910,15 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   const activeVisit =
     visitRow && visitRow.status !== TraderSiteVisitStatus.CANCELLED ? visitRow : null;
 
-  const quoteAmount = quoteRow ? money(quoteRow.quotedAmount) : null;
-  const hasSubmittedQuote = Boolean(quoteRow);
-  const isJobRequested = Boolean(quoteRow?.requestedAt);
-  const isAssignedToThis = job.traderId === trader.id;
-  const isWaitingForCustomerConfirmation =
-    isJobRequested && !isAssignedToThis && job.status === JobStatus.PUBLISHED;
-  const quoteState: DiscoverQuoteState = hasSubmittedQuote
-    ? {
-        hasSubmittedQuote: true,
-        canUpdateQuote: quoteRow!.status === 'PENDING' && !isAssignedToThis,
-        canSubmitQuote: false,
-        canRequestJob:
-          !isJobRequested &&
-          !isAssignedToThis &&
-          job.status === JobStatus.PUBLISHED &&
-          quoteRow!.status === 'PENDING',
-        isJobRequested,
-        isWaitingForCustomerConfirmation,
-        quoteId: quoteRow!.id,
-        quoteAmount,
-        quoteNotes: quoteRow!.notes,
-        quoteStatus: quoteRow!.status,
-      }
-    : {
-        ...emptyQuoteState(),
-        canSubmitQuote: !isSiteVisitJob(job) || Boolean(activeVisit),
-        canRequestJob: false,
-      };
+  const isSiteVisitPreview = isSiteVisitJob(job);
+  let quoteState = resolveDiscoverQuoteFlags({
+    quote: quoteRow,
+    jobStatus: job.status,
+    jobTraderId: job.traderId,
+    traderId: trader.id,
+    isSiteVisit: isSiteVisitPreview,
+    hasActiveVisit: Boolean(activeVisit),
+  });
 
   const listCard: ListCardJob = {
     id: job.id,
@@ -855,6 +936,8 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     scheduledDate: job.scheduledDate,
     createdAt: job.createdAt,
     categoryId: job.categoryId,
+    status: job.status,
+    traderId: job.traderId,
     address: job.address,
     customer: {
       preferredCurrency: job.customer.preferredCurrency,
@@ -873,12 +956,18 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     currency
   );
   const fee = money(job.siteVisitFee);
-  const isSiteVisit = list.isSiteVisit || isSiteVisitJob(job);
+  const isSiteVisit = list.isSiteVisit || isSiteVisitPreview;
   const siteVisit = toSiteVisitPayload(activeVisit);
   // Site-visit jobs: allow request job after slots proposed (optional quote for fee jobs).
   if (isSiteVisit && !quoteState.hasSubmittedQuote && siteVisit.status === 'PENDING') {
-    quoteState.canRequestJob =
-      !isJobRequested && !isAssignedToThis && job.status === JobStatus.PUBLISHED;
+    quoteState = {
+      ...quoteState,
+      canRequestJob:
+        !quoteState.isJobRequested &&
+        job.traderId !== trader.id &&
+        job.status === JobStatus.PUBLISHED &&
+        job.traderId == null,
+    };
   }
   const actions = resolvePrimaryActions(isSiteVisit, siteVisit, quoteState);
   const isReschedule =
@@ -940,6 +1029,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     canRequestJob: actions.canRequestJob,
     isJobRequested: quoteState.isJobRequested,
     isWaitingForCustomerConfirmation: quoteState.isWaitingForCustomerConfirmation,
+    assignmentStatus: quoteState.assignmentStatus,
     quoteId: quoteState.quoteId,
     quoteAmount: quoteState.quoteAmount,
     quoteNotes: quoteState.quoteNotes,
@@ -1296,8 +1386,10 @@ export const listWaitingJobs = async (userId: string) => {
         colorHint: 'blue',
         isJobRequested: true,
         isWaitingForCustomerConfirmation: true,
+        assignmentStatus: 'WAITING_FOR_CUSTOMER',
         hasSubmittedQuote: true,
         requestedAt: q.requestedAt,
+        jobStatus: JobStatus.PUBLISHED,
         primaryAction: 'WAITING_FOR_CUSTOMER',
       };
     }),

@@ -73,6 +73,18 @@
  *         isSiteVisit:
  *           type: boolean
  *           description: true when site-visit APIs apply
+ *         jobStatus:
+ *           type: string
+ *           example: PUBLISHED
+ *           description: DB job status. Stays PUBLISHED until customer confirms trader.
+ *         assignmentStatus:
+ *           type: string
+ *           enum: [NONE, QUOTED, WAITING_FOR_CUSTOMER, ASSIGNED]
+ *           description: |
+ *             NONE = no quote yet;
+ *             QUOTED = quote submitted (not Active);
+ *             WAITING_FOR_CUSTOMER = Request Job done, pending customer confirm (NOT My Jobs ACTIVE);
+ *             ASSIGNED = customer confirmed (My Jobs ACTIVE; normally leaves Discover).
  *         hasSubmittedQuote:
  *           type: boolean
  *           description: true if this trader already quoted
@@ -84,14 +96,17 @@
  *           description: true → Submit Quotation via POST quotes
  *         isJobRequested:
  *           type: boolean
- *           description: true after Request Job, waiting on customer
+ *           description: true after Request Job (quote.requestedAt set)
  *         isWaitingForCustomerConfirmation:
  *           type: boolean
- *           description: true while waiting — Home blue Waiting card; not My Jobs ACTIVE yet
+ *           description: |
+ *             true only while trader requested AND customer has NOT confirmed yet
+ *             (job still PUBLISHED + unassigned). This is the pending-confirmation state —
+ *             NOT My Jobs ACTIVE. After customer confirm → false / job leaves Discover.
  *         quoteAmount:
  *           type: number
  *           nullable: true
- *           description: This trader latest quote amount EUR
+ *           description: This trader latest quote amount
  *     TraderSiteVisitBlock:
  *       type: object
  *       description: Site-visit state on Discover Job Details
