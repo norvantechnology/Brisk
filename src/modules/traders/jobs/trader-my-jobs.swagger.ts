@@ -18,7 +18,7 @@
  *   schemas:
  *     TraderMyJobCard:
  *       type: object
- *       description: Card in My Jobs list
+ *       description: Card in My Jobs list (ACTIVE = customer-confirmed / assigned only)
  *       properties:
  *         id:
  *           type: string
@@ -31,6 +31,9 @@
  *         title:
  *           type: string
  *           description: Job title
+ *         status:
+ *           type: string
+ *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS
  *         statusBadge:
  *           type: string
  *           enum: [Active, Completed, Awaiting Payout]
@@ -41,6 +44,30 @@
  *         customerName:
  *           type: string
  *           description: Customer display name
+ *         customerProfilePhotoUrl:
+ *           type: string
+ *           nullable: true
+ *           description: Customer avatar URL
+ *         areaName:
+ *           type: string
+ *           description: Area label for card
+ *         distanceKm:
+ *           type: number
+ *           description: Distance from trader service centre
+ *         quotePrice:
+ *           type: number
+ *           nullable: true
+ *           description: Agreed quote / service charge
+ *         scheduledDate:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         primaryAction:
+ *           type: string
+ *           description: Suggested CTA — ARRIVE | FINISH | AWAITING_PAYOUT | VIEW_DETAILS
  *     TraderMyJobsList:
  *       type: object
  *       description: Paginated My Jobs tab response

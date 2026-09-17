@@ -448,13 +448,28 @@ export const listMyJobs = async (
         title: true,
         status: true,
         traderId: true,
-        customer: { select: { fullName: true } },
+        city: true,
+        postcode: true,
+        latitude: true,
+        longitude: true,
+        serviceCharge: true,
+        scheduledDate: true,
+        createdAt: true,
+        updatedAt: true,
+        customer: { select: { fullName: true, profilePhotoUrl: true } },
+        address: { select: { city: true, county: true, latitude: true, longitude: true } },
+        quotes: {
+          where: { traderId: trader.id },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { quotedAmount: true, status: true },
+        },
         siteVisitRequests: {
           where: { traderId: trader.id, status: { not: TraderSiteVisitStatus.CANCELLED } },
           select: { status: true },
           take: 1,
         },
-        booking: { select: { status: true, traderId: true } },
+        booking: { select: { status: true, traderId: true, arrivedAt: true, finishedAt: true } },
       },
       orderBy: { updatedAt: 'desc' },
       skip: (page - 1) * limit,
@@ -462,18 +477,58 @@ export const listMyJobs = async (
     }),
   ]);
 
+  const origin = resolveOrigin(trader);
+
   const items = jobs.map((job) => {
     const visit = job.siteVisitRequests[0];
     const siteVisitedBadge =
       visit?.status === TraderSiteVisitStatus.COMPLETED ||
       visit?.status === TraderSiteVisitStatus.CONFIRMED;
+    const coords = resolveJobCoords(
+      {
+        id: job.id,
+        latitude: job.latitude ?? job.address?.latitude ?? null,
+        longitude: job.longitude ?? job.address?.longitude ?? null,
+      },
+      origin
+    );
+    const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
+    const quotePrice =
+      (job.quotes[0] ? money(job.quotes[0].quotedAmount) : null) ||
+      (job.serviceCharge != null ? money(job.serviceCharge) : null);
+    const areaName =
+      job.city?.trim() ||
+      job.address?.city?.trim() ||
+      job.address?.county?.trim() ||
+      job.postcode?.trim() ||
+      'Nearby';
+
+    let primaryAction = 'VIEW_DETAILS';
+    if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
+      primaryAction = 'ARRIVE';
+    } else if (job.booking?.arrivedAt && !job.booking.finishedAt) {
+      primaryAction = 'FINISH';
+    } else if (job.status === JobStatus.PAYMENT_PENDING) {
+      primaryAction = 'AWAITING_PAYOUT';
+    } else if (COMPLETED_JOB_STATUSES.includes(job.status)) {
+      primaryAction = 'VIEW_DETAILS';
+    }
+
     return {
       id: job.id,
       jobRef: job.jobRef,
       title: job.title,
+      status: job.status,
       statusBadge: statusBadgeFor(job.status),
       siteVisitedBadge: Boolean(siteVisitedBadge),
       customerName: job.customer.fullName,
+      customerProfilePhotoUrl: job.customer.profilePhotoUrl,
+      areaName,
+      distanceKm,
+      quotePrice,
+      scheduledDate: job.scheduledDate,
+      createdAt: job.createdAt,
+      primaryAction,
     };
   });
 
