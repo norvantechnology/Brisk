@@ -100,9 +100,8 @@
  *         isWaitingForCustomerConfirmation:
  *           type: boolean
  *           description: |
- *             true only while trader requested AND customer has NOT confirmed yet
- *             (job still PUBLISHED + unassigned). This is the pending-confirmation state —
- *             NOT My Jobs ACTIVE. After customer confirm → false / job leaves Discover.
+ *             true while waiting on customer — either after Request Job, or after site-visit
+ *             slots proposed (siteVisit.status=PENDING). Not My Jobs ACTIVE yet.
  *         quoteAmount:
  *           type: number
  *           nullable: true
@@ -194,7 +193,7 @@
  *             quoteStatus: { type: string, nullable: true, description: PENDING|ACCEPTED|REJECTED }
  *             primaryAction:
  *               type: string
- *               enum: [REQUEST_SITE_VISIT, UPDATE_SITE_VISIT, REQUEST_RESCHEDULE, BACK_TO_JOB, SUBMIT_QUOTE, UPDATE_QUOTE, REQUEST_JOB, WAITING_FOR_CUSTOMER]
+ *               enum: [REQUEST_SITE_VISIT, UPDATE_SITE_VISIT, REQUEST_RESCHEDULE, BACK_TO_JOB, SUBMIT_QUOTE, UPDATE_QUOTE, REQUEST_JOB, WAITING_FOR_CUSTOMER, WAITING_FOR_CONFIRMATION]
  *               description: Main CTA code (app owns button text)
  *             siteVisit: { $ref: '#/components/schemas/TraderSiteVisitBlock' }
  *             customer:
