@@ -36,8 +36,8 @@
  *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS
  *         statusBadge:
  *           type: string
- *           enum: [Active, Completed, Awaiting Payout]
- *           description: List badge code — app maps to UI text/colour
+ *           enum: [Active, Completed, Awaiting Payout, Open]
+ *           description: List badge — Active only for ACCEPTED/SCHEDULED/IN_PROGRESS
  *         siteVisitedBadge:
  *           type: boolean
  *           description: true if site visit is confirmed or completed for this trader
@@ -70,7 +70,7 @@
  *           description: Suggested CTA — ARRIVE | FINISH | AWAITING_PAYOUT | VIEW_DETAILS
  *     TraderMyJobsList:
  *       type: object
- *       description: Paginated My Jobs tab response
+ *       description: Paginated My Jobs tab response (items + meta for infinite scroll)
  *       properties:
  *         tab:
  *           type: string
@@ -80,10 +80,14 @@
  *           type: array
  *           description: Jobs for this tab (ACTIVE = customer-confirmed / assigned only)
  *           items: { $ref: '#/components/schemas/TraderMyJobCard' }
- *         page: { type: integer, description: Current page (1-based) }
- *         limit: { type: integer, description: Page size }
- *         total: { type: integer, description: Total matching jobs }
- *         hasMore: { type: boolean, description: true if another page exists }
+ *         meta:
+ *           type: object
+ *           description: Pagination meta for infinite scroll
+ *           properties:
+ *             total: { type: integer, description: Total matching jobs }
+ *             page: { type: integer, description: Current page (1-based) }
+ *             limit: { type: integer, description: Page size }
+ *             totalPages: { type: integer, description: Total pages }
  *     TraderMyJobDetail:
  *       type: object
  *       description: My Jobs detail — only after customer confirmed / trader assigned

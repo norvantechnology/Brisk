@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
+import { buildPaginationMeta } from '../../../utils/pagination';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 
 const EARTH_RADIUS_KM = 6371;
@@ -150,7 +151,8 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
 const statusBadgeFor = (status: JobStatus): string => {
   if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
   if (COMPLETED_JOB_STATUSES.includes(status)) return 'Completed';
-  return 'Active';
+  if (ACTIVE_JOB_STATUSES.includes(status)) return 'Active';
+  return 'Open';
 };
 
 const formatFullAddress = (job: {
@@ -535,10 +537,7 @@ export const listMyJobs = async (
   return {
     tab,
     items,
-    page,
-    limit,
-    total,
-    hasMore: page * limit < total,
+    meta: buildPaginationMeta(total, page, limit),
   };
 };
 
