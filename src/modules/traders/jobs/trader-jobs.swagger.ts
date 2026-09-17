@@ -236,6 +236,7 @@
  *             location:
  *               type: object
  *               properties:
+ *                 fullAddress: { type: string, description: Formatted full address for map/details UI }
  *                 areaName: { type: string }
  *                 distanceKm: { type: number }
  *                 latitude: { type: number }

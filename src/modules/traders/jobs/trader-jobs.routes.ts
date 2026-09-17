@@ -542,6 +542,7 @@ router.post(
  *                 timeSlot: null
  *                 durationLabel: null
  *                 location:
+ *                   fullAddress: 8 Bypass Circle, Idar Road, 383110
  *                   areaName: Dublin 6
  *                   distanceKm: 1.8
  *                   latitude: 53.34

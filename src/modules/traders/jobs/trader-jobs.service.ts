@@ -489,6 +489,37 @@ const areaNameOf = (job: {
   );
 };
 
+const formatDiscoverFullAddress = (job: {
+  addressLine: string | null;
+  city: string | null;
+  postcode: string | null;
+  address?: {
+    houseNumber?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    county?: string | null;
+    eircode?: string | null;
+    country?: string | null;
+  } | null;
+}): string => {
+  if (job.address) {
+    const a = job.address;
+    const line = [
+      [a.houseNumber, a.addressLine1].filter(Boolean).join(' ').trim(),
+      a.addressLine2,
+      a.city,
+      a.county,
+      a.eircode,
+      a.country,
+    ]
+      .filter((p) => p && String(p).trim())
+      .join(', ');
+    if (line) return line;
+  }
+  return [job.addressLine, job.city, job.postcode].filter(Boolean).join(', ') || 'Address TBD';
+};
+
 /** Stable demo distance 0.8–8.5 km when job has no coordinates (keeps list usable for testing). */
 const syntheticDistanceKm = (jobId: string): number => {
   let hash = 0;
@@ -884,7 +915,17 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     },
     include: {
       address: {
-        select: { city: true, county: true, country: true, latitude: true, longitude: true },
+        select: {
+          houseNumber: true,
+          addressLine1: true,
+          addressLine2: true,
+          city: true,
+          county: true,
+          eircode: true,
+          country: true,
+          latitude: true,
+          longitude: true,
+        },
       },
       booking: { select: { status: true } },
       customer: {
@@ -1129,6 +1170,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     timeSlot: siteVisit.timeSlot ?? job.timeSlot,
     durationLabel: job.durationLabel,
     location: {
+      fullAddress: formatDiscoverFullAddress(job),
       areaName: list.areaName,
       distanceKm: list.distanceKm,
       latitude: coords.lat,
