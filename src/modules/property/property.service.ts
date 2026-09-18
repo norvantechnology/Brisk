@@ -324,6 +324,98 @@ export const createAddress = async (userId: string, input: CreateAddressInput) =
   return serializeAddress(withProperty);
 };
 
+const normalizeAddr = (value?: string | null) =>
+  (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const normalizeEircode = (value?: string | null) =>
+  normalizeAddr(value).replace(/\s/g, '');
+
+type AddressMatchInput = {
+  id?: string;
+  addressId?: string;
+  houseNumber?: string | null;
+  addressLine1?: string;
+  city?: string;
+  eircode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+/**
+ * Find an existing saved address for this customer that matches the selection.
+ * Used when job location/publish sends the place payload without top-level addressId.
+ */
+export const findMatchingAddress = async (userId: string, input: AddressMatchInput) => {
+  const explicitId = input.addressId || input.id;
+  if (explicitId) {
+    const owned = await prisma.address.findFirst({
+      where: { id: explicitId, userId },
+    });
+    if (owned) return owned;
+  }
+
+  const saved = await prisma.address.findMany({
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
+    take: 200,
+  });
+  if (!saved.length) return null;
+
+  const eircode = normalizeEircode(input.eircode);
+  if (eircode) {
+    const byEircode = saved.find((a) => normalizeEircode(a.eircode) === eircode);
+    if (byEircode) return byEircode;
+  }
+
+  const line1 = normalizeAddr(input.addressLine1);
+  const city = normalizeAddr(input.city);
+  const house = normalizeAddr(input.houseNumber);
+  if (line1 && city) {
+    const byText = saved.find((a) => {
+      if (normalizeAddr(a.addressLine1) !== line1) return false;
+      if (normalizeAddr(a.city) !== city) return false;
+      if (house && normalizeAddr(a.houseNumber) && normalizeAddr(a.houseNumber) !== house) {
+        return false;
+      }
+      return true;
+    });
+    if (byText) return byText;
+  }
+
+  if (
+    input.latitude != null &&
+    input.longitude != null &&
+    Number.isFinite(input.latitude) &&
+    Number.isFinite(input.longitude)
+  ) {
+    // ~40–50m — same pin / same saved place
+    const EPS = 0.00045;
+    const byGeo = saved.find(
+      (a) =>
+        a.latitude != null &&
+        a.longitude != null &&
+        Math.abs(a.latitude - input.latitude!) <= EPS &&
+        Math.abs(a.longitude - input.longitude!) <= EPS
+    );
+    if (byGeo) return byGeo;
+  }
+
+  return null;
+};
+
+/**
+ * Reuse an existing address when the customer selects the same place again;
+ * only create when it is genuinely new.
+ */
+export const findOrCreateAddress = async (userId: string, input: CreateAddressInput & AddressMatchInput) => {
+  const match = await findMatchingAddress(userId, input);
+  if (match) {
+    const withProperty = await getOwnedAddress(userId, match.id);
+    return serializeAddress(withProperty);
+  }
+  return createAddress(userId, input);
+};
+
 export const updateAddress = async (userId: string, id: string, input: UpdateAddressInput) => {
   await ensureCustomer(userId);
   await getOwnedAddress(userId, id);

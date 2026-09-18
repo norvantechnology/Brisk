@@ -98,6 +98,9 @@ export const updateJobSchema = z.object({
 });
 
 const publishAddressObjectSchema = z.object({
+  /** When selecting a saved place, pass its id here (or top-level addressId). */
+  id: uuid.optional(),
+  addressId: uuid.optional(),
   addressType: z.enum(['Home', 'Work', 'Custom']).optional(),
   label: z.string().trim().min(1).optional(),
   houseNumber: z.string().trim().optional(),

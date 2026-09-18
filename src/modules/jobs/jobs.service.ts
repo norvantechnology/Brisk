@@ -778,9 +778,10 @@ const resolveOwnedAddress = async (customerId: string, addressId: string) => {
 
 /**
  * Resolve address for publish / location:
- * 1) addressId if provided
- * 2) inline address/location object → create saved address
- * 3) existing job.addressId
+ * 1) top-level addressId if provided
+ * 2) inline address/location.id | addressId if provided
+ * 3) inline address/location → reuse matching saved address, else create
+ * 4) existing job.addressId
  */
 const resolveJobAddressForPublish = async (
   customerId: string,
@@ -797,8 +798,13 @@ const resolveJobAddressForPublish = async (
 
   const inline = input.address ?? input.location;
   if (inline) {
-    const { createAddress } = await import('../property/property.service');
-    const created = await createAddress(customerId, {
+    const nestedId = inline.addressId || inline.id;
+    if (nestedId) {
+      return resolveOwnedAddress(customerId, nestedId);
+    }
+
+    const { findOrCreateAddress } = await import('../property/property.service');
+    const resolved = await findOrCreateAddress(customerId, {
       addressType: inline.addressType ?? 'Custom',
       label: inline.label,
       houseNumber: inline.houseNumber,
@@ -813,7 +819,7 @@ const resolveJobAddressForPublish = async (
       mapImageUrl: inline.mapImageUrl,
       isDefault: inline.isDefault ?? false,
     });
-    return resolveOwnedAddress(customerId, created.id);
+    return resolveOwnedAddress(customerId, resolved.id);
   }
 
   if (existingAddressId) {

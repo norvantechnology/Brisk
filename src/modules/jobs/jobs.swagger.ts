@@ -414,35 +414,38 @@
  *     SetJobLocationRequest:
  *       type: object
  *       description: |
- *         Provide **either** `addressId` **or** inline `address` / `location` (map search).
- *         Do not send both unless `addressId` should win (addressId is preferred when present).
+ *         Prefer **`addressId`** when the user picks a saved location from GET /addresses.
+ *         If you send inline `address` / `location` for a place that already exists, the backend
+ *         **reuses** the matching saved address (same eircode / street+city / nearby lat-lng)
+ *         instead of creating a duplicate. You may also put `id` or `addressId` inside `location`.
  *       properties:
  *         addressId:
  *           type: string
  *           format: uuid
- *           description: Saved address UUID from GET /addresses.
+ *           description: Saved address UUID from GET /addresses (preferred).
  *           example: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
  *         address:
  *           $ref: '#/components/schemas/InlineJobAddress'
  *         location:
  *           $ref: '#/components/schemas/InlineJobAddress'
  *       example:
- *         location:
- *           label: Grafton Street
- *           addressLine1: 12 Grafton Street
- *           city: Dublin
- *           county: Dublin
- *           eircode: D02 XY45
- *           country: Ireland
- *           latitude: 53.342
- *           longitude: -6.259
+ *         addressId: e60ca842-e86a-4825-abcf-2e79a9ff8e4d
  *     InlineJobAddress:
  *       type: object
  *       required: [addressLine1, city]
  *       description: |
- *         Map-search / new place payload. Backend creates a saved Address for the customer
- *         and returns its id on the job as `addressId`.
+ *         Map-search / place payload. If it matches an existing saved address for this customer,
+ *         that `addressId` is reused. Otherwise a new Address is created.
+ *         When re-selecting a saved place, send top-level `addressId` or `location.id`.
  *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: Saved address id when selecting an existing location.
+ *         addressId:
+ *           type: string
+ *           format: uuid
+ *           description: Alias of `id`.
  *         addressType:
  *           type: string
  *           enum: [Home, Work, Custom]
