@@ -33,13 +33,12 @@
  *           description: Job title
  *         status:
  *           type: string
- *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS
+ *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS | CANCELLED
  *         statusBadge:
  *           type: string
  *           enum: [Active, Completed, Awaiting Payout, Cancelled, Open]
  *           description: |
- *             List badge — Active (ACCEPTED/SCHEDULED/IN_PROGRESS), Completed, Awaiting Payout
- *             (PAYMENT_PENDING), Cancelled (CANCELLED), Open (other / draft-like).
+ *             List + detail badge. Cancelled when job.status=CANCELLED or booking.status=CANCELLED.
  *         siteVisitedBadge:
  *           type: boolean
  *           description: true if site visit is confirmed or completed for this trader

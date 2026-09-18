@@ -513,4 +513,30 @@ router.post(
   controller.acceptJobQuote
 );
 
+/**
+ * @swagger
+ * /jobs/{id}/cancel:
+ *   post:
+ *     summary: Cancel a job (customer)
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Sets `status=CANCELLED` (and booking if present).
+ *       Response includes `statusBadge: "Cancelled"`.
+ *       Not allowed for COMPLETED, already CANCELLED, or PAID invoices.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Job cancelled — `data.status=CANCELLED`, `data.statusBadge=Cancelled`
+ *       400:
+ *         description: Completed or paid job
+ *       409:
+ *         description: Already cancelled
+ */
+router.post('/:id/cancel', ...customerOnly, validate(jobIdParamSchema), controller.cancelJob);
+
 export default router;

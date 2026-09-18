@@ -31,6 +31,7 @@ import type { JobFormEntryPoint } from './jobs.form-config';
 import {
   emitJobCreated,
   emitJobPublished,
+  emitJobStatusChanged,
   emitJobUpdated,
 } from '../../sockets/realtime';
 
@@ -38,6 +39,27 @@ const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Same badge labels as trader My Jobs — keep customer & trader UIs aligned. */
+const customerStatusBadgeFor = (
+  status: JobStatus,
+  bookingStatus?: string | null
+): string => {
+  if (status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED) {
+    return 'Cancelled';
+  }
+  if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
+  if (status === JobStatus.COMPLETED) return 'Completed';
+  if (
+    status === JobStatus.ACCEPTED ||
+    status === JobStatus.SCHEDULED ||
+    status === JobStatus.IN_PROGRESS
+  ) {
+    return 'Active';
+  }
+  if (status === JobStatus.DRAFT) return 'Draft';
+  return 'Open';
+};
 
 const generateJobRef = () => `JOB-${randomBytes(2).toString('hex').toUpperCase()}`;
 const generateBookingRef = () => `BKG-${randomBytes(2).toString('hex').toUpperCase()}`;
@@ -203,6 +225,7 @@ const serializeJob = (
     siteVisitRequested: job.siteVisitRequested,
     siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
     status: job.status,
+    statusBadge: customerStatusBadgeFor(job.status, job.booking?.status ?? null),
     scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : '',
     qaFormAnswers: job.qaFormAnswers ?? {},
     createdAt: job.createdAt,
@@ -1249,6 +1272,60 @@ export const publishJob = async (
       siteVisitFee: 0,
     },
   };
+};
+
+/**
+ * Customer cancels a job. Sets job (+ booking if any) to CANCELLED.
+ * Blocked once completed or already cancelled, or after successful payment.
+ */
+export const cancelJob = async (customerId: string, jobId: string) => {
+  const existing = await getOwnedJob(customerId, jobId);
+
+  if (existing.status === JobStatus.CANCELLED) {
+    throw new ConflictError('Job is already cancelled.');
+  }
+  if (existing.status === JobStatus.COMPLETED) {
+    throw new BadRequestError('Completed jobs cannot be cancelled.');
+  }
+  if (existing.booking?.invoice?.status === InvoiceStatus.PAID) {
+    throw new BadRequestError('Paid jobs cannot be cancelled here. Contact support for refunds.');
+  }
+
+  const traderUserId = existing.traderId
+    ? (
+        await prisma.trader.findUnique({
+          where: { id: existing.traderId },
+          select: { userId: true },
+        })
+      )?.userId
+    : null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.job.update({
+      where: { id: jobId },
+      data: { status: JobStatus.CANCELLED },
+    });
+    if (existing.booking?.id) {
+      await tx.booking.update({
+        where: { id: existing.booking.id },
+        data: { status: BookingStatus.CANCELLED },
+      });
+    }
+  });
+
+  const job = await getJob(customerId, jobId);
+  emitJobStatusChanged({
+    jobId: job.id,
+    jobRef: job.jobRef,
+    status: job.status,
+    customerId,
+    traderId: job.traderId || null,
+    traderUserId: traderUserId ?? null,
+    bookingId: existing.booking?.id ?? null,
+    invoiceId: existing.booking?.invoice?.id ?? null,
+    at: new Date().toISOString(),
+  });
+  return job;
 };
 
 /**

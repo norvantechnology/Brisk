@@ -148,13 +148,24 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
   };
 };
 
-const statusBadgeFor = (status: JobStatus): string => {
-  if (status === JobStatus.CANCELLED) return 'Cancelled';
+const statusBadgeFor = (
+  status: JobStatus,
+  bookingStatus?: string | null
+): string => {
+  if (status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED) {
+    return 'Cancelled';
+  }
   if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
   if (COMPLETED_JOB_STATUSES.includes(status)) return 'Completed';
   if (ACTIVE_JOB_STATUSES.includes(status)) return 'Active';
   return 'Open';
 };
+
+const isJobCancelled = (
+  status: JobStatus,
+  bookingStatus?: string | null
+): boolean =>
+  status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED;
 
 const formatFullAddress = (job: {
   addressLine: string | null;
@@ -280,6 +291,20 @@ const buildActions = (job: MyJobRow, traderId: string) => {
   const visit = job.siteVisitRequests[0] ?? null;
   const booking = job.booking;
   const assignedToThis = job.traderId === traderId;
+  const cancelled = isJobCancelled(job.status, booking?.status ?? null);
+
+  if (cancelled) {
+    return {
+      canArrive: false,
+      canFinish: false,
+      canAddMaterials: false,
+      canSubmitQuote: false,
+      canAcceptJob: false,
+      canRequestPayment: false,
+      canCompleteSiteVisit: false,
+      canRequestSiteVisitPayment: false,
+    };
+  }
 
   const hasActiveVisit =
     visit &&
@@ -349,6 +374,9 @@ const resolvePrimaryAction = (
   actions: ReturnType<typeof buildActions>,
   job: MyJobRow
 ): { primaryAction: string } => {
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    return { primaryAction: 'VIEW_DETAILS' };
+  }
   if (actions.canArrive) return { primaryAction: 'ARRIVE' };
   if (actions.canFinish) return { primaryAction: 'FINISH' };
   if (actions.canCompleteSiteVisit) return { primaryAction: 'COMPLETE_SITE_VISIT' };
@@ -507,7 +535,9 @@ export const listMyJobs = async (
       'Nearby';
 
     let primaryAction = 'VIEW_DETAILS';
-    if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
+    if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+      primaryAction = 'VIEW_DETAILS';
+    } else if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'ARRIVE';
     } else if (job.booking?.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'FINISH';
@@ -522,7 +552,7 @@ export const listMyJobs = async (
       jobRef: job.jobRef,
       title: job.title,
       status: job.status,
-      statusBadge: statusBadgeFor(job.status),
+      statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
       siteVisitedBadge: Boolean(siteVisitedBadge),
       customerName: job.customer.fullName,
       customerProfilePhotoUrl: job.customer.profilePhotoUrl,
@@ -625,6 +655,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     jobRef: job.jobRef,
     description: job.description,
     status: job.status,
+    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
     photos: customerPhotos.map((p) => p.photoUrl),
     proofPhotos: proofPhotos.map((p) => ({ id: p.id, photoUrl: p.photoUrl })),
     tags,
@@ -660,6 +691,9 @@ export const arriveAtJob = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
 
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    throw new BadRequestError('This job was cancelled.');
+  }
   if (!job.booking || job.booking.traderId !== trader.id) {
     throw new BadRequestError('No booking found for this job.');
   }
@@ -689,6 +723,9 @@ export const finishJob = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
 
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    throw new BadRequestError('This job was cancelled.');
+  }
   if (!job.booking || job.booking.traderId !== trader.id) {
     throw new BadRequestError('No booking found for this job.');
   }

@@ -161,3 +161,21 @@ export const acceptJobQuote = async (
     next(error);
   }
 };
+
+export const cancelJob = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.cancelJob(req.user!.id, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job cancelled successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

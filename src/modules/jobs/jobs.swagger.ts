@@ -213,6 +213,10 @@
  *         siteVisitRequested: { type: boolean }
  *         siteVisitFee: { type: number }
  *         status: { $ref: '#/components/schemas/JobStatus' }
+ *         statusBadge:
+ *           type: string
+ *           enum: [Draft, Open, Active, Completed, Awaiting Payout, Cancelled]
+ *           description: UI badge aligned with trader My Jobs
  *         scheduledDate: { type: string, format: date-time, description: Empty string when unset }
  *         qaFormAnswers: { type: object }
  *         createdAt: { type: string, format: date-time }
