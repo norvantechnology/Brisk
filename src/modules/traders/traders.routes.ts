@@ -3,6 +3,7 @@ import * as tradersController from './traders.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
+import { traderVerifiedMiddleware } from '../../middlewares/trader-verified.middleware';
 import { updateTraderAccountSchema, updateTraderBankDetailsSchema, updateTraderProfileSchema } from './traders.validation';
 import {
   categoriesSchema,
@@ -21,9 +22,12 @@ const router = Router();
 router.use('/onboarding', onboardingRoutes);
 
 router.use(authMiddleware, roleMiddleware(['TRADER']));
-router.use('/offers', traderOffersRoutes);
-router.use('/jobs', traderMyJobsRoutes);
-router.use('/jobs', traderJobsRoutes);
+
+// Marketplace APIs require VERIFIED — PENDING/REJECTED/SUSPENDED traders get 403 TRADER_NOT_VERIFIED.
+// Profile (/me*) stays available so portal can show "Pending Verification" and allow limited edits.
+router.use('/offers', traderVerifiedMiddleware, traderOffersRoutes);
+router.use('/jobs', traderVerifiedMiddleware, traderMyJobsRoutes);
+router.use('/jobs', traderVerifiedMiddleware, traderJobsRoutes);
 
 /**
  * @swagger

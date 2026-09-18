@@ -90,11 +90,14 @@
  *       **Response `nextStep` values:**
  *       - `VERIFY_PHONE` — mobile not verified yet (also when `requiresOtpVerification: true`)
  *       - `TRADER_ONBOARDING` — trader must complete onboarding
- *       - `TRADER_PENDING_APPROVAL` — onboarding submitted, awaiting admin review
- *       - `TRADER_HOME` — trader approved, go to main app
+ *       - `TRADER_PENDING_APPROVAL` — onboarding submitted / documents not fully verified (`traderAccountActive: false`)
+ *       - `TRADER_HOME` — trader `verificationStatus=VERIFIED` and onboarding approved (`traderAccountActive: true`)
  *       - `CUSTOMER_HOME` — customer main app
  *
- *       **After login:** Use `nextStep` for routing. If `TRADER_ONBOARDING`, call `GET /traders/onboarding` to load saved form data and `onboardingScreen`.
+ *       **After login:** Use `nextStep` + `traderAccountActive` for routing. Do **not** open Jobs/Offers/Dashboard
+ *       until `nextStep` is `TRADER_HOME`. Pending traders may call `GET /traders/me` / onboarding only;
+ *       `/traders/jobs/*` and `/traders/offers/*` return **403** `TRADER_NOT_VERIFIED`.
+ *       If `TRADER_ONBOARDING`, call `GET /traders/onboarding` to load saved form data and `onboardingScreen`.
  *     tags: ['Mobile / Auth']
  */
 

@@ -1,4 +1,4 @@
-import { TraderOnboardingStatus, TraderType, UserRole } from '@prisma/client';
+import { TraderOnboardingStatus, TraderType, UserRole, VerificationStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import {
   buildOnboardingProgress,
@@ -189,17 +189,23 @@ const resolveTraderNextStep = async (userId: string): Promise<SessionExtras> => 
     !trader ||
     trader.onboardingStatus === TraderOnboardingStatus.NOT_STARTED ||
     trader.onboardingStatus === TraderOnboardingStatus.IN_PROGRESS ||
-    trader.onboardingStatus === TraderOnboardingStatus.REJECTED
+    trader.onboardingStatus === TraderOnboardingStatus.REJECTED ||
+    trader.verificationStatus === VerificationStatus.REJECTED
   ) {
     const onboarding = await buildTraderOnboardingSnapshot(userId);
     return { nextStep: APP_NEXT_STEP.TRADER_ONBOARDING, traderAccountActive: false, onboarding };
   }
 
-  if (trader.onboardingStatus === TraderOnboardingStatus.SUBMITTED) {
-    return { nextStep: APP_NEXT_STEP.TRADER_PENDING_APPROVAL, traderAccountActive: false, onboarding: null };
+  // Full portal access only when both onboarding and document verification are approved.
+  if (
+    trader.onboardingStatus === TraderOnboardingStatus.APPROVED &&
+    trader.verificationStatus === VerificationStatus.VERIFIED
+  ) {
+    return { nextStep: APP_NEXT_STEP.TRADER_HOME, traderAccountActive: true, onboarding: null };
   }
 
-  return { nextStep: APP_NEXT_STEP.TRADER_HOME, traderAccountActive: true, onboarding: null };
+  // SUBMITTED, PENDING/SUSPENDED verification, or APPROVED+PENDING inconsistency
+  return { nextStep: APP_NEXT_STEP.TRADER_PENDING_APPROVAL, traderAccountActive: false, onboarding: null };
 };
 
 export const resolveAppNextStep = async (user: {
