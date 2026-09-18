@@ -154,15 +154,11 @@
  *           type: string
  *           nullable: true
  *           description: Optional duration from job
- *         arrival:
- *           type: object
- *           description: Arrival state for active job
- *           properties:
- *             status:
- *               type: string
- *               nullable: true
- *               enum: [ARRIVING_SOON, ARRIVED]
- *               description: ARRIVING_SOON before arrive; ARRIVED after POST arrive
+ *         arrivalStatus:
+ *           type: string
+ *           nullable: true
+ *           enum: [ARRIVING_SOON, ARRIVED]
+ *           description: ARRIVING_SOON before arrive; ARRIVED after POST arrive; null if not in arrival phase
  *         materials:
  *           type: object
  *           description: Materials summary

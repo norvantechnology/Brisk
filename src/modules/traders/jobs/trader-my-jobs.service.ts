@@ -376,17 +376,17 @@ const siteVisitBlock = (job: MyJobRow) => {
   };
 };
 
-const arrivalBlock = (job: MyJobRow) => {
+const arrivalStatus = (job: MyJobRow): 'ARRIVING_SOON' | 'ARRIVED' | null => {
   const booking = job.booking;
-  if (!booking) return { status: null as string | null };
-  if (booking.arrivedAt) return { status: 'ARRIVED' as const };
+  if (!booking) return null;
+  if (booking.arrivedAt) return 'ARRIVED';
   if (
     booking.status === BookingStatus.SCHEDULED ||
     booking.status === BookingStatus.IN_PROGRESS
   ) {
-    return { status: 'ARRIVING_SOON' as const };
+    return 'ARRIVING_SOON';
   }
-  return { status: null };
+  return null;
 };
 
 const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean }) => {
@@ -651,7 +651,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     ...primary,
     estimatedEarnings,
     durationLabel: job.durationLabel,
-    arrival: arrivalBlock(job),
+    arrivalStatus: arrivalStatus(job),
   };
 };
 
