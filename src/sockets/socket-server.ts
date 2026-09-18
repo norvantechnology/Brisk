@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
-import { setRealtimeServer, realtimeRooms } from './realtime';
+import { setRealtimeServer, realtimeRooms, resolveTraderDiscoverRooms } from './realtime';
 import { RealtimeEvents } from './events';
 
 type SocketUser = {
@@ -80,15 +80,28 @@ export const initSocketServer = (httpServer: http.Server): SocketServer => {
     const userRoom = realtimeRooms.roomUser(user.id);
     void socket.join(userRoom);
 
-    logger.info(`Socket connected user=${user.id} role=${user.role} id=${socket.id}`);
+    void (async () => {
+      const joined = [userRoom];
+      if (user.role === 'TRADER') {
+        const discoverRooms = await resolveTraderDiscoverRooms(user.id);
+        for (const room of discoverRooms) {
+          await socket.join(room);
+          joined.push(room);
+        }
+      }
 
-    socket.emit('realtime:ready', {
-      userId: user.id,
-      role: user.role,
-      rooms: [userRoom],
-      events: Object.values(RealtimeEvents),
-      at: new Date().toISOString(),
-    });
+      logger.info(
+        `Socket connected user=${user.id} role=${user.role} id=${socket.id} rooms=${joined.length}`
+      );
+
+      socket.emit('realtime:ready', {
+        userId: user.id,
+        role: user.role,
+        rooms: joined,
+        events: Object.values(RealtimeEvents),
+        at: new Date().toISOString(),
+      });
+    })();
 
     socket.on('job:subscribe', async (payload: { jobId?: string }, ack?: (r: unknown) => void) => {
       try {

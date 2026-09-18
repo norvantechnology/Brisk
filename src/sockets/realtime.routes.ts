@@ -46,6 +46,8 @@ router.get('/', (_req, res) => {
       },
       rooms: {
         autoJoin: 'user:{userId}',
+        tradersDiscover:
+          'traders:discover + traders:category:{categoryId} (verified traders only, on connect)',
         job: 'job:{jobId} via job:subscribe',
         booking: 'booking:{bookingId} via booking:subscribe',
       },
@@ -53,8 +55,10 @@ router.get('/', (_req, res) => {
       serverEmits: Object.values(RealtimeEvents),
       notes: [
         'REST APIs under /jobs and /payments are unchanged.',
-        'On event, patch local state or soft-refresh GET /jobs/{id} / GET /invoices/{id}.',
-        'After login, connect socket; on logout, disconnect.',
+        'When a customer publishes a marketplace job (PUBLISHED, no assigned trader), traders in matching category / service area receive `job:published` and `job:created` (same payload, source: marketplace).',
+        'On those events, soft-refresh GET /traders/jobs/discover or upsert the card from payload.',
+        'On event for own jobs, patch local state or soft-refresh GET /jobs/{id} / GET /invoices/{id}.',
+        'After login, connect socket; on logout, disconnect. Reconnect after verification approval to join discover rooms.',
       ],
     },
   });

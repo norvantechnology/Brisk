@@ -21,6 +21,14 @@ export type JobRealtimePayload = {
   invoiceId?: string | null;
   bookingId?: string | null;
   at: string;
+  /** Discover / marketplace fields (optional) */
+  title?: string | null;
+  city?: string | null;
+  categoryId?: string | null;
+  subcategoryId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  siteVisitRequested?: boolean;
 };
 
 export type PaymentRealtimePayload = {

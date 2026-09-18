@@ -1182,6 +1182,13 @@ export const publishJob = async (
       traderUserId: traderUserId ?? null,
       invoiceId: payload.invoiceId,
       bookingId: payload.booking?.id || null,
+      title: payload.job.title,
+      city: payload.job.city,
+      categoryId: payload.job.categoryId,
+      subcategoryId: payload.job.subcategoryId,
+      latitude: payload.job.latitude,
+      longitude: payload.job.longitude,
+      siteVisitRequested: payload.job.siteVisitRequested,
       at: new Date().toISOString(),
     });
     return payload;
@@ -1205,6 +1212,13 @@ export const publishJob = async (
     traderUserId: traderUserId ?? null,
     invoiceId: null,
     bookingId: result.booking?.id ?? null,
+    title: publishedJob.title,
+    city: publishedJob.city,
+    categoryId: publishedJob.categoryId,
+    subcategoryId: publishedJob.subcategoryId,
+    latitude: publishedJob.latitude,
+    longitude: publishedJob.longitude,
+    siteVisitRequested: publishedJob.siteVisitRequested,
     at: new Date().toISOString(),
   });
 
