@@ -13,6 +13,7 @@ import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { buildPaginationMeta } from '../../../utils/pagination';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
+import { resolveDiscoverCurrency } from '../../../services/currency.service';
 
 const EARTH_RADIUS_KM = 6371;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
@@ -83,7 +84,9 @@ const getTraderContext = async (userId: string) => {
       serviceRadiusKm: true,
       serviceCenterLat: true,
       serviceCenterLng: true,
+      country: true,
       categories: { select: { categoryId: true } },
+      user: { select: { preferredCurrency: true, country: true } },
     },
   });
   if (!trader) {
@@ -212,6 +215,8 @@ const assertMyJob = async (traderId: string, jobId: string) => {
           mobileVerified: true,
           emailVerified: true,
           mobileNumber: true,
+          preferredCurrency: true,
+          country: true,
           _count: { select: { jobs: true } },
         },
       },
@@ -1091,13 +1096,29 @@ export const listMaterials = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
 
-  const items = job.materials.map((m) => ({
-    id: m.id,
-    name: m.name,
-    detail: m.detail,
-    price: money(m.price),
-    photoUrl: m.photoUrl,
-  }));
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+
+  const formatPriceLabel = (amount: number) =>
+    `${currency.currencySymbol}${amount.toFixed(2)}`;
+
+  const items = job.materials.map((m) => {
+    const price = money(m.price);
+    return {
+      id: m.id,
+      name: m.name,
+      detail: m.detail,
+      price,
+      priceLabel: formatPriceLabel(price),
+      currencyCode: currency.currencyCode,
+      currencySymbol: currency.currencySymbol,
+      photoUrl: m.photoUrl,
+    };
+  });
   const total = round2(items.reduce((s, i) => s + i.price, 0));
   const last = job.materials[0]?.updatedAt ?? job.materials[0]?.createdAt ?? null;
 
@@ -1105,6 +1126,9 @@ export const listMaterials = async (userId: string, jobId: string) => {
     items,
     count: items.length,
     total,
+    totalLabel: formatPriceLabel(total),
+    currencyCode: currency.currencyCode,
+    currencySymbol: currency.currencySymbol,
     lastUpdatedAt: last,
   };
 };

@@ -184,10 +184,16 @@
  *               id: { type: string, format: uuid, description: Material id }
  *               name: { type: string, description: Material name }
  *               detail: { type: string, nullable: true, description: Optional detail }
- *               price: { type: number, description: Line price EUR }
+ *               price: { type: number, description: Line price number }
+ *               priceLabel: { type: string, example: "€12.50", description: Price with currency symbol }
+ *               currencyCode: { type: string, example: EUR }
+ *               currencySymbol: { type: string, example: € }
  *               photoUrl: { type: string, nullable: true, description: Optional photo URL }
  *         count: { type: integer, description: Item count }
- *         total: { type: number, description: Sum of prices EUR }
+ *         total: { type: number, description: Sum of prices }
+ *         totalLabel: { type: string, example: "€45.00", description: Total with currency symbol }
+ *         currencyCode: { type: string, example: EUR }
+ *         currencySymbol: { type: string, example: € }
  *         lastUpdatedAt:
  *           type: string
  *           format: date-time
