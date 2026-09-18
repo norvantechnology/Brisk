@@ -90,12 +90,12 @@ export const getMe = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const user = await authService.getAuthenticatedUser(req.user!.id);
+    const session = await authService.getAuthenticatedSession(req.user!.id);
     sendResponse({
       res,
       statusCode: 200,
       message: 'Profile retrieved successfully.',
-      data: { user },
+      data: session,
     });
   } catch (error) {
     next(error);

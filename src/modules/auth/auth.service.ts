@@ -429,6 +429,13 @@ export const getAuthenticatedUser = async (userId: string) => {
   return user;
 };
 
+/** Session bootstrap for portal/app — includes navigation gates after refresh. */
+export const getAuthenticatedSession = async (userId: string) => {
+  const user = await getAuthenticatedUser(userId);
+  const { nextStep, traderAccountActive, onboarding } = await resolveSessionExtras(user);
+  return { user, nextStep, traderAccountActive, onboarding };
+};
+
 export const logoutUser = async () => ({
   message: 'Logged out successfully.',
 });

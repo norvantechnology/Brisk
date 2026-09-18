@@ -387,6 +387,13 @@ router.post('/refresh', validate(refreshSchema), authController.refresh);
  *     tags: ['Mobile / Auth']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Returns `user` plus session navigation fields (same as login):
+ *       - `nextStep` — e.g. `TRADER_PENDING_APPROVAL`, `TRADER_HOME`
+ *       - `traderAccountActive` — `true` only when trader is fully verified
+ *       - `onboarding` — snapshot when still in onboarding; otherwise `null`
+ *
+ *       Use these on page refresh to keep PENDING traders off Jobs/Offers/Dashboard.
  *     responses:
  *       200:
  *         description: Profile retrieved successfully.
