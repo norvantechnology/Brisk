@@ -36,8 +36,10 @@
  *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS
  *         statusBadge:
  *           type: string
- *           enum: [Active, Completed, Awaiting Payout, Open]
- *           description: List badge — Active only for ACCEPTED/SCHEDULED/IN_PROGRESS
+ *           enum: [Active, Completed, Awaiting Payout, Cancelled, Open]
+ *           description: |
+ *             List badge — Active (ACCEPTED/SCHEDULED/IN_PROGRESS), Completed, Awaiting Payout
+ *             (PAYMENT_PENDING), Cancelled (CANCELLED), Open (other / draft-like).
  *         siteVisitedBadge:
  *           type: boolean
  *           description: true if site visit is confirmed or completed for this trader

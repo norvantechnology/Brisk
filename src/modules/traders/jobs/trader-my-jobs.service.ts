@@ -149,6 +149,7 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
 };
 
 const statusBadgeFor = (status: JobStatus): string => {
+  if (status === JobStatus.CANCELLED) return 'Cancelled';
   if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
   if (COMPLETED_JOB_STATUSES.includes(status)) return 'Completed';
   if (ACTIVE_JOB_STATUSES.includes(status)) return 'Active';
