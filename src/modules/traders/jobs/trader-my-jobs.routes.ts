@@ -9,6 +9,7 @@ import {
   myJobMaterialIdParamSchema,
   myJobMessageBodySchema,
   myJobProofPhotoBodySchema,
+  myJobPartialPaymentBodySchema,
   myJobQuoteBodySchema,
   myJobSubmitCompletionBodySchema,
   myJobsListQuerySchema,
@@ -585,6 +586,101 @@ router.post(
   '/mine/:id/request-payment',
   validate(myJobIdParamSchema),
   controller.requestPayment
+);
+
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/partial-payment:
+ *   get:
+ *     summary: Partial payment screen (Job in Progress → Request Partial Payment)
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Returns Job Amount, Already Paid, remaining balance, previous payments, and `paymentStatus`
+ *       for the Payment Request (installment) screen.
+ *
+ *       `paymentStatus` is a string: `UNPAID` | `PENDING` | `PARTIALLY_PAID` | `PAID` | …
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Partial payment screen payload
+ *       400:
+ *         description: Not arrived / cancelled
+ */
+router.get(
+  '/mine/:id/partial-payment',
+  validate(myJobIdParamSchema),
+  controller.getPartialPaymentScreen
+);
+
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/request-partial-payment:
+ *   post:
+ *     summary: Send partial installment payment request
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       **Screen:** Payment Request → Send Payment Request.
+ *       Separate from full-job `POST .../request-payment`.
+ *
+ *       Allowed while job is in progress (arrived, not finished).
+ *       Body: `amount` (installment) + `description`.
+ *       Job stays `IN_PROGRESS` (does not move to PAYMENT_PENDING).
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount, description]
+ *             properties:
+ *               amount: { type: number, example: 420 }
+ *               description:
+ *                 type: string
+ *                 example: Electrical wiring and mounting hardware completed.
+ *           example:
+ *             amount: 420
+ *             description: Electrical wiring and mounting hardware completed.
+ *     responses:
+ *       200:
+ *         description: Partial payment request sent
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Partial payment request sent successfully.
+ *               data:
+ *                 paymentRequestId: uuid
+ *                 paymentStatus: PENDING
+ *                 installment:
+ *                   amount: 420
+ *                   description: Electrical wiring and mounting hardware completed.
+ *                   netDue: 420
+ *                 jobAmount: 931.5
+ *                 alreadyPaid: 511.5
+ *                 remainingBalance: 420
+ *                 duePaymentSummary:
+ *                   installmentDueAmount: 420
+ *                   netDue: 420
+ *       400:
+ *         description: Invalid amount / not arrived / exceeds remaining
+ *       409:
+ *         description: Open partial request already pending / fully paid
+ */
+router.post(
+  '/mine/:id/request-partial-payment',
+  validate(myJobPartialPaymentBodySchema),
+  controller.requestPartialPayment
 );
 
 /**

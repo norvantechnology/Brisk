@@ -346,6 +346,44 @@ export const requestPayment = async (
   }
 };
 
+export const getPartialPaymentScreen = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.getPartialPaymentScreen(req.user!.id, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Partial payment details fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestPartialPayment = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.requestPartialPayment(req.user!.id, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Partial payment request sent successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const completeSiteVisit = async (
   req: AuthenticatedRequest,
   res: Response,

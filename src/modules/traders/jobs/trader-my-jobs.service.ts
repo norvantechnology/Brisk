@@ -444,6 +444,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
       canSubmitQuote: false,
       canAcceptJob: false,
       canRequestPayment: false,
+      canRequestPartialPayment: false,
       canCompleteSiteVisit: false,
       canRequestSiteVisitPayment: false,
     };
@@ -493,6 +494,12 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     assignedToThis &&
     job.status !== JobStatus.PAYMENT_PENDING &&
     (job.status === JobStatus.COMPLETED || Boolean(bookingFinished));
+  const canRequestPartialPayment =
+    assignedToThis &&
+    bookingArrived &&
+    !bookingFinished &&
+    isInProgress &&
+    job.status !== JobStatus.CANCELLED;
   const canCompleteSiteVisit = Boolean(hasActiveVisit) && !visitCompleted;
   const canRequestSiteVisitPayment =
     Boolean(visitCompleted) &&
@@ -509,6 +516,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     canSubmitQuote,
     canAcceptJob,
     canRequestPayment,
+    canRequestPartialPayment,
     canCompleteSiteVisit,
     canRequestSiteVisitPayment,
   };
@@ -530,6 +538,7 @@ const resolvePrimaryAction = (
     return { primaryAction: 'UPLOAD_PROOF' };
   }
   if (actions.canFinish) return { primaryAction: 'FINISH' };
+  if (actions.canRequestPartialPayment) return { primaryAction: 'REQUEST_PARTIAL_PAYMENT' };
   if (actions.canCompleteSiteVisit) return { primaryAction: 'COMPLETE_SITE_VISIT' };
   if (actions.canRequestSiteVisitPayment) return { primaryAction: 'REQUEST_SITE_VISIT_PAYMENT' };
   if (actions.canRequestPayment) return { primaryAction: 'REQUEST_PAYMENT' };
@@ -1728,6 +1737,244 @@ export const getPaymentSummary = async (userId: string, jobId: string) => {
     jobRef: job.jobRef,
     completedDate: job.booking?.finishedAt ?? job.updatedAt,
     address: formatFullAddress(job),
+  };
+};
+
+const formatPaidDateLabel = (date: Date) => {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+};
+
+const loadJobPaymentRequests = async (jobId: string, traderId: string) =>
+  prisma.traderPaymentRequest.findMany({
+    where: {
+      jobId,
+      traderId,
+      status: { not: TraderPaymentRequestStatus.CANCELLED },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+const sumPaidAmount = (
+  requests: { status: TraderPaymentRequestStatus; totalAmount: Prisma.Decimal }[]
+) =>
+  round2(
+    requests
+      .filter((r) => r.status === TraderPaymentRequestStatus.PAID)
+      .reduce((s, r) => s + money(r.totalAmount), 0)
+  );
+
+const resolvePartialPaymentStatus = (
+  jobAmount: number,
+  alreadyPaid: number,
+  hasOpenPartial: boolean
+): string => {
+  if (alreadyPaid <= 0 && !hasOpenPartial) return 'UNPAID';
+  if (alreadyPaid > 0 && alreadyPaid < jobAmount) return 'PARTIALLY_PAID';
+  if (alreadyPaid >= jobAmount && jobAmount > 0) return 'PAID';
+  if (hasOpenPartial) return 'PENDING';
+  return 'UNPAID';
+};
+
+/**
+ * Payment Request screen (partial installment) — GET data for Job in Progress → Request Partial Payment.
+ */
+export const getPartialPaymentScreen = async (userId: string, jobId: string) => {
+  const trader = await getTraderContext(userId);
+  const job = await assertMyJob(trader.id, jobId);
+
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    throw new BadRequestError('This job was cancelled.');
+  }
+  if (!job.booking || job.booking.traderId !== trader.id) {
+    throw new BadRequestError('No booking found for this job.');
+  }
+  if (!job.booking.arrivedAt) {
+    throw new BadRequestError('Mark arrival before requesting partial payment.');
+  }
+
+  const breakdown = computePaymentBreakdown(job);
+  const jobAmount = breakdown.totalAmount;
+  const requests = await loadJobPaymentRequests(jobId, trader.id);
+  const alreadyPaid = sumPaidAmount(requests);
+  const remainingBalance = round2(Math.max(0, jobAmount - alreadyPaid));
+  const hasOpenPartial = requests.some(
+    (r) =>
+      r.type === TraderPaymentRequestType.PARTIAL &&
+      r.status === TraderPaymentRequestStatus.SENT
+  );
+  const paymentStatus = resolvePartialPaymentStatus(jobAmount, alreadyPaid, hasOpenPartial);
+
+  const previousPayments = requests
+    .filter(
+      (r) =>
+        r.type === TraderPaymentRequestType.PARTIAL ||
+        r.type === TraderPaymentRequestType.FULL_JOB ||
+        r.status === TraderPaymentRequestStatus.PAID
+    )
+    .map((r) => ({
+      id: r.id,
+      title:
+        r.description?.trim() ||
+        (r.type === TraderPaymentRequestType.PARTIAL
+          ? 'Installment'
+          : r.type === TraderPaymentRequestType.SITE_VISIT_FEE
+            ? 'Site Visit Fee'
+            : 'Job Payment'),
+      description: r.description,
+      amount: money(r.totalAmount),
+      status: r.status,
+      statusLabel:
+        r.status === TraderPaymentRequestStatus.PAID
+          ? `Paid • ${formatPaidDateLabel(r.updatedAt)}`
+          : r.status === TraderPaymentRequestStatus.SENT
+            ? 'Pending'
+            : r.status,
+      createdAt: r.createdAt,
+      paidAt: r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : null,
+      type: r.type,
+    }));
+
+  return {
+    id: job.id,
+    jobRef: job.jobRef,
+    title: job.title,
+    status: job.status,
+    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
+    progressLabel: job.booking?.finishedAt ? 'COMPLETED' : 'IN PROGRESS',
+    location: {
+      fullAddress: formatFullAddress(job),
+    },
+    jobAmount,
+    alreadyPaid,
+    remainingBalance,
+    currencyCode: 'EUR',
+    paymentStatus,
+    previousPayments,
+    escrowNote:
+      'Funds are securely held and released only upon customer confirmation of milestone completion.',
+    canRequestPartialPayment: remainingBalance > 0 && !job.booking.finishedAt,
+  };
+};
+
+/**
+ * Send partial installment payment request (separate from full-job request-payment).
+ */
+export const requestPartialPayment = async (
+  userId: string,
+  jobId: string,
+  input: { amount: number; description: string }
+) => {
+  const trader = await getTraderContext(userId);
+  const job = await assertMyJob(trader.id, jobId);
+
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    throw new BadRequestError('This job was cancelled.');
+  }
+  if (!job.booking || job.booking.traderId !== trader.id) {
+    throw new BadRequestError('No booking found for this job.');
+  }
+  if (!job.booking.arrivedAt) {
+    throw new BadRequestError('Mark arrival before requesting partial payment.');
+  }
+  if (job.booking.finishedAt) {
+    throw new BadRequestError(
+      'Job is already finished. Use full payment request instead of partial.'
+    );
+  }
+
+  const amount = round2(input.amount);
+  if (!(amount > 0)) {
+    throw new BadRequestError('Installment amount must be greater than 0.');
+  }
+
+  const description = input.description.trim();
+  if (!description) {
+    throw new BadRequestError('Description for this installment is required.');
+  }
+
+  const breakdown = computePaymentBreakdown(job);
+  const jobAmount = breakdown.totalAmount;
+  const requests = await loadJobPaymentRequests(jobId, trader.id);
+  const alreadyPaid = sumPaidAmount(requests);
+  const remainingBalance = round2(Math.max(0, jobAmount - alreadyPaid));
+
+  if (remainingBalance <= 0) {
+    throw new ConflictError('Job is already fully paid.');
+  }
+  if (amount > remainingBalance) {
+    throw new BadRequestError(
+      `Installment amount cannot exceed remaining balance (${remainingBalance}).`
+    );
+  }
+
+  const openPartial = requests.find(
+    (r) =>
+      r.type === TraderPaymentRequestType.PARTIAL &&
+      r.status === TraderPaymentRequestStatus.SENT
+  );
+  if (openPartial) {
+    throw new ConflictError(
+      'A partial payment request is already pending. Wait for the customer to pay or cancel it first.'
+    );
+  }
+
+  const paymentRequest = await prisma.traderPaymentRequest.create({
+    data: {
+      jobId,
+      traderId: trader.id,
+      customerId: job.customerId,
+      type: TraderPaymentRequestType.PARTIAL,
+      status: TraderPaymentRequestStatus.SENT,
+      description,
+      serviceCharge: amount,
+      materialsTotal: 0,
+      siteVisitFee: 0,
+      platformFee: 0,
+      vatRate: 0,
+      vatAmount: 0,
+      totalAmount: amount,
+    },
+  });
+
+  const alreadyPaidAfter = alreadyPaid;
+  const remainingAfter = round2(Math.max(0, jobAmount - alreadyPaidAfter));
+  const paymentStatus = resolvePartialPaymentStatus(jobAmount, alreadyPaidAfter, true);
+
+  return {
+    paymentRequestId: paymentRequest.id,
+    id: job.id,
+    jobRef: job.jobRef,
+    title: job.title,
+    status: job.status,
+    paymentStatus,
+    installment: {
+      amount,
+      description,
+      netDue: amount,
+      status: paymentRequest.status,
+    },
+    jobAmount,
+    alreadyPaid: alreadyPaidAfter,
+    remainingBalance: remainingAfter,
+    duePaymentSummary: {
+      installmentDueAmount: amount,
+      netDue: amount,
+    },
+    message: 'Partial payment request sent successfully.',
   };
 };
 

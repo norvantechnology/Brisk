@@ -1061,6 +1061,7 @@ enum TraderPaymentRequestStatus {
 enum TraderPaymentRequestType {
   FULL_JOB
   SITE_VISIT_FEE
+  PARTIAL
 }
 
 /// Trader Site Visit / Reschedule — one request per job+trader; many proposed slots.
@@ -1126,7 +1127,7 @@ model JobMaterial {
   @@map("job_materials")
 }
 
-/// Trader → customer payment request (full job or site-visit fee).
+/// Trader → customer payment request (full job, site-visit fee, or partial installment).
 model TraderPaymentRequest {
   id              String                     @id @default(uuid()) @db.Uuid
   jobId           String                     @map("job_id") @db.Uuid
@@ -1134,6 +1135,8 @@ model TraderPaymentRequest {
   customerId      String                     @map("customer_id") @db.Uuid
   type            TraderPaymentRequestType   @default(FULL_JOB)
   status          TraderPaymentRequestStatus @default(SENT)
+  /// Installment / milestone label for PARTIAL requests (Payment Request screen).
+  description     String?                    @db.Text
   serviceCharge   Decimal                    @default(0) @map("service_charge") @db.Decimal(10, 2)
   materialsTotal  Decimal                    @default(0) @map("materials_total") @db.Decimal(10, 2)
   siteVisitFee    Decimal                    @default(0) @map("site_visit_fee") @db.Decimal(10, 2)

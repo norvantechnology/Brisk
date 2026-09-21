@@ -95,6 +95,18 @@ export const myJobMessageBodySchema = z.object({
   }),
 });
 
+export const myJobPartialPaymentBodySchema = z.object({
+  params: jobIdParam,
+  body: z.object({
+    amount: z.number().positive('Installment amount must be greater than 0.'),
+    description: z
+      .string()
+      .trim()
+      .min(1, 'Description for this installment is required.')
+      .max(2000),
+  }),
+});
+
 export const incomingJobIdParamSchema = z.object({
   params: jobIdParam,
 });
