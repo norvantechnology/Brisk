@@ -261,6 +261,14 @@ export const registerUser = async (
 
   await generateOtp(mobileNumber, 'mobile_verification');
 
+  // Register Interest email (customer vs trader) — non-blocking
+  void import('../../services/email.service').then(({ sendRegisterInterestEmailSafe }) =>
+    sendRegisterInterestEmailSafe(role, {
+      fullName: user.fullName,
+      email: user.email,
+    })
+  );
+
   return {
     message: 'Registration successful. Verification code has been sent to your mobile number.',
     data: {

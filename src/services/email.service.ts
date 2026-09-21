@@ -66,7 +66,11 @@ const escapeHtml = (value: string): string =>
 const wrapHtmlEmail = (
   title: string,
   paragraphs: string[],
-  options?: { logo?: EmailLogoKind }
+  options?: {
+    logo?: EmailLogoKind;
+    closingHtml?: string;
+    footerNoteHtml?: string;
+  }
 ): string => {
   const body = paragraphs
     .map(
@@ -83,6 +87,18 @@ const wrapHtmlEmail = (
     </tr>`
     : '';
   const titleAlign = logo ? 'center' : 'left';
+  const closingHtml =
+    options?.closingHtml ??
+    `Regards,<br/>
+                    <strong>BRISK</strong><br/>
+                    <span style="color:#64748b;font-size:14px;">Brisk - Making things Quicker.</span>`;
+  const footerNoteRow = options?.footerNoteHtml
+    ? `<tr>
+                  <td style="padding:20px 0 0 0;border-top:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">
+                    ${options.footerNoteHtml}
+                  </td>
+                </tr>`
+    : '';
 
   // Table layout is more reliable in Gmail than div + width:100% images.
   return `<!DOCTYPE html>
@@ -109,11 +125,10 @@ const wrapHtmlEmail = (
                 ${body}
                 <tr>
                   <td style="padding:16px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1e293b;">
-                    Regards,<br/>
-                    <strong>BRISK</strong><br/>
-                    <span style="color:#64748b;font-size:14px;">Brisk - Making things Quicker.</span>
+                    ${closingHtml}
                   </td>
                 </tr>
+                ${footerNoteRow}
               </table>
             </td>
           </tr>
@@ -123,6 +138,157 @@ const wrapHtmlEmail = (
   </table>
 </body>
 </html>`;
+};
+
+const WAITLIST_REMOVAL_NOTE =
+  'At any stage you change your mind and don’t wish to be on the BRISK waitlist, email us at waitlist@brisk.ie - we will remove you from the waiting list, and you will receive an email confirmation within 48 hours.';
+
+const WAITLIST_CLOSING_HTML = `Warm Regards,<br/><strong>BRISK team</strong>`;
+
+const WAITLIST_FOOTER_HTML = `Note: At any stage you change your mind and don’t wish to be on the BRISK waitlist, email us at <a href="mailto:waitlist@brisk.ie" style="color:#2563eb;text-decoration:none;">waitlist@brisk.ie</a> - we will remove you from the waiting list, and you will receive an email confirmation within 48 hours.`;
+
+const buildRegisterInterestEmail = (kind: 'customer' | 'trader', fullName?: string) => {
+  const safeName = fullName?.trim() ? escapeHtml(fullName.trim().split(/\s+/)[0]) : '';
+  const thanksLine = safeName
+    ? `Firstly, thanks for registering your interest in BRISK, ${safeName}.`
+    : 'Firstly, thanks for registering your interest in BRISK.';
+
+  if (kind === 'trader') {
+    return {
+      subject: 'You’re on the BRISK Trader Waitlist',
+      title: 'You’re on the BRISK Trader Waitlist',
+      logo: 'trader' as const,
+      paragraphs: [
+        thanksLine,
+        'We are currently in development of BRISK - a new way to make it easier for tradespeople to find new customers, manage jobs and grow their business.',
+        'By joining the waitlist, you will be among the first traders to hear when BRISK launches and when we are ready to welcome traders onto the platform.',
+        'We will keep you updated as we get closer.',
+      ],
+      text: `You’re on the BRISK Trader Waitlist
+
+${thanksLine.replace(/<[^>]+>/g, '')}
+
+We are currently in development of BRISK - a new way to make it easier for tradespeople to find new customers, manage jobs and grow their business.
+
+By joining the waitlist, you will be among the first traders to hear when BRISK launches and when we are ready to welcome traders onto the platform.
+
+We will keep you updated as we get closer.
+
+Warm Regards
+BRISK team
+
+Note: ${WAITLIST_REMOVAL_NOTE}`,
+    };
+  }
+
+  return {
+    subject: 'You’re on the BRISK Waitlist',
+    title: 'You’re on the BRISK Waitlist',
+    logo: 'consumer' as const,
+    paragraphs: [
+      thanksLine,
+      'We are currently in development of BRISK - a new way of finding a trusted tradesperson for your home in a simpler, easier and less stressful way.',
+      'By joining the waitlist, you will be among the first to hear when BRISK launches and when you can start using the platform to find the right tradesperson for your home.',
+      'We will keep you updated as we get closer.',
+    ],
+    text: `You’re on the BRISK Waitlist
+
+${thanksLine.replace(/<[^>]+>/g, '')}
+
+We are currently in development of BRISK - a new way of finding a trusted tradesperson for your home in a simpler, easier and less stressful way.
+
+By joining the waitlist, you will be among the first to hear when BRISK launches and when you can start using the platform to find the right tradesperson for your home.
+
+We will keep you updated as we get closer.
+
+Warm Regards
+BRISK team
+
+Note: ${WAITLIST_REMOVAL_NOTE}`,
+  };
+};
+
+/** Customer register / waitlist interest confirmation (Register Interest PDF). */
+export const sendCustomerRegisterInterestEmail = async (
+  payload: SurveyWaitlistEmailPayload
+): Promise<void> => {
+  const content = buildRegisterInterestEmail('customer', payload.fullName);
+  await sendMail({
+    to: payload.email,
+    subject: content.subject,
+    text: content.text,
+    html: wrapHtmlEmail(content.title, content.paragraphs, {
+      logo: content.logo,
+      closingHtml: WAITLIST_CLOSING_HTML,
+      footerNoteHtml: WAITLIST_FOOTER_HTML,
+    }),
+  });
+};
+
+/** Trader register / waitlist interest confirmation (Register Interest PDF). */
+export const sendTraderRegisterInterestEmail = async (
+  payload: SurveyWaitlistEmailPayload
+): Promise<void> => {
+  const content = buildRegisterInterestEmail('trader', payload.fullName);
+  await sendMail({
+    to: payload.email,
+    subject: content.subject,
+    text: content.text,
+    html: wrapHtmlEmail(content.title, content.paragraphs, {
+      logo: content.logo,
+      closingHtml: WAITLIST_CLOSING_HTML,
+      footerNoteHtml: WAITLIST_FOOTER_HTML,
+    }),
+  });
+};
+
+/** @deprecated Prefer sendCustomerRegisterInterestEmail - kept for survey callers. */
+export const sendConsumerSurveyWaitlistEmail = async (
+  payload: SurveyWaitlistEmailPayload
+): Promise<void> => sendCustomerRegisterInterestEmail(payload);
+
+/** @deprecated Prefer sendTraderRegisterInterestEmail - kept for survey callers. */
+export const sendTraderSurveyWaitlistEmail = async (
+  payload: SurveyWaitlistEmailPayload
+): Promise<void> => sendTraderRegisterInterestEmail(payload);
+
+export const sendSurveyWaitlistEmailSafe = async (
+  kind: 'consumer' | 'trader',
+  payload: SurveyWaitlistEmailPayload
+): Promise<boolean> => {
+  try {
+    if (kind === 'consumer') {
+      await sendCustomerRegisterInterestEmail(payload);
+    } else {
+      await sendTraderRegisterInterestEmail(payload);
+    }
+    return true;
+  } catch (error) {
+    logger.warn(`Failed to send ${kind} survey waitlist email`, { error, email: payload.email });
+    return false;
+  }
+};
+
+/** Safe send after auth register - never blocks signup if SMTP fails. */
+export const sendRegisterInterestEmailSafe = async (
+  role: 'CUSTOMER' | 'TRADER',
+  payload: SurveyWaitlistEmailPayload
+): Promise<boolean> => {
+  try {
+    if (role === 'TRADER') {
+      await sendTraderRegisterInterestEmail(payload);
+    } else {
+      await sendCustomerRegisterInterestEmail(payload);
+    }
+    return true;
+  } catch (error) {
+    logger.warn('Failed to send register interest email', {
+      error,
+      email: payload.email,
+      role,
+    });
+    return false;
+  }
 };
 
 type SendMailInput = {
@@ -258,89 +424,4 @@ export const sendContactEmails = async (
   }
 
   return { userEmailSent, adminEmailSent };
-};
-
-/** Website consumer survey / waitlist confirmation */
-export const sendConsumerSurveyWaitlistEmail = async (
-  payload: SurveyWaitlistEmailPayload
-): Promise<void> => {
-  const subject = '🏠 You’re on the Brisk Waitlist';
-  const text = `Thanks for your interest in Brisk.
-
-We’re currently building Brisk - a new way to make finding a trusted trades person for your home simpler, easier and less stressful.
-
-By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right trades person for your home.
-
-We’ll keep you updated as we get closer.
-
-Regards,
-BRISK
-Brisk - Making things Quicker.`;
-
-  await sendMail({
-    to: payload.email,
-    subject,
-    text,
-    html: wrapHtmlEmail(
-      'You’re on the Brisk Waitlist',
-      [
-        'Thanks for your interest in Brisk.',
-        'We’re currently building Brisk - a new way to make finding a trusted trades person for your home simpler, easier and less stressful.',
-        'By joining the waitlist, you’ll be among the first to hear when Brisk launches and when you can start using the platform to find the right trades person for your home.',
-        'We’ll keep you updated as we get closer.',
-      ],
-      { logo: 'consumer' }
-    ),
-  });
-};
-
-/** Website trader survey / waitlist confirmation */
-export const sendTraderSurveyWaitlistEmail = async (
-  payload: SurveyWaitlistEmailPayload
-): Promise<void> => {
-  const subject = '🔨 You’re on the Brisk Trader Waitlist';
-  const text = `Thanks for your interest in Brisk.
-
-We’re currently building Brisk - a new platform designed to make it easier for trades people to find new customers, manage jobs and grow their business.
-
-By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.
-
-We’ll keep you updated as we get closer.
-
-Regards,
-BRISK
-Brisk - Making things Quicker.`;
-
-  await sendMail({
-    to: payload.email,
-    subject,
-    text,
-    html: wrapHtmlEmail(
-      'You’re on the Brisk Trader Waitlist',
-      [
-        'Thanks for your interest in Brisk.',
-        'We’re currently building Brisk - a new platform designed to make it easier for trades people to find new customers, manage jobs and grow their business.',
-        'By joining the waitlist, you’ll be among the first traders to hear when Brisk launches and when we’re ready to welcome traders onto the platform.',
-        'We’ll keep you updated as we get closer.',
-      ],
-      { logo: 'trader' }
-    ),
-  });
-};
-
-export const sendSurveyWaitlistEmailSafe = async (
-  kind: 'consumer' | 'trader',
-  payload: SurveyWaitlistEmailPayload
-): Promise<boolean> => {
-  try {
-    if (kind === 'consumer') {
-      await sendConsumerSurveyWaitlistEmail(payload);
-    } else {
-      await sendTraderSurveyWaitlistEmail(payload);
-    }
-    return true;
-  } catch (error) {
-    logger.warn(`Failed to send ${kind} survey waitlist email`, { error, email: payload.email });
-    return false;
-  }
 };
