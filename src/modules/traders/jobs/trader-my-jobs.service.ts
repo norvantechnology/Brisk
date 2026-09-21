@@ -1179,7 +1179,7 @@ export const getJobOutcomeDetail = async (
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
     paymentSummary: buildOutcomePaymentSummary(job),
     invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
-    invoiceUrl: null as string | null,
+    invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };
 };
 
@@ -2377,4 +2377,49 @@ export const declineIncomingJob = async (userId: string, jobId: string) => {
     jobId,
     declined: true,
   };
+};
+
+/**
+ * Download job invoice as PDF (completed / payment screens).
+ */
+export const downloadJobInvoicePdf = async (userId: string, jobId: string) => {
+  const trader = await getTraderContext(userId);
+  const job = await assertMyJob(trader.id, jobId);
+
+  if (!job.booking?.finishedAt && job.status !== JobStatus.COMPLETED && job.status !== JobStatus.PAYMENT_PENDING) {
+    throw new BadRequestError('Invoice is available after the job is finished.');
+  }
+
+  const summary = buildSubmitPaymentSummary(job);
+  const paymentStatus = resolvePaymentStatusLabel(job);
+  const invoice = job.booking?.invoice;
+  const invoiceNumber =
+    invoice?.invoiceNumber ||
+    `INV-${(job.jobRef || job.id.slice(0, 8)).replace(/^#/, '')}`;
+
+  const { buildInvoicePdfBuffer } = await import('../../../utils/invoice-pdf');
+  const buffer = await buildInvoicePdfBuffer({
+    invoiceNumber,
+    jobRef: job.jobRef,
+    title: job.title,
+    completedAt: job.booking?.finishedAt ?? null,
+    customerName: job.customer.fullName,
+    address: formatFullAddress(job),
+    currencyCode: invoice?.currencyCode || 'EUR',
+    lines: [
+      { label: 'Base rate', amount: summary.baseRate },
+      { label: 'Materials', amount: summary.materialCost },
+      { label: 'Platform fee', amount: summary.platformFee },
+      { label: 'Offer applied', amount: summary.offerApplied },
+      ...(summary.siteVisitFee > 0
+        ? [{ label: 'Site visit fee', amount: summary.siteVisitFee }]
+        : []),
+      { label: `VAT (${summary.vatRate}%)`, amount: summary.vatAmount },
+    ],
+    totalAmount: summary.totalAmount,
+    paymentStatus,
+  });
+
+  const filename = `${invoiceNumber}.pdf`.replace(/[^\w.-]+/g, '_');
+  return { buffer, filename, invoiceNumber };
 };

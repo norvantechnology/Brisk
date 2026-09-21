@@ -775,4 +775,37 @@ router.post(
   controller.requestSiteVisitPayment
 );
 
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/invoice/download:
+ *   get:
+ *     summary: Download job invoice as PDF
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Returns `application/pdf` attachment for finished / payment-pending / completed jobs.
+ *       Use `invoiceUrl` from job outcome / payment screens:
+ *       `GET /traders/jobs/mine/{id}/invoice/download`
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: PDF file
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: Job not finished yet
+ */
+router.get(
+  '/mine/:id/invoice/download',
+  validate(myJobIdParamSchema),
+  controller.downloadJobInvoice
+);
+
 export default router;

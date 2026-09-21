@@ -499,3 +499,21 @@ export const declineIncomingJob = async (
     next(error);
   }
 };
+
+/** Streams invoice PDF — Content-Type application/pdf (not JSON). */
+export const downloadJobInvoice = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const { buffer, filename } = await service.downloadJobInvoicePdf(req.user!.id, req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.status(200).send(buffer);
+  } catch (error) {
+    next(error);
+  }
+};
