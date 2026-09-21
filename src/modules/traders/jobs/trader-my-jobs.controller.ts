@@ -148,7 +148,7 @@ export const submitJobCompletion = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Job proof submitted and job completed successfully.',
+      message: 'Proof uploaded successfully',
       data,
     });
   } catch (error) {

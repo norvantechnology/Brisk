@@ -961,10 +961,13 @@ const resolvePaymentStatusLabel = (job: MyJobRow): string => {
   if (latestPayment?.status === 'FAILED') return 'FAILED';
   if (job.status === JobStatus.PAYMENT_PENDING) return 'PENDING';
   if (job.status === JobStatus.CANCELLED) return 'CANCELLED';
-  return invoice?.status === 'UNPAID' ? 'UNPAID' : 'UNPAID';
+  // Ready for full / part payment request after job finish
+  if (job.status === JobStatus.COMPLETED || job.booking?.finishedAt) return 'UNPAID';
+  return 'UNPAID';
 };
 
-const buildOutcomePaymentSummary = (job: MyJobRow) => {
+/** Payment Request screen breakdown (Submit & Next response). */
+const buildSubmitPaymentSummary = (job: MyJobRow) => {
   const invoice = job.booking?.invoice;
   const breakdown = computePaymentBreakdown(job);
   const offerDiscount = invoice
@@ -972,18 +975,40 @@ const buildOutcomePaymentSummary = (job: MyJobRow) => {
     : 0;
   const baseRate = invoice ? money(invoice.serviceCharge) : breakdown.serviceCharge;
   const platformFee = invoice ? money(invoice.platformFee) : breakdown.platformFee;
+  const materialCost = breakdown.materialsTotal;
+  const vatRate = Math.round(breakdown.vatRate * 100);
   const vatAmount = invoice ? money(invoice.tax) : breakdown.vatAmount;
-  const netPayout = invoice ? money(invoice.totalAmount) : breakdown.totalAmount;
+  const totalAmount = invoice ? money(invoice.totalAmount) : breakdown.totalAmount;
 
   return {
     baseRate,
+    materialCost,
+    materialsTotal: materialCost,
     platformFee,
     offerApplied: offerDiscount > 0 ? -offerDiscount : 0,
-    materialsTotal: breakdown.materialsTotal,
     siteVisitFee: breakdown.siteVisitFee,
-    vatPercentage: Math.round(breakdown.vatRate * 100),
+    vatRate,
+    vatPercentage: vatRate,
     vatAmount,
-    netPayout,
+    totalAmount,
+    netPayout: totalAmount,
+  };
+};
+
+const buildOutcomePaymentSummary = (job: MyJobRow) => {
+  const summary = buildSubmitPaymentSummary(job);
+  return {
+    baseRate: summary.baseRate,
+    platformFee: summary.platformFee,
+    offerApplied: summary.offerApplied,
+    materialsTotal: summary.materialsTotal,
+    materialCost: summary.materialCost,
+    siteVisitFee: summary.siteVisitFee,
+    vatPercentage: summary.vatPercentage,
+    vatRate: summary.vatRate,
+    vatAmount: summary.vatAmount,
+    netPayout: summary.netPayout,
+    totalAmount: summary.totalAmount,
     paymentStatus: resolvePaymentStatusLabel(job),
   };
 };
@@ -1187,11 +1212,29 @@ export const submitJobCompletion = async (
     });
   });
 
-  const detail = await getMyJobDetail(userId, jobId);
+  // Re-load after finish for payment summary (Payment Request screen — no extra GET needed).
+  const fresh = await assertMyJob(trader.id, jobId);
+  const paymentSummary = buildSubmitPaymentSummary(fresh);
+  const paymentStatus = resolvePaymentStatusLabel(fresh);
+
   return {
-    ...detail,
+    id: fresh.id,
+    jobRef: fresh.jobRef
+      ? fresh.jobRef.startsWith('#')
+        ? fresh.jobRef
+        : fresh.jobRef
+      : null,
+    title: fresh.title,
+    status: fresh.status,
+    statusBadge: statusBadgeFor(fresh.status, fresh.booking?.status ?? null, 'COMPLETED'),
+    completedAt: fresh.booking?.finishedAt ?? now,
+    location: {
+      fullAddress: formatFullAddress(fresh),
+    },
+    paymentSummary,
+    /** String enum for payment UI / future part-payment — not boolean. */
+    paymentStatus,
     proofPhotosAdded: photoUrls.length,
-    submittedAt: now,
   };
 };
 

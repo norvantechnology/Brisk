@@ -243,6 +243,13 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *       3. On Submit & Next → call this endpoint once with those URL(s)
  *
  *       Body accepts either `photoUrl` (single) or `photoUrls` (array). At least one is required.
+ *
+ *       **Response** is shaped for the Payment Request screen (no extra GET needed):
+ *       `id`, `jobRef`, `title`, `completedAt`, `location.fullAddress`, `paymentSummary`, `paymentStatus`.
+ *
+ *       `paymentStatus` is a **string** (not boolean) for future part-payment support, e.g.
+ *       `UNPAID` | `PENDING` | `PARTIALLY_PAID` | `PAID` | `FAILED` | `REFUNDED` | `CANCELLED`.
+ *       After submit (before payment request) it is typically `UNPAID`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -271,7 +278,28 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *                   - https://api.brisk.ie/uploads/files/job_proof/b.jpg
  *     responses:
  *       200:
- *         description: Proof saved and job status COMPLETED. Returns process/detail payload.
+ *         description: Proof saved + job completed. Payment Request payload in data.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Proof uploaded successfully
+ *               data:
+ *                 id: uuid
+ *                 jobRef: BRK-99281
+ *                 title: Emergency Pipe Repair
+ *                 completedAt: '2026-10-24T14:30:00.000Z'
+ *                 location:
+ *                   fullAddress: 24 Windsor Terrace, SE1 7PB
+ *                 paymentSummary:
+ *                   baseRate: 120
+ *                   materialCost: 0
+ *                   platformFee: 10
+ *                   offerApplied: 0
+ *                   vatRate: 20
+ *                   vatAmount: 26
+ *                   totalAmount: 156
+ *                 paymentStatus: UNPAID
  *       400:
  *         description: Missing photos, not arrived, or cancelled
  *       409:
