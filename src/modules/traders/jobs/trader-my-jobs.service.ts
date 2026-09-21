@@ -701,10 +701,18 @@ export const listMyJobs = async (
         },
         siteVisitRequests: {
           where: { traderId: trader.id, status: { not: TraderSiteVisitStatus.CANCELLED } },
-          select: { status: true },
+          select: { status: true, visitDate: true },
           take: 1,
         },
-        booking: { select: { status: true, traderId: true, arrivedAt: true, finishedAt: true } },
+        booking: {
+          select: {
+            status: true,
+            traderId: true,
+            arrivedAt: true,
+            finishedAt: true,
+            scheduledDate: true,
+          },
+        },
         photos: {
           where: { kind: JobPhotoKind.PROOF },
           select: { id: true },
@@ -778,17 +786,19 @@ export const listMyJobs = async (
       jobAmount: jobAmountEstimate,
     });
 
+    // Prefer ARRIVE before site-visit CTAs when trader has not marked arrival yet
+    // (matches detail resolvePrimaryAction / app "I have arrived" button).
     let primaryAction = 'VIEW_DETAILS';
     if (isJobCancelled(job.status, job.booking?.status ?? null)) {
       primaryAction = 'VIEW_DETAILS';
+    } else if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
+      primaryAction = 'ARRIVE';
     } else if (flowStatus === 'SITE_VISIT_IN_PROGRESS') {
       primaryAction = 'COMPLETE_SITE_VISIT';
     } else if (flowStatus === 'SITE_VISIT_PAYMENT_PENDING') {
       primaryAction = 'REQUEST_SITE_VISIT_PAYMENT';
     } else if (flowStatus === 'PARTIAL_PAYMENT_PENDING') {
       primaryAction = 'AWAITING_PARTIAL_PAYMENT';
-    } else if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
-      primaryAction = 'ARRIVE';
     } else if (flowStatus === 'WORK_PROOF_PENDING') {
       primaryAction = 'UPLOAD_PROOF';
     } else if (job.booking?.arrivedAt && !job.booking.finishedAt) {
@@ -798,6 +808,9 @@ export const listMyJobs = async (
     } else if (job.status === JobStatus.COMPLETED || flowStatus === 'COMPLETED') {
       primaryAction = 'VIEW_DETAILS';
     }
+
+    const scheduledDate =
+      job.scheduledDate ?? job.booking?.scheduledDate ?? visit?.visitDate ?? null;
 
     return {
       id: job.id,
@@ -826,7 +839,7 @@ export const listMyJobs = async (
       areaName,
       distanceKm,
       quotePrice,
-      scheduledDate: job.scheduledDate,
+      scheduledDate,
       createdAt: job.createdAt,
       primaryAction,
     };
@@ -1028,6 +1041,11 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     estimatedEarnings,
     durationLabel: job.durationLabel,
     arrivalStatus: arrivalStatus(job),
+    scheduledDate:
+      job.scheduledDate ??
+      job.booking?.scheduledDate ??
+      job.siteVisitRequests[0]?.visitDate ??
+      null,
   };
 };
 
