@@ -40,9 +40,11 @@ type TraderForVerificationSync = {
   registrations: Array<{ entityType: TraderType }>;
 };
 
-const REVIEWABLE_ONBOARDING_STATUSES: TraderOnboardingStatus[] = [
+/** Document-level review is allowed after approval too (new category / replaced docs). */
+const DOCUMENT_REVIEWABLE_ONBOARDING_STATUSES: TraderOnboardingStatus[] = [
   TraderOnboardingStatus.SUBMITTED,
   TraderOnboardingStatus.REJECTED,
+  TraderOnboardingStatus.APPROVED,
 ];
 
 const isProfileComplete = (trader: TraderForVerificationSync, entityType: TraderType) => {
@@ -109,7 +111,7 @@ export const syncTraderVerificationFromDocuments = async (traderId: string) => {
     },
   });
 
-  if (!trader || !REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
+  if (!trader || !DOCUMENT_REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
     return null;
   }
 
@@ -123,6 +125,10 @@ export const syncTraderVerificationFromDocuments = async (traderId: string) => {
   const entityType = trader.registrations[0]?.entityType ?? trader.traderType;
   const profileComplete = isProfileComplete(trader, entityType);
   const bankComplete = isBankComplete(trader);
+
+  const alreadyApproved =
+    trader.onboardingStatus === TraderOnboardingStatus.APPROVED &&
+    trader.verificationStatus === VerificationStatus.VERIFIED;
 
   let nextVerificationStatus: VerificationStatus = VerificationStatus.PENDING;
   let nextOnboardingStatus: TraderOnboardingStatus = TraderOnboardingStatus.SUBMITTED;
@@ -146,6 +152,11 @@ export const syncTraderVerificationFromDocuments = async (traderId: string) => {
     nextOnboardingStatus = TraderOnboardingStatus.APPROVED;
     nextRejectionReason = null;
     shouldInvalidateSessions = trader.verificationStatus !== VerificationStatus.VERIFIED;
+  } else if (alreadyApproved) {
+    // Keep marketplace access while new/replaced category docs are still pending review.
+    nextVerificationStatus = VerificationStatus.VERIFIED;
+    nextOnboardingStatus = TraderOnboardingStatus.APPROVED;
+    nextRejectionReason = null;
   } else {
     nextVerificationStatus = VerificationStatus.PENDING;
     nextOnboardingStatus = TraderOnboardingStatus.SUBMITTED;
@@ -452,9 +463,9 @@ export const reviewTraderDocument = async (
     throw new NotFoundError('Trader not found.');
   }
 
-  if (!REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
+  if (!DOCUMENT_REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
     throw new BadRequestError(
-      'Documents can only be reviewed while the application is submitted or rejected.'
+      'Documents can only be reviewed when onboarding is SUBMITTED, REJECTED, or APPROVED (verified traders with new/replaced docs).'
     );
   }
 

@@ -146,10 +146,16 @@ router.get(
  *       **Document status values:** `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`
  *       (this endpoint sets `APPROVED` or `REJECTED` only).
  *
+ *       **Allowed when trader onboarding is:** `SUBMITTED`, `REJECTED`, or `APPROVED`.
+ *       Verified traders (`VERIFIED` + `APPROVED`) can still have new category / replaced
+ *       documents reviewed here — review is **not** limited to first-time onboarding only.
+ *
  *       After each action the backend recalculates overall trader status:
  *       - Any required document `REJECTED` → trader `verificationStatus=REJECTED`, `onboardingStatus=REJECTED`
  *       - All required documents `APPROVED` + profile + bank complete → `VERIFIED` / `APPROVED`
- *       - Otherwise stays `PENDING` / `SUBMITTED`
+ *       - Already `VERIFIED` + `APPROVED` with some docs still `PENDING` → stays `VERIFIED` / `APPROVED`
+ *         (does not demote while new docs await review)
+ *       - Otherwise (first-time queue) stays `PENDING` / `SUBMITTED`
  *
  *       **Frontend:** refresh trader status from `data.trader` in this response
  *       (do **not** calculate verification/onboarding status on the client).
@@ -213,7 +219,7 @@ router.get(
  *                   bankComplete: true
  *                   readyForApproval: false
  *       400:
- *         description: Application not in reviewable state / validation error.
+ *         description: Onboarding not SUBMITTED/REJECTED/APPROVED, or validation error.
  *       401:
  *         description: Unauthorized.
  *       404:
