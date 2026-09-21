@@ -1342,6 +1342,7 @@ const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
   const paymentSummary = buildSubmitPaymentSummary(job);
   const paymentStatus = resolvePaymentStatusLabel(job);
   const completedAt = job.booking?.finishedAt ?? job.updatedAt;
+  const invoice = job.booking?.invoice;
 
   return {
     id: job.id,
@@ -1363,6 +1364,8 @@ const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
     canRequestPayment:
       job.status === JobStatus.COMPLETED ||
       (Boolean(job.booking?.finishedAt) && job.status !== JobStatus.PAYMENT_PENDING),
+    invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
+    invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };
 };
 
