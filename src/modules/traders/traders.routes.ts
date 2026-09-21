@@ -109,6 +109,13 @@ router.patch('/me', validate(updateTraderProfileSchema), tradersController.updat
  *       Editable: `fullName`, `mobileNumber` (E.164 e.g. `+353212121212`), `profilePhotoUrl`,
  *       `preferredCurrency` (EUR/GBP), **`country`** (same field as signup `POST /auth/register`).
  *       **Profile photo update:** After login → `POST /uploads` (`purpose: profile_photo`) → pass returned `url` as `profilePhotoUrl` here (JSON only, no file on this endpoint).
+ *
+ *       **Profile photo clear / omit rules:**
+ *       - `profilePhotoUrl: "https://..."` → save/replace photo
+ *       - `profilePhotoUrl: null` → clear photo (DB NULL); response returns `profilePhotoUrl: null`
+ *       - `profilePhotoUrl: ""` → treated as clear (same as null)
+ *       - field omitted → keep existing photo unchanged
+ *
  *       **Email is locked** (`emailLocked: true` on GET /traders/me) — do not send `email`.
  *       Changing phone sets `mobileVerified: false` and `mobileReverificationRequired: true`.
  *
@@ -122,7 +129,14 @@ router.patch('/me', validate(updateTraderProfileSchema), tradersController.updat
  *             properties:
  *               fullName: { type: string, example: Brisk Trader }
  *               mobileNumber: { type: string, example: "+353212121212" }
- *               profilePhotoUrl: { type: string, format: uri }
+ *               profilePhotoUrl:
+ *                 oneOf:
+ *                   - { type: string, format: uri }
+ *                   - { type: string, enum: [""], description: Clears photo (same as null) }
+ *                   - { type: "null", description: Clears photo }
+ *                 nullable: true
+ *                 description: |
+ *                   URL to set photo; `null` or `""` to clear; omit to keep existing.
  *               preferredCurrency: { type: string, example: "EUR", description: "ISO 4217 — active currencies only (e.g. EUR, GBP)." }
  *               country: { type: string, example: Ireland, description: "Country from signup country picker — editable here too." }
  *           examples:
@@ -134,15 +148,30 @@ router.patch('/me', validate(updateTraderProfileSchema), tradersController.updat
  *                 mobileNumber: "+353871234567"
  *                 country: Ireland
  *                 preferredCurrency: EUR
+ *             setPhoto:
+ *               summary: Set / replace profile photo
+ *               value:
+ *                 fullName: Sarah Mur
+ *                 profilePhotoUrl: https://api.brisk.ie/uploads/files/profile_photo/example.png
+ *             clearPhoto:
+ *               summary: Remove profile photo
+ *               value:
+ *                 fullName: Sarah Mur
+ *                 profilePhotoUrl: null
  *     responses:
  *       200:
- *         description: Account updated. Full profile in `data` (includes `country`).
+ *         description: Account updated. Full profile in `data` (includes `country`). After clear, `profilePhotoUrl` is null.
  *       400:
  *         description: Validation error (e.g. email change attempted).
  *       409:
  *         description: Mobile number already registered.
  */
 router.patch(
+  '/me/account',
+  validate(updateTraderAccountSchema),
+  tradersController.updateMyAccount
+);
+router.put(
   '/me/account',
   validate(updateTraderAccountSchema),
   tradersController.updateMyAccount

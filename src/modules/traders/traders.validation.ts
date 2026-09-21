@@ -13,6 +13,17 @@ const currencyCodeSchema = z
   .regex(/^[A-Z]{3}$/, 'Currency code must be ISO 4217 uppercase (e.g. EUR, GBP)')
   .transform((v) => v.toUpperCase());
 
+/**
+ * Profile photo URL for account edit:
+ * - omitted → undefined (preserve existing)
+ * - valid URL → set new photo
+ * - null or "" → clear photo (store NULL)
+ */
+const optionalClearablePhotoUrl = z
+  .union([z.string().url(), z.literal(''), z.null()])
+  .optional()
+  .transform((v) => (v === '' || v === null ? null : v));
+
 export const updateTraderProfileSchema = z.object({
   body: z.object({
     traderType: z.nativeEnum(TraderType).optional(),
@@ -32,7 +43,7 @@ export const updateTraderAccountSchema = z.object({
     .object({
       fullName: z.string().trim().min(2).max(255).optional(),
       mobileNumber: mobileNumberSchema.optional(),
-      profilePhotoUrl: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+      profilePhotoUrl: optionalClearablePhotoUrl,
       preferredCurrency: currencyCodeSchema.optional(),
       /** Same country field as signup (`POST /auth/register`). Updates User.country. */
       country: z.string().trim().min(1).max(100).optional(),
@@ -47,8 +58,8 @@ export const updateTraderAccountSchema = z.object({
         });
       }
       if (
-        !body.fullName &&
-        !body.mobileNumber &&
+        body.fullName === undefined &&
+        body.mobileNumber === undefined &&
         body.profilePhotoUrl === undefined &&
         body.preferredCurrency === undefined &&
         body.country === undefined

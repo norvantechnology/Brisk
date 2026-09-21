@@ -303,20 +303,23 @@ export const updateTraderAccount = async (userId: string, input: UpdateTraderAcc
     prisma.user.update({
       where: { id: userId },
       data: {
-        fullName: input.fullName,
-        mobileNumber: input.mobileNumber,
-        profilePhotoUrl: input.profilePhotoUrl,
-        preferredCurrency: input.preferredCurrency,
-        country: input.country !== undefined ? input.country.trim() : undefined,
-        mobileVerified:
-          input.mobileNumber && input.mobileNumber !== trader.user.mobileNumber ? false : undefined,
+        ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
+        ...(input.mobileNumber !== undefined ? { mobileNumber: input.mobileNumber } : {}),
+        ...(input.profilePhotoUrl !== undefined ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
+        ...(input.preferredCurrency !== undefined
+          ? { preferredCurrency: input.preferredCurrency }
+          : {}),
+        ...(input.country !== undefined ? { country: input.country.trim() } : {}),
+        ...(input.mobileNumber && input.mobileNumber !== trader.user.mobileNumber
+          ? { mobileVerified: false }
+          : {}),
       },
     }),
     ...(input.profilePhotoUrl !== undefined
       ? [
           prisma.trader.update({
             where: { userId },
-            data: { profilePhotoUrl: input.profilePhotoUrl || null },
+            data: { profilePhotoUrl: input.profilePhotoUrl },
           }),
         ]
       : []),
