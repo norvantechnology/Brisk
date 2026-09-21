@@ -121,6 +121,66 @@ router.get('/mine/:id', validate(myJobIdParamSchema), controller.getMyJobDetail)
 
 /**
  * @swagger
+ * /traders/jobs/mine/{id}/process:
+ *   get:
+ *     summary: Process / in-progress job screen detail
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Active process payload (materials items, proof, canFinish, arrivalStatus)
+ *       400:
+ *         description: Job not in active process state
+ */
+router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProcessJobDetail);
+
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/completed:
+ *   get:
+ *     summary: Completed job history screen detail
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Completed job outcome (review, photos, paymentSummary, invoice)
+ *       400:
+ *         description: Job is not completed
+ */
+router.get('/mine/:id/completed', validate(myJobIdParamSchema), controller.getCompletedJobDetail);
+
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/cancelled:
+ *   get:
+ *     summary: Cancelled job history screen detail
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Cancelled job outcome (same shape as completed)
+ *       400:
+ *         description: Job is not cancelled
+ */
+router.get('/mine/:id/cancelled', validate(myJobIdParamSchema), controller.getCancelledJobDetail);
+
+/**
+ * @swagger
  * /traders/jobs/mine/{id}/arrive:
  *   post:
  *     summary: Mark arrived on site

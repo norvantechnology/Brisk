@@ -2,6 +2,7 @@ import {
   DiscountType,
   JobQuoteType,
   JobStatus,
+  JobPhotoKind,
   OfferClaimStatus,
   OfferStatus,
   Prisma,
@@ -184,7 +185,33 @@ const jobInclude = {
       bookingRef: true,
       status: true,
       scheduledDate: true,
-      invoice: { select: { id: true, invoiceNumber: true, status: true, totalAmount: true } },
+      arrivedAt: true,
+      finishedAt: true,
+      invoice: {
+        select: {
+          id: true,
+          invoiceNumber: true,
+          status: true,
+          totalAmount: true,
+          serviceCharge: true,
+          traderOfferDiscount: true,
+          promoDiscount: true,
+          platformFee: true,
+          tax: true,
+          payments: {
+            orderBy: { createdAt: 'desc' as const },
+            take: 1,
+            select: { status: true, paidAt: true },
+          },
+        },
+      },
+      ratingReview: {
+        select: {
+          stars: true,
+          review: true,
+          createdAt: true,
+        },
+      },
     },
   },
   claim: { select: { id: true, status: true, claimedAt: true } },
@@ -662,6 +689,127 @@ export const listJobs = async (customerId: string, status?: JobStatus) => {
 export const getJob = async (customerId: string, jobId: string) => {
   const job = await getOwnedJob(customerId, jobId);
   return serializeJob(job);
+};
+
+const formatOutcomeDateLabel = (date: Date, kind: 'COMPLETED' | 'CANCELLED') => {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const month = months[date.getMonth()];
+  const day = date.getDate();
+  const year = date.getFullYear();
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  const prefix = kind === 'COMPLETED' ? 'Finished on' : 'Cancelled on';
+  return `${prefix} ${month} ${day}, ${year} • ${hours}:${minutes} ${ampm}`;
+};
+
+/**
+ * Completed / cancelled history screens for customer app (same shape as trader dummy).
+ */
+export const getJobOutcomeDetail = async (
+  customerId: string,
+  jobId: string,
+  expected: 'COMPLETED' | 'CANCELLED'
+) => {
+  const job = await getOwnedJob(customerId, jobId);
+  const cancelled =
+    job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
+  const completedLike =
+    job.status === JobStatus.COMPLETED || job.status === JobStatus.PAYMENT_PENDING;
+
+  if (expected === 'COMPLETED' && !completedLike) {
+    throw new BadRequestError('Job is not completed.');
+  }
+  if (expected === 'CANCELLED' && !cancelled) {
+    throw new BadRequestError('Job is not cancelled.');
+  }
+
+  const eventAt =
+    expected === 'COMPLETED'
+      ? (job.booking?.finishedAt ?? job.updatedAt)
+      : job.updatedAt;
+
+  const invoice = job.booking?.invoice ?? null;
+  const review = job.booking?.ratingReview ?? null;
+  const proofPhotos = job.photos.filter((p) => p.kind === JobPhotoKind.PROOF);
+  const traderName =
+    job.trader?.businessName || job.trader?.user?.fullName || 'Trader';
+  const traderLocation = [job.trader?.city, job.trader?.country].filter(Boolean).join(', ');
+
+  const baseRate = invoice ? money(invoice.serviceCharge) : money(job.serviceCharge);
+  const platformFee = invoice ? money(invoice.platformFee) : 0;
+  const offerDiscount = invoice
+    ? round2(money(invoice.traderOfferDiscount) + money(invoice.promoDiscount))
+    : 0;
+  const vatAmount = invoice ? money(invoice.tax) : round2((baseRate + platformFee) * 0.2);
+  const netPayout = invoice ? money(invoice.totalAmount) : round2(baseRate + platformFee + vatAmount - offerDiscount);
+
+  let paymentStatus = 'UNPAID';
+  if (invoice?.status === InvoiceStatus.PAID) paymentStatus = 'PAID';
+  else if (invoice?.status === InvoiceStatus.REFUNDED) paymentStatus = 'REFUNDED';
+  else if (invoice?.payments?.[0]?.status === 'COMPLETED') paymentStatus = 'PAID';
+  else if (cancelled) paymentStatus = 'CANCELLED';
+  else if (job.status === JobStatus.PAYMENT_PENDING) paymentStatus = 'PENDING';
+
+  const categoryLabel = (
+    job.subcategory?.name ||
+    job.category?.name ||
+    'SERVICE'
+  ).toUpperCase();
+
+  return {
+    id: job.id,
+    jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
+    title: job.title,
+    category: categoryLabel,
+    status: cancelled ? JobStatus.CANCELLED : job.status,
+    statusBadge: customerStatusBadgeFor(job.status, job.booking?.status ?? null),
+    completedAt: expected === 'COMPLETED' ? eventAt : null,
+    cancelledAt: expected === 'CANCELLED' ? eventAt : null,
+    formattedCompletedDate: formatOutcomeDateLabel(eventAt, expected),
+    trader: job.trader
+      ? {
+          id: job.trader.id,
+          name: traderName,
+          location: traderLocation || job.city || '',
+          avatar: job.trader.profilePhotoUrl || job.trader.user?.profilePhotoUrl || null,
+          conversationId: job.id,
+        }
+      : null,
+    review: review
+      ? {
+          rating: review.stars,
+          comment: review.review,
+          createdAt: review.createdAt,
+        }
+      : null,
+    completionPhotos: proofPhotos.map((p) => p.photoUrl),
+    paymentSummary: {
+      baseRate,
+      platformFee,
+      offerApplied: offerDiscount > 0 ? -offerDiscount : 0,
+      vatPercentage: 20,
+      vatAmount,
+      netPayout,
+      paymentStatus,
+    },
+    invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
+    invoiceUrl: null as string | null,
+  };
 };
 
 export const updateJob = async (customerId: string, jobId: string, input: UpdateJobInput) => {

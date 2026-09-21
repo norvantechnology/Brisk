@@ -305,6 +305,18 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *         description: Job / category / trader not found.
  */
 router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJob);
+router.get(
+  '/:id/completed',
+  ...customerOnly,
+  validate(jobIdParamSchema),
+  controller.getCompletedJobDetail
+);
+router.get(
+  '/:id/cancelled',
+  ...customerOnly,
+  validate(jobIdParamSchema),
+  controller.getCancelledJobDetail
+);
 router.patch('/:id', ...customerOnly, validate(updateJobSchema), controller.updateJob);
 
 /**

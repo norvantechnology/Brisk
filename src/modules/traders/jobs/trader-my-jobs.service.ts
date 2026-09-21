@@ -206,7 +206,19 @@ const assertMyJob = async (traderId: string, jobId: string) => {
     where: { id: jobId, ...traderJobAccessWhere(traderId) },
     include: {
       address: true,
-      booking: true,
+      booking: {
+        include: {
+          invoice: {
+            include: {
+              payments: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          ratingReview: true,
+        },
+      },
       customer: {
         select: {
           id: true,
@@ -653,6 +665,28 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
   const estimatedEarnings =
     quotePrice ?? (job.serviceCharge != null ? money(job.serviceCharge) : null);
 
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+  const formatPriceLabel = (amount: number) =>
+    `${currency.currencySymbol}${amount.toFixed(2)}`;
+  const materialItems = job.materials.map((m) => {
+    const price = money(m.price);
+    return {
+      id: m.id,
+      name: m.name,
+      detail: m.detail,
+      price,
+      priceLabel: formatPriceLabel(price),
+      currencyCode: currency.currencyCode,
+      currencySymbol: currency.currencySymbol,
+      photoUrl: m.photoUrl,
+    };
+  });
+
   return {
     id: job.id,
     title: job.title,
@@ -663,6 +697,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
     photos: customerPhotos.map((p) => p.photoUrl),
     proofPhotos: proofPhotos.map((p) => ({ id: p.id, photoUrl: p.photoUrl })),
+    completionPhotos: proofPhotos.map((p) => p.photoUrl),
     tags,
     location: {
       fullAddress: formatFullAddress(job),
@@ -674,15 +709,26 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     distanceKm,
     quotePrice,
     customer: {
+      id: job.customer.id,
       fullName: job.customer.fullName,
+      name: job.customer.fullName,
       profilePhotoUrl: job.customer.profilePhotoUrl,
+      avatar: job.customer.profilePhotoUrl,
+      location: job.city || job.address?.city || formatFullAddress(job),
       isVerified: customerVerified,
       phoneNumber: job.phoneNumber || job.customer.mobileNumber || null,
       rating: null as number | null,
       jobsPosted: job.customer._count.jobs,
+      conversationId: job.id,
     },
     siteVisit: siteVisitBlock(job),
-    materials,
+    materials: {
+      ...materials,
+      items: materialItems,
+      totalLabel: formatPriceLabel(materials.total),
+      currencyCode: currency.currencyCode,
+      currencySymbol: currency.currencySymbol,
+    },
     negotiationMessages,
     ...actions,
     ...primary,
@@ -690,6 +736,146 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     durationLabel: job.durationLabel,
     arrivalStatus: arrivalStatus(job),
   };
+};
+
+const formatOutcomeDateLabel = (date: Date, kind: 'COMPLETED' | 'CANCELLED') => {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const month = months[date.getMonth()];
+  const day = date.getDate();
+  const year = date.getFullYear();
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  const prefix = kind === 'COMPLETED' ? 'Finished on' : 'Cancelled on';
+  return `${prefix} ${month} ${day}, ${year} • ${hours}:${minutes} ${ampm}`;
+};
+
+const resolvePaymentStatusLabel = (job: MyJobRow): string => {
+  const invoice = job.booking?.invoice;
+  if (invoice?.status === 'PAID') return 'PAID';
+  if (invoice?.status === 'REFUNDED') return 'REFUNDED';
+  const latestPayment = invoice?.payments?.[0];
+  if (latestPayment?.status === 'COMPLETED') return 'PAID';
+  if (latestPayment?.status === 'FAILED') return 'FAILED';
+  if (job.status === JobStatus.PAYMENT_PENDING) return 'PENDING';
+  if (job.status === JobStatus.CANCELLED) return 'CANCELLED';
+  return invoice?.status === 'UNPAID' ? 'UNPAID' : 'UNPAID';
+};
+
+const buildOutcomePaymentSummary = (job: MyJobRow) => {
+  const invoice = job.booking?.invoice;
+  const breakdown = computePaymentBreakdown(job);
+  const offerDiscount = invoice
+    ? round2(money(invoice.traderOfferDiscount) + money(invoice.promoDiscount))
+    : 0;
+  const baseRate = invoice ? money(invoice.serviceCharge) : breakdown.serviceCharge;
+  const platformFee = invoice ? money(invoice.platformFee) : breakdown.platformFee;
+  const vatAmount = invoice ? money(invoice.tax) : breakdown.vatAmount;
+  const netPayout = invoice ? money(invoice.totalAmount) : breakdown.totalAmount;
+
+  return {
+    baseRate,
+    platformFee,
+    offerApplied: offerDiscount > 0 ? -offerDiscount : 0,
+    materialsTotal: breakdown.materialsTotal,
+    siteVisitFee: breakdown.siteVisitFee,
+    vatPercentage: Math.round(breakdown.vatRate * 100),
+    vatAmount,
+    netPayout,
+    paymentStatus: resolvePaymentStatusLabel(job),
+  };
+};
+
+/**
+ * Completed / cancelled history screens — matches mobile dummy payload shape.
+ */
+export const getJobOutcomeDetail = async (
+  userId: string,
+  jobId: string,
+  expected: 'COMPLETED' | 'CANCELLED'
+) => {
+  const trader = await getTraderContext(userId);
+  const job = await assertMyJob(trader.id, jobId);
+  const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
+  const completedLike =
+    job.status === JobStatus.COMPLETED || job.status === JobStatus.PAYMENT_PENDING;
+
+  if (expected === 'COMPLETED' && !completedLike) {
+    throw new BadRequestError('Job is not completed.');
+  }
+  if (expected === 'CANCELLED' && !cancelled) {
+    throw new BadRequestError('Job is not cancelled.');
+  }
+
+  const eventAt =
+    expected === 'COMPLETED'
+      ? (job.booking?.finishedAt ?? job.updatedAt)
+      : job.updatedAt;
+  const proofPhotos = job.photos.filter((p) => p.kind === JobPhotoKind.PROOF);
+  const review = job.booking?.ratingReview ?? null;
+  const invoice = job.booking?.invoice ?? null;
+  const categoryLabel = (
+    job.subcategory?.name ||
+    job.category?.name ||
+    'SERVICE'
+  ).toUpperCase();
+
+  return {
+    id: job.id,
+    jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
+    title: job.title,
+    category: categoryLabel,
+    status: cancelled ? JobStatus.CANCELLED : job.status,
+    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
+    completedAt: expected === 'COMPLETED' ? eventAt : null,
+    cancelledAt: expected === 'CANCELLED' ? eventAt : null,
+    formattedCompletedDate: formatOutcomeDateLabel(eventAt, expected),
+    customer: {
+      id: job.customer.id,
+      name: job.customer.fullName,
+      location: job.city || job.address?.city || formatFullAddress(job),
+      avatar: job.customer.profilePhotoUrl,
+      conversationId: job.id,
+    },
+    review: review
+      ? {
+          rating: review.stars,
+          comment: review.review,
+          createdAt: review.createdAt,
+        }
+      : null,
+    completionPhotos: proofPhotos.map((p) => p.photoUrl),
+    paymentSummary: buildOutcomePaymentSummary(job),
+    invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
+    invoiceUrl: null as string | null,
+  };
+};
+
+/** Process / progress screen — same as detail with materials items for in-job UI. */
+export const getProcessJobDetail = async (userId: string, jobId: string) => {
+  const detail = await getMyJobDetail(userId, jobId);
+  if (
+    detail.status !== JobStatus.IN_PROGRESS &&
+    detail.status !== JobStatus.ACCEPTED &&
+    detail.status !== JobStatus.SCHEDULED
+  ) {
+    throw new BadRequestError('Job is not in an active process state.');
+  }
+  return detail;
 };
 
 export const arriveAtJob = async (userId: string, jobId: string) => {

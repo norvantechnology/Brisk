@@ -42,6 +42,63 @@ export const getMyJobDetail = async (
   }
 };
 
+export const getProcessJobDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.getProcessJobDetail(req.user!.id, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Process job details fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCompletedJobDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.getJobOutcomeDetail(req.user!.id, req.params.id, 'COMPLETED');
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Completed job details fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCancelledJobDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.getJobOutcomeDetail(req.user!.id, req.params.id, 'CANCELLED');
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Cancelled job details fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const arriveAtJob = async (
   req: AuthenticatedRequest,
   res: Response,

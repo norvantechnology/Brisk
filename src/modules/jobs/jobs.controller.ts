@@ -59,6 +59,42 @@ export const getJob = async (
   }
 };
 
+export const getCompletedJobDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getJobOutcomeDetail(req.user!.id, req.params.id, 'COMPLETED');
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Completed job details fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCancelledJobDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getJobOutcomeDetail(req.user!.id, req.params.id, 'CANCELLED');
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Cancelled job details fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateJob = async (
   req: AuthenticatedRequest,
   res: Response,
