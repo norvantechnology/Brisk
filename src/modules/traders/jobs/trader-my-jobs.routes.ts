@@ -244,13 +244,17 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *       3. On Submit & Next → call this endpoint once with those URL(s)
  *
  *       Body accepts either `photoUrl` (single) or `photoUrls` (array). At least one is required.
+ *       Also accepts `isPartPayment` (boolean). For Mark as Finished send `isPartPayment: false`.
+ *
+ *       Response includes `paymentStatus`, `flowStatus`, `isPartPayment` for screen routing.
  *
  *       **Response** is shaped for the Payment Request screen (no extra GET needed):
- *       `id`, `jobRef`, `title`, `completedAt`, `location.fullAddress`, `paymentSummary`, `paymentStatus`.
+ *       `id`, `jobRef`, `title`, `completedAt`, `location.fullAddress`, `paymentSummary`, `paymentStatus`, `flowStatus`, `isPartPayment`.
  *
  *       `paymentStatus` is a **string** (not boolean) for future part-payment support, e.g.
  *       `UNPAID` | `PENDING` | `PARTIALLY_PAID` | `PAID` | `FAILED` | `REFUNDED` | `CANCELLED`.
  *       After submit (before payment request) it is typically `UNPAID`.
+ *       `flowStatus` on list/detail also returns `PARTIAL_PAYMENT_PENDING` / `PARTIALLY_PAID` after part payment.
  *     parameters:
  *       - in: path
  *         name: id
@@ -268,15 +272,20 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *                 type: array
  *                 items: { type: string, format: uri }
  *                 description: One or more proof image URLs
+ *               isPartPayment:
+ *                 type: boolean
+ *                 default: false
+ *                 description: false = Mark as Finished (full). Part payment uses request-partial-payment API.
  *           examples:
- *             single:
- *               value:
- *                 photoUrl: https://api.brisk.ie/uploads/files/job_proof/example.jpg
- *             multiple:
+ *             markFinished:
  *               value:
  *                 photoUrls:
  *                   - https://api.brisk.ie/uploads/files/job_proof/a.jpg
- *                   - https://api.brisk.ie/uploads/files/job_proof/b.jpg
+ *                 isPartPayment: false
+ *             single:
+ *               value:
+ *                 photoUrl: https://api.brisk.ie/uploads/files/job_proof/example.jpg
+ *                 isPartPayment: false
  *     responses:
  *       200:
  *         description: Proof saved + job completed. Payment Request payload in data.
@@ -301,6 +310,8 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *                   vatAmount: 26
  *                   totalAmount: 156
  *                 paymentStatus: UNPAID
+ *                 flowStatus: COMPLETED
+ *                 isPartPayment: false
  *       400:
  *         description: Missing photos, not arrived, or cancelled
  *       409:

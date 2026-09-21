@@ -72,6 +72,8 @@ export const myJobSubmitCompletionBodySchema = z.object({
         .min(1)
         .max(20)
         .optional(),
+      /** false = Mark as Finished (full). true reserved / echoed for screen routing. */
+      isPartPayment: z.boolean().optional().default(false),
     })
     .superRefine((body, ctx) => {
       const urls = [
