@@ -36,9 +36,32 @@
  *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS | CANCELLED
  *         statusBadge:
  *           type: string
- *           enum: [Active, Completed, Awaiting Payout, Cancelled, Open]
+ *           description: Short UI badge derived from flowStatus
+ *         statusLabel:
+ *           type: string
+ *           description: Human-readable progress label e.g. Work Proof Pending
+ *         flowStatus:
+ *           type: string
+ *           enum:
+ *             - READY_TO_ARRIVE
+ *             - ARRIVED
+ *             - WORK_PROOF_PENDING
+ *             - READY_TO_FINISH
+ *             - SITE_VISIT_IN_PROGRESS
+ *             - SITE_VISIT_PAYMENT_PENDING
+ *             - AWAITING_PAYMENT
+ *             - COMPLETED
+ *             - CANCELLED
+ *             - OPEN
  *           description: |
- *             List + detail badge. Cancelled when job.status=CANCELLED or booking.status=CANCELLED.
+ *             Machine-readable progress for Flutter tabs.
+ *             ACTIVE tab = not finished (READY_TO_ARRIVE … AWAITING_PAYMENT).
+ *             COMPLETED tab = only flowStatus=COMPLETED (booking.finishedAt set).
+ *         arrivalStatus:
+ *           type: string
+ *           nullable: true
+ *           enum: [ARRIVING_SOON, ARRIVED]
+ *           description: Null when no booking yet
  *         siteVisitedBadge:
  *           type: boolean
  *           description: true if site visit is confirmed or completed for this trader

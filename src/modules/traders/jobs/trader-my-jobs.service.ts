@@ -28,7 +28,19 @@ const ACTIVE_JOB_STATUSES: JobStatus[] = [
   JobStatus.SCHEDULED,
   JobStatus.IN_PROGRESS,
 ];
-const COMPLETED_JOB_STATUSES: JobStatus[] = [JobStatus.COMPLETED, JobStatus.PAYMENT_PENDING];
+
+type FlowStatus =
+  | 'CANCELLED'
+  | 'READY_TO_ARRIVE'
+  | 'ARRIVED'
+  | 'WORK_PROOF_PENDING'
+  | 'READY_TO_FINISH'
+  | 'SITE_VISIT_IN_PROGRESS'
+  | 'SITE_VISIT_PAYMENT_PENDING'
+  | 'AWAITING_PAYMENT'
+  | 'COMPLETED'
+  | 'OPEN';
+
 const money = (v: Prisma.Decimal | number | null | undefined): number => {
   if (v == null) return 0;
   return Number(v);
@@ -118,33 +130,57 @@ const traderJobAccessWhere = (traderId: string): Prisma.JobWhereInput => ({
 
 const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput => {
   if (tab === 'ACTIVE') {
-    // Only customer-confirmed / assigned running jobs — not Discover quotes or waiting requests.
+    // Running jobs only. Arrived / proof / site-visit / awaiting payout stay here.
+    // Never include finishedAt jobs or JobStatus.COMPLETED.
     return {
       traderId,
-      OR: [
-        { status: { in: ACTIVE_JOB_STATUSES } },
+      AND: [
         {
-          booking: {
-            traderId,
-            status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
-          },
+          OR: [
+            { status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] } },
+            {
+              booking: {
+                traderId,
+                finishedAt: null,
+                status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
+              },
+            },
+          ],
         },
+        {
+          OR: [
+            { booking: null },
+            { booking: { finishedAt: null } },
+          ],
+        },
+        { status: { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] } },
       ],
     };
   }
   if (tab === 'COMPLETED') {
-    return { status: { in: COMPLETED_JOB_STATUSES } };
+    // Only after trader finishes the job (booking.finishedAt set) or status COMPLETED.
+    // Arrived / proof-pending / in-progress must NEVER appear here.
+    return {
+      traderId,
+      status: JobStatus.COMPLETED,
+      booking: {
+        traderId,
+        finishedAt: { not: null },
+      },
+    };
   }
   return {
     NOT: {
       OR: [
-        { status: { in: ACTIVE_JOB_STATUSES } },
-        { status: { in: COMPLETED_JOB_STATUSES } },
         {
-          booking: {
-            traderId,
-            status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
-          },
+          traderId,
+          status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] },
+          OR: [{ booking: null }, { booking: { finishedAt: null } }],
+        },
+        {
+          traderId,
+          status: JobStatus.COMPLETED,
+          booking: { finishedAt: { not: null } },
         },
       ],
     },
@@ -153,15 +189,105 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
 
 const statusBadgeFor = (
   status: JobStatus,
-  bookingStatus?: string | null
+  bookingStatus?: string | null,
+  flowStatus?: FlowStatus
 ): string => {
   if (status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED) {
     return 'Cancelled';
   }
+  if (flowStatus) {
+    switch (flowStatus) {
+      case 'READY_TO_ARRIVE':
+        return 'Ready to Arrive';
+      case 'ARRIVED':
+        return 'Job Arrived';
+      case 'WORK_PROOF_PENDING':
+        return 'Work Proof';
+      case 'READY_TO_FINISH':
+        return 'In Progress';
+      case 'SITE_VISIT_IN_PROGRESS':
+        return 'Site Visit';
+      case 'SITE_VISIT_PAYMENT_PENDING':
+        return 'Site Visit Fee';
+      case 'AWAITING_PAYMENT':
+        return 'Awaiting Payout';
+      case 'COMPLETED':
+        return 'Completed';
+      case 'CANCELLED':
+        return 'Cancelled';
+      default:
+        break;
+    }
+  }
   if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
-  if (COMPLETED_JOB_STATUSES.includes(status)) return 'Completed';
+  if (status === JobStatus.COMPLETED) return 'Completed';
   if (ACTIVE_JOB_STATUSES.includes(status)) return 'Active';
   return 'Open';
+};
+
+/** Machine-readable progress for Flutter ACTIVE vs COMPLETED UI. */
+const resolveFlowStatus = (input: {
+  status: JobStatus;
+  bookingStatus?: string | null;
+  arrivedAt?: Date | null;
+  finishedAt?: Date | null;
+  proofCount?: number;
+  siteVisitStatus?: TraderSiteVisitStatus | null;
+  hasSiteVisitPaymentRequest?: boolean;
+}): { flowStatus: FlowStatus; statusLabel: string } => {
+  const {
+    status,
+    bookingStatus,
+    arrivedAt,
+    finishedAt,
+    proofCount = 0,
+    siteVisitStatus = null,
+    hasSiteVisitPaymentRequest = false,
+  } = input;
+
+  if (status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED) {
+    return { flowStatus: 'CANCELLED', statusLabel: 'Cancelled' };
+  }
+
+  const visitActive =
+    siteVisitStatus != null &&
+    siteVisitStatus !== TraderSiteVisitStatus.CANCELLED &&
+    siteVisitStatus !== TraderSiteVisitStatus.COMPLETED;
+  const visitCompleted = siteVisitStatus === TraderSiteVisitStatus.COMPLETED;
+
+  if (visitActive && !arrivedAt && !finishedAt) {
+    return { flowStatus: 'SITE_VISIT_IN_PROGRESS', statusLabel: 'Site Visit In Progress' };
+  }
+  if (visitCompleted && !hasSiteVisitPaymentRequest && !finishedAt && status !== JobStatus.COMPLETED) {
+    return {
+      flowStatus: 'SITE_VISIT_PAYMENT_PENDING',
+      statusLabel: 'Site Visit Payment Pending',
+    };
+  }
+
+  if (finishedAt || status === JobStatus.COMPLETED) {
+    return { flowStatus: 'COMPLETED', statusLabel: 'Completed' };
+  }
+  if (status === JobStatus.PAYMENT_PENDING) {
+    return { flowStatus: 'AWAITING_PAYMENT', statusLabel: 'Awaiting Payment' };
+  }
+
+  if (arrivedAt && !finishedAt) {
+    if (proofCount <= 0) {
+      return { flowStatus: 'WORK_PROOF_PENDING', statusLabel: 'Work Proof Pending' };
+    }
+    return { flowStatus: 'READY_TO_FINISH', statusLabel: 'Ready to Finish' };
+  }
+
+  if (
+    status === JobStatus.ACCEPTED ||
+    status === JobStatus.SCHEDULED ||
+    status === JobStatus.IN_PROGRESS
+  ) {
+    return { flowStatus: 'READY_TO_ARRIVE', statusLabel: 'Ready to Arrive' };
+  }
+
+  return { flowStatus: 'OPEN', statusLabel: 'Open' };
 };
 
 const isJobCancelled = (
@@ -345,7 +471,8 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     booking?.traderId === traderId &&
     bookingArrived &&
     !bookingFinished &&
-    isInProgress;
+    isInProgress &&
+    job.photos.some((p) => p.kind === JobPhotoKind.PROOF);
   const canAddMaterials =
     assignedToThis &&
     (job.status === JobStatus.ACCEPTED ||
@@ -395,6 +522,13 @@ const resolvePrimaryAction = (
     return { primaryAction: 'VIEW_DETAILS' };
   }
   if (actions.canArrive) return { primaryAction: 'ARRIVE' };
+  if (
+    job.booking?.arrivedAt &&
+    !job.booking.finishedAt &&
+    !job.photos.some((p) => p.kind === JobPhotoKind.PROOF)
+  ) {
+    return { primaryAction: 'UPLOAD_PROOF' };
+  }
   if (actions.canFinish) return { primaryAction: 'FINISH' };
   if (actions.canCompleteSiteVisit) return { primaryAction: 'COMPLETE_SITE_VISIT' };
   if (actions.canRequestSiteVisitPayment) return { primaryAction: 'REQUEST_SITE_VISIT_PAYMENT' };
@@ -518,6 +652,20 @@ export const listMyJobs = async (
           take: 1,
         },
         booking: { select: { status: true, traderId: true, arrivedAt: true, finishedAt: true } },
+        photos: {
+          where: { kind: JobPhotoKind.PROOF },
+          select: { id: true },
+          take: 1,
+        },
+        paymentRequests: {
+          where: {
+            traderId: trader.id,
+            type: TraderPaymentRequestType.SITE_VISIT_FEE,
+            status: { not: TraderPaymentRequestStatus.CANCELLED },
+          },
+          select: { id: true },
+          take: 1,
+        },
       },
       orderBy: { updatedAt: 'desc' },
       skip: (page - 1) * limit,
@@ -551,16 +699,32 @@ export const listMyJobs = async (
       job.postcode?.trim() ||
       'Nearby';
 
+    const { flowStatus, statusLabel } = resolveFlowStatus({
+      status: job.status,
+      bookingStatus: job.booking?.status ?? null,
+      arrivedAt: job.booking?.arrivedAt ?? null,
+      finishedAt: job.booking?.finishedAt ?? null,
+      proofCount: job.photos.length,
+      siteVisitStatus: visit?.status ?? null,
+      hasSiteVisitPaymentRequest: job.paymentRequests.length > 0,
+    });
+
     let primaryAction = 'VIEW_DETAILS';
     if (isJobCancelled(job.status, job.booking?.status ?? null)) {
       primaryAction = 'VIEW_DETAILS';
+    } else if (flowStatus === 'SITE_VISIT_IN_PROGRESS') {
+      primaryAction = 'COMPLETE_SITE_VISIT';
+    } else if (flowStatus === 'SITE_VISIT_PAYMENT_PENDING') {
+      primaryAction = 'REQUEST_SITE_VISIT_PAYMENT';
     } else if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'ARRIVE';
+    } else if (flowStatus === 'WORK_PROOF_PENDING') {
+      primaryAction = 'UPLOAD_PROOF';
     } else if (job.booking?.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'FINISH';
-    } else if (job.status === JobStatus.PAYMENT_PENDING) {
+    } else if (job.status === JobStatus.PAYMENT_PENDING || flowStatus === 'AWAITING_PAYMENT') {
       primaryAction = 'AWAITING_PAYOUT';
-    } else if (COMPLETED_JOB_STATUSES.includes(job.status)) {
+    } else if (job.status === JobStatus.COMPLETED || flowStatus === 'COMPLETED') {
       primaryAction = 'VIEW_DETAILS';
     }
 
@@ -569,7 +733,14 @@ export const listMyJobs = async (
       jobRef: job.jobRef,
       title: job.title,
       status: job.status,
-      statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
+      statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
+      statusLabel,
+      flowStatus,
+      arrivalStatus: job.booking?.arrivedAt
+        ? 'ARRIVED'
+        : job.booking
+          ? 'ARRIVING_SOON'
+          : null,
       siteVisitedBadge: Boolean(siteVisitedBadge),
       customerName: job.customer.fullName,
       customerProfilePhotoUrl: job.customer.profilePhotoUrl,
@@ -687,6 +858,21 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     };
   });
 
+  const hasSiteVisitPaymentRequest = job.paymentRequests.some(
+    (p) =>
+      p.type === TraderPaymentRequestType.SITE_VISIT_FEE &&
+      p.status !== TraderPaymentRequestStatus.CANCELLED
+  );
+  const { flowStatus, statusLabel } = resolveFlowStatus({
+    status: job.status,
+    bookingStatus: job.booking?.status ?? null,
+    arrivedAt: job.booking?.arrivedAt ?? null,
+    finishedAt: job.booking?.finishedAt ?? null,
+    proofCount: proofPhotos.length,
+    siteVisitStatus: job.siteVisitRequests[0]?.status ?? null,
+    hasSiteVisitPaymentRequest,
+  });
+
   return {
     id: job.id,
     title: job.title,
@@ -694,7 +880,9 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     jobRef: job.jobRef,
     description: job.description,
     status: job.status,
-    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
+    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
+    statusLabel,
+    flowStatus,
     photos: customerPhotos.map((p) => p.photoUrl),
     proofPhotos: proofPhotos.map((p) => ({ id: p.id, photoUrl: p.photoUrl })),
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
@@ -925,6 +1113,10 @@ export const finishJob = async (userId: string, jobId: string) => {
   }
   if (job.booking.finishedAt) {
     throw new ConflictError('Job already finished.');
+  }
+  const proofCount = job.photos.filter((p) => p.kind === JobPhotoKind.PROOF).length;
+  if (proofCount <= 0) {
+    throw new BadRequestError('Upload at least one work-proof photo before finishing.');
   }
 
   const now = new Date();
