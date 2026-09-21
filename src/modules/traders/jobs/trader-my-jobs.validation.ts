@@ -58,6 +58,36 @@ export const myJobProofPhotoBodySchema = z.object({
   }),
 });
 
+/**
+ * Job Progress → Submit & Next
+ * One call: attach proof photo URL(s) + finish the job.
+ */
+export const myJobSubmitCompletionBodySchema = z.object({
+  params: jobIdParam,
+  body: z
+    .object({
+      photoUrl: z.string().url('photoUrl must be a valid URL.').optional(),
+      photoUrls: z
+        .array(z.string().url('Each photoUrl must be a valid URL.'))
+        .min(1)
+        .max(20)
+        .optional(),
+    })
+    .superRefine((body, ctx) => {
+      const urls = [
+        ...(body.photoUrls ?? []),
+        ...(body.photoUrl ? [body.photoUrl] : []),
+      ];
+      if (urls.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Provide photoUrl or photoUrls (at least one work-proof image URL).',
+          path: ['photoUrls'],
+        });
+      }
+    }),
+});
+
 export const myJobMessageBodySchema = z.object({
   params: jobIdParam,
   body: z.object({

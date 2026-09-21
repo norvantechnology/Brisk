@@ -137,6 +137,25 @@ export const finishJob = async (
   }
 };
 
+export const submitJobCompletion = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.submitJobCompletion(req.user!.id, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job proof submitted and job completed successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const upsertQuote = async (
   req: AuthenticatedRequest,
   res: Response,

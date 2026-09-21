@@ -1134,6 +1134,67 @@ export const finishJob = async (userId: string, jobId: string) => {
   return getMyJobDetail(userId, jobId);
 };
 
+/**
+ * Job Progress screen — Submit & Next.
+ * Saves proof photo URL(s) and finishes the job in one request.
+ */
+export const submitJobCompletion = async (
+  userId: string,
+  jobId: string,
+  input: { photoUrl?: string; photoUrls?: string[] }
+) => {
+  const trader = await getTraderContext(userId);
+  const job = await assertMyJob(trader.id, jobId);
+
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    throw new BadRequestError('This job was cancelled.');
+  }
+  if (!job.booking || job.booking.traderId !== trader.id) {
+    throw new BadRequestError('No booking found for this job.');
+  }
+  if (!job.booking.arrivedAt) {
+    throw new BadRequestError('Mark arrival before submitting completion.');
+  }
+  if (job.booking.finishedAt) {
+    throw new ConflictError('Job already finished.');
+  }
+
+  const photoUrls = [
+    ...new Set([...(input.photoUrls ?? []), ...(input.photoUrl ? [input.photoUrl] : [])]),
+  ].filter(Boolean);
+
+  if (photoUrls.length === 0) {
+    throw new BadRequestError('Provide at least one work-proof photo URL.');
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.jobPhoto.createMany({
+      data: photoUrls.map((photoUrl) => ({
+        jobId,
+        photoUrl,
+        kind: JobPhotoKind.PROOF,
+        uploadedById: userId,
+      })),
+    });
+    await tx.booking.update({
+      where: { id: job.booking!.id },
+      data: { finishedAt: now, status: BookingStatus.COMPLETED },
+    });
+    await tx.job.update({
+      where: { id: job.id },
+      data: { status: JobStatus.COMPLETED },
+    });
+  });
+
+  const detail = await getMyJobDetail(userId, jobId);
+  return {
+    ...detail,
+    proofPhotosAdded: photoUrls.length,
+    submittedAt: now,
+  };
+};
+
 export const upsertQuote = async (
   userId: string,
   jobId: string,

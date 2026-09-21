@@ -10,6 +10,7 @@ import {
   myJobMessageBodySchema,
   myJobProofPhotoBodySchema,
   myJobQuoteBodySchema,
+  myJobSubmitCompletionBodySchema,
   myJobsListQuerySchema,
 } from './trader-my-jobs.validation';
 
@@ -222,6 +223,65 @@ router.post('/mine/:id/arrive', validate(myJobIdParamSchema), controller.arriveA
  *         description: Already finished
  */
 router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJob);
+
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/submit:
+ *   post:
+ *     summary: Submit job proof + finish (Job Progress → Submit & Next)
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       **Mobile screen:** Job Progress (materials + Job Proof + **Submit & Next**).
+ *
+ *       Single API for Submit & Next — saves work-proof photo URL(s) and marks the job completed.
+ *       Prefer this over calling `POST .../proof-photos` then `POST .../finish` separately.
+ *
+ *       **Client flow:**
+ *       1. User picks image(s) on device
+ *       2. Upload file(s) via `POST /uploads` → get URL(s)
+ *       3. On Submit & Next → call this endpoint once with those URL(s)
+ *
+ *       Body accepts either `photoUrl` (single) or `photoUrls` (array). At least one is required.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photoUrl: { type: string, format: uri, description: Single proof image URL }
+ *               photoUrls:
+ *                 type: array
+ *                 items: { type: string, format: uri }
+ *                 description: One or more proof image URLs
+ *           examples:
+ *             single:
+ *               value:
+ *                 photoUrl: https://api.brisk.ie/uploads/files/job_proof/example.jpg
+ *             multiple:
+ *               value:
+ *                 photoUrls:
+ *                   - https://api.brisk.ie/uploads/files/job_proof/a.jpg
+ *                   - https://api.brisk.ie/uploads/files/job_proof/b.jpg
+ *     responses:
+ *       200:
+ *         description: Proof saved and job status COMPLETED. Returns process/detail payload.
+ *       400:
+ *         description: Missing photos, not arrived, or cancelled
+ *       409:
+ *         description: Already finished
+ */
+router.post(
+  '/mine/:id/submit',
+  validate(myJobSubmitCompletionBodySchema),
+  controller.submitJobCompletion
+);
 
 /**
  * @swagger
