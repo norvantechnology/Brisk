@@ -1221,30 +1221,57 @@ export const submitJobCompletion = async (
     });
   });
 
-  // Re-load after finish for payment summary (Payment Request screen — no extra GET needed).
+  // Re-load after finish for payment summary (Payment Request screen — no extra GET needed on first submit).
   const fresh = await assertMyJob(trader.id, jobId);
-  const paymentSummary = buildSubmitPaymentSummary(fresh);
-  const paymentStatus = resolvePaymentStatusLabel(fresh);
-
   return {
-    id: fresh.id,
-    jobRef: fresh.jobRef
-      ? fresh.jobRef.startsWith('#')
-        ? fresh.jobRef
-        : fresh.jobRef
-      : null,
-    title: fresh.title,
-    status: fresh.status,
-    statusBadge: statusBadgeFor(fresh.status, fresh.booking?.status ?? null, 'COMPLETED'),
-    completedAt: fresh.booking?.finishedAt ?? now,
-    location: {
-      fullAddress: formatFullAddress(fresh),
-    },
-    paymentSummary,
-    /** String enum for payment UI / future part-payment — not boolean. */
-    paymentStatus,
+    ...buildPaymentRequestScreenPayload(fresh),
     proofPhotosAdded: photoUrls.length,
   };
+};
+
+/** Shared Payment Request screen payload (after Mark as Finished / reopen app). */
+const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
+  const paymentSummary = buildSubmitPaymentSummary(job);
+  const paymentStatus = resolvePaymentStatusLabel(job);
+  const completedAt = job.booking?.finishedAt ?? job.updatedAt;
+
+  return {
+    id: job.id,
+    jobRef: job.jobRef ?? null,
+    title: job.title,
+    status: job.status,
+    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, 'COMPLETED'),
+    completedAt,
+    location: {
+      fullAddress: formatFullAddress(job),
+    },
+    paymentSummary,
+    /** String enum — not boolean. UNPAID | PENDING | PARTIALLY_PAID | PAID | … */
+    paymentStatus,
+    canRequestPayment:
+      job.status === JobStatus.COMPLETED ||
+      (Boolean(job.booking?.finishedAt) && job.status !== JobStatus.PAYMENT_PENDING),
+  };
+};
+
+/**
+ * Re-open Payment Request screen after Submit (e.g. user closed app and comes back).
+ * Same shape as POST /submit response — no need to cache locally.
+ */
+export const getPaymentRequestScreen = async (userId: string, jobId: string) => {
+  const trader = await getTraderContext(userId);
+  const job = await assertMyJob(trader.id, jobId);
+
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    throw new BadRequestError('This job was cancelled.');
+  }
+  if (!job.booking?.finishedAt && job.status !== JobStatus.COMPLETED && job.status !== JobStatus.PAYMENT_PENDING) {
+    throw new BadRequestError(
+      'Job is not ready for payment request. Submit job proof / finish first.'
+    );
+  }
+
+  return buildPaymentRequestScreenPayload(job);
 };
 
 export const upsertQuote = async (
@@ -1728,16 +1755,8 @@ export const sendMessage = async (userId: string, jobId: string, message: string
 };
 
 export const getPaymentSummary = async (userId: string, jobId: string) => {
-  const trader = await getTraderContext(userId);
-  const job = await assertMyJob(trader.id, jobId);
-  const breakdown = computePaymentBreakdown(job);
-
-  return {
-    ...breakdown,
-    jobRef: job.jobRef,
-    completedDate: job.booking?.finishedAt ?? job.updatedAt,
-    address: formatFullAddress(job),
-  };
+  // Alias of payment-request screen for reopen after Submit.
+  return getPaymentRequestScreen(userId, jobId);
 };
 
 const formatPaidDateLabel = (date: Date) => {

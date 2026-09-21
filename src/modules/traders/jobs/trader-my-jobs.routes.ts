@@ -544,11 +544,19 @@ router.post('/mine/:id/messages', validate(myJobMessageBodySchema), controller.s
 
 /**
  * @swagger
- * /traders/jobs/mine/{id}/payment-summary:
+ * /traders/jobs/mine/{id}/payment-request:
  *   get:
- *     summary: Payment summary before request
+ *     summary: Payment Request screen details (re-open after Submit / app relaunch)
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Use when trader already submitted proof (`POST .../submit`), closed the app,
+ *       then opens the job again → Payment Request screen.
+ *
+ *       **Same `data` shape as `POST /traders/jobs/mine/{id}/submit`**
+ *       (`paymentSummary`, `paymentStatus`, `location`, `completedAt`, …).
+ *
+ *       Alias: `GET /traders/jobs/mine/{id}/payment-summary`
  *     parameters:
  *       - in: path
  *         name: id
@@ -556,7 +564,32 @@ router.post('/mine/:id/messages', validate(myJobMessageBodySchema), controller.s
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Fee breakdown with VAT
+ *         description: Payment Request screen payload
+ *       400:
+ *         description: Job not finished / cancelled
+ */
+router.get(
+  '/mine/:id/payment-request',
+  validate(myJobIdParamSchema),
+  controller.getPaymentRequestScreen
+);
+
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/payment-summary:
+ *   get:
+ *     summary: Payment Request screen details (alias of payment-request)
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: Same response as GET /traders/jobs/mine/{id}/payment-request
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Fee breakdown / payment request payload
  */
 router.get(
   '/mine/:id/payment-summary',

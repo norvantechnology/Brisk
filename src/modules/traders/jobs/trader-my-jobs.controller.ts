@@ -319,7 +319,26 @@ export const getPaymentSummary = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Payment summary retrieved successfully.',
+      message: 'Payment details fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPaymentRequestScreen = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.getPaymentRequestScreen(req.user!.id, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Payment details fetched successfully.',
       data,
     });
   } catch (error) {
