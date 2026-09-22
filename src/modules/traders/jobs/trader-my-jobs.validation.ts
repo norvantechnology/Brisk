@@ -72,8 +72,13 @@ export const myJobSubmitCompletionBodySchema = z.object({
         .min(1)
         .max(20)
         .optional(),
-      /** false = Mark as Finished (full). true reserved / echoed for screen routing. */
+      /**
+       * false = Mark as Finished (complete job).
+       * true = Partial payment path (job stays ACTIVE) — requires amount + description.
+       */
       isPartPayment: z.boolean().optional().default(false),
+      amount: z.number().positive('Installment amount must be greater than 0.').optional(),
+      description: z.string().trim().max(2000).optional(),
     })
     .superRefine((body, ctx) => {
       const urls = [
@@ -86,6 +91,22 @@ export const myJobSubmitCompletionBodySchema = z.object({
           message: 'Provide photoUrl or photoUrls (at least one work-proof image URL).',
           path: ['photoUrls'],
         });
+      }
+      if (body.isPartPayment === true) {
+        if (body.amount == null || !(body.amount > 0)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'amount is required when isPartPayment is true.',
+            path: ['amount'],
+          });
+        }
+        if (!body.description || !body.description.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'description is required when isPartPayment is true.',
+            path: ['description'],
+          });
+        }
       }
     }),
 });

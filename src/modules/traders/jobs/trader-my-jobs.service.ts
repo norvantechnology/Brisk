@@ -1386,12 +1386,21 @@ export const finishJob = async (userId: string, jobId: string) => {
 
 /**
  * Job Progress screen — Submit & Next.
- * Saves proof photo URL(s) and finishes the job in one request.
+ *
+ * isPartPayment: false → save proof + finish job (COMPLETED).
+ * isPartPayment: true  → save proof + create partial payment request; job stays ACTIVE/IN_PROGRESS.
+ *   (Images stay on Submit screen; partial amount/description go in the same body.)
  */
 export const submitJobCompletion = async (
   userId: string,
   jobId: string,
-  input: { photoUrl?: string; photoUrls?: string[]; isPartPayment?: boolean }
+  input: {
+    photoUrl?: string;
+    photoUrls?: string[];
+    isPartPayment?: boolean;
+    amount?: number;
+    description?: string;
+  }
 ) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
@@ -1418,14 +1427,107 @@ export const submitJobCompletion = async (
     throw new BadRequestError('Provide at least one work-proof photo URL.');
   }
 
-  // Mark as Finished path (isPartPayment: false) — save proof + complete job.
-  // Part payment uses POST .../request-partial-payment (job stays IN_PROGRESS).
+  // ── Partial payment path (job stays ACTIVE) ──────────────────────────────
   if (isPartPayment) {
-    throw new BadRequestError(
-      'For part payment use POST /traders/jobs/mine/{id}/request-partial-payment. Submit with isPartPayment:false for Mark as Finished.'
+    const amount = round2(input.amount ?? 0);
+    const description = (input.description ?? '').trim();
+    if (!(amount > 0)) {
+      throw new BadRequestError('amount is required when isPartPayment is true.');
+    }
+    if (!description) {
+      throw new BadRequestError('description is required when isPartPayment is true.');
+    }
+
+    const breakdown = computePaymentBreakdown(job);
+    const jobAmount = breakdown.totalAmount;
+    const requests = await loadJobPaymentRequests(jobId, trader.id);
+    const alreadyPaid = sumPaidAmount(requests);
+    const remainingBalance = round2(Math.max(0, jobAmount - alreadyPaid));
+
+    if (remainingBalance <= 0) {
+      throw new ConflictError('Job is already fully paid.');
+    }
+    if (amount > remainingBalance) {
+      throw new BadRequestError(
+        `Installment amount cannot exceed remaining balance (${remainingBalance}).`
+      );
+    }
+
+    const openPartial = requests.find(
+      (r) =>
+        r.type === TraderPaymentRequestType.PARTIAL &&
+        r.status === TraderPaymentRequestStatus.SENT
     );
+    if (openPartial) {
+      throw new ConflictError(
+        'A partial payment request is already pending. Wait for the customer to pay or cancel it first.'
+      );
+    }
+
+    const paymentRequest = await prisma.$transaction(async (tx) => {
+      await tx.jobPhoto.createMany({
+        data: photoUrls.map((photoUrl) => ({
+          jobId,
+          photoUrl,
+          kind: JobPhotoKind.PROOF,
+          uploadedById: userId,
+        })),
+      });
+
+      return tx.traderPaymentRequest.create({
+        data: {
+          jobId,
+          traderId: trader.id,
+          customerId: job.customerId,
+          type: TraderPaymentRequestType.PARTIAL,
+          status: TraderPaymentRequestStatus.SENT,
+          description,
+          serviceCharge: amount,
+          materialsTotal: 0,
+          siteVisitFee: 0,
+          platformFee: 0,
+          vatRate: 0,
+          vatAmount: 0,
+          totalAmount: amount,
+        },
+      });
+    });
+
+    const paymentStatus = resolvePartialPaymentStatus(jobAmount, alreadyPaid, true);
+    const remainingAfter = round2(Math.max(0, jobAmount - alreadyPaid));
+
+    return {
+      id: job.id,
+      jobRef: job.jobRef,
+      title: job.title,
+      status: job.status,
+      statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
+      paymentRequestId: paymentRequest.id,
+      paymentStatus,
+      isPartPayment: true,
+      flowStatus: 'PARTIAL_PAYMENT_PENDING' as FlowStatus,
+      statusLabel: 'Partial Payment Pending',
+      proofPhotosAdded: photoUrls.length,
+      installment: {
+        amount,
+        description,
+        netDue: amount,
+        status: paymentRequest.status,
+      },
+      jobAmount,
+      alreadyPaid,
+      remainingBalance: remainingAfter,
+      location: {
+        fullAddress: formatFullAddress(job),
+      },
+      duePaymentSummary: {
+        installmentDueAmount: amount,
+        netDue: amount,
+      },
+    };
   }
 
+  // ── Mark as Finished path ────────────────────────────────────────────────
   const now = new Date();
   await prisma.$transaction(async (tx) => {
     await tx.jobPhoto.createMany({
