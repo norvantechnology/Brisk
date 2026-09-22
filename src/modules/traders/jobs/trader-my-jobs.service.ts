@@ -2228,6 +2228,66 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
   };
 };
 
+const formatInstallmentPaymentDateLabel = (date: Date) => {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} • ${hours}:${minutes} ${ampm}`;
+};
+
+/**
+ * Installment Payments History screen — flat list for Transaction History UI.
+ */
+export const listInstallmentPayments = async (userId: string, jobId: string) => {
+  const trader = await getTraderContext(userId);
+  await assertMyJob(trader.id, jobId);
+
+  const requests = await loadJobPaymentRequests(jobId, trader.id);
+  const installments = requests
+    .filter((r) => r.type === TraderPaymentRequestType.PARTIAL)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  return installments.map((r, index) => {
+    const paymentDate =
+      r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : r.createdAt;
+    const txnSuffix = r.id.replace(/-/g, '').slice(-6).toUpperCase();
+    const transactionId = `TXN-${txnSuffix}`;
+    const title =
+      r.description?.trim() ||
+      (index === 0
+        ? 'Initial Deposit'
+        : index === installments.length - 1 && installments.length > 1
+          ? 'Final Installment'
+          : `Installment ${index + 1}`);
+
+    return {
+      id: transactionId,
+      title,
+      amount: money(r.totalAmount),
+      currencyCode: r.currencyCode || 'EUR',
+      currencySymbol: (r.currencyCode || 'EUR') === 'GBP' ? '£' : '€',
+      paymentDate,
+      formattedPaymentDate: formatInstallmentPaymentDateLabel(paymentDate),
+      transactionId,
+    };
+  });
+};
+
 /**
  * Send partial installment payment request (separate from full-job request-payment).
  * Optional proof photo URL(s) can be attached (same URLs from POST /uploads) — job stays IN_PROGRESS.

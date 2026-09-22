@@ -673,6 +673,31 @@ router.get(
 
 /**
  * @swagger
+ * /traders/jobs/mine/{id}/installment-payments:
+ *   get:
+ *     summary: Installment Payments History listing
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       **Screen:** Installment Payments History → Transaction History list.
+ *       Returns a flat array (not nested) matching mobile UI cards.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Installment list
+ */
+router.get(
+  '/mine/:id/installment-payments',
+  validate(myJobIdParamSchema),
+  controller.listInstallmentPayments
+);
+
+/**
+ * @swagger
  * /traders/jobs/mine/{id}/request-partial-payment:
  *   post:
  *     summary: Send partial installment payment request
