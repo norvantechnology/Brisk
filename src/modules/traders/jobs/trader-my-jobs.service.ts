@@ -1075,6 +1075,87 @@ const formatOutcomeDateLabel = (date: Date, kind: 'COMPLETED' | 'CANCELLED') => 
   return `${prefix} ${month} ${day}, ${year} • ${hours}:${minutes} ${ampm}`;
 };
 
+const formatShortDateTimeLabel = (date: Date) => {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} • ${hours}:${minutes} ${ampm}`;
+};
+
+const formatTimelineTimeLabel = (date: Date) => {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${months[date.getMonth()]} ${date.getDate()}, ${hours}:${minutes} ${ampm}`;
+};
+
+const buildCancelledTimeline = (job: MyJobRow, cancelledAt: Date) => {
+  const steps: Array<{
+    key: string;
+    title: string;
+    time: string;
+    isCompleted: boolean;
+    isCancelledStep?: boolean;
+  }> = [
+    {
+      key: 'JOB_REQUESTED',
+      title: 'Job Requested',
+      time: formatTimelineTimeLabel(job.createdAt),
+      isCompleted: true,
+    },
+  ];
+
+  const confirmedAt = job.booking?.createdAt ?? null;
+  if (confirmedAt) {
+    steps.push({
+      key: 'TRADER_CONFIRMED',
+      title: 'Trader Confirmed',
+      time: formatTimelineTimeLabel(confirmedAt),
+      isCompleted: true,
+    });
+  }
+
+  steps.push({
+    key: 'CANCELLED',
+    title: 'Cancelled by Customer',
+    time: formatTimelineTimeLabel(cancelledAt),
+    isCompleted: true,
+    isCancelledStep: true,
+  });
+
+  return steps;
+};
+
 const resolvePaymentStatusLabel = (job: MyJobRow): string => {
   const invoice = job.booking?.invoice;
   if (invoice?.status === 'PAID') return 'PAID';
@@ -1164,22 +1245,43 @@ export const getJobOutcomeDetail = async (
   const proofPhotos = job.photos.filter((p) => p.kind === JobPhotoKind.PROOF);
   const review = job.booking?.ratingReview ?? null;
   const invoice = job.booking?.invoice ?? null;
-  const categoryLabel = (
-    job.subcategory?.name ||
-    job.category?.name ||
-    'SERVICE'
-  ).toUpperCase();
+  const categoryLabel = job.subcategory?.name || job.category?.name || 'SERVICE';
+
+  if (expected === 'CANCELLED') {
+    return {
+      id: job.id,
+      jobRef: job.jobRef ? job.jobRef.replace(/^#/, '') : null,
+      title: job.title,
+      category: categoryLabel,
+      status: JobStatus.CANCELLED,
+      statusBadge: 'Cancelled',
+      cancellationTitle: 'Job Terminated',
+      cancellationReason:
+        'Customer requested cancellation due to personal scheduling conflict.',
+      cancelledBy: 'CUSTOMER',
+      cancelledAt: eventAt,
+      formattedCancelledDate: formatShortDateTimeLabel(eventAt),
+      fullAddress: formatFullAddress(job),
+      latitude: job.latitude ?? job.address?.latitude ?? null,
+      longitude: job.longitude ?? job.address?.longitude ?? null,
+      customerId: job.customer.id,
+      customerName: job.customer.fullName,
+      customerProfileImage: job.customer.profilePhotoUrl,
+      customerPhoneNumber: job.phoneNumber || job.customer.mobileNumber || null,
+      timeline: buildCancelledTimeline(job, eventAt),
+    };
+  }
 
   return {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
     title: job.title,
-    category: categoryLabel,
-    status: cancelled ? JobStatus.CANCELLED : job.status,
+    category: categoryLabel.toUpperCase(),
+    status: job.status,
     statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
-    completedAt: expected === 'COMPLETED' ? eventAt : null,
-    cancelledAt: expected === 'CANCELLED' ? eventAt : null,
-    formattedCompletedDate: formatOutcomeDateLabel(eventAt, expected),
+    completedAt: eventAt,
+    cancelledAt: null,
+    formattedCompletedDate: formatOutcomeDateLabel(eventAt, 'COMPLETED'),
     customer: {
       id: job.customer.id,
       name: job.customer.fullName,
