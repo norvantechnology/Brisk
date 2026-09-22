@@ -245,11 +245,11 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *
  *       Body accepts either `photoUrl` (single) or `photoUrls` (array). At least one is required.
  *
- *       **`isPartPayment` (required meaning):**
- *       - `false` → Mark as Finished: save proof + complete job. Response `flowStatus=COMPLETED`.
- *       - `true` → Partial payment: save proof + create installment request; **job stays ACTIVE**.
- *         Also send `amount` + `description`. Response `flowStatus=PARTIAL_PAYMENT_PENDING`.
- *         (Images stay on Submit screen — Partial Payment screen does not need image upload.)
+ *       **`isPartPayment`:**
+ *       - `false` → Mark as Finished: save proof + complete job → `flowStatus=COMPLETED`
+ *       - `true` → Partial path: save proof only; job stays ACTIVE → then call
+ *         `POST .../request-partial-payment` with `amount` + `description`
+ *         (images already on Submit screen; Partial Payment screen needs no upload)
  *
  *       Response includes `paymentStatus`, `flowStatus`, `isPartPayment` for screen routing.
  *
@@ -280,33 +280,25 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *               isPartPayment:
  *                 type: boolean
  *                 default: false
- *                 description: false = finish job; true = partial payment (job stays ACTIVE)
- *               amount:
- *                 type: number
- *                 description: Required when isPartPayment is true
- *               description:
- *                 type: string
- *                 description: Required when isPartPayment is true
+ *                 description: false = finish job; true = save proof only then use request-partial-payment
  *           examples:
  *             markFinished:
  *               value:
  *                 photoUrls:
  *                   - https://api.brisk.ie/uploads/files/job_proof/a.jpg
  *                 isPartPayment: false
- *             partialPayment:
+ *             partialProofOnly:
  *               value:
  *                 photoUrls:
  *                   - https://api.brisk.ie/uploads/files/job_proof/a.jpg
  *                 isPartPayment: true
- *                 amount: 50
- *                 description: Materials instalment
  *             single:
  *               value:
  *                 photoUrl: https://api.brisk.ie/uploads/files/job_proof/example.jpg
  *                 isPartPayment: false
  *     responses:
  *       200:
- *         description: Proof saved. Finished (false) or partial pending (true).
+ *         description: Proof saved. Finished (false) or ready for partial request (true).
  *         content:
  *           application/json:
  *             example:
