@@ -2119,24 +2119,6 @@ export const getPaymentSummary = async (userId: string, jobId: string) => {
   return getPaymentRequestScreen(userId, jobId);
 };
 
-const formatPaidDateLabel = (date: Date) => {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-};
-
 const loadJobPaymentRequests = async (jobId: string, traderId: string) =>
   prisma.traderPaymentRequest.findMany({
     where: {
@@ -2146,87 +2128,6 @@ const loadJobPaymentRequests = async (jobId: string, traderId: string) =>
     },
     orderBy: { createdAt: 'desc' },
   });
-
-/**
- * Payment Request screen (partial installment) — GET data for Job in Progress → Request Partial Payment.
- */
-export const getPartialPaymentScreen = async (userId: string, jobId: string) => {
-  const trader = await getTraderContext(userId);
-  const job = await assertMyJob(trader.id, jobId);
-
-  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
-    throw new BadRequestError('This job was cancelled.');
-  }
-  if (!job.booking || job.booking.traderId !== trader.id) {
-    throw new BadRequestError('No booking found for this job.');
-  }
-  if (!job.booking.arrivedAt) {
-    throw new BadRequestError('Mark arrival before requesting partial payment.');
-  }
-
-  const breakdown = computePaymentBreakdown(job);
-  const jobAmount = breakdown.totalAmount;
-  const requests = await loadJobPaymentRequests(jobId, trader.id);
-  const alreadyPaid = sumPaidAmount(requests);
-  const remainingBalance = round2(Math.max(0, jobAmount - alreadyPaid));
-  const hasOpenPartial = requests.some(
-    (r) =>
-      r.type === TraderPaymentRequestType.PARTIAL &&
-      r.status === TraderPaymentRequestStatus.SENT
-  );
-  const paymentStatus = resolvePartialPaymentStatus(jobAmount, alreadyPaid, hasOpenPartial);
-
-  const previousPayments = requests
-    .filter(
-      (r) =>
-        r.type === TraderPaymentRequestType.PARTIAL ||
-        r.type === TraderPaymentRequestType.FULL_JOB ||
-        r.status === TraderPaymentRequestStatus.PAID
-    )
-    .map((r) => ({
-      id: r.id,
-      title:
-        r.description?.trim() ||
-        (r.type === TraderPaymentRequestType.PARTIAL
-          ? 'Installment'
-          : r.type === TraderPaymentRequestType.SITE_VISIT_FEE
-            ? 'Site Visit Fee'
-            : 'Job Payment'),
-      description: r.description,
-      amount: money(r.totalAmount),
-      status: r.status,
-      statusLabel:
-        r.status === TraderPaymentRequestStatus.PAID
-          ? `Paid • ${formatPaidDateLabel(r.updatedAt)}`
-          : r.status === TraderPaymentRequestStatus.SENT
-            ? 'Pending'
-            : r.status,
-      createdAt: r.createdAt,
-      paidAt: r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : null,
-      type: r.type,
-    }));
-
-  return {
-    id: job.id,
-    jobRef: job.jobRef,
-    title: job.title,
-    status: job.status,
-    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
-    progressLabel: job.booking?.finishedAt ? 'COMPLETED' : 'IN PROGRESS',
-    location: {
-      fullAddress: formatFullAddress(job),
-    },
-    jobAmount,
-    alreadyPaid,
-    remainingBalance,
-    currencyCode: 'EUR',
-    paymentStatus,
-    previousPayments,
-    escrowNote:
-      'Funds are securely held and released only upon customer confirmation of milestone completion.',
-    canRequestPartialPayment: remainingBalance > 0 && !job.booking.finishedAt,
-  };
-};
 
 const formatInstallmentPaymentDateLabel = (date: Date) => {
   const months = [
@@ -2251,9 +2152,10 @@ const formatInstallmentPaymentDateLabel = (date: Date) => {
 };
 
 /**
- * Installment Payments History screen — flat list for Transaction History UI.
+ * Installment Payments History — flat list for Transaction History UI cards.
+ * Used by GET .../partial-payment and GET .../installment-payments.
  */
-export const listInstallmentPayments = async (userId: string, jobId: string) => {
+const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   await assertMyJob(trader.id, jobId);
 
@@ -2294,6 +2196,14 @@ export const listInstallmentPayments = async (userId: string, jobId: string) => 
     };
   });
 };
+
+/** GET .../partial-payment — same flat installment history list. */
+export const getPartialPaymentScreen = async (userId: string, jobId: string) =>
+  buildInstallmentPaymentList(userId, jobId);
+
+/** GET .../installment-payments — same flat installment history list. */
+export const listInstallmentPayments = async (userId: string, jobId: string) =>
+  buildInstallmentPaymentList(userId, jobId);
 
 /**
  * Send partial installment payment request (separate from full-job request-payment).

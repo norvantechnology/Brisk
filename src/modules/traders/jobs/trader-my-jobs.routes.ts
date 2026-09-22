@@ -646,14 +646,13 @@ router.post(
  * @swagger
  * /traders/jobs/mine/{id}/partial-payment:
  *   get:
- *     summary: Partial payment screen (Job in Progress → Request Partial Payment)
+ *     summary: Installment Payments History (flat list)
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Returns Job Amount, Already Paid, remaining balance, previous payments, and `paymentStatus`
- *       for the Payment Request (installment) screen.
- *
- *       `paymentStatus` is a string: `UNPAID` | `PENDING` | `PARTIALLY_PAID` | `PAID` | …
+ *       **Screen:** Installment Payments History → Transaction History list.
+ *       Returns a flat `data[]` with title, amount, amountLabel, formattedPaymentDate, transactionId.
+ *       Same payload as `GET .../installment-payments`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -661,9 +660,7 @@ router.post(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Partial payment screen payload
- *       400:
- *         description: Not arrived / cancelled
+ *         description: Flat installment list
  */
 router.get(
   '/mine/:id/partial-payment',

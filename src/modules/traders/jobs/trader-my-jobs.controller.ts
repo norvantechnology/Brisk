@@ -376,7 +376,7 @@ export const getPartialPaymentScreen = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Partial payment details fetched successfully.',
+      message: 'Payment installments fetched successfully',
       data,
     });
   } catch (error) {
