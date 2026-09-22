@@ -273,7 +273,7 @@ const resolveFlowStatus = (input: {
     proofCount = 0,
     siteVisitStatus = null,
     hasSiteVisitPaymentRequest = false,
-    hasOpenPartialPayment = false,
+    hasOpenPartialPayment: _hasOpenPartialPayment = false,
     alreadyPaidAmount = 0,
     jobAmount = 0,
   } = input;
@@ -298,18 +298,15 @@ const resolveFlowStatus = (input: {
     };
   }
 
-  // Part-payment states (Payment Request / in-progress installment flow)
-  if (hasOpenPartialPayment) {
-    return { flowStatus: 'PARTIAL_PAYMENT_PENDING', statusLabel: 'Partial Payment Pending' };
-  }
-  if (alreadyPaidAmount > 0 && jobAmount > 0 && alreadyPaidAmount < jobAmount && !finishedAt) {
-    return { flowStatus: 'PARTIALLY_PAID', statusLabel: 'Partially Paid' };
-  }
-  if (alreadyPaidAmount > 0 && jobAmount > 0 && alreadyPaidAmount < jobAmount && finishedAt) {
-    return { flowStatus: 'PARTIALLY_PAID', statusLabel: 'Partially Paid' };
-  }
+  // While job is still in progress, keep proof-screen statuses so app opens
+  // Job Proof (not a separate awaiting-partial screen). Partial state is exposed
+  // via isPartialJob + paymentStatus instead.
+  // (PARTIAL_PAYMENT_PENDING / PARTIALLY_PAID only matter after finish / payout UIs.)
 
   if (finishedAt || status === JobStatus.COMPLETED) {
+    if (alreadyPaidAmount > 0 && jobAmount > 0 && alreadyPaidAmount < jobAmount) {
+      return { flowStatus: 'PARTIALLY_PAID', statusLabel: 'Partially Paid' };
+    }
     return { flowStatus: 'COMPLETED', statusLabel: 'Completed' };
   }
   if (status === JobStatus.PAYMENT_PENDING) {
@@ -491,6 +488,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
       canRequestPartialPayment: false,
       canCompleteSiteVisit: false,
       canRequestSiteVisitPayment: false,
+      isPartialJob: false,
     };
   }
 
@@ -503,6 +501,25 @@ const buildActions = (job: MyJobRow, traderId: string) => {
   const bookingFinished = Boolean(booking?.finishedAt);
   const isInProgress =
     job.status === JobStatus.IN_PROGRESS || booking?.status === BookingStatus.IN_PROGRESS;
+
+  const alreadyPaidAmount = sumPaidAmount(job.paymentRequests);
+  const hasOpenPartial = job.paymentRequests.some(
+    (p) =>
+      p.type === TraderPaymentRequestType.PARTIAL &&
+      p.status === TraderPaymentRequestStatus.SENT
+  );
+  const hasAnyPartial = job.paymentRequests.some(
+    (p) =>
+      p.type === TraderPaymentRequestType.PARTIAL &&
+      p.status !== TraderPaymentRequestStatus.CANCELLED
+  );
+  const breakdown = computePaymentBreakdown(job);
+  const jobAmount = breakdown.totalAmount;
+  const remainingBalance = round2(Math.max(0, jobAmount - alreadyPaidAmount));
+  /** Once partial flow started, stay on Job Proof until fully paid — no Submit & Next. */
+  const isPartialJob = !bookingFinished && (hasAnyPartial || alreadyPaidAmount > 0);
+  const blockFinishForPartial = isPartialJob && remainingBalance > 0;
+
   const canArrive =
     Boolean(booking) &&
     booking?.traderId === traderId &&
@@ -517,7 +534,8 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     bookingArrived &&
     !bookingFinished &&
     isInProgress &&
-    job.photos.some((p) => p.kind === JobPhotoKind.PROOF);
+    job.photos.some((p) => p.kind === JobPhotoKind.PROOF) &&
+    !blockFinishForPartial;
   const canAddMaterials =
     assignedToThis &&
     (job.status === JobStatus.ACCEPTED ||
@@ -543,7 +561,9 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     bookingArrived &&
     !bookingFinished &&
     isInProgress &&
-    job.status !== JobStatus.CANCELLED;
+    job.status !== JobStatus.CANCELLED &&
+    remainingBalance > 0 &&
+    !hasOpenPartial;
   const canCompleteSiteVisit = Boolean(hasActiveVisit) && !visitCompleted;
   const canRequestSiteVisitPayment =
     Boolean(visitCompleted) &&
@@ -563,6 +583,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     canRequestPartialPayment,
     canCompleteSiteVisit,
     canRequestSiteVisitPayment,
+    isPartialJob,
   };
 };
 
@@ -574,6 +595,13 @@ const resolvePrimaryAction = (
     return { primaryAction: 'VIEW_DETAILS' };
   }
   if (actions.canArrive) return { primaryAction: 'ARRIVE' };
+  // Partial job: stay on Job Proof — only part-payment CTA (not Submit & Next / FINISH)
+  if (actions.isPartialJob && job.booking?.arrivedAt && !job.booking?.finishedAt) {
+    if (!actions.canRequestPartialPayment) {
+      return { primaryAction: 'AWAITING_PARTIAL_PAYMENT' };
+    }
+    return { primaryAction: 'REQUEST_PARTIAL_PAYMENT' };
+  }
   if (
     job.booking?.arrivedAt &&
     !job.booking.finishedAt &&
@@ -766,10 +794,18 @@ export const listMyJobs = async (
         p.type === TraderPaymentRequestType.PARTIAL &&
         p.status === TraderPaymentRequestStatus.SENT
     );
+    const hasAnyPartial = job.paymentRequests.some(
+      (p) =>
+        p.type === TraderPaymentRequestType.PARTIAL &&
+        p.status !== TraderPaymentRequestStatus.CANCELLED
+    );
     const alreadyPaidAmount = sumPaidAmount(job.paymentRequests);
     const jobAmountEstimate = round2(
       (quotePrice ?? 0) + PLATFORM_FEE + ((quotePrice ?? 0) + PLATFORM_FEE) * VAT_RATE
     );
+    const remainingBalance = round2(Math.max(0, jobAmountEstimate - alreadyPaidAmount));
+    const isPartialJob =
+      !job.booking?.finishedAt && (hasAnyPartial || alreadyPaidAmount > 0);
 
     const { flowStatus, statusLabel } = resolveFlowStatus({
       status: job.status,
@@ -797,12 +833,17 @@ export const listMyJobs = async (
       primaryAction = 'COMPLETE_SITE_VISIT';
     } else if (flowStatus === 'SITE_VISIT_PAYMENT_PENDING') {
       primaryAction = 'REQUEST_SITE_VISIT_PAYMENT';
-    } else if (flowStatus === 'PARTIAL_PAYMENT_PENDING') {
-      primaryAction = 'AWAITING_PARTIAL_PAYMENT';
+    } else if (isPartialJob && job.booking?.arrivedAt && !job.booking?.finishedAt) {
+      // Stay on Job Proof screen — only part-payment CTA until fully paid
+      primaryAction = hasOpenPartial
+        ? 'AWAITING_PARTIAL_PAYMENT'
+        : remainingBalance > 0
+          ? 'REQUEST_PARTIAL_PAYMENT'
+          : 'FINISH';
     } else if (flowStatus === 'WORK_PROOF_PENDING') {
       primaryAction = 'UPLOAD_PROOF';
     } else if (job.booking?.arrivedAt && !job.booking.finishedAt) {
-      primaryAction = flowStatus === 'PARTIALLY_PAID' ? 'REQUEST_PARTIAL_PAYMENT' : 'FINISH';
+      primaryAction = 'FINISH';
     } else if (job.status === JobStatus.PAYMENT_PENDING || flowStatus === 'AWAITING_PAYMENT') {
       primaryAction = 'AWAITING_PAYOUT';
     } else if (job.status === JobStatus.COMPLETED || flowStatus === 'COMPLETED') {
@@ -825,7 +866,8 @@ export const listMyJobs = async (
         alreadyPaidAmount,
         hasOpenPartial
       ),
-      isPartPayment: hasOpenPartial || alreadyPaidAmount > 0,
+      isPartPayment: isPartialJob,
+      isPartialJob,
       siteVisit: Boolean(job.siteVisitRequested || visit),
       siteVisitRequested: Boolean(job.siteVisitRequested),
       arrivalStatus: job.booking?.arrivedAt
@@ -960,6 +1002,11 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
       p.type === TraderPaymentRequestType.PARTIAL &&
       p.status === TraderPaymentRequestStatus.SENT
   );
+  const hasAnyPartial = job.paymentRequests.some(
+    (p) =>
+      p.type === TraderPaymentRequestType.PARTIAL &&
+      p.status !== TraderPaymentRequestStatus.CANCELLED
+  );
   const alreadyPaidAmount = job.paymentRequests
     .filter((p) => p.status === TraderPaymentRequestStatus.PAID)
     .reduce((s, p) => s + money(p.totalAmount), 0);
@@ -972,6 +1019,8 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     alreadyPaidAmount,
     hasOpenPartialPayment
   );
+  const isPartialJob =
+    !job.booking?.finishedAt && (hasAnyPartial || alreadyPaidAmount > 0);
   const { flowStatus, statusLabel } = resolveFlowStatus({
     status: job.status,
     bookingStatus: job.booking?.status ?? null,
@@ -996,7 +1045,6 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     statusLabel,
     flowStatus,
     paymentStatus,
-    isPartPayment: hasOpenPartialPayment || alreadyPaidAmount > 0,
     siteVisit: {
       ...siteVisitBlock(job),
       requested: Boolean(job.siteVisitRequested),
@@ -1038,6 +1086,8 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     negotiationMessages,
     ...actions,
     ...primary,
+    isPartialJob,
+    isPartPayment: isPartialJob,
     estimatedEarnings,
     durationLabel: job.durationLabel,
     arrivalStatus: arrivalStatus(job),
@@ -1456,13 +1506,19 @@ export const submitJobCompletion = async (
       title: fresh.title,
       status: fresh.status,
       statusBadge: statusBadgeFor(fresh.status, fresh.booking?.status ?? null),
-      // Not PARTIAL_PAYMENT_PENDING yet — installment not sent until request-partial-payment
-      flowStatus: 'READY_TO_FINISH' as FlowStatus,
-      statusLabel: 'Ready for Partial Payment',
+      flowStatus: (photoUrls.length > 0 || fresh.photos.some((p) => p.kind === JobPhotoKind.PROOF)
+        ? 'READY_TO_FINISH'
+        : 'WORK_PROOF_PENDING') as FlowStatus,
+      statusLabel: 'Work Proof — Partial Job',
       isPartPayment: true,
+      isPartialJob: true,
       paymentStatus,
       proofPhotosAdded: photoUrls.length,
-      canRequestPartialPayment: remainingBalance > 0 && !fresh.booking?.finishedAt,
+      canFinish: false,
+      canRequestPartialPayment: remainingBalance > 0 && !hasOpenPartial && !fresh.booking?.finishedAt,
+      primaryAction: hasOpenPartial
+        ? 'AWAITING_PARTIAL_PAYMENT'
+        : 'REQUEST_PARTIAL_PAYMENT',
       jobAmount,
       alreadyPaid,
       remainingBalance,
@@ -2257,6 +2313,10 @@ export const requestPartialPayment = async (
   const alreadyPaidAfter = alreadyPaid;
   const remainingAfter = round2(Math.max(0, jobAmount - alreadyPaidAfter));
   const paymentStatus = resolvePartialPaymentStatus(jobAmount, alreadyPaidAfter, true);
+  const proofCount = job.photos.filter((p) => p.kind === JobPhotoKind.PROOF).length + photoUrls.length;
+  const flowStatus = (
+    proofCount > 0 ? 'READY_TO_FINISH' : 'WORK_PROOF_PENDING'
+  ) as FlowStatus;
 
   return {
     paymentRequestId: paymentRequest.id,
@@ -2266,9 +2326,14 @@ export const requestPartialPayment = async (
     status: job.status,
     paymentStatus,
     isPartPayment: true,
-    flowStatus: 'PARTIAL_PAYMENT_PENDING' as FlowStatus,
-    statusLabel: 'Partial Payment Pending',
+    isPartialJob: true,
+    // Stay on Job Proof screen — do not use PARTIAL_PAYMENT_PENDING for navigation
+    flowStatus,
+    statusLabel: proofCount > 0 ? 'Ready to Finish' : 'Work Proof Pending',
     proofPhotosAdded: photoUrls.length,
+    canFinish: false,
+    canRequestPartialPayment: false,
+    primaryAction: 'AWAITING_PARTIAL_PAYMENT',
     installment: {
       amount,
       description,
