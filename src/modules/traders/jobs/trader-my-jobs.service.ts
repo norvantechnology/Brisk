@@ -1530,6 +1530,26 @@ export const submitJobCompletion = async (
   }
 
   // ── Mark as Finished path ────────────────────────────────────────────────
+  // Once partial flow started and balance remains, force Job Proof + part payment only
+  // (Submit & Next / finish must stay disabled until fully paid).
+  {
+    const requests = await loadJobPaymentRequests(jobId, trader.id);
+    const alreadyPaid = sumPaidAmount(requests);
+    const hasAnyPartial = requests.some(
+      (r) =>
+        r.type === TraderPaymentRequestType.PARTIAL &&
+        r.status !== TraderPaymentRequestStatus.CANCELLED
+    );
+    const breakdown = computePaymentBreakdown(job);
+    const remainingBalance = round2(Math.max(0, breakdown.totalAmount - alreadyPaid));
+    const isPartialJob = hasAnyPartial || alreadyPaid > 0;
+    if (isPartialJob && remainingBalance > 0) {
+      throw new BadRequestError(
+        'This is a partial payment job. Full finish (Submit & Next) is disabled until the remaining balance is paid. Use part payment / request-partial-payment, or wait until fully paid.'
+      );
+    }
+  }
+
   const now = new Date();
   await prisma.$transaction(async (tx) => {
     await tx.jobPhoto.createMany({
@@ -1555,6 +1575,7 @@ export const submitJobCompletion = async (
   return {
     ...payload,
     isPartPayment: false,
+    isPartialJob: false,
     flowStatus: 'COMPLETED' as FlowStatus,
     statusLabel: 'Completed',
     proofPhotosAdded: photoUrls.length,
