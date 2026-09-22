@@ -106,6 +106,12 @@ export const myJobPartialPaymentBodySchema = z.object({
       .trim()
       .min(1, 'Description for this installment is required.')
       .max(2000),
+    /** Optional work-proof image URL(s). Upload via POST /uploads first. */
+    photoUrl: z.string().url('photoUrl must be a valid URL.').optional(),
+    photoUrls: z
+      .array(z.string().url('Each photoUrl must be a valid URL.'))
+      .max(20)
+      .optional(),
   }),
 });
 

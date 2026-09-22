@@ -2105,11 +2105,17 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
 
 /**
  * Send partial installment payment request (separate from full-job request-payment).
+ * Optional proof photo URL(s) can be attached (same URLs from POST /uploads) — job stays IN_PROGRESS.
  */
 export const requestPartialPayment = async (
   userId: string,
   jobId: string,
-  input: { amount: number; description: string }
+  input: {
+    amount: number;
+    description: string;
+    photoUrl?: string;
+    photoUrls?: string[];
+  }
 ) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
@@ -2165,22 +2171,39 @@ export const requestPartialPayment = async (
     );
   }
 
-  const paymentRequest = await prisma.traderPaymentRequest.create({
-    data: {
-      jobId,
-      traderId: trader.id,
-      customerId: job.customerId,
-      type: TraderPaymentRequestType.PARTIAL,
-      status: TraderPaymentRequestStatus.SENT,
-      description,
-      serviceCharge: amount,
-      materialsTotal: 0,
-      siteVisitFee: 0,
-      platformFee: 0,
-      vatRate: 0,
-      vatAmount: 0,
-      totalAmount: amount,
-    },
+  const photoUrls = [
+    ...new Set([...(input.photoUrls ?? []), ...(input.photoUrl ? [input.photoUrl] : [])]),
+  ].filter(Boolean);
+
+  const paymentRequest = await prisma.$transaction(async (tx) => {
+    if (photoUrls.length > 0) {
+      await tx.jobPhoto.createMany({
+        data: photoUrls.map((photoUrl) => ({
+          jobId,
+          photoUrl,
+          kind: JobPhotoKind.PROOF,
+          uploadedById: userId,
+        })),
+      });
+    }
+
+    return tx.traderPaymentRequest.create({
+      data: {
+        jobId,
+        traderId: trader.id,
+        customerId: job.customerId,
+        type: TraderPaymentRequestType.PARTIAL,
+        status: TraderPaymentRequestStatus.SENT,
+        description,
+        serviceCharge: amount,
+        materialsTotal: 0,
+        siteVisitFee: 0,
+        platformFee: 0,
+        vatRate: 0,
+        vatAmount: 0,
+        totalAmount: amount,
+      },
+    });
   });
 
   const alreadyPaidAfter = alreadyPaid;
@@ -2197,6 +2220,7 @@ export const requestPartialPayment = async (
     isPartPayment: true,
     flowStatus: 'PARTIAL_PAYMENT_PENDING' as FlowStatus,
     statusLabel: 'Partial Payment Pending',
+    proofPhotosAdded: photoUrls.length,
     installment: {
       amount,
       description,
@@ -2210,7 +2234,6 @@ export const requestPartialPayment = async (
       installmentDueAmount: amount,
       netDue: amount,
     },
-    message: 'Partial payment request sent successfully.',
   };
 };
 
