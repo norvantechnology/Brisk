@@ -2275,12 +2275,19 @@ export const listInstallmentPayments = async (userId: string, jobId: string) => 
           ? 'Final Installment'
           : `Installment ${index + 1}`);
 
+    const amount = money(r.totalAmount);
+    const currencyCode = r.currencyCode || 'EUR';
+    const currencySymbol = currencyCode === 'GBP' ? '£' : '€';
+    const amountDisplay =
+      Number.isInteger(round2(amount)) ? String(round2(amount)) : round2(amount).toFixed(2);
+
     return {
       id: transactionId,
       title,
-      amount: money(r.totalAmount),
-      currencyCode: r.currencyCode || 'EUR',
-      currencySymbol: (r.currencyCode || 'EUR') === 'GBP' ? '£' : '€',
+      amount,
+      amountLabel: `${currencySymbol} ${amountDisplay}`,
+      currencyCode,
+      currencySymbol,
       paymentDate,
       formattedPaymentDate: formatInstallmentPaymentDateLabel(paymentDate),
       transactionId,
