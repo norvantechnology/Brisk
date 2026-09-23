@@ -155,7 +155,7 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *     description: |
  *       Completed job history screen. Includes `previousPayments` — full installment
  *       list with the same item shape as GET .../part-payment-history (no server-side truncate).
- *       FE can show first N on screen and use `previousPaymentsViewAllPath` for View All.
+ *       FE can show first N on screen; full list is already in `previousPayments`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -193,9 +193,6 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *                           statusLabel: { type: string, example: 'Paid • Jul 10, 2026' }
  *                           transactionId: { type: string, example: TXN-A1B2C3 }
  *                     previousPaymentsTotal: { type: integer, example: 5 }
- *                     previousPaymentsViewAllPath:
- *                       type: string
- *                       example: /traders/jobs/mine/{id}/part-payment-history
  *       400:
  *         description: Job is not completed
  */

@@ -1457,7 +1457,6 @@ export const getJobOutcomeDetail = async (
     /** Full installment list — same shape as GET .../part-payment-history (FE truncates for UI). */
     previousPayments,
     previousPaymentsTotal,
-    previousPaymentsViewAllPath: `/traders/jobs/mine/${job.id}/part-payment-history`,
     invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };

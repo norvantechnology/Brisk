@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Cursor local rules / agent config
+.cursor/
+
 # Environment Variables
 .env
 .env.local
