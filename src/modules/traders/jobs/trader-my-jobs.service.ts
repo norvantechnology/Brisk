@@ -172,12 +172,12 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
               traderId,
               OR: [
                 { status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] } },
-                {
-                  booking: {
-                    traderId,
+        {
+          booking: {
+            traderId,
                     finishedAt: null,
-                    status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
-                  },
+            status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
+          },
                 },
               ],
             },
@@ -198,11 +198,11 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
   if (tab === 'COMPLETED') {
     // Only after trader finishes the job (booking.finishedAt set) or status COMPLETED.
     // Arrived / proof-pending / in-progress must NEVER appear here.
-    return {
+  return {
       traderId,
       status: JobStatus.COMPLETED,
-      booking: {
-        traderId,
+          booking: {
+            traderId,
         finishedAt: { not: null },
       },
     };
@@ -1844,7 +1844,7 @@ export const requestJob = async (
   }
 
   if (existingQuote?.requestedAt) {
-    return {
+  return {
       jobId,
       quoteId: existingQuote.id,
       amount: money(existingQuote.quotedAmount),
@@ -2088,14 +2088,14 @@ export const listMaterials = async (userId: string, jobId: string) => {
   const items = job.materials.map((m) => {
     const price = money(m.price);
     return {
-      id: m.id,
-      name: m.name,
-      detail: m.detail,
+    id: m.id,
+    name: m.name,
+    detail: m.detail,
       price,
       priceLabel: formatPriceLabel(price),
       currencyCode: currency.currencyCode,
       currencySymbol: currency.currencySymbol,
-      photoUrl: m.photoUrl,
+    photoUrl: m.photoUrl,
     };
   });
   const total = round2(items.reduce((s, i) => s + i.price, 0));
@@ -2327,7 +2327,7 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
               : currency.currencySymbol;
       const amountDisplay =
         Number.isInteger(round2(amount)) ? String(round2(amount)) : round2(amount).toFixed(2);
-      return {
+  return {
         id: r.id,
         title:
           r.description?.trim() ||
