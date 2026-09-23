@@ -119,7 +119,7 @@ const options: swaggerJSDoc.Options = {
       { name: 'Website / Content', description: 'Public website reads — Customers/Traders pages, testimonials, bootstrap, blog, FAQ. Parameters explain which page/screen each filter is for.' },
       { name: 'Website / Surveys', description: 'Website survey forms — consumer-survey & trader-survey pages. No login needed.' },
       { name: 'Website / Contact', description: 'Website Contact Us form — public submit, no login. Saves to DB + sends confirmation/notification emails (mock until SMTP/SES).' },
-      { name: 'Mobile / Auth', description: 'Customer & Trader auth. Responses include `nextStep` navigation key (e.g. `TRADER_ONBOARDING`, `VERIFY_PHONE`). No separate Verify Email step for traders.' },
+      { name: 'Mobile / Auth', description: 'Customer & Trader auth. Responses include `nextStep` (e.g. `VERIFY_OTP` for traders dual mobile+email OTP, `VERIFY_PHONE` for customers, `TRADER_ONBOARDING`, `TRADER_HOME`). Traders verify both OTPs via POST /auth/verify-otp on the same screen.' },
       {
         name: 'Trader / Onboarding',
         description: [
@@ -127,11 +127,11 @@ const options: swaggerJSDoc.Options = {
           '',
           '**After login:** if `nextStep` is `TRADER_ONBOARDING`, call `GET /traders/onboarding` for saved data and `onboardingScreen`.',
           '',
-          '**Prerequisites:** `POST /auth/register` (role=TRADER) → `POST /auth/verify-otp`',
+          '**Prerequisites:** `POST /auth/register` (role=TRADER) → `POST /auth/verify-otp` with mobileCode + emailCode (mock mobile `123456`, email `654321`).',
           '',
           '**Figma flow:** Business Verification → Sole/Company Verification → Document Verification → Submit',
           '',
-          '**Auth:** Bearer access token on every endpoint. Test OTP: `123456`.',
+          '**Auth:** Bearer access token on every endpoint. Test OTPs: mobile `123456`, email `654321`.',
         ].join('\n'),
       },
       { name: 'Admin / Document Rules', description: 'Admin-configured entity and category document requirements for trader onboarding' },

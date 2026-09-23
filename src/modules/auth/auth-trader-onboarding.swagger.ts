@@ -1,5 +1,5 @@
 /**
- * Trader auth steps before onboarding — complements Mobile / Auth routes.
+ * Trader auth steps before onboarding - complements Mobile / Auth routes.
  */
 
 /**
@@ -10,13 +10,21 @@
  *       type: string
  *       enum:
  *         - VERIFY_PHONE
+ *         - VERIFY_OTP
  *         - TRADER_ONBOARDING
  *         - TRADER_PENDING_APPROVAL
  *         - TRADER_HOME
  *         - CUSTOMER_HOME
  *       description: |
  *         App navigation key returned by register, login, verify-otp, and onboarding status.
- *         Mobile app maps each value to a screen or flow — no API paths in this field.
+ *         Mobile app maps each value to a screen or flow - no API paths in this field.
+ *
+ *         - `VERIFY_PHONE` - customer (or mobile-only) OTP screen
+ *         - `VERIFY_OTP` - trader dual OTP screen (mobile + email on the same screen)
+ *         - `TRADER_ONBOARDING` - trader onboarding wizard
+ *         - `TRADER_PENDING_APPROVAL` - docs submitted, waiting admin approval
+ *         - `TRADER_HOME` - trader fully verified
+ *         - `CUSTOMER_HOME` - customer main app
  */
 
 /**
@@ -24,21 +32,24 @@
  * /auth/register:
  *   post:
  *     description: |
- *       **Figma screen (Trader):** **Sign-up** — Create your account.
+ *       **Figma screen (Trader):** **Sign-up** - Create your account.
  *
  *       **Trader vs Customer:** Send `role: "TRADER"`. Customer uses same endpoint with `role: "CUSTOMER"`.
  *
- *       **Response `nextStep`:** Always `VERIFY_PHONE` after register.
+ *       **OTP behaviour:**
+ *       - **Customer:** mobile OTP only. Response `nextStep` = `VERIFY_PHONE`.
+ *       - **Trader:** mobile OTP + email OTP. Response `nextStep` = `VERIFY_OTP`,
+ *         `requiresEmailVerification` = `true`.
  *
  *       **Fields on screen:**
- *       - Full Name → `fullName`
- *       - Email → `email`
- *       - Phone (+353) → `mobileNumber` (E.164, e.g. `+353871234567`)
- *       - Password → `password`
- *       - Terms checkbox → `acceptedTerms: true` (required)
- *       - Country picker → `country` (e.g. `Ireland`, `United Kingdom`) — saved on user profile
- *       - Profile photo at signup → send `profilePhoto` file in **multipart/form-data** on this endpoint (no token). Or optional `profilePhotoUrl` if you already have a URL.
- *       - Profile photo after login → `POST /uploads` then PATCH `/traders/me/account` with `profilePhotoUrl`.
+ *       - Full Name -> `fullName`
+ *       - Email -> `email`
+ *       - Phone (+353) -> `mobileNumber` (E.164, e.g. `+353871234567`)
+ *       - Password -> `password`
+ *       - Terms checkbox -> `acceptedTerms: true` (required)
+ *       - Country picker -> `country` (e.g. `Ireland`, `United Kingdom`) - saved on user profile
+ *       - Profile photo at signup -> send `profilePhoto` file in **multipart/form-data** on this endpoint (no token). Or optional `profilePhotoUrl` if you already have a URL.
+ *       - Profile photo after login -> `POST /uploads` then PATCH `/traders/me/account` with `profilePhotoUrl`.
  *     tags: ['Mobile / Auth']
  */
 
@@ -47,17 +58,34 @@
  * /auth/verify-otp:
  *   post:
  *     description: |
- *       **Figma screen (Trader):** **Verify your number** — 6-digit SMS code.
+ *       **Same screen for traders:** verify **mobile + email** OTP together.
  *
- *       **When to call:** After Sign-up, user enters 6-digit code from SMS.
+ *       **Customers:** send `mobileNumber` + `mobileCode` (or legacy `code`).
+ *       **Traders:** send `mobileNumber` + `mobileCode` + `email` + `emailCode` on the same API/screen.
+ *
+ *       **Mock codes (staging):** mobile `123456`, email `654321`.
  *
  *       **Response includes:**
- *       - `accessToken`, `refreshToken` — store for authenticated calls
- *       - `nextStep` — for traders: `TRADER_ONBOARDING`; for customers: `CUSTOMER_HOME`
+ *       - `accessToken`, `refreshToken` - store for authenticated calls
+ *       - `nextStep` - traders: `TRADER_ONBOARDING`; customers: `CUSTOMER_HOME`
  *
- *       **No Verify Email step** in the current trader app — go straight to onboarding when `nextStep` is `TRADER_ONBOARDING`.
+ *       Do **not** call separate `/auth/verify-email` for signup - email is verified here for traders.
  *
- *       **Not for forgot-password** — use `POST /auth/verify-reset-otp` instead.
+ *       **Not for forgot-password** - use `POST /auth/verify-reset-otp` instead.
+ *     tags: ['Mobile / Auth']
+ */
+
+/**
+ * @swagger
+ * /auth/resend-otp:
+ *   post:
+ *     description: |
+ *       Resend signup OTP.
+ *
+ *       **Traders:** can resend mobile and/or email via `channel`: `mobile` | `email` | `both` (default `both`).
+ *       Provide `mobileNumber` and/or `email` matching the registered account.
+ *
+ *       **Customers:** mobile only (`mobileNumber`).
  *     tags: ['Mobile / Auth']
  */
 
@@ -65,19 +93,21 @@
  * @swagger
  * /auth/verify-email:
  *   post:
- *     summary: Verify trader email (deprecated — not used in current mobile app)
+ *     summary: Verify trader email (deprecated - use POST /auth/verify-otp with emailCode)
  *     tags: ['Mobile / Auth']
  *     description: |
- *       **Not used** in the current trader onboarding UI. Kept for backward compatibility only.
- *       Traders proceed to onboarding after mobile OTP without email verification.
+ *       **Deprecated for signup.** Traders now verify email OTP on the same screen as mobile via
+ *       `POST /auth/verify-otp` with `email` + `emailCode`. Kept for backward compatibility only.
  */
 
 /**
  * @swagger
  * /auth/resend-email-otp:
  *   post:
- *     summary: Resend email verification code (deprecated — not used in current mobile app)
+ *     summary: Resend email verification code (deprecated - use POST /auth/resend-otp)
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Deprecated.** Prefer `POST /auth/resend-otp` with `channel: "email"` or `channel: "both"`.
  */
 
 /**
@@ -85,14 +115,15 @@
  * /auth/login:
  *   post:
  *     description: |
- *       **Figma screen:** **Welcome back** — Log in to your BRISK account.
+ *       **Figma screen:** **Welcome back** - Log in to your BRISK account.
  *
  *       **Response `nextStep` values:**
- *       - `VERIFY_PHONE` — mobile not verified yet (also when `requiresOtpVerification: true`)
- *       - `TRADER_ONBOARDING` — trader must complete onboarding
- *       - `TRADER_PENDING_APPROVAL` — onboarding submitted / documents not fully verified (`traderAccountActive: false`)
- *       - `TRADER_HOME` — trader `verificationStatus=VERIFIED` and onboarding approved (`traderAccountActive: true`)
- *       - `CUSTOMER_HOME` — customer main app
+ *       - `VERIFY_OTP` - trader email/mobile OTP still pending (same dual-OTP screen)
+ *       - `VERIFY_PHONE` - mobile not verified yet (also when `requiresOtpVerification: true`)
+ *       - `TRADER_ONBOARDING` - trader must complete onboarding
+ *       - `TRADER_PENDING_APPROVAL` - onboarding submitted / documents not fully verified (`traderAccountActive: false`)
+ *       - `TRADER_HOME` - trader `verificationStatus=VERIFIED` and onboarding approved (`traderAccountActive: true`)
+ *       - `CUSTOMER_HOME` - customer main app
  *
  *       **After login:** Use `nextStep` + `traderAccountActive` for routing. Do **not** open Jobs/Offers/Dashboard
  *       until `nextStep` is `TRADER_HOME`. Pending traders may call `GET /traders/me` / onboarding only;
@@ -106,6 +137,6 @@
  * /auth/forgot-password:
  *   post:
  *     description: |
- *       **Figma screen:** **Forgot Password** — enter email, tap Get OTP.
+ *       **Figma screen:** **Forgot Password** - enter email, tap Get OTP.
  *     tags: ['Mobile / Auth']
  */

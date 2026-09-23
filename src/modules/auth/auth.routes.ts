@@ -22,8 +22,12 @@ const router = Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Register Customer or Trader account and send 6-digit SMS OTP verification code
+ *     summary: Register Customer or Trader and send OTP (traders get mobile + email OTP)
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Customer:** mobile OTP only. `nextStep` = `VERIFY_PHONE`.
+ *       **Trader:** mobile + email OTP. `nextStep` = `VERIFY_OTP`, `requiresEmailVerification` = true.
+ *       Mock codes - mobile `123456`, email `654321`.
  *     requestBody:
  *       required: true
  *       content:
@@ -86,7 +90,9 @@ const router = Router();
  *                 description: Optional profile image file — field name `profilePhoto` or `profilePhotoUrl`.
  *     responses:
  *       201:
- *         description: User registered successfully. OTP sent. Returns mobileNumber for the OTP screen.
+ *         description: |
+ *           Registered. OTP sent.
+ *           Customer `nextStep`=`VERIFY_PHONE`. Trader `nextStep`=`VERIFY_OTP` + `requiresEmailVerification`=true.
  *       400:
  *         description: Validation error.
  *       409:
@@ -110,7 +116,7 @@ router.post(
  *     description: |
  *       **Customers:** send `mobileNumber` + `mobileCode` (or legacy `code`).
  *       **Traders:** send `mobileNumber` + `mobileCode` + `email` + `emailCode` on the same screen.
- *       Mock codes — mobile `123456`, email `654321`.
+ *       Mock codes - mobile `123456`, email `654321`.
  *       For forgot-password OTP use **POST /auth/verify-reset-otp** instead.
  *     requestBody:
  *       required: true
