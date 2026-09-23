@@ -571,7 +571,11 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     job.status !== JobStatus.CANCELLED &&
     remainingBalance > 0 &&
     !hasOpenPartial;
-  const canCompleteSiteVisit = Boolean(hasActiveVisit) && !visitCompleted;
+  const canCompleteSiteVisit =
+    Boolean(hasActiveVisit) &&
+    !visitCompleted &&
+    // PENDING = waiting customer confirm slot — not ready to "complete" site visit.
+    visit?.status === TraderSiteVisitStatus.CONFIRMED;
   const canRequestSiteVisitPayment =
     Boolean(visitCompleted) &&
     !job.paymentRequests.some(
@@ -851,8 +855,14 @@ export const listMyJobs = async (
       primaryAction = 'VIEW_DETAILS';
     } else if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'ARRIVE';
-    } else if (flowStatus === 'SITE_VISIT_IN_PROGRESS') {
+    } else if (
+      flowStatus === 'SITE_VISIT_IN_PROGRESS' &&
+      activeVisit?.status === TraderSiteVisitStatus.CONFIRMED
+    ) {
       primaryAction = 'COMPLETE_SITE_VISIT';
+    } else if (flowStatus === 'SITE_VISIT_IN_PROGRESS') {
+      // PENDING / other open visit — open Job Details (Discover), not Progress/Arrive.
+      primaryAction = 'VIEW_DETAILS';
     } else if (flowStatus === 'SITE_VISIT_PAYMENT_PENDING') {
       primaryAction = 'REQUEST_SITE_VISIT_PAYMENT';
     } else if (isPartialJob && job.booking?.arrivedAt && !job.booking?.finishedAt) {
@@ -1070,6 +1080,8 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     statusLabel,
     flowStatus,
     paymentStatus,
+    /** Boolean flag for Active-list FE routing (same meaning as list `siteVisit`). */
+    isSiteVisit: Boolean(job.siteVisitRequested || job.siteVisitRequests[0]),
     siteVisit: {
       ...siteVisitBlock(job),
       requested: Boolean(job.siteVisitRequested),
