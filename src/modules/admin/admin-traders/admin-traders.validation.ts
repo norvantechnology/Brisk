@@ -13,6 +13,15 @@ export const traderFilterSchema = z.object({
     status: traderAccountStatus.optional(),
     categoryId: z.string().uuid('Invalid categoryId.').optional(),
     verification: verificationStatus.optional(),
+    /** Filter by onboarding status (e.g. SUBMITTED = pending admin approval). */
+    onboardingStatus: z
+      .enum(['NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'APPROVED', 'REJECTED'])
+      .optional(),
+    /** Shortcut: traders waiting for admin approval (onboardingStatus=SUBMITTED + verification=PENDING). */
+    pendingApproval: z
+      .union([z.literal('true'), z.literal('false'), z.boolean()])
+      .optional()
+      .transform((v) => v === true || v === 'true'),
     country: z.string().optional(),
   }),
 });

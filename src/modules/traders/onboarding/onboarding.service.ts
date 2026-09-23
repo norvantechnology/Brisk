@@ -780,7 +780,7 @@ const validateProfileComplete = (
 };
 
 export const submitOnboarding = async (userId: string) => {
-  const { trader } = await ensureTraderForUser(userId);
+  const { trader, user } = await ensureTraderForUser(userId);
   assertOnboardingEditable(trader);
 
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
@@ -827,6 +827,17 @@ export const submitOnboarding = async (userId: string) => {
       },
     }),
   ]);
+
+  void import('../../../services/trader-onboarding-notify.service').then(
+    ({ notifyAdminTraderPendingApproval }) =>
+      notifyAdminTraderPendingApproval({
+        traderId: trader.id,
+        traderUserId: userId,
+        fullName: user.fullName,
+        email: user.email,
+        mobileNumber: user.mobileNumber,
+      })
+  );
 
   return getOnboardingStatus(userId);
 };

@@ -48,9 +48,12 @@ export const canResendOtp = (
   };
 };
 
+/** Mock codes until SNS/Twilio/SES is wired. Mobile ≠ email so traders verify both channels. */
+export const getMockOtpCode = (purpose: OtpPurpose): string =>
+  purpose === 'email_verification' ? '654321' : '123456';
+
 const persistAndMockSendOtp = (identifier: string, purpose: OtpPurpose): string => {
-  // Static test OTP until SNS/Twilio/SES is wired.
-  const code = '123456';
+  const code = getMockOtpCode(purpose);
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
   otpStore.set(otpStoreKey(purpose, identifier), { code, expiresAt });
@@ -101,8 +104,8 @@ export const verifyOtp = async (
 ): Promise<boolean> => {
   const key = otpStoreKey(purpose, identifier);
 
-  // Static test OTP always accepted in staging/dev builds.
-  if (code === '123456') {
+  // Static test OTP always accepted in staging/dev builds (purpose-specific).
+  if (code === getMockOtpCode(purpose)) {
     otpStore.delete(key);
     return true;
   }

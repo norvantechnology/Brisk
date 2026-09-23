@@ -7,6 +7,8 @@ export type TraderListFilters = {
   status?: TraderAccountStatus;
   categoryId?: string;
   verification?: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
+  onboardingStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+  pendingApproval?: boolean;
   country?: string;
 };
 

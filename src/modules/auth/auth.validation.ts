@@ -51,18 +51,60 @@ export const registerSchema = z.object({
   body: registerBodySchema,
 });
 
-const verifyOtpBodySchema = z.object({
-  mobileNumber: mobileNumberSchema,
-  code: otpCodeSchema,
-});
+const verifyOtpBodySchema = z
+  .object({
+    mobileNumber: mobileNumberSchema,
+    /** Mobile OTP code (required). Alias: `code` kept for backward compatibility. */
+    mobileCode: otpCodeSchema.optional(),
+    code: otpCodeSchema.optional(),
+    /** Required for traders — email OTP on the same verify screen. */
+    email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
+    emailCode: otpCodeSchema.optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (!body.mobileCode && !body.code) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'mobileCode (or code) is required.',
+        path: ['mobileCode'],
+      });
+    }
+  });
 
 export const verifyOtpSchema = z.object({
   body: verifyOtpBodySchema,
 });
 
-const resendOtpBodySchema = z.object({
-  mobileNumber: mobileNumberSchema,
-});
+const resendOtpBodySchema = z
+  .object({
+    mobileNumber: mobileNumberSchema.optional(),
+    email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
+    /** Which channel to resend. Default: both when trader provides both identifiers. */
+    channel: z.enum(['mobile', 'email', 'both']).optional().default('both'),
+  })
+  .superRefine((body, ctx) => {
+    if (body.channel === 'mobile' && !body.mobileNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'mobileNumber is required when channel is mobile.',
+        path: ['mobileNumber'],
+      });
+    }
+    if (body.channel === 'email' && !body.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'email is required when channel is email.',
+        path: ['email'],
+      });
+    }
+    if (body.channel === 'both' && !body.mobileNumber && !body.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide mobileNumber and/or email to resend OTP.',
+        path: ['mobileNumber'],
+      });
+    }
+  });
 
 export const resendOtpSchema = z.object({
   body: resendOtpBodySchema,

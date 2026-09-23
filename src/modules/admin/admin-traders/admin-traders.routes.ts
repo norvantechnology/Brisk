@@ -215,6 +215,14 @@ router.get('/traders/stats', controller.getStats);
  *         schema: { type: string, enum: [PENDING, VERIFIED, REJECTED, SUSPENDED] }
  *         description: Verification badge filter (All Verifications dropdown).
  *       - in: query
+ *         name: onboardingStatus
+ *         schema: { type: string, enum: [NOT_STARTED, IN_PROGRESS, SUBMITTED, APPROVED, REJECTED] }
+ *         description: Onboarding status filter.
+ *       - in: query
+ *         name: pendingApproval
+ *         schema: { type: boolean, example: true }
+ *         description: Shortcut for traders pending admin approval (SUBMITTED + PENDING).
+ *       - in: query
  *         name: country
  *         schema: { type: string, example: 'Ireland' }
  *         description: Country filter (All Countries dropdown).

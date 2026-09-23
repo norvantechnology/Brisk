@@ -8,6 +8,8 @@ import {
 /** App-level navigation keys returned by auth and onboarding status APIs. */
 export const APP_NEXT_STEP = {
   VERIFY_PHONE: 'VERIFY_PHONE',
+  /** Trader signup screen — verify email OTP + mobile OTP together. */
+  VERIFY_OTP: 'VERIFY_OTP',
   TRADER_ONBOARDING: 'TRADER_ONBOARDING',
   TRADER_PENDING_APPROVAL: 'TRADER_PENDING_APPROVAL',
   TRADER_HOME: 'TRADER_HOME',
@@ -212,7 +214,11 @@ export const resolveAppNextStep = async (user: {
   id: string;
   role: UserRole | string;
   mobileVerified: boolean;
+  emailVerified?: boolean;
 }): Promise<AppNextStep> => {
+  if (user.role === UserRole.TRADER && (!user.mobileVerified || user.emailVerified === false)) {
+    return APP_NEXT_STEP.VERIFY_OTP;
+  }
   if (!user.mobileVerified) return APP_NEXT_STEP.VERIFY_PHONE;
   if (user.role === UserRole.TRADER) {
     const { nextStep } = await resolveTraderNextStep(user.id);
@@ -225,7 +231,11 @@ export const resolveSessionExtras = async (user: {
   id: string;
   role: UserRole | string;
   mobileVerified: boolean;
+  emailVerified?: boolean;
 }): Promise<SessionExtras> => {
+  if (user.role === UserRole.TRADER && (!user.mobileVerified || user.emailVerified === false)) {
+    return { nextStep: APP_NEXT_STEP.VERIFY_OTP, traderAccountActive: false, onboarding: null };
+  }
   if (!user.mobileVerified) {
     return { nextStep: APP_NEXT_STEP.VERIFY_PHONE, traderAccountActive: false, onboarding: null };
   }

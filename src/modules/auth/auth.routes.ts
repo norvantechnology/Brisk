@@ -105,10 +105,12 @@ router.post(
  * @swagger
  * /auth/verify-otp:
  *   post:
- *     summary: Verify signup SMS OTP to activate mobile number (NOT forgot-password)
+ *     summary: Verify signup OTP (mobile + email for traders on the same screen)
  *     tags: ['Mobile / Auth']
  *     description: |
- *       Use only after **register** / unverified **login**.
+ *       **Customers:** send `mobileNumber` + `mobileCode` (or legacy `code`).
+ *       **Traders:** send `mobileNumber` + `mobileCode` + `email` + `emailCode` on the same screen.
+ *       Mock codes — mobile `123456`, email `654321`.
  *       For forgot-password OTP use **POST /auth/verify-reset-otp** instead.
  *     requestBody:
  *       required: true
@@ -116,19 +118,16 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - mobileNumber
- *               - code
+ *             required: [mobileNumber]
  *             properties:
- *               mobileNumber:
- *                 type: string
- *                 example: "+353871234567"
- *               code:
- *                 type: string
- *                 example: "123456"
+ *               mobileNumber: { type: string, example: "+353871234567" }
+ *               mobileCode: { type: string, example: "123456" }
+ *               code: { type: string, example: "123456", description: Legacy alias for mobileCode }
+ *               email: { type: string, example: "trader@example.com" }
+ *               emailCode: { type: string, example: "654321" }
  *     responses:
  *       200:
- *         description: Mobile verified. Returns user profile plus access and refresh tokens.
+ *         description: Verified. Returns user profile plus access and refresh tokens.
  *       400:
  *         description: Invalid or expired OTP, or already verified.
  *       404:
@@ -140,7 +139,7 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
  * @swagger
  * /auth/resend-otp:
  *   post:
- *     summary: Resend 6-digit SMS OTP to an unverified mobile number (60s cooldown)
+ *     summary: Resend signup OTP (mobile and/or email)
  *     tags: ['Mobile / Auth']
  *     requestBody:
  *       required: true
@@ -148,21 +147,15 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - mobileNumber
  *             properties:
- *               mobileNumber:
- *                 type: string
- *                 example: "+353871234567"
+ *               mobileNumber: { type: string, example: "+353871234567" }
+ *               email: { type: string, example: "trader@example.com" }
+ *               channel: { type: string, enum: [mobile, email, both], default: both }
  *     responses:
  *       200:
- *         description: New OTP sent successfully.
- *       400:
- *         description: Mobile number already verified.
- *       404:
- *         description: User not found.
+ *         description: OTP resent
  *       429:
- *         description: Resend cooldown active — wait before requesting again.
+ *         description: Resend cooldown active
  */
 router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
 

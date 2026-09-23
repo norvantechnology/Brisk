@@ -217,8 +217,16 @@ export const listTraders = async (filters: TraderListFilters) => {
     }
   }
 
-  if (filters.verification) {
-    where.verificationStatus = filters.verification;
+  if (filters.pendingApproval) {
+    where.onboardingStatus = TraderOnboardingStatus.SUBMITTED;
+    where.verificationStatus = VerificationStatus.PENDING;
+  } else {
+    if (filters.verification) {
+      where.verificationStatus = filters.verification;
+    }
+    if (filters.onboardingStatus) {
+      where.onboardingStatus = filters.onboardingStatus as TraderOnboardingStatus;
+    }
   }
 
   if (filters.categoryId) {

@@ -203,6 +203,28 @@ export const syncTraderVerificationFromDocuments = async (traderId: string) => {
     await prisma.$transaction(ops);
   }
 
+  // When auto-approving via document sync, notify trader once.
+  if (
+    statusChanged &&
+    nextVerificationStatus === VerificationStatus.VERIFIED &&
+    shouldInvalidateSessions
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: trader.userId },
+      select: { id: true, fullName: true, email: true },
+    });
+    if (user) {
+      void import('../../../services/trader-onboarding-notify.service').then(
+        ({ notifyTraderProfileApproved }) =>
+          notifyTraderProfileApproved({
+            userId: user.id,
+            fullName: user.fullName,
+            email: user.email,
+          })
+      );
+    }
+  }
+
   return {
     verificationStatus: nextVerificationStatus,
     onboardingStatus: nextOnboardingStatus,
@@ -437,6 +459,39 @@ export const reviewTraderVerification = async (
   }
 
   await prisma.$transaction(ops);
+
+  if (input.verificationStatus === 'VERIFIED') {
+    const user = await prisma.user.findUnique({
+      where: { id: trader.userId },
+      select: { id: true, fullName: true, email: true },
+    });
+    if (user) {
+      void import('../../../services/trader-onboarding-notify.service').then(
+        ({ notifyTraderProfileApproved }) =>
+          notifyTraderProfileApproved({
+            userId: user.id,
+            fullName: user.fullName,
+            email: user.email,
+          })
+      );
+    }
+  } else if (input.verificationStatus === 'REJECTED') {
+    const user = await prisma.user.findUnique({
+      where: { id: trader.userId },
+      select: { id: true, fullName: true, email: true },
+    });
+    if (user) {
+      void import('../../../services/trader-onboarding-notify.service').then(
+        ({ notifyTraderProfileRejected }) =>
+          notifyTraderProfileRejected({
+            userId: user.id,
+            fullName: user.fullName,
+            email: user.email,
+            reason: input.rejectionReason,
+          })
+      );
+    }
+  }
 
   return getTraderVerificationDetail(traderId);
 };
