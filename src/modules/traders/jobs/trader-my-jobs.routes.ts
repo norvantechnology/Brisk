@@ -646,13 +646,14 @@ router.post(
  * @swagger
  * /traders/jobs/mine/{id}/partial-payment:
  *   get:
- *     summary: Installment Payments History (flat list)
+ *     summary: Partial payment screen (Request Partial Payment details)
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       **Screen:** Installment Payments History → Transaction History list.
- *       Returns a flat `data[]` with title, amount, amountLabel, formattedPaymentDate, transactionId.
- *       Same payload as `GET .../installment-payments`.
+ *       Returns Job Amount, Already Paid, remaining balance, previous payments, and `paymentStatus`
+ *       for the Payment Request (installment) screen.
+ *
+ *       `paymentStatus` is a string: `UNPAID` | `PENDING` | `PARTIALLY_PAID` | `PAID` | …
  *     parameters:
  *       - in: path
  *         name: id
@@ -660,7 +661,9 @@ router.post(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Flat installment list
+ *         description: Partial payment screen payload
+ *       400:
+ *         description: Not arrived / cancelled
  */
 router.get(
   '/mine/:id/partial-payment',
@@ -670,14 +673,14 @@ router.get(
 
 /**
  * @swagger
- * /traders/jobs/mine/{id}/installment-payments:
+ * /traders/jobs/mine/{id}/part-payment-history:
  *   get:
- *     summary: Installment Payments History listing
+ *     summary: Part Payment History (flat list)
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       **Screen:** Installment Payments History → Transaction History list.
- *       Returns a flat array (not nested) matching mobile UI cards.
+ *       **Screen:** Installment / Part Payment History → Transaction History list.
+ *       Returns flat `data[]` with title, amount, amountLabel, formattedPaymentDate, transactionId.
  *     parameters:
  *       - in: path
  *         name: id
@@ -685,12 +688,12 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Installment list
+ *         description: Flat installment history list
  */
 router.get(
-  '/mine/:id/installment-payments',
+  '/mine/:id/part-payment-history',
   validate(myJobIdParamSchema),
-  controller.listInstallmentPayments
+  controller.listPartPaymentHistory
 );
 
 /**

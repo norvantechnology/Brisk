@@ -376,7 +376,7 @@ export const getPartialPaymentScreen = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Payment installments fetched successfully',
+      message: 'Partial payment details fetched successfully.',
       data,
     });
   } catch (error) {
@@ -384,14 +384,14 @@ export const getPartialPaymentScreen = async (
   }
 };
 
-export const listInstallmentPayments = async (
+export const listPartPaymentHistory = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
     await tradersService.ensureTraderProfile(req.user!.id);
-    const data = await service.listInstallmentPayments(req.user!.id, req.params.id);
+    const data = await service.listPartPaymentHistory(req.user!.id, req.params.id);
     sendResponse({
       res,
       statusCode: 200,
