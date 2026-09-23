@@ -28,6 +28,10 @@ const router = Router();
  *       - in: query
  *         name: tab
  *         schema: { type: string, enum: [ACTIVE, COMPLETED, OTHER], default: ACTIVE }
+ *         description: |
+ *           ACTIVE = in-progress / site-visit / awaiting payout.
+ *           COMPLETED = finished jobs only.
+ *           OTHER = cancelled jobs only.
  *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }

@@ -153,30 +153,44 @@ const traderJobAccessWhere = (traderId: string): Prisma.JobWhereInput => ({
 
 const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput => {
   if (tab === 'ACTIVE') {
-    // Running jobs only. Arrived / proof / site-visit / awaiting payout stay here.
-    // Never include finishedAt jobs or JobStatus.COMPLETED.
+    // Running jobs: assigned in-progress + open site-visit jobs for this trader.
+    // Never include finishedAt jobs or JobStatus.COMPLETED / CANCELLED.
     return {
-      traderId,
+      status: { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] },
       AND: [
-        {
-          OR: [
-            { status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] } },
-            {
-              booking: {
-                traderId,
-                finishedAt: null,
-                status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
-              },
-            },
-          ],
-        },
         {
           OR: [
             { booking: null },
             { booking: { finishedAt: null } },
           ],
         },
-        { status: { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] } },
+        {
+          OR: [
+            // Assigned trader — normal active job
+            {
+              traderId,
+              OR: [
+                { status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] } },
+                {
+                  booking: {
+                    traderId,
+                    finishedAt: null,
+                    status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
+                  },
+                },
+              ],
+            },
+            // Site visit in progress (may not have job.traderId yet)
+            {
+              siteVisitRequests: {
+                some: {
+                  traderId,
+                  status: { notIn: [TraderSiteVisitStatus.CANCELLED, TraderSiteVisitStatus.COMPLETED] },
+                },
+              },
+            },
+          ],
+        },
       ],
     };
   }
@@ -192,21 +206,12 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
       },
     };
   }
+  // OTHER tab = cancelled jobs only (not site-visit / quotes / other leftovers).
   return {
-    NOT: {
-      OR: [
-        {
-          traderId,
-          status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] },
-          OR: [{ booking: null }, { booking: { finishedAt: null } }],
-        },
-        {
-          traderId,
-          status: JobStatus.COMPLETED,
-          booking: { finishedAt: { not: null } },
-        },
-      ],
-    },
+    OR: [
+      { status: JobStatus.CANCELLED },
+      { booking: { status: BookingStatus.CANCELLED } },
+    ],
   };
 };
 
@@ -2199,6 +2204,13 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
   );
   const paymentStatus = resolvePartialPaymentStatus(jobAmount, alreadyPaid, hasOpenPartial);
 
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+
   const previousPayments = requests
     .filter(
       (r) =>
@@ -2206,28 +2218,51 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
         r.type === TraderPaymentRequestType.FULL_JOB ||
         r.status === TraderPaymentRequestStatus.PAID
     )
-    .map((r) => ({
-      id: r.id,
-      title:
-        r.description?.trim() ||
-        (r.type === TraderPaymentRequestType.PARTIAL
-          ? 'Installment'
-          : r.type === TraderPaymentRequestType.SITE_VISIT_FEE
-            ? 'Site Visit Fee'
-            : 'Job Payment'),
-      description: r.description,
-      amount: money(r.totalAmount),
-      status: r.status,
-      statusLabel:
-        r.status === TraderPaymentRequestStatus.PAID
-          ? `Paid • ${formatPaidDateLabel(r.updatedAt)}`
-          : r.status === TraderPaymentRequestStatus.SENT
-            ? 'Pending'
-            : r.status,
-      createdAt: r.createdAt,
-      paidAt: r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : null,
-      type: r.type,
-    }));
+    .map((r) => {
+      const amount = money(r.totalAmount);
+      const rowCurrencyCode = r.currencyCode || currency.currencyCode;
+      const rowCurrencySymbol =
+        rowCurrencyCode === currency.currencyCode
+          ? currency.currencySymbol
+          : rowCurrencyCode === 'GBP'
+            ? '£'
+            : rowCurrencyCode === 'EUR'
+              ? '€'
+              : currency.currencySymbol;
+      const amountDisplay =
+        Number.isInteger(round2(amount)) ? String(round2(amount)) : round2(amount).toFixed(2);
+      return {
+        id: r.id,
+        title:
+          r.description?.trim() ||
+          (r.type === TraderPaymentRequestType.PARTIAL
+            ? 'Installment'
+            : r.type === TraderPaymentRequestType.SITE_VISIT_FEE
+              ? 'Site Visit Fee'
+              : 'Job Payment'),
+        description: r.description,
+        amount,
+        amountLabel: `${rowCurrencySymbol} ${amountDisplay}`,
+        currencyCode: rowCurrencyCode,
+        currencySymbol: rowCurrencySymbol,
+        status: r.status,
+        statusLabel:
+          r.status === TraderPaymentRequestStatus.PAID
+            ? `Paid • ${formatPaidDateLabel(r.updatedAt)}`
+            : r.status === TraderPaymentRequestStatus.SENT
+              ? 'Pending'
+              : r.status,
+        createdAt: r.createdAt,
+        paidAt: r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : null,
+        type: r.type,
+      };
+    });
+
+  const formatAmountLabel = (amount: number) => {
+    const amountDisplay =
+      Number.isInteger(round2(amount)) ? String(round2(amount)) : round2(amount).toFixed(2);
+    return `${currency.currencySymbol} ${amountDisplay}`;
+  };
 
   return {
     id: job.id,
@@ -2240,9 +2275,13 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
       fullAddress: formatFullAddress(job),
     },
     jobAmount,
+    jobAmountLabel: formatAmountLabel(jobAmount),
     alreadyPaid,
+    alreadyPaidLabel: formatAmountLabel(alreadyPaid),
     remainingBalance,
-    currencyCode: 'EUR',
+    remainingBalanceLabel: formatAmountLabel(remainingBalance),
+    currencyCode: currency.currencyCode,
+    currencySymbol: currency.currencySymbol,
     paymentStatus,
     previousPayments,
     escrowNote:
@@ -2257,7 +2296,14 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
  */
 const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
-  await assertMyJob(trader.id, jobId);
+  const job = await assertMyJob(trader.id, jobId);
+
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
 
   const requests = await loadJobPaymentRequests(jobId, trader.id);
   const installments = requests
@@ -2278,8 +2324,15 @@ const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
           : `Installment ${index + 1}`);
 
     const amount = money(r.totalAmount);
-    const currencyCode = r.currencyCode || 'EUR';
-    const currencySymbol = currencyCode === 'GBP' ? '£' : '€';
+    const currencyCode = r.currencyCode || currency.currencyCode;
+    const currencySymbol =
+      currencyCode === currency.currencyCode
+        ? currency.currencySymbol
+        : currencyCode === 'GBP'
+          ? '£'
+          : currencyCode === 'EUR'
+            ? '€'
+            : currency.currencySymbol;
     const amountDisplay =
       Number.isInteger(round2(amount)) ? String(round2(amount)) : round2(amount).toFixed(2);
 
