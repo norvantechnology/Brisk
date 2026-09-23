@@ -146,7 +146,8 @@ const resolveOrigin = (trader: {
 const traderJobAccessWhere = (traderId: string): Prisma.JobWhereInput => ({
   OR: [
     { traderId },
-    { siteVisitRequests: { some: { traderId, status: { not: TraderSiteVisitStatus.CANCELLED } } } },
+    // Include cancelled visits too — cancelled site-visit jobs still appear under OTHER.
+    { siteVisitRequests: { some: { traderId } } },
     { quotes: { some: { traderId } } },
   ],
 });
@@ -417,8 +418,9 @@ const assertMyJob = async (traderId: string, jobId: string) => {
         take: 1,
       },
       siteVisitRequests: {
-        where: { traderId, status: { not: TraderSiteVisitStatus.CANCELLED } },
-        take: 1,
+        where: { traderId },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
       },
       paymentRequests: {
         where: { traderId },
@@ -733,9 +735,11 @@ export const listMyJobs = async (
           select: { quotedAmount: true, status: true },
         },
         siteVisitRequests: {
-          where: { traderId: trader.id, status: { not: TraderSiteVisitStatus.CANCELLED } },
+          // Keep cancelled visits so cancelled site-visit jobs still get siteVisit=true.
+          where: { traderId: trader.id },
           select: { status: true, visitDate: true },
-          take: 1,
+          orderBy: { createdAt: 'desc' },
+          take: 5,
         },
         booking: {
           select: {
@@ -771,7 +775,19 @@ export const listMyJobs = async (
   const origin = resolveOrigin(trader);
 
   const items = jobs.map((job) => {
-    const visit = job.siteVisitRequests[0];
+    const visits = job.siteVisitRequests;
+    const activeVisit =
+      visits.find(
+        (v) =>
+          v.status !== TraderSiteVisitStatus.CANCELLED &&
+          v.status !== TraderSiteVisitStatus.COMPLETED
+      ) ??
+      visits.find((v) => v.status !== TraderSiteVisitStatus.CANCELLED) ??
+      null;
+    const visit = activeVisit ?? visits[0] ?? null;
+    const isSiteVisitJob = Boolean(
+      job.siteVisitRequested || visits.length > 0 || (job.siteVisitFee != null && money(job.siteVisitFee) > 0)
+    );
     const siteVisitedBadge =
       visit?.status === TraderSiteVisitStatus.COMPLETED ||
       visit?.status === TraderSiteVisitStatus.CONFIRMED;
@@ -812,13 +828,14 @@ export const listMyJobs = async (
     const isPartialJob =
       !job.booking?.finishedAt && (hasAnyPartial || alreadyPaidAmount > 0);
 
+    const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
     const { flowStatus, statusLabel } = resolveFlowStatus({
       status: job.status,
       bookingStatus: job.booking?.status ?? null,
       arrivedAt: job.booking?.arrivedAt ?? null,
       finishedAt: job.booking?.finishedAt ?? null,
       proofCount: job.photos.length,
-      siteVisitStatus: visit?.status ?? null,
+      siteVisitStatus: activeVisit?.status ?? null,
       hasSiteVisitPaymentRequest: job.paymentRequests.some(
         (p) => p.type === TraderPaymentRequestType.SITE_VISIT_FEE
       ),
@@ -830,7 +847,7 @@ export const listMyJobs = async (
     // Prefer ARRIVE before site-visit CTAs when trader has not marked arrival yet
     // (matches detail resolvePrimaryAction / app "I have arrived" button).
     let primaryAction = 'VIEW_DETAILS';
-    if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    if (cancelled) {
       primaryAction = 'VIEW_DETAILS';
     } else if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'ARRIVE';
@@ -863,8 +880,9 @@ export const listMyJobs = async (
       jobRef: job.jobRef,
       title: job.title,
       status: job.status,
+      // Cancelled always wins for status chip; site-visit type is separate field below.
       statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
-      statusLabel,
+      statusLabel: cancelled ? 'Cancelled' : statusLabel,
       flowStatus,
       paymentStatus: resolvePartialPaymentStatus(
         jobAmountEstimate,
@@ -873,8 +891,10 @@ export const listMyJobs = async (
       ),
       isPartPayment: isPartialJob,
       isPartialJob,
-      siteVisit: Boolean(job.siteVisitRequested || visit),
+      siteVisit: isSiteVisitJob,
       siteVisitRequested: Boolean(job.siteVisitRequested),
+      // Second label for UI: show with Cancelled when site-visit job was cancelled.
+      siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
       arrivalStatus: job.booking?.arrivedAt
         ? 'ARRIVED'
         : job.booking
@@ -1303,6 +1323,11 @@ export const getJobOutcomeDetail = async (
   const categoryLabel = job.subcategory?.name || job.category?.name || 'SERVICE';
 
   if (expected === 'CANCELLED') {
+    const isSiteVisitJob = Boolean(
+      job.siteVisitRequested ||
+        job.siteVisitRequests.length > 0 ||
+        (job.siteVisitFee != null && money(job.siteVisitFee) > 0)
+    );
     return {
       id: job.id,
       jobRef: job.jobRef ? job.jobRef.replace(/^#/, '') : null,
@@ -1310,6 +1335,9 @@ export const getJobOutcomeDetail = async (
       category: categoryLabel,
       status: JobStatus.CANCELLED,
       statusBadge: 'Cancelled',
+      siteVisit: isSiteVisitJob,
+      siteVisitRequested: Boolean(job.siteVisitRequested),
+      siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
       cancellationTitle: 'Job Terminated',
       cancellationReason:
         'Customer requested cancellation due to personal scheduling conflict.',
