@@ -1274,20 +1274,36 @@ const buildSubmitPaymentSummary = (job: MyJobRow) => {
   };
 };
 
-const buildOutcomePaymentSummary = (job: MyJobRow) => {
+const formatMoneyWithSymbol = (currencySymbol: string, amount: number) => {
+  const rounded = round2(amount);
+  const amountDisplay = Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(2);
+  return `${currencySymbol} ${amountDisplay}`;
+};
+
+const buildOutcomePaymentSummary = (
+  job: MyJobRow,
+  currency: { currencyCode: string; currencySymbol: string }
+) => {
   const summary = buildSubmitPaymentSummary(job);
+  const moneyLabel = (amount: number) =>
+    formatMoneyWithSymbol(currency.currencySymbol, amount);
+
   return {
-    baseRate: summary.baseRate,
-    platformFee: summary.platformFee,
-    offerApplied: summary.offerApplied,
-    materialsTotal: summary.materialsTotal,
-    materialCost: summary.materialCost,
-    siteVisitFee: summary.siteVisitFee,
+    baseRate: moneyLabel(summary.baseRate),
+    platformFee: moneyLabel(summary.platformFee),
+    offerApplied: moneyLabel(summary.offerApplied),
+    materialsTotal: moneyLabel(summary.materialsTotal),
+    materialCost: moneyLabel(summary.materialCost),
+    siteVisitFee: moneyLabel(summary.siteVisitFee),
     vatPercentage: summary.vatPercentage,
     vatRate: summary.vatRate,
-    vatAmount: summary.vatAmount,
-    netPayout: summary.netPayout,
-    totalAmount: summary.totalAmount,
+    vatAmount: moneyLabel(summary.vatAmount),
+    netPayout: moneyLabel(summary.netPayout),
+    totalAmount: moneyLabel(summary.totalAmount),
+    currencyCode: currency.currencyCode,
+    currencySymbol: currency.currencySymbol,
     paymentStatus: resolvePaymentStatusLabel(job),
   };
 };
@@ -1380,7 +1396,15 @@ export const getJobOutcomeDetail = async (
         }
       : null,
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
-    paymentSummary: buildOutcomePaymentSummary(job),
+    paymentSummary: buildOutcomePaymentSummary(
+      job,
+      await resolveDiscoverCurrency({
+        customerPreferredCurrency: job.customer.preferredCurrency,
+        traderPreferredCurrency: trader.user.preferredCurrency,
+        jobCountry: job.address?.country ?? job.customer.country,
+        traderCountry: trader.user.country ?? trader.country,
+      })
+    ),
     invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };
