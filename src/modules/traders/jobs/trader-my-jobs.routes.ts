@@ -152,6 +152,10 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *     summary: Completed job history screen detail
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Completed job history screen. Includes `previousPayments` — full installment
+ *       list with the same item shape as GET .../part-payment-history (no server-side truncate).
+ *       FE can show first N on screen and use `previousPaymentsViewAllPath` for View All.
  *     parameters:
  *       - in: path
  *         name: id
@@ -159,7 +163,39 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Completed job outcome (review, photos, paymentSummary, invoice)
+ *         description: |
+ *           Completed job outcome (review, photos, paymentSummary, invoice,
+ *           previousPayments full list).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     previousPayments:
+ *                       type: array
+ *                       description: All part-payment history items (same shape as part-payment-history)
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, example: TXN-A1B2C3 }
+ *                           title: { type: string, example: Initial Deposit }
+ *                           amount: { type: number, example: 481.5 }
+ *                           amountLabel: { type: string, example: '€ 481.50' }
+ *                           currencyCode: { type: string, example: EUR }
+ *                           currencySymbol: { type: string, example: € }
+ *                           paymentDate: { type: string, format: date-time }
+ *                           formattedPaymentDate: { type: string, example: 'Jul 10, 2026 • 2:30 PM' }
+ *                           status: { type: string, example: PAID }
+ *                           statusLabel: { type: string, example: 'Paid • Jul 10, 2026' }
+ *                           transactionId: { type: string, example: TXN-A1B2C3 }
+ *                     previousPaymentsTotal: { type: integer, example: 5 }
+ *                     previousPaymentsViewAllPath:
+ *                       type: string
+ *                       example: /traders/jobs/mine/{id}/part-payment-history
  *       400:
  *         description: Job is not completed
  */
@@ -684,7 +720,8 @@ router.get(
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       **Screen:** Installment / Part Payment History → Transaction History list.
- *       Returns flat `data[]` with title, amount, amountLabel, formattedPaymentDate, transactionId.
+ *       Returns flat `data[]` with title, amount, amountLabel, statusLabel,
+ *       formattedPaymentDate, transactionId (same item shape as completed.previousPayments).
  *     parameters:
  *       - in: path
  *         name: id

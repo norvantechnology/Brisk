@@ -1408,6 +1408,11 @@ export const getJobOutcomeDetail = async (
       : null,
   ].filter(Boolean);
 
+  // Full part-payment history (same item shape as GET .../part-payment-history).
+  // FE may show first N on completed screen and use View All for the rest.
+  const { items: previousPayments, total: previousPaymentsTotal } =
+    await buildInstallmentPaymentList(userId, jobId);
+
   return {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
@@ -1449,6 +1454,10 @@ export const getJobOutcomeDetail = async (
         traderCountry: trader.user.country ?? trader.country,
       })
     ),
+    /** Full installment list — same shape as GET .../part-payment-history (FE truncates for UI). */
+    previousPayments,
+    previousPaymentsTotal,
+    previousPaymentsViewAllPath: `/traders/jobs/mine/${job.id}/part-payment-history`,
     invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };
@@ -2388,7 +2397,7 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
 
 /**
  * Part Payment History — flat list for Transaction History UI cards.
- * Used by GET .../part-payment-history.
+ * Used by GET .../part-payment-history and embedded preview on completed job detail.
  */
 const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
@@ -2406,7 +2415,7 @@ const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
     .filter((r) => r.type === TraderPaymentRequestType.PARTIAL)
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-  return installments.map((r, index) => {
+  const items = installments.map((r, index) => {
     const paymentDate =
       r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : r.createdAt;
     const txnSuffix = r.id.replace(/-/g, '').slice(-6).toUpperCase();
@@ -2432,6 +2441,13 @@ const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
     const amountDisplay =
       Number.isInteger(round2(amount)) ? String(round2(amount)) : round2(amount).toFixed(2);
 
+    const isPaid = r.status === TraderPaymentRequestStatus.PAID;
+    const statusLabel = isPaid
+      ? `Paid • ${formatPaidDateLabel(paymentDate)}`
+      : r.status === TraderPaymentRequestStatus.SENT
+        ? 'Pending'
+        : String(r.status);
+
     return {
       id: transactionId,
       title,
@@ -2441,14 +2457,20 @@ const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
       currencySymbol,
       paymentDate,
       formattedPaymentDate: formatInstallmentPaymentDateLabel(paymentDate),
+      status: r.status,
+      statusLabel,
       transactionId,
     };
   });
+
+  return { items, total: items.length };
 };
 
 /** GET .../part-payment-history — flat installment history list. */
-export const listPartPaymentHistory = async (userId: string, jobId: string) =>
-  buildInstallmentPaymentList(userId, jobId);
+export const listPartPaymentHistory = async (userId: string, jobId: string) => {
+  const { items } = await buildInstallmentPaymentList(userId, jobId);
+  return items;
+};
 
 /**
  * Send partial installment payment request (separate from full-job request-payment).
