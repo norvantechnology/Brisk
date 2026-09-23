@@ -1371,13 +1371,57 @@ export const getJobOutcomeDetail = async (
     };
   }
 
+  const isSiteVisitJob = Boolean(
+    job.siteVisitRequested ||
+      job.siteVisitRequests.length > 0 ||
+      (job.siteVisitFee != null && money(job.siteVisitFee) > 0)
+  );
+
+  const categoryIconUrl = job.category
+    ? resolveCategoryIconUrl({
+        iconName: job.category.iconName,
+        urlSlug: job.category.urlSlug,
+      })
+    : null;
+  const subcategoryIconUrl = job.subcategory
+    ? resolveCategoryIconUrl({
+        iconName: null,
+        urlSlug: job.subcategory.urlSlug,
+      })
+    : null;
+  const tags = [
+    job.category
+      ? {
+          label: job.category.name,
+          icon: categoryIconUrl,
+          iconUrl: categoryIconUrl,
+          iconName: job.category.iconName,
+        }
+      : null,
+    job.subcategory
+      ? {
+          label: job.subcategory.name,
+          icon: subcategoryIconUrl,
+          iconUrl: subcategoryIconUrl,
+          iconName: null as string | null,
+        }
+      : null,
+  ].filter(Boolean);
+
   return {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
     title: job.title,
-    category: categoryLabel.toUpperCase(),
+    // Keep string for existing UI; prefer parent category name (not UPPERCASE).
+    category: job.category?.name || job.subcategory?.name || categoryLabel,
+    categoryName: job.category?.name ?? null,
+    subcategoryName: job.subcategory?.name ?? null,
+    tags,
     status: job.status,
     statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
+    siteVisit: isSiteVisitJob,
+    siteVisitRequested: Boolean(job.siteVisitRequested),
+    siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
     completedAt: eventAt,
     cancelledAt: null,
     formattedCompletedDate: formatOutcomeDateLabel(eventAt, 'COMPLETED'),
