@@ -53,7 +53,7 @@ export const notifyAdminTraderOtpVerified = async (input: {
   email: string;
   mobileNumber: string;
 }) => {
-  const subject = `[BRISK] New trader verified OTP — ${input.fullName}`;
+  const subject = `[BRISK] New trader verified OTP - ${input.fullName}`;
   const text = [
     'A trader has successfully verified email and mobile OTP.',
     '',
@@ -67,7 +67,7 @@ export const notifyAdminTraderOtpVerified = async (input: {
 
   await notifyAdminsByEmail(subject, text);
 
-  // No User-linked admin inbox for in-app — email is the admin channel.
+  // No User-linked admin inbox for in-app; email is the admin channel.
   logger.info('[NOTIFY] Admin informed of trader OTP verification', {
     traderUserId: input.traderUserId,
   });
@@ -81,7 +81,7 @@ export const notifyAdminTraderPendingApproval = async (input: {
   email: string;
   mobileNumber: string;
 }) => {
-  const subject = `[BRISK] Trader pending approval — ${input.fullName}`;
+  const subject = `[BRISK] Trader pending approval - ${input.fullName}`;
   const text = [
     'A trader has submitted onboarding documents and is pending admin verification.',
     '',
@@ -91,7 +91,7 @@ export const notifyAdminTraderPendingApproval = async (input: {
     `Trader ID: ${input.traderId}`,
     `User ID: ${input.traderUserId}`,
     '',
-    'Review in Admin → Trader Verification.',
+    'Review in Admin > Trader Verification.',
   ].join('\n');
 
   await notifyAdminsByEmail(subject, text);
@@ -110,7 +110,7 @@ export const notifyTraderProfileApproved = async (input: {
   const text = [
     `Hi ${input.fullName},`,
     '',
-    'Great news — your BRISK trader profile has been approved.',
+    'Great news - your BRISK trader profile has been approved.',
     'You can now log in and start discovering jobs.',
     '',
     'Regards,',
