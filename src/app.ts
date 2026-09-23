@@ -178,8 +178,8 @@ const SMTP_TEST_COOLDOWN_MS = 60_000;
  *         description: Missing/invalid email
  *       429:
  *         description: Cooldown active for this email
- *       502:
- *         description: SMTP send failed (error included in response)
+ *       422:
+ *         description: SMTP send failed (error included in JSON body — not a Cloudflare gateway issue)
  */
 app.get('/health/smtp-test', async (req: Request, res: Response) => {
   const email = String(req.query.email || '')
@@ -250,7 +250,7 @@ app.get('/health/smtp-test', async (req: Request, res: Response) => {
     logger.warn('[SMTP-TEST] Failed', { email, error });
     sendResponse({
       res,
-      statusCode: 502,
+      statusCode: 422,
       message: 'SMTP send failed.',
       data: {
         to: email,
