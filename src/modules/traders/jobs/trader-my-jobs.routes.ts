@@ -110,6 +110,13 @@ router.post(
  * /traders/jobs/mine/{id}:
  *   get:
  *     summary: My Job detail
+ *     description: |
+ *       Full Job Details payload for the logged-in trader.
+ *
+ *       **Site visit done flag:**
+ *       - Top-level `isSiteVisitDone` — `true` only after trader completes site visit (`visit.status=COMPLETED`)
+ *       - Also on `siteVisit.isSiteVisitDone` + `siteVisit.completedAt`
+ *       - `isSiteVisit` / `siteVisit.isSiteVisit` = this job is a site-visit job (may still be pending)
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -119,7 +126,7 @@ router.post(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Full my-job detail payload
+ *         description: Full my-job detail payload (includes isSiteVisitDone)
  *       404:
  *         description: Job not found
  */

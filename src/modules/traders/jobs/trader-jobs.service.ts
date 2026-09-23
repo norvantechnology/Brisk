@@ -169,6 +169,7 @@ type SiteVisitRow = {
   visitDate: Date | null;
   timeSlot: SiteVisitTimeSlot | null;
   status: TraderSiteVisitStatus;
+  completedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
   slots?: SiteVisitSlotRow[];
@@ -182,6 +183,24 @@ const normalizeSlotsInput = (body: {
   if (body.slots && body.slots.length > 0) return body.slots;
   if (body.date && body.timeSlot) return [{ date: body.date, timeSlot: body.timeSlot }];
   throw new BadRequestError('Provide slots: [{ date, timeSlot }] or date + timeSlot.');
+};
+
+/** UI badge on scheduled-visit card (Figma). */
+const visitStatusBadgeFor = (
+  status: string
+): 'WAITING' | 'CONFIRMED' | 'RESCHEDULE_REQUESTED' | 'COMPLETED' | null => {
+  switch (status) {
+    case 'PENDING':
+      return 'WAITING';
+    case 'CONFIRMED':
+      return 'CONFIRMED';
+    case 'RESCHEDULE_REQUIRED':
+      return 'RESCHEDULE_REQUESTED';
+    case 'COMPLETED':
+      return 'COMPLETED';
+    default:
+      return null;
+  }
 };
 
 const toSiteVisitPayload = (row: SiteVisitRow | null) => {
@@ -202,6 +221,8 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
         isSelected: boolean;
       }>,
       slotCount: 0,
+      isSiteVisitDone: false,
+      completedAt: null as Date | null,
     };
   }
 
@@ -243,16 +264,20 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
       : slotRows[0]) ||
     null;
 
+  const isSiteVisitDone = row.status === TraderSiteVisitStatus.COMPLETED;
+
   if (!primary) {
     return {
-      status: 'NONE' as const,
-      visitDate: null,
-      timeSlot: null,
-      startTime: null,
-      endTime: null,
+      status: row.status as 'PENDING' | 'CONFIRMED' | 'RESCHEDULE_REQUIRED' | 'COMPLETED',
+      visitDate: null as string | null,
+      timeSlot: null as SiteVisitTimeSlot | null,
+      startTime: null as string | null,
+      endTime: null as string | null,
       requestId: row.id,
       slots: [],
       slotCount: 0,
+      isSiteVisitDone,
+      completedAt: row.completedAt ?? null,
     };
   }
 
@@ -267,6 +292,8 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
     requestId: row.id,
     slots,
     slotCount: slots.length,
+    isSiteVisitDone,
+    completedAt: row.completedAt ?? null,
   };
 };
 
@@ -970,6 +997,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
         visitDate: true,
         timeSlot: true,
         status: true,
+        completedAt: true,
         createdAt: true,
         updatedAt: true,
         slots: {
@@ -1123,17 +1151,44 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       : null,
   ].filter(Boolean);
 
+  const isSiteVisitDone = siteVisit.status === 'COMPLETED';
+  const canCompleteSiteVisit = siteVisit.status === 'CONFIRMED';
+  const visitStatusBadge = visitStatusBadgeFor(siteVisit.status);
+  const visitSectionLabel =
+    isReschedule || siteVisit.status === 'RESCHEDULE_REQUIRED'
+      ? ('RESCHEDULED_VISIT' as const)
+      : siteVisit.status === 'PENDING' ||
+          siteVisit.status === 'CONFIRMED' ||
+          siteVisit.status === 'COMPLETED'
+        ? ('SCHEDULED_VISIT' as const)
+        : null;
+  // Figma "Accept Job for €X" — same action as Request Job; amount for button label.
+  const serviceChargeAmt = money(job.serviceCharge) ?? 0;
+  const maxBudgetAmt = money(job.maxBudget) ?? 0;
+  const minBudgetAmt = money(job.minBudget) ?? 0;
+  const acceptJobAmount =
+    quoteState.quoteAmount ??
+    (serviceChargeAmt > 0 ? serviceChargeAmt : null) ??
+    (maxBudgetAmt > 0 ? maxBudgetAmt : null) ??
+    (minBudgetAmt > 0 ? minBudgetAmt : null);
+
   return {
     ...list,
     description: job.description,
     photos,
     photoCount: photos.length,
+    /** Prefer showing fee card only when value > 0; still return 0 if DB has 0. */
     siteVisitFee: isSiteVisit ? fee : null,
+    siteVisitRequested: Boolean(job.siteVisitRequested),
     isReschedule,
     ...actions,
     hasSubmittedQuote: quoteState.hasSubmittedQuote,
     canUpdateQuote: actions.canUpdateQuote,
     canRequestJob: actions.canRequestJob,
+    /** Alias of canRequestJob — Figma "Accept Job" button. */
+    canAcceptJob: actions.canRequestJob,
+    /** Amount to show on Accept Job button (quote / service charge / budget). */
+    acceptJobAmount,
     isJobRequested: quoteState.isJobRequested,
     isWaitingForCustomerConfirmation,
     assignmentStatus: isWaitingForCustomerConfirmation
@@ -1143,7 +1198,20 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     quoteAmount: quoteState.quoteAmount,
     quoteNotes: quoteState.quoteNotes,
     quoteStatus: quoteState.quoteStatus,
-    siteVisit,
+    siteVisit: {
+      ...siteVisit,
+      requested: Boolean(job.siteVisitRequested),
+      isSiteVisit,
+      isSiteVisitDone,
+    },
+    /** true only when this trader's site visit status is COMPLETED. */
+    isSiteVisitDone,
+    /** true when visit is CONFIRMED — trader can complete site visit (My Jobs CTA). */
+    canCompleteSiteVisit,
+    /** Figma badge on visit card: WAITING | CONFIRMED | RESCHEDULE_REQUESTED | COMPLETED */
+    visitStatusBadge,
+    /** Figma section title: SCHEDULED_VISIT | RESCHEDULED_VISIT | null */
+    visitSectionLabel,
     customer: {
       id: job.customer.id,
       fullName: job.customer.fullName,

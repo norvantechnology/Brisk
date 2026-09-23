@@ -65,6 +65,11 @@
  *         siteVisitedBadge:
  *           type: boolean
  *           description: true if site visit is confirmed or completed for this trader
+ *         isSiteVisitDone:
+ *           type: boolean
+ *           description: |
+ *             true only when this trader's site visit status is COMPLETED
+ *             (trader marked site visit done). false otherwise.
  *         customerName:
  *           type: string
  *           description: Customer display name
@@ -193,8 +198,20 @@
  *           type: object
  *           description: Site visit summary on My Jobs detail
  *           properties:
- *             status: { type: string, description: Site visit status code }
+ *             status:
+ *               type: string
+ *               description: NONE | PENDING | CONFIRMED | COMPLETED | CANCELLED | …
  *             fee: { type: number, nullable: true, description: Site visit fee EUR }
+ *             requested: { type: boolean, description: Job marked as site-visit requested }
+ *             isSiteVisit: { type: boolean, description: Same as top-level isSiteVisit }
+ *             isSiteVisitDone:
+ *               type: boolean
+ *               description: true only when visit.status = COMPLETED
+ *             completedAt:
+ *               type: string
+ *               format: date-time
+ *               nullable: true
+ *               description: When trader completed the site visit (null if not done)
  *     TraderMaterialsList:
  *       type: object
  *       description: GET/POST materials response

@@ -221,9 +221,11 @@ router.get(
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Submit date + timeSlot from bottom sheet.
- *       MVP auto-confirms. Response is full Job Details with siteVisit.status CONFIRMED
- *       and primaryAction BACK_TO_JOB.
+ *       Submit date + timeSlot (or slots[]) from bottom sheet.
+ *       Creates/updates visit as **PENDING** (waiting for customer to confirm).
+ *       Response: `siteVisit.status=PENDING`, `primaryAction=WAITING_FOR_CONFIRMATION`.
+ *       After customer confirms → `CONFIRMED` + `primaryAction=BACK_TO_JOB` (Confirmed Job Details screen).
+ *       Already `CONFIRMED` → 409 — use reschedule endpoint.
  *     parameters:
  *       - in: path
  *         name: id
@@ -241,7 +243,7 @@ router.get(
 
  *     responses:
  *       200:
- *         description: Confirmed — open Confirmed Job Details
+ *         description: Slots proposed — status PENDING, waiting for customer confirmation
  *         content:
  *           application/json:
  *             schema:
@@ -271,8 +273,10 @@ router.post(
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Same body as request. Requires an existing site visit (any non-cancelled).
- *       Sets CONFIRMED with new slot. Response primaryAction BACK_TO_JOB.
+ *       Same body as request. For existing visit in RESCHEDULE_REQUIRED (or past preferred date).
+ *       Sets visit to **PENDING** again (new slots proposed → wait for customer).
+ *       Response: `primaryAction=WAITING_FOR_CONFIRMATION`.
+ *       After customer confirms → `CONFIRMED` + `BACK_TO_JOB` (Confirmed / Rescheduled Confirmed screen).
  *     parameters:
  *       - in: path
  *         name: id
@@ -290,7 +294,7 @@ router.post(
 
  *     responses:
  *       200:
- *         description: Reschedule confirmed
+ *         description: New slots proposed — PENDING, waiting for customer confirmation
  *         content:
  *           application/json:
  *             schema:
@@ -451,16 +455,25 @@ router.post(
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       One payload for all Job Details screens.
+ *       **Purpose:** Single Discover Job Details API for marketplace jobs (not yet fully assigned
+ *       in My Jobs progress). Powers Site Visit / Quote / Accept / Waiting screens from Figma.
  *
- *       UI mapping:
- *       - canSubmitQuote → Submit Quotation → POST .../quotes
- *       - hasSubmittedQuote / canUpdateQuote → Update Quotation → POST .../quotes
- *       - canRequestJob / primaryAction REQUEST_JOB → POST .../request
- *       - isWaitingForCustomerConfirmation → Home Waiting card (blue)
- *       - siteVisit.status PENDING → trader can update date/time until customer confirms
- *       - siteVisit.status RESCHEDULE_REQUIRED → Request For Reschedule
- *       - After customer confirms → use My Jobs APIs
+ *       Drive UI from `primaryAction` + `siteVisit.status` + flags below — do not invent local state.
+ *
+ *       | primaryAction | Screen / CTA |
+ *       |---|---|
+ *       | REQUEST_SITE_VISIT | Select Date & Time + Request For Site Visit |
+ *       | WAITING_FOR_CONFIRMATION | Slots sent — waiting customer (PENDING) |
+ *       | REQUEST_RESCHEDULE | RESCHEDULE REQUESTED + Request For Reschedule |
+ *       | BACK_TO_JOB | CONFIRMED visit — Back to Job |
+ *       | SUBMIT_QUOTE / UPDATE_QUOTE | Normal quote flow |
+ *       | REQUEST_JOB / WAITING_FOR_CUSTOMER | Accept / Request Job + waiting |
+ *
+ *       Key flags: `isSiteVisit`, `isSiteVisitDone`, `isReschedule`, `visitStatusBadge`,
+ *       `visitSectionLabel`, `canSelectDateTime`, `canRequestSiteVisit`, `canRequestReschedule`,
+ *       `canSubmitQuote`, `canAcceptJob` (= `canRequestJob`), `isWaitingForCustomerConfirmation`.
+ *
+ *       After customer assigns trader → use My Jobs (`/traders/jobs/mine/{id}`).
  *     parameters:
  *       - in: path
  *         name: id

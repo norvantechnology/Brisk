@@ -635,16 +635,22 @@ const resolvePrimaryAction = (
 const siteVisitBlock = (job: MyJobRow) => {
   const visit = job.siteVisitRequests[0] ?? null;
   const fee = money(job.siteVisitFee);
+  const isSiteVisitDone = visit?.status === TraderSiteVisitStatus.COMPLETED;
   if (!visit && !job.siteVisitRequested) {
     return {
       status: 'NONE' as const,
       fee: null as number | null,
+      isSiteVisitDone: false,
+      completedAt: null as Date | null,
     };
   }
 
   return {
     status: visit?.status ?? 'NONE',
     fee: fee > 0 ? fee : null,
+    /** true after trader completes site visit (status=COMPLETED). */
+    isSiteVisitDone,
+    completedAt: visit?.completedAt ?? null,
   };
 };
 
@@ -792,6 +798,7 @@ export const listMyJobs = async (
     const isSiteVisitJob = Boolean(
       job.siteVisitRequested || visits.length > 0 || (job.siteVisitFee != null && money(job.siteVisitFee) > 0)
     );
+    const isSiteVisitDone = visits.some((v) => v.status === TraderSiteVisitStatus.COMPLETED);
     const siteVisitedBadge =
       visit?.status === TraderSiteVisitStatus.COMPLETED ||
       visit?.status === TraderSiteVisitStatus.CONFIRMED;
@@ -903,6 +910,8 @@ export const listMyJobs = async (
       isPartialJob,
       siteVisit: isSiteVisitJob,
       siteVisitRequested: Boolean(job.siteVisitRequested),
+      /** true = trader already marked site visit done (status COMPLETED). */
+      isSiteVisitDone,
       // Second label for UI: show with Cancelled when site-visit job was cancelled.
       siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
       arrivalStatus: job.booking?.arrivedAt
@@ -1082,6 +1091,11 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     paymentStatus,
     /** Boolean flag for Active-list FE routing (same meaning as list `siteVisit`). */
     isSiteVisit: Boolean(job.siteVisitRequested || job.siteVisitRequests[0]),
+    /**
+     * true = trader already completed the site visit (visit.status = COMPLETED).
+     * false = not a site-visit job, or visit still PENDING/CONFIRMED/etc.
+     */
+    isSiteVisitDone: job.siteVisitRequests[0]?.status === TraderSiteVisitStatus.COMPLETED,
     siteVisit: {
       ...siteVisitBlock(job),
       requested: Boolean(job.siteVisitRequested),

@@ -140,6 +140,10 @@
  *               endTime: { type: string }
  *               isSelected: { type: boolean }
  *         slotCount: { type: integer, description: Number of proposed slots }
+ *         isSiteVisitDone: { type: boolean, description: true when status=COMPLETED }
+ *         completedAt: { type: string, format: date-time, nullable: true }
+ *         requested: { type: boolean, description: Job siteVisitRequested }
+ *         isSiteVisit: { type: boolean }
  *     TraderWaitingJobCard:
  *       type: object
  *       description: Home Waiting (blue) card from GET /traders/jobs/waiting
@@ -177,13 +181,28 @@
  *               description: Customer photo URLs
  *             photoCount: { type: integer, description: Photo count }
  *             siteVisitFee: { type: number, nullable: true, description: Site visit fee EUR }
- *             isReschedule: { type: boolean, description: Reschedule flow }
- *             canSelectDateTime: { type: boolean, description: Show date/time sheet }
+ *             siteVisitRequested: { type: boolean, description: Job marked as site-visit by customer }
+ *             isReschedule: { type: boolean, description: Reschedule flow (show RESCHEDULED section) }
+ *             isSiteVisitDone: { type: boolean, description: true when siteVisit.status=COMPLETED }
+ *             canCompleteSiteVisit: { type: boolean, description: true when status=CONFIRMED }
+ *             visitStatusBadge:
+ *               type: string
+ *               nullable: true
+ *               enum: [WAITING, CONFIRMED, RESCHEDULE_REQUESTED, COMPLETED]
+ *               description: Badge on visit card (Figma CONFIRMED / RESCHEDULE REQUESTED / Waiting)
+ *             visitSectionLabel:
+ *               type: string
+ *               nullable: true
+ *               enum: [SCHEDULED_VISIT, RESCHEDULED_VISIT]
+ *               description: Section title — SCHEDULED vs RESCHEDULED visit date & time
+ *             canSelectDateTime: { type: boolean, description: Show Select Date & Time }
  *             canRequestSiteVisit: { type: boolean, description: Allow POST site-visit/request }
  *             canRequestReschedule: { type: boolean, description: Allow POST site-visit/reschedule }
  *             canSubmitQuote: { type: boolean, description: Show Submit Quotation }
  *             canUpdateQuote: { type: boolean, description: Show Update Quotation }
  *             canRequestJob: { type: boolean, description: Show Request Job; POST .../request }
+ *             canAcceptJob: { type: boolean, description: Alias of canRequestJob — Figma Accept Job }
+ *             acceptJobAmount: { type: number, nullable: true, description: Amount for Accept Job button label }
  *             hasSubmittedQuote: { type: boolean, description: Trader already quoted }
  *             isJobRequested: { type: boolean, description: Request Job already done }
  *             isWaitingForCustomerConfirmation: { type: boolean, description: Waiting on customer }
