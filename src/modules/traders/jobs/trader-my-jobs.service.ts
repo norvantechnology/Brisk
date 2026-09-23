@@ -2465,6 +2465,18 @@ export const requestPartialPayment = async (
     proofCount > 0 ? 'READY_TO_FINISH' : 'WORK_PROOF_PENDING'
   ) as FlowStatus;
 
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+  const formatAmountLabel = (value: number) => {
+    const amountDisplay =
+      Number.isInteger(round2(value)) ? String(round2(value)) : round2(value).toFixed(2);
+    return `${currency.currencySymbol} ${amountDisplay}`;
+  };
+
   return {
     paymentRequestId: paymentRequest.id,
     id: job.id,
@@ -2475,24 +2487,34 @@ export const requestPartialPayment = async (
     isPartPayment: true,
     isPartialJob: true,
     // Stay on Job Proof screen — do not use PARTIAL_PAYMENT_PENDING for navigation
+    // Do NOT call GET .../completed — job remains IN_PROGRESS until fully finished.
     flowStatus,
     statusLabel: proofCount > 0 ? 'Ready to Finish' : 'Work Proof Pending',
     proofPhotosAdded: photoUrls.length,
     canFinish: false,
     canRequestPartialPayment: false,
     primaryAction: 'AWAITING_PARTIAL_PAYMENT',
+    currencyCode: currency.currencyCode,
+    currencySymbol: currency.currencySymbol,
     installment: {
       amount,
+      amountLabel: formatAmountLabel(amount),
       description,
       netDue: amount,
+      netDueLabel: formatAmountLabel(amount),
       status: paymentRequest.status,
     },
     jobAmount,
+    jobAmountLabel: formatAmountLabel(jobAmount),
     alreadyPaid: alreadyPaidAfter,
+    alreadyPaidLabel: formatAmountLabel(alreadyPaidAfter),
     remainingBalance: remainingAfter,
+    remainingBalanceLabel: formatAmountLabel(remainingAfter),
     duePaymentSummary: {
       installmentDueAmount: amount,
+      installmentDueAmountLabel: formatAmountLabel(amount),
       netDue: amount,
+      netDueLabel: formatAmountLabel(amount),
     },
   };
 };
