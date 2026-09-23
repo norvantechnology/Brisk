@@ -4,12 +4,15 @@ import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middl
 import * as service from './admin-traders.service';
 
 export const getStats = async (
-  _req: AuthenticatedAdminRequest,
+  req: AuthenticatedAdminRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const stats = await service.getTraderDirectoryStats();
+    const stats = await service.getTraderDirectoryStats(req.query as {
+      joinedFrom?: string;
+      joinedTo?: string;
+    });
     sendResponse({
       res,
       statusCode: 200,

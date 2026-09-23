@@ -5,6 +5,13 @@ const traderAccountStatus = z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED'
 const traderType = z.enum(['SOLO', 'COMPANY']);
 const verificationStatus = z.nativeEnum(VerificationStatus);
 
+const isoDateOrDateTime = z
+  .string()
+  .trim()
+  .refine((v) => !Number.isNaN(Date.parse(v)), {
+    message: 'Must be a valid ISO date or datetime (e.g. 2026-09-01 or 2026-09-01T00:00:00.000Z).',
+  });
+
 export const traderFilterSchema = z.object({
   query: z.object({
     page: z.string().optional(),
@@ -12,17 +19,34 @@ export const traderFilterSchema = z.object({
     search: z.string().optional(),
     status: traderAccountStatus.optional(),
     categoryId: z.string().uuid('Invalid categoryId.').optional(),
+    /** Same business field as verificationStatus (either works). */
     verification: verificationStatus.optional(),
+    /** Alias for verification — Admin FE uses this name. */
+    verificationStatus: verificationStatus.optional(),
     /** Filter by onboarding status (e.g. SUBMITTED = pending admin approval). */
     onboardingStatus: z
       .enum(['NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'APPROVED', 'REJECTED'])
       .optional(),
-    /** Shortcut: traders waiting for admin approval (onboardingStatus=SUBMITTED + verification=PENDING). */
+    /**
+     * Shortcut for admin approval queue only:
+     * onboardingStatus=SUBMITTED AND verificationStatus=PENDING.
+     * Not the same as Pending Verification KPI (which is verificationStatus=PENDING only).
+     */
     pendingApproval: z
       .union([z.literal('true'), z.literal('false'), z.boolean()])
       .optional()
       .transform((v) => v === true || v === 'true'),
     country: z.string().optional(),
+    joinedFrom: isoDateOrDateTime.optional(),
+    joinedTo: isoDateOrDateTime.optional(),
+  }),
+});
+
+/** Optional date window for newTraders on GET /admin/traders/stats. */
+export const traderStatsFilterSchema = z.object({
+  query: z.object({
+    joinedFrom: isoDateOrDateTime.optional(),
+    joinedTo: isoDateOrDateTime.optional(),
   }),
 });
 

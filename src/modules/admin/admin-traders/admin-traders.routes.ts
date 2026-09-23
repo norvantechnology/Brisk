@@ -6,6 +6,7 @@ import {
   createTraderSchema,
   traderFilterSchema,
   traderIdParamSchema,
+  traderStatsFilterSchema,
   updateTraderSchema,
   updateTraderStatusSchema,
   updateTraderVerificationSchema,
@@ -109,10 +110,27 @@ router.use(adminAuthMiddleware);
  *     AdminTraderStats:
  *       type: object
  *       properties:
- *         totalTraders: { type: integer, example: 15 }
+ *         totalTraders: { type: integer, example: 47 }
  *         activeTraders: { type: integer, example: 11 }
  *         suspendedTraders: { type: integer, example: 1 }
- *         pendingVerification: { type: integer, example: 1 }
+ *         pendingVerification:
+ *           type: integer
+ *           example: 35
+ *           description: |
+ *             Count of traders with `verificationStatus=PENDING` only.
+ *             Same filter as `GET /admin/traders?verificationStatus=PENDING` (`meta.total`).
+ *         newTraders:
+ *           type: integer
+ *           example: 8
+ *           description: |
+ *             New/fresh traders = `trader.createdAt` inside `newTradersWindow`.
+ *             Default window = current UTC calendar month. Override with `joinedFrom` / `joinedTo`.
+ *             Same filter as `GET /admin/traders?joinedFrom=...&joinedTo=...`.
+ *         newTradersWindow:
+ *           type: object
+ *           properties:
+ *             joinedFrom: { type: string, format: date-time }
+ *             joinedTo: { type: string, format: date-time }
  *         totalRevenue: { type: number, example: 1234266.3 }
  *         avgRating: { type: number, example: 4.61 }
  *     ApiSuccessEnvelope:
@@ -143,11 +161,37 @@ router.use(adminAuthMiddleware);
  *   get:
  *     summary: Traders Management KPI cards
  *     description: |
- *       Powers the six top cards on **Admin → Traders Management**:
- *       Total Traders, Active Traders, Suspended, Pending Verification, Total Revenue, Avg. Rating.
+ *       Powers the top cards on **Admin → Traders Management**.
+ *
+ *       **Pending Verification** (`pendingVerification`):
+ *       - Rule: `trader.verificationStatus = PENDING` (no extra status/onboarding filters).
+ *       - Matching list call: `GET /admin/traders?verificationStatus=PENDING`
+ *       - Alias also accepted on list: `?verification=PENDING`
+ *       - Do **not** combine with `status=ACTIVE` — that returns a different (smaller) set.
+ *       - Do **not** use `pendingApproval=true` for this card — that is the narrower approval queue
+ *         (`onboardingStatus=SUBMITTED` **and** `verificationStatus=PENDING`).
+ *
+ *       **New / Fresh Traders** (`newTraders`):
+ *       - Rule: `trader.createdAt` within `newTradersWindow`.
+ *       - Default window: start of current **UTC** calendar month → now.
+ *       - Override: `?joinedFrom=2026-09-01&joinedTo=2026-09-30`
+ *       - Matching list call: `GET /admin/traders?joinedFrom=...&joinedTo=...`
+ *         (use the same dates returned in `data.newTradersWindow`).
+ *
+ *       List responses are paginated (`limit` default 10). Use `meta.total` to match the KPI count,
+ *       and raise `limit` / page through to load all rows.
  *     tags: ['Admin / Traders']
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: joinedFrom
+ *         schema: { type: string, example: '2026-09-01' }
+ *         description: Optional start of newTraders window (ISO date or datetime). Date-only = 00:00:00.000Z.
+ *       - in: query
+ *         name: joinedTo
+ *         schema: { type: string, example: '2026-09-30' }
+ *         description: Optional end of newTraders window (ISO date or datetime). Date-only = 23:59:59.999Z.
  *     responses:
  *       200:
  *         description: Stats retrieved.
@@ -165,10 +209,14 @@ router.use(adminAuthMiddleware);
  *               success: true
  *               message: Trader directory stats retrieved successfully.
  *               data:
- *                 totalTraders: 15
+ *                 totalTraders: 47
  *                 activeTraders: 11
  *                 suspendedTraders: 1
- *                 pendingVerification: 1
+ *                 pendingVerification: 35
+ *                 newTraders: 8
+ *                 newTradersWindow:
+ *                   joinedFrom: '2026-09-01T00:00:00.000Z'
+ *                   joinedTo: '2026-09-23T12:00:00.000Z'
  *                 totalRevenue: 1234266.3
  *                 avgRating: 4.61
  *       401:
@@ -177,7 +225,7 @@ router.use(adminAuthMiddleware);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiErrorEnvelope' }
  */
-router.get('/traders/stats', controller.getStats);
+router.get('/traders/stats', validate(traderStatsFilterSchema), controller.getStats);
 
 /**
  * @swagger
@@ -187,7 +235,21 @@ router.get('/traders/stats', controller.getStats);
  *     description: |
  *       Powers the Traders Management table.
  *       Search matches name, business, email, mobile, or trader code.
- *       Filters map to UI dropdowns: Status, Category, Verification, Country.
+ *
+ *       **Card → list consistency (exact query strings):**
+ *
+ *       | Dashboard card | Exact list query |
+ *       |---|---|
+ *       | Pending Verification | `GET /admin/traders?verificationStatus=PENDING` |
+ *       | New / Fresh Traders | `GET /admin/traders?joinedFrom={newTradersWindow.joinedFrom}&joinedTo={newTradersWindow.joinedTo}` |
+ *
+ *       `verification` is an accepted alias for `verificationStatus`.
+ *
+ *       **Not** the Pending Verification card:
+ *       - `?pendingApproval=true` → SUBMITTED + PENDING only (approval queue)
+ *       - `?status=ACTIVE&verificationStatus=PENDING` → stricter subset
+ *
+ *       Paginated: default `limit=10`. Match KPI using `data.meta.total`, not row count on page 1.
  *     tags: ['Admin / Traders']
  *     security:
  *       - bearerAuth: []
@@ -197,7 +259,8 @@ router.get('/traders/stats', controller.getStats);
  *         schema: { type: integer, default: 1, example: 1 }
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 10, example: 10 }
+ *         schema: { type: integer, default: 10, example: 50 }
+ *         description: Max 100. Raise when opening a KPI card so more rows load per page.
  *       - in: query
  *         name: search
  *         schema: { type: string, example: 'Book Nook' }
@@ -205,15 +268,21 @@ router.get('/traders/stats', controller.getStats);
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, INACTIVE, PENDING, SUSPENDED] }
- *         description: Account status filter (All Statuses dropdown).
+ *         description: Account status filter (All Statuses dropdown). Do not send with Pending Verification card.
  *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
  *         description: Filter by trade category UUID (All Categories dropdown).
  *       - in: query
+ *         name: verificationStatus
+ *         schema: { type: string, enum: [PENDING, VERIFIED, REJECTED, SUSPENDED] }
+ *         description: |
+ *           Verification filter (preferred name). Pending Verification card → `PENDING`.
+ *           Same as `verification`.
+ *       - in: query
  *         name: verification
  *         schema: { type: string, enum: [PENDING, VERIFIED, REJECTED, SUSPENDED] }
- *         description: Verification badge filter (All Verifications dropdown).
+ *         description: Alias for `verificationStatus` (legacy).
  *       - in: query
  *         name: onboardingStatus
  *         schema: { type: string, enum: [NOT_STARTED, IN_PROGRESS, SUBMITTED, APPROVED, REJECTED] }
@@ -221,11 +290,21 @@ router.get('/traders/stats', controller.getStats);
  *       - in: query
  *         name: pendingApproval
  *         schema: { type: boolean, example: true }
- *         description: Shortcut for traders pending admin approval (SUBMITTED + PENDING).
+ *         description: |
+ *           Approval queue shortcut = `onboardingStatus=SUBMITTED` + `verificationStatus=PENDING`.
+ *           Not the Pending Verification KPI.
  *       - in: query
  *         name: country
  *         schema: { type: string, example: 'Ireland' }
  *         description: Country filter (All Countries dropdown).
+ *       - in: query
+ *         name: joinedFrom
+ *         schema: { type: string, example: '2026-09-01' }
+ *         description: Inclusive start of `trader.createdAt` (ISO date or datetime). Date-only = 00:00:00.000Z.
+ *       - in: query
+ *         name: joinedTo
+ *         schema: { type: string, example: '2026-09-30' }
+ *         description: Inclusive end of `trader.createdAt` (ISO date or datetime). Date-only = 23:59:59.999Z.
  *     responses:
  *       200:
  *         description: Paginated trader rows for the table.
@@ -242,10 +321,10 @@ router.get('/traders/stats', controller.getStats);
  *                     meta:
  *                       type: object
  *                       properties:
- *                         total: { type: integer, example: 15 }
+ *                         total: { type: integer, example: 35 }
  *                         page: { type: integer, example: 1 }
  *                         limit: { type: integer, example: 10 }
- *                         totalPages: { type: integer, example: 2 }
+ *                         totalPages: { type: integer, example: 4 }
  *                     traders:
  *                       type: array
  *                       items: { $ref: '#/components/schemas/AdminTraderListItem' }
@@ -253,7 +332,7 @@ router.get('/traders/stats', controller.getStats);
  *               success: true
  *               message: Traders retrieved successfully.
  *               data:
- *                 meta: { total: 15, page: 1, limit: 10, totalPages: 2 }
+ *                 meta: { total: 35, page: 1, limit: 10, totalPages: 4 }
  *                 traders:
  *                   - id: f0f8b572-de03-48d2-a080-34b8966082a6
  *                     traderCode: TRD-1001
@@ -270,8 +349,8 @@ router.get('/traders/stats', controller.getStats);
  *                     revenue: 8920.5
  *                     rating: { average: 4.3, reviewsCount: 78 }
  *                     status: INACTIVE
- *                     verificationStatus: VERIFIED
- *                     onboardingStatus: APPROVED
+ *                     verificationStatus: PENDING
+ *                     onboardingStatus: SUBMITTED
  *                     country: Ireland
  *                     city: Dublin
  *                     categories: [{ id: '3f0f23dd-dfa2-4606-9eed-acdc22534f0f', name: 'Plumbing Services', categoryCode: 'CAT-PLUMB' }]

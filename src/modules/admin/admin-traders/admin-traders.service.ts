@@ -14,10 +14,44 @@ import {
   CreateTraderInput,
   TraderAccountStatus,
   TraderListFilters,
+  TraderStatsFilters,
   UpdateTraderInput,
   UpdateTraderStatusInput,
   UpdateTraderVerificationInput,
 } from './admin-traders.types';
+
+/** Parse ISO date/datetime; date-only `to` uses end of UTC day. */
+const parseJoinedBoundary = (value: string | undefined, endOfDay: boolean): Date | undefined => {
+  if (!value?.trim()) return undefined;
+  const raw = value.trim();
+  const hasTime = /T\d{2}:/.test(raw);
+  if (!hasTime && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(endOfDay ? `${raw}T23:59:59.999Z` : `${raw}T00:00:00.000Z`);
+  }
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+};
+
+const joinedAtWhere = (joinedFrom?: string, joinedTo?: string): Prisma.DateTimeFilter | undefined => {
+  const gte = parseJoinedBoundary(joinedFrom, false);
+  const lte = parseJoinedBoundary(joinedTo, true);
+  if (!gte && !lte) return undefined;
+  return {
+    ...(gte ? { gte } : {}),
+    ...(lte ? { lte } : {}),
+  };
+};
+
+/** Same rule as Pending Verification KPI + list filter. */
+const pendingVerificationWhere = (): Prisma.TraderWhereInput => ({
+  verificationStatus: VerificationStatus.PENDING,
+});
+
+/** Resolve verification filter: verificationStatus (FE) or verification (legacy). */
+const resolveVerificationFilter = (
+  filters: Pick<TraderListFilters, 'verification' | 'verificationStatus'>
+): VerificationStatus | undefined =>
+  (filters.verificationStatus || filters.verification) as VerificationStatus | undefined;
 
 const toDbTraderStatus = (status: TraderAccountStatus): string => {
   switch (status) {
@@ -138,8 +172,15 @@ const formatTraderRow = async (trader: {
   };
 };
 
-export const getTraderDirectoryStats = async () => {
-  const [totalTraders, activeTraders, suspendedTraders, pendingVerification, ratingAgg] =
+export const getTraderDirectoryStats = async (filters: TraderStatsFilters = {}) => {
+  const now = new Date();
+  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  // New/fresh traders: joinedFrom/joinedTo when provided; else current calendar month (UTC).
+  const customJoined = joinedAtWhere(filters.joinedFrom, filters.joinedTo);
+  const newTradersCreatedAt: Prisma.DateTimeFilter = customJoined ?? { gte: startOfMonth };
+
+  const [totalTraders, activeTraders, suspendedTraders, pendingVerification, newTraders, ratingAgg] =
     await Promise.all([
       prisma.trader.count(),
       prisma.trader.count({
@@ -153,9 +194,9 @@ export const getTraderDirectoryStats = async () => {
           OR: [{ status: 'suspended' }, { user: { status: UserStatus.SUSPENDED } }],
         },
       }),
-      prisma.trader.count({
-        where: { verificationStatus: VerificationStatus.PENDING },
-      }),
+      // Same rule as GET /admin/traders?verificationStatus=PENDING
+      prisma.trader.count({ where: pendingVerificationWhere() }),
+      prisma.trader.count({ where: { createdAt: newTradersCreatedAt } }),
       prisma.trader.aggregate({
         _avg: { avgRating: true },
       }),
@@ -169,11 +210,21 @@ export const getTraderDirectoryStats = async () => {
     },
   });
 
+  const windowFrom = customJoined?.gte ?? startOfMonth;
+  const windowTo = customJoined?.lte ?? now;
+  const toIso = (d: Date | string) => (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
+
   return {
     totalTraders,
     activeTraders,
     suspendedTraders,
     pendingVerification,
+    /** Traders with createdAt in the new/fresh window (default: this UTC calendar month). */
+    newTraders,
+    newTradersWindow: {
+      joinedFrom: toIso(windowFrom),
+      joinedTo: toIso(windowTo),
+    },
     totalRevenue: totalRevenueAgg._sum.amount ? Number(totalRevenueAgg._sum.amount) : 0,
     avgRating: ratingAgg._avg.avgRating ? Number(ratingAgg._avg.avgRating) : 0,
   };
@@ -218,15 +269,22 @@ export const listTraders = async (filters: TraderListFilters) => {
   }
 
   if (filters.pendingApproval) {
+    // Approval queue — narrower than Pending Verification KPI.
     where.onboardingStatus = TraderOnboardingStatus.SUBMITTED;
     where.verificationStatus = VerificationStatus.PENDING;
   } else {
-    if (filters.verification) {
-      where.verificationStatus = filters.verification;
+    const verification = resolveVerificationFilter(filters);
+    if (verification) {
+      where.verificationStatus = verification;
     }
     if (filters.onboardingStatus) {
       where.onboardingStatus = filters.onboardingStatus as TraderOnboardingStatus;
     }
+  }
+
+  const createdAt = joinedAtWhere(filters.joinedFrom, filters.joinedTo);
+  if (createdAt) {
+    where.createdAt = createdAt;
   }
 
   if (filters.categoryId) {

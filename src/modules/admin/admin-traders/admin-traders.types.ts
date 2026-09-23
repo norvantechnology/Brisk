@@ -1,15 +1,30 @@
 export type TraderAccountStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'SUSPENDED';
 
+export type TraderVerificationFilter = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
+
 export type TraderListFilters = {
   page?: string;
   limit?: string;
   search?: string;
   status?: TraderAccountStatus;
   categoryId?: string;
-  verification?: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
+  /** Preferred list filter (also accepted as verificationStatus). */
+  verification?: TraderVerificationFilter;
+  /** Alias used by Admin FE — same as verification. */
+  verificationStatus?: TraderVerificationFilter;
   onboardingStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
   pendingApproval?: boolean;
   country?: string;
+  /** Inclusive start of trader.createdAt (ISO date or datetime). */
+  joinedFrom?: string;
+  /** Inclusive end of trader.createdAt (ISO date or datetime). */
+  joinedTo?: string;
+};
+
+export type TraderStatsFilters = {
+  /** Optional window for newTraders; default = start of current calendar month → now. */
+  joinedFrom?: string;
+  joinedTo?: string;
 };
 
 export type CreateTraderInput = {
