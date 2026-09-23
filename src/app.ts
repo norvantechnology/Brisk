@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { sendResponse } from './utils/apiResponse';
+import { sendMail } from './services/email.service';
+import { logger } from './utils/logger';
 import { setupSwagger } from './config/swagger';
 import authRoutes from './modules/auth/auth.routes';
 import usersRoutes from './modules/users/users.routes';
@@ -148,6 +150,115 @@ app.get('/health', (_req: Request, res: Response) => {
       uptime: process.uptime(),
     },
   });
+});
+
+/** Simple per-email cooldown so open SMTP test cannot be hammered. */
+const smtpTestLastSentAt = new Map<string, number>();
+const SMTP_TEST_COOLDOWN_MS = 60_000;
+
+/**
+ * @swagger
+ * /health/smtp-test:
+ *   get:
+ *     summary: Open SMTP test (no auth) - send a test email to ?email=
+ *     tags: ['System / Health']
+ *     description: |
+ *       Open this in a browser, e.g. `/health/smtp-test?email=you@gmail.com`.
+ *       No Bearer token. Uses the same SMTP config as production mail.
+ *       Cooldown: 60 seconds per email address.
+ *     parameters:
+ *       - in: query
+ *         name: email
+ *         required: true
+ *         schema: { type: string, format: email, example: you@gmail.com }
+ *     responses:
+ *       200:
+ *         description: Test email accepted by SMTP
+ *       400:
+ *         description: Missing/invalid email
+ *       429:
+ *         description: Cooldown active for this email
+ *       502:
+ *         description: SMTP send failed (error included in response)
+ */
+app.get('/health/smtp-test', async (req: Request, res: Response) => {
+  const email = String(req.query.email || '')
+    .trim()
+    .toLowerCase();
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    sendResponse({
+      res,
+      statusCode: 400,
+      message: 'Query param email is required (valid email address).',
+      data: {
+        example: '/health/smtp-test?email=you@gmail.com',
+      },
+    });
+    return;
+  }
+
+  const last = smtpTestLastSentAt.get(email) ?? 0;
+  const waitMs = SMTP_TEST_COOLDOWN_MS - (Date.now() - last);
+  if (waitMs > 0) {
+    sendResponse({
+      res,
+      statusCode: 429,
+      message: `Please wait ${Math.ceil(waitMs / 1000)}s before testing this email again.`,
+      data: { email, retryAfterSeconds: Math.ceil(waitMs / 1000) },
+    });
+    return;
+  }
+
+  if (!process.env.SMTP_HOST?.trim()) {
+    sendResponse({
+      res,
+      statusCode: 503,
+      message: 'SMTP is not configured on this server (SMTP_HOST missing).',
+      data: { to: email, smtpConfigured: false },
+    });
+    return;
+  }
+
+  const subject = 'BRISK SMTP test';
+  const text = [
+    'This is a BRISK SMTP connectivity test.',
+    '',
+    `Sent at: ${new Date().toISOString()}`,
+    `To: ${email}`,
+    '',
+    'If you received this, outbound SMTP is working.',
+  ].join('\n');
+
+  try {
+    await sendMail({ to: email, subject, text });
+    smtpTestLastSentAt.set(email, Date.now());
+    logger.info('[SMTP-TEST] Sent', { email });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Test email sent. Check inbox (and spam).',
+      data: {
+        to: email,
+        subject,
+        sentAt: new Date().toISOString(),
+        smtpConfigured: Boolean(process.env.SMTP_HOST),
+      },
+    });
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    logger.warn('[SMTP-TEST] Failed', { email, error });
+    sendResponse({
+      res,
+      statusCode: 502,
+      message: 'SMTP send failed.',
+      data: {
+        to: email,
+        smtpConfigured: Boolean(process.env.SMTP_HOST),
+        error,
+      },
+    });
+  }
 });
 
 // Centralized error handling middleware
