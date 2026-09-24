@@ -138,7 +138,7 @@ export const notifyAdminTraderPendingApproval = async (input: {
     type: 'TRADER_PENDING_APPROVAL',
     title: 'Trader pending approval',
     message: `${input.fullName} submitted documents and is awaiting verification.`,
-    actionUrl: adminNotificationActionUrl.traderVerificationDetail(input.traderId),
+    actionUrl: adminNotificationActionUrl.traderDetail(input.traderId),
     payload: {
       traderId: input.traderId,
       traderUserId: input.traderUserId,
@@ -226,7 +226,7 @@ export const notifyAdminTraderDocumentUploaded = async (input: {
     type: 'TRADER_DOCUMENT_UPLOADED',
     title: 'New document uploaded',
     message: `${input.fullName} uploaded "${input.documentName}".`,
-    actionUrl: adminNotificationActionUrl.traderVerificationDetail(input.traderId),
+    actionUrl: adminNotificationActionUrl.traderDetail(input.traderId),
     payload: {
       traderId: input.traderId,
       traderUserId: input.traderUserId,

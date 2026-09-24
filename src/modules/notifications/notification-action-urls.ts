@@ -4,7 +4,7 @@
  *
  * Admin Portal paths (leading slash, Trader.id — not userId):
  *   /traders/{traderId}
- *   /trader-verification/{traderId}
+ *   (document verification is a modal on the trader details page — do not use /trader-verification/…)
  *
  * Trader Portal paths:
  *   /dashboard
@@ -14,7 +14,8 @@
 
 export const adminNotificationActionUrl = {
   traderDetail: (traderId: string) => `/traders/${traderId}`,
-  traderVerificationDetail: (traderId: string) => `/trader-verification/${traderId}`,
+  /** @deprecated FE has no trader-verification route — use traderDetail (modal on details). */
+  traderVerificationDetail: (traderId: string) => `/traders/${traderId}`,
 } as const;
 
 export const traderNotificationActionUrl = {
@@ -34,10 +35,20 @@ const asRecord = (payload: unknown): Record<string, unknown> => {
 const str = (v: unknown): string | null =>
   typeof v === 'string' && v.trim() ? v.trim() : null;
 
+/** Rewrite legacy /trader-verification/{id} → /traders/{id} (FE uses modal on details). */
+const normalizeAdminActionUrl = (url: string): string => {
+  const withSlash = url.startsWith('/') ? url : `/${url}`;
+  const legacy = withSlash.match(/^\/trader-verification\/([^/?#]+)\/?$/i);
+  if (legacy?.[1]) {
+    return adminNotificationActionUrl.traderDetail(legacy[1]);
+  }
+  return withSlash;
+};
+
 /** True when URL already targets a specific entity (has a path segment after the resource). */
 const isDetailPath = (url: string): boolean => {
   const parts = url.replace(/\/+$/, '').split('/').filter(Boolean);
-  // e.g. traders/{id} → 2+ segments; trader-verification/{id} → 2+
+  // e.g. traders/{id} → 2+ segments
   return parts.length >= 2;
 };
 
@@ -55,23 +66,21 @@ export const resolveAdminNotificationActionUrl = (
   const stored = str(actionUrl);
 
   if (stored && isDetailPath(stored)) {
-    return stored.startsWith('/') ? stored : `/${stored}`;
+    return normalizeAdminActionUrl(stored);
   }
 
   switch (type) {
     case 'TRADER_OTP_VERIFIED':
-      if (traderId) return adminNotificationActionUrl.traderDetail(traderId);
-      break;
     case 'TRADER_PENDING_APPROVAL':
     case 'TRADER_DOCUMENT_UPLOADED':
-      if (traderId) return adminNotificationActionUrl.traderVerificationDetail(traderId);
+      if (traderId) return adminNotificationActionUrl.traderDetail(traderId);
       break;
     default:
       break;
   }
 
   if (stored) {
-    return stored.startsWith('/') ? stored : `/${stored}`;
+    return normalizeAdminActionUrl(stored);
   }
   return null;
 };

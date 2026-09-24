@@ -47,7 +47,7 @@ router.use(adminAuthMiddleware);
  *       Admin Portal inbox for the logged-in admin.
  *       Query: `page`, `limit` (default 20, max 100), `unreadOnly`, `type`, `search`.
  *       **actionUrl** is always a detail route when an entity id is known, e.g.
- *       `/traders/{traderId}` or `/trader-verification/{traderId}` — navigate directly; do not map by type.
+ *       `/traders/{traderId}` — navigate directly; document verification is a modal on that page.
  *     tags: ['Admin / Notifications']
  *     security:
  *       - bearerAuth: []
