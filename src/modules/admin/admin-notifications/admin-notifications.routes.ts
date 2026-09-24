@@ -102,6 +102,55 @@ router.get('/', validate(notificationListQuerySchema), controller.listNotificati
 
 /**
  * @swagger
+ * /admin/notifications/types:
+ *   get:
+ *     summary: List admin notification types (for FE filters)
+ *     description: |
+ *       Returns the catalog of admin notification `type` values with labels/categories
+ *       plus `count` / `unreadCount` for the logged-in admin.
+ *       Use `type` from each item as `GET /admin/notifications?type=...`.
+ *     tags: ['Admin / Notifications']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Notification type filter catalog
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Admin notification types retrieved successfully.
+ *               data:
+ *                 types:
+ *                   - type: TRADER_OTP_VERIFIED
+ *                     label: OTP verified
+ *                     category: traders
+ *                     description: Trader verified email and mobile OTP.
+ *                     count: 2
+ *                     unreadCount: 1
+ *                   - type: TRADER_PENDING_APPROVAL
+ *                     label: Pending approval
+ *                     category: verification
+ *                     description: Trader submitted onboarding and awaits verification.
+ *                     count: 1
+ *                     unreadCount: 0
+ *                   - type: TRADER_DOCUMENT_UPLOADED
+ *                     label: Document uploaded
+ *                     category: verification
+ *                     description: Trader uploaded or replaced a verification document.
+ *                     count: 3
+ *                     unreadCount: 2
+ *                   - type: SYSTEM
+ *                     label: System
+ *                     category: system
+ *                     description: Platform / system notice.
+ *                     count: 0
+ *                     unreadCount: 0
+ */
+router.get('/types', controller.listTypes);
+
+/**
+ * @swagger
  * /admin/notifications/unread-count:
  *   get:
  *     summary: Admin unread badge count

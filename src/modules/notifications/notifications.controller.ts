@@ -48,6 +48,24 @@ export const getUnreadCount = async (
   }
 };
 
+export const listTypes = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.listUserNotificationTypes(req.user!.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Notification types retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const markAsRead = async (
   req: AuthenticatedRequest,
   res: Response,

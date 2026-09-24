@@ -96,8 +96,8 @@ const buildBadge = (
   },
   traderVisitStatus?: TraderSiteVisitStatus | null
 ): string | null => {
-  // Proposed slots awaiting customer confirm — not Reschedule again
-  if (traderVisitStatus === TraderSiteVisitStatus.PENDING) return 'Waiting';
+  // Discover list badge: Reschedule | Site Visit | null only (never "Waiting").
+  // Waiting-for-customer is signaled via isWaitingForCustomerConfirmation / primaryAction.
   if (jobNeedsReschedule(job, traderVisitStatus)) return 'Reschedule';
   if (!isSiteVisitJob(job)) return null;
   return 'Site Visit';

@@ -26,7 +26,9 @@
  *           type: string
  *           nullable: true
  *           enum: [Site Visit, Reschedule]
- *           description: List badge code. null = normal quote job
+ *           description: |
+ *             Discover list badge only. `Reschedule` | `Site Visit` | `null`.
+ *             Never `Waiting` — use `isWaitingForCustomerConfirmation` / Home Waiting APIs for that.
  *         distanceKm:
  *           type: number
  *           example: 2.5

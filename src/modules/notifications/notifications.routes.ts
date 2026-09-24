@@ -103,6 +103,43 @@ router.get('/', validate(notificationListQuerySchema), controller.listNotificati
 
 /**
  * @swagger
+ * /notifications/types:
+ *   get:
+ *     summary: List notification types (for FE filters)
+ *     description: |
+ *       Returns the catalog of user notification `type` values with labels/categories
+ *       plus `count` / `unreadCount` for the logged-in user.
+ *       Use `type` from each item as `GET /notifications?type=...`.
+ *     tags: ['Notifications']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Notification type filter catalog
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Notification types retrieved successfully.
+ *               data:
+ *                 types:
+ *                   - type: TRADER_PROFILE_APPROVED
+ *                     label: Profile approved
+ *                     category: account
+ *                     description: Trader profile was approved by admin.
+ *                     count: 1
+ *                     unreadCount: 0
+ *                   - type: DOCUMENT_APPROVED
+ *                     label: Document approved
+ *                     category: documents
+ *                     description: A submitted document was approved.
+ *                     count: 2
+ *                     unreadCount: 1
+ */
+router.get('/types', controller.listTypes);
+
+/**
+ * @swagger
  * /notifications/unread-count:
  *   get:
  *     summary: Unread notification badge count

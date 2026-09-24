@@ -48,6 +48,24 @@ export const getUnreadCount = async (
   }
 };
 
+export const listTypes = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.listAdminNotificationTypes(req.adminUser!.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Admin notification types retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const markAsRead = async (
   req: AuthenticatedAdminRequest,
   res: Response,

@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { NotificationListFilters } from './notifications.types';
 import { resolveUserNotificationActionUrl } from './notification-action-urls';
+import { USER_NOTIFICATION_TYPE_CATALOG } from './notification-types';
 
 const parsePage = (v?: string) => Math.max(1, Number(v) || 1);
 const parseLimit = (v?: string) => Math.max(1, Math.min(100, Number(v) || 20));
@@ -41,6 +42,43 @@ export const serializeUserNotification = (n: {
     data: payload,
     createdAt: n.createdAt,
   };
+};
+
+/** Filter catalog for Trader/Customer FE — known types + counts for this user. */
+export const listUserNotificationTypes = async (userId: string) => {
+  const grouped = await prisma.notification.groupBy({
+    by: ['type'],
+    where: { userId },
+    _count: { _all: true },
+  });
+  const unreadGrouped = await prisma.notification.groupBy({
+    by: ['type'],
+    where: { userId, read: false },
+    _count: { _all: true },
+  });
+  const countByType = new Map(grouped.map((g) => [g.type, g._count._all]));
+  const unreadByType = new Map(unreadGrouped.map((g) => [g.type, g._count._all]));
+
+  const known = new Set(USER_NOTIFICATION_TYPE_CATALOG.map((t) => t.type));
+  const types = [
+    ...USER_NOTIFICATION_TYPE_CATALOG.map((t) => ({
+      ...t,
+      count: countByType.get(t.type) ?? 0,
+      unreadCount: unreadByType.get(t.type) ?? 0,
+    })),
+    ...grouped
+      .filter((g) => !known.has(g.type))
+      .map((g) => ({
+        type: g.type,
+        label: g.type.replace(/_/g, ' '),
+        category: 'other',
+        description: 'Additional notification type.',
+        count: g._count._all,
+        unreadCount: unreadByType.get(g.type) ?? 0,
+      })),
+  ];
+
+  return { types };
 };
 
 export const listUserNotifications = async (
