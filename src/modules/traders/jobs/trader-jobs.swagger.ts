@@ -180,8 +180,25 @@
  *               items: { type: string, format: uri }
  *               description: Customer photo URLs
  *             photoCount: { type: integer, description: Photo count }
- *             siteVisitFee: { type: number, nullable: true, description: Site visit fee EUR }
+ *             siteVisitFee: { type: number, nullable: true, description: Site visit fee EUR (separate from jobPriceQuotation) }
  *             siteVisitRequested: { type: boolean, description: Job marked as site-visit by customer }
+ *             jobPriceQuotation:
+ *               type: number
+ *               nullable: true
+ *               description: |
+ *                 Single display price for Job Details top card. Mobile owns labels
+ *                 (e.g. Site Visited / ESTIMATED BUDGET from isSiteVisit + flags).
+ *                 Value = submitted quoteAmount when present; else estimated budget
+ *                 (maxBudget → serviceCharge → minBudget) for normal jobs. Never siteVisitFee.
+ *             jobPriceQuotationCurrencySymball:
+ *               type: string
+ *               example: €
+ *               description: Currency symbol for jobPriceQuotation (mobile key spelling).
+ *             jobPriceQuotationCurrencyCode:
+ *               type: string
+ *               enum: [EUR, GBP]
+ *               example: EUR
+ *               description: ISO currency code for jobPriceQuotation.
  *             isReschedule: { type: boolean, description: Reschedule flow (show RESCHEDULED section) }
  *             isSiteVisitDone: { type: boolean, description: true when siteVisit.status=COMPLETED }
  *             canCompleteSiteVisit: { type: boolean, description: true when status=CONFIRMED }

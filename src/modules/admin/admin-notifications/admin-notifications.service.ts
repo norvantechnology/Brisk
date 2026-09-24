@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
 import { NotificationListFilters } from '../../notifications/notifications.types';
+import { resolveAdminNotificationActionUrl } from '../../notifications/notification-action-urls';
 
 const parsePage = (v?: string) => Math.max(1, Number(v) || 1);
 const parseLimit = (v?: string) => Math.max(1, Math.min(100, Number(v) || 20));
@@ -23,7 +24,7 @@ export const serializeAdminNotification = (n: {
   desc: n.message,
   read: n.read,
   isRead: n.read,
-  actionUrl: n.actionUrl,
+  actionUrl: resolveAdminNotificationActionUrl(n.type, n.actionUrl, n.payload),
   data: n.payload,
   createdAt: n.createdAt,
   timestamp: n.createdAt,

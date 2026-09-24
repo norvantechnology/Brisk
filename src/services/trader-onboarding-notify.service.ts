@@ -3,6 +3,10 @@ import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 import { sendMail } from './email.service';
 import { createAdminNotifications } from '../modules/admin/admin-notifications/admin-notifications.service';
+import {
+  adminNotificationActionUrl,
+  traderNotificationActionUrl,
+} from '../modules/notifications/notification-action-urls';
 
 const getAdminInbox = (): string =>
   process.env.CONTACT_ADMIN_EMAIL?.trim() || 'support@brisk.ie';
@@ -62,6 +66,14 @@ const createUserNotification = async (
   }
 };
 
+const resolveTraderIdForUser = async (traderUserId: string): Promise<string | null> => {
+  const trader = await prisma.trader.findUnique({
+    where: { userId: traderUserId },
+    select: { id: true },
+  });
+  return trader?.id ?? null;
+};
+
 /** After trader verifies both email + mobile OTP. */
 export const notifyAdminTraderOtpVerified = async (input: {
   traderUserId: string;
@@ -69,6 +81,7 @@ export const notifyAdminTraderOtpVerified = async (input: {
   email: string;
   mobileNumber: string;
 }) => {
+  const traderId = await resolveTraderIdForUser(input.traderUserId);
   const subject = `[BRISK] New trader verified OTP - ${input.fullName}`;
   const text = [
     'A trader has successfully verified email and mobile OTP.',
@@ -77,17 +90,21 @@ export const notifyAdminTraderOtpVerified = async (input: {
     `Email: ${input.email}`,
     `Mobile: ${input.mobileNumber}`,
     `User ID: ${input.traderUserId}`,
+    traderId ? `Trader ID: ${traderId}` : null,
     '',
     'They can now continue onboarding.',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   await notifyAdminsByEmail(subject, text);
   await notifyAdminsInApp({
     type: 'TRADER_OTP_VERIFIED',
     title: 'New trader verified OTP',
     message: `${input.fullName} verified email and mobile OTP.`,
-    actionUrl: '/traders',
+    actionUrl: traderId ? adminNotificationActionUrl.traderDetail(traderId) : '/traders',
     payload: {
+      ...(traderId ? { traderId } : {}),
       traderUserId: input.traderUserId,
       email: input.email,
       mobileNumber: input.mobileNumber,
@@ -121,7 +138,7 @@ export const notifyAdminTraderPendingApproval = async (input: {
     type: 'TRADER_PENDING_APPROVAL',
     title: 'Trader pending approval',
     message: `${input.fullName} submitted documents and is awaiting verification.`,
-    actionUrl: '/trader-verification',
+    actionUrl: adminNotificationActionUrl.traderVerificationDetail(input.traderId),
     payload: {
       traderId: input.traderId,
       traderUserId: input.traderUserId,
@@ -158,6 +175,7 @@ export const notifyTraderProfileApproved = async (input: {
   await createUserNotification(input.userId, 'TRADER_PROFILE_APPROVED', {
     title: 'Profile approved',
     message: 'Your BRISK trader profile has been approved. You can now use the app.',
+    actionUrl: traderNotificationActionUrl.dashboard(),
   });
 };
 
@@ -189,5 +207,6 @@ export const notifyTraderProfileRejected = async (input: {
   await createUserNotification(input.userId, 'TRADER_PROFILE_REJECTED', {
     title: 'Application update',
     message: input.reason?.trim() || 'Your trader application was not approved.',
+    actionUrl: traderNotificationActionUrl.onboardingPendingReview(),
   });
 };

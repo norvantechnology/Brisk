@@ -30,7 +30,7 @@ router.use(authMiddleware);
  *         title: { type: string, example: 'Profile approved' }
  *         message: { type: string, example: 'Your BRISK trader profile has been approved.' }
  *         read: { type: boolean, example: false }
- *         actionUrl: { type: string, nullable: true, example: '/jobs' }
+ *         actionUrl: { type: string, nullable: true, example: '/dashboard', description: 'Detail/screen route — FE navigates with router.push(actionUrl); no per-type routing.' }
  *         data:
  *           type: object
  *           additionalProperties: true

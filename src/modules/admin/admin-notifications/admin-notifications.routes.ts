@@ -32,8 +32,8 @@ router.use(adminAuthMiddleware);
  *         desc: { type: string, description: Alias of message for Admin FE }
  *         read: { type: boolean, example: false }
  *         isRead: { type: boolean, description: Alias of read for Admin FE }
- *         actionUrl: { type: string, nullable: true, example: '/traders' }
- *         data: { type: object, nullable: true, additionalProperties: true }
+ *         actionUrl: { type: string, nullable: true, example: '/traders/0d5ad2bc-8da7-4872-83bd-bd7a631004ee', description: 'Detail-page route for the related entity. FE should navigate with router.push(actionUrl).' }
+ *         data: { type: object, nullable: true, additionalProperties: true, description: 'Includes traderId (Trader.id) and traderUserId when applicable.' }
  *         createdAt: { type: string, format: date-time }
  *         timestamp: { type: string, format: date-time, description: Alias of createdAt }
  */
@@ -46,6 +46,8 @@ router.use(adminAuthMiddleware);
  *     description: |
  *       Admin Portal inbox for the logged-in admin.
  *       Query: `page`, `limit` (default 20, max 100), `unreadOnly`, `type`, `search`.
+ *       **actionUrl** is always a detail route when an entity id is known, e.g.
+ *       `/traders/{traderId}` or `/trader-verification/{traderId}` — navigate directly; do not map by type.
  *     tags: ['Admin / Notifications']
  *     security:
  *       - bearerAuth: []
@@ -83,8 +85,8 @@ router.use(adminAuthMiddleware);
  *                     desc: Jenish Kavathiya verified email and mobile OTP.
  *                     read: false
  *                     isRead: false
- *                     actionUrl: /traders
- *                     data: { traderUserId: '0d5ad2bc-8da7-4872-83bd-bd7a631004ee' }
+ *                     actionUrl: /traders/0d5ad2bc-8da7-4872-83bd-bd7a631004ee
+ *                     data: { traderId: '0d5ad2bc-8da7-4872-83bd-bd7a631004ee', traderUserId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' }
  *                     createdAt: '2026-09-24T11:00:00.000Z'
  *                     timestamp: '2026-09-24T11:00:00.000Z'
  *                 unreadCount: 2
@@ -169,7 +171,7 @@ router.post('/read-all', controller.markAllAsRead);
  *                   message: Jenish Kavathiya verified email and mobile OTP.
  *                   read: true
  *                   isRead: true
- *                   actionUrl: /traders
+ *                   actionUrl: /traders/0d5ad2bc-8da7-4872-83bd-bd7a631004ee
  *                   createdAt: '2026-09-24T11:00:00.000Z'
  *       404:
  *         description: Not found

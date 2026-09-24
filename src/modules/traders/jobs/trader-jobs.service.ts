@@ -529,68 +529,29 @@ const primaryActionLabelFor = (primaryAction: string, acceptJobAmount?: number |
 };
 
 /**
- * Top price/budget card for Job Details (Figma).
- * Site visit → SITE VISIT FEE; normal quote job → ESTIMATED BUDGET (maxBudget preferred).
+ * Single Job Details price amount for mobile top card.
+ * Labels ("Site Visited" / "ESTIMATED BUDGET") are client-side from flags.
+ * Prefer submitted quotation; else estimated budget for normal (non site-visit) jobs.
+ * Never returns siteVisitFee.
  */
-const buildPriceCard = (input: {
+const resolveJobPriceQuotation = (input: {
   isSiteVisit: boolean;
-  siteVisitFee: number | null;
+  quoteAmount: number | null;
   minBudget: number | null;
   maxBudget: number | null;
   serviceCharge: number | null;
-  quoteAmount: number | null;
-  currencySymbol: string;
-}) => {
-  const sym = input.currencySymbol || '€';
-
-  if (input.isSiteVisit) {
-    const amount = input.siteVisitFee != null && input.siteVisitFee > 0 ? input.siteVisitFee : 0;
-    return {
-      kind: 'SITE_VISIT_FEE' as const,
-      label: 'SITE VISIT FEE',
-      amount,
-      amountFormatted: `${sym}${amount}`,
-      subtitle: null as string | null,
-      showOpenToOffers: false,
-    };
-  }
-
+}): number | null => {
   if (input.quoteAmount != null && input.quoteAmount > 0) {
-    return {
-      kind: 'QUOTE_PRICE' as const,
-      label: 'QUOTE PRICE',
-      amount: input.quoteAmount,
-      amountFormatted: `${sym}${input.quoteAmount}`,
-      subtitle: null as string | null,
-      showOpenToOffers: false,
-    };
+    return input.quoteAmount;
   }
-
-  const amount =
+  if (input.isSiteVisit) {
+    return null;
+  }
+  return (
     (input.maxBudget != null && input.maxBudget > 0 ? input.maxBudget : null) ??
     (input.serviceCharge != null && input.serviceCharge > 0 ? input.serviceCharge : null) ??
-    (input.minBudget != null && input.minBudget > 0 ? input.minBudget : null);
-
-  if (amount != null) {
-    return {
-      kind: 'ESTIMATED_BUDGET' as const,
-      label: 'ESTIMATED BUDGET',
-      amount,
-      amountFormatted: `${sym}${amount}`,
-      /** Figma italic "Open to Offers" on the right of the budget card. */
-      subtitle: 'Open to Offers' as string | null,
-      showOpenToOffers: true,
-    };
-  }
-
-  return {
-    kind: 'NONE' as const,
-    label: null as string | null,
-    amount: null as number | null,
-    amountFormatted: null as string | null,
-    subtitle: null as string | null,
-    showOpenToOffers: false,
-  };
+    (input.minBudget != null && input.minBudget > 0 ? input.minBudget : null)
+  );
 };
 
 const areaNameOf = (job: {
@@ -1278,14 +1239,12 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     (maxBudgetAmt > 0 ? maxBudgetAmt : null) ??
     (minBudgetAmt > 0 ? minBudgetAmt : null);
 
-  const priceCard = buildPriceCard({
+  const jobPriceQuotation = resolveJobPriceQuotation({
     isSiteVisit,
-    siteVisitFee: isSiteVisit ? fee : null,
+    quoteAmount: quoteState.quoteAmount,
     minBudget: minBudgetAmt > 0 ? minBudgetAmt : null,
     maxBudget: maxBudgetAmt > 0 ? maxBudgetAmt : null,
     serviceCharge: serviceChargeAmt > 0 ? serviceChargeAmt : null,
-    quoteAmount: quoteState.quoteAmount,
-    currencySymbol: list.currencySymbol,
   });
   const primaryActionLabel = primaryActionLabelFor(actions.primaryAction, acceptJobAmount);
 
@@ -1297,8 +1256,14 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     /** Prefer showing fee card only when value > 0; still return 0 if DB has 0. */
     siteVisitFee: isSiteVisit ? fee : null,
     siteVisitRequested: Boolean(job.siteVisitRequested),
-    /** Top card: SITE VISIT FEE vs ESTIMATED BUDGET vs QUOTE PRICE — use this for UI. */
-    priceCard,
+    /**
+     * Single price for Job Details top card (mobile owns labels).
+     * Quotation when submitted; else estimated budget for normal jobs. Not siteVisitFee.
+     */
+    jobPriceQuotation,
+    /** Mobile key spelling (Symball) — same value as currencySymbol. */
+    jobPriceQuotationCurrencySymball: list.currencySymbol,
+    jobPriceQuotationCurrencyCode: list.currencyCode,
     isReschedule,
     ...actions,
     /** Ready-to-show bottom button text (from primaryAction). */

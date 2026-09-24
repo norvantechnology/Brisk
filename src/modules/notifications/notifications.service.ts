@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { NotificationListFilters } from './notifications.types';
+import { resolveUserNotificationActionUrl } from './notification-action-urls';
 
 const parsePage = (v?: string) => Math.max(1, Number(v) || 1);
 const parseLimit = (v?: string) => Math.max(1, Math.min(100, Number(v) || 20));
@@ -29,10 +30,6 @@ export const serializeUserNotification = (n: {
     (typeof payload.body === 'string' && payload.body) ||
     (typeof payload.desc === 'string' && payload.desc) ||
     '';
-  const actionUrl =
-    (typeof payload.actionUrl === 'string' && payload.actionUrl) ||
-    (typeof payload.url === 'string' && payload.url) ||
-    undefined;
 
   return {
     id: n.id,
@@ -40,7 +37,7 @@ export const serializeUserNotification = (n: {
     title,
     message,
     read: n.read,
-    actionUrl: actionUrl || null,
+    actionUrl: resolveUserNotificationActionUrl(n.type, payload),
     data: payload,
     createdAt: n.createdAt,
   };

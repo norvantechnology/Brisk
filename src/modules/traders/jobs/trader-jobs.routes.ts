@@ -473,6 +473,10 @@ router.post(
  *       `visitSectionLabel`, `canSelectDateTime`, `canRequestSiteVisit`, `canRequestReschedule`,
  *       `canSubmitQuote`, `canAcceptJob` (= `canRequestJob`), `isWaitingForCustomerConfirmation`.
  *
+ *       **Price card:** use `jobPriceQuotation` + `jobPriceQuotationCurrencySymball` +
+ *       `jobPriceQuotationCurrencyCode` only. Labels (Site Visited / ESTIMATED BUDGET) are client-side.
+ *       Do not use `priceCard` (removed). `quoteAmount` is still returned as the raw submitted quote.
+ *
  *       After customer assigns trader → use My Jobs (`/traders/jobs/mine/{id}`).
  *     parameters:
  *       - in: path
@@ -522,6 +526,9 @@ router.post(
  *                 isWaitingForCustomerConfirmation: false
  *                 quoteId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
  *                 quoteAmount: 420
+ *                 jobPriceQuotation: 420
+ *                 jobPriceQuotationCurrencySymball: €
+ *                 jobPriceQuotationCurrencyCode: EUR
  *                 quoteNotes: Includes parts and labour
  *                 quoteStatus: PENDING
  *                 description: Looking for a professional to install solar panels.
