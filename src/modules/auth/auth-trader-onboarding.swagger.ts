@@ -63,7 +63,7 @@
  *       **Customers:** send `mobileNumber` + `mobileCode` (or legacy `code`).
  *       **Traders:** send `mobileNumber` + `mobileCode` + `email` + `emailCode` on the same API/screen.
  *
- *       **Mock codes (staging):** mobile `123456`, email `654321`.
+ *       **OTP:** mobile mock `123456`; email = dynamic code from inbox (not fixed).
  *
  *       **Response includes:**
  *       - `accessToken`, `refreshToken` - store for authenticated calls
@@ -96,8 +96,10 @@
  *     summary: Verify trader email (deprecated - use POST /auth/verify-otp with emailCode)
  *     tags: ['Mobile / Auth']
  *     description: |
- *       **Deprecated for signup.** Traders now verify email OTP on the same screen as mobile via
- *       `POST /auth/verify-otp` with `email` + `emailCode`. Kept for backward compatibility only.
+ *       **Deprecated for signup.** Prefer `POST /auth/verify-otp` with mobile + email codes together.
+ *       Dynamic email OTP only (static codes rejected).
+ *       If mobile is already verified → activates account + returns session (same as verify-otp).
+ *       If mobile is still pending → marks email verified and returns `nextStep: VERIFY_OTP`.
  */
 
 /**

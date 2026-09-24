@@ -13,9 +13,10 @@ import {
 } from '../../utils/errors';
 import {
   generateOtp,
-  getMockOtpCode,
   getOtpMeta,
   getResendCooldownSeconds,
+  matchOtp,
+  consumeOtp,
   trySendOtp,
   verifyOtp,
 } from './otp.service';
@@ -170,7 +171,7 @@ const buildOtpRequiredPayload = async (user: AuthUser) => {
     const sendResult = await trySendOtp(user.email, 'email_verification');
     if (sendResult.sent) {
       emailSent = true;
-      await sendEmailOtpMail(user.email, getMockOtpCode('email_verification'));
+      await sendEmailOtpMail(user.email, sendResult.code);
     } else if (retryAfterSeconds == null) {
       retryAfterSeconds = sendResult.retryAfterSeconds;
     }
@@ -351,29 +352,31 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
     throw new BadRequestError('Account is already verified.');
   }
 
-  if (needsMobile) {
-    if (!mobileCode) {
-      throw new BadRequestError('Mobile verification code is required.');
-    }
-    const mobileOk = await verifyOtp(mobileNumber, mobileCode, 'mobile_verification');
-    if (!mobileOk) {
-      throw new BadRequestError('Invalid or expired mobile verification code.');
-    }
+  if (needsMobile && !mobileCode) {
+    throw new BadRequestError('Mobile verification code is required.');
   }
 
+  let emailToVerify: string | null = null;
   if (needsEmail) {
-    const emailToVerify = (email || user.email).toLowerCase();
+    emailToVerify = (email || user.email).toLowerCase();
     if (email && email.toLowerCase() !== user.email.toLowerCase()) {
       throw new BadRequestError('Email does not match the registered account.');
     }
     if (!emailCode) {
       throw new BadRequestError('Email verification code is required.');
     }
-    const emailOk = await verifyOtp(emailToVerify, emailCode, 'email_verification');
-    if (!emailOk) {
-      throw new BadRequestError('Invalid or expired email verification code.');
-    }
   }
+
+  // Match all required channels first so one wrong code does not burn the other OTP.
+  if (needsMobile && !matchOtp(mobileNumber, mobileCode, 'mobile_verification')) {
+    throw new BadRequestError('Invalid or expired mobile verification code.');
+  }
+  if (needsEmail && emailToVerify && !matchOtp(emailToVerify, emailCode, 'email_verification')) {
+    throw new BadRequestError('Invalid or expired email verification code.');
+  }
+
+  if (needsMobile) consumeOtp(mobileNumber, 'mobile_verification');
+  if (needsEmail && emailToVerify) consumeOtp(emailToVerify, 'email_verification');
 
   const verifiedUser = await prisma.$transaction(async (tx) => {
     const updated = await tx.user.update({
@@ -823,19 +826,58 @@ export const verifyTraderEmail = async (input: VerifyEmailInput) => {
     throw new BadRequestError('Invalid or expired verification code.');
   }
 
-  const updatedUser = await prisma.user.update({
+  // Prefer POST /auth/verify-otp (mobile + email together). This endpoint remains for
+  // backward compatibility — if mobile is already verified, fully activate like verify-otp.
+  if (user.mobileVerified) {
+    const verifiedUser = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerified: true,
+          status: UserStatus.ACTIVE,
+        },
+        select: PUBLIC_USER_SELECT,
+      });
+      await ensureTraderProfile(tx, user);
+      return updated;
+    });
+
+    void import('../../services/trader-onboarding-notify.service').then(
+      ({ notifyAdminTraderOtpVerified }) =>
+        notifyAdminTraderOtpVerified({
+          traderUserId: verifiedUser.id,
+          fullName: verifiedUser.fullName,
+          email: verifiedUser.email,
+          mobileNumber: verifiedUser.mobileNumber,
+        })
+    );
+
+    return {
+      message: 'Email and mobile verified successfully. Your account is now active.',
+      data: await buildSessionPayload({
+        ...verifiedUser,
+        emailVerified: true,
+        mobileVerified: true,
+      }),
+    };
+  }
+
+  await prisma.user.update({
     where: { id: user.id },
     data: { emailVerified: true },
-    select: PUBLIC_USER_SELECT,
   });
 
   return {
-    message: 'Email address verified successfully.',
+    message: 'Email address verified. Please verify your mobile number to activate your account.',
     data: {
-      user: { ...toPublicUser(updatedUser), emailVerified: true },
+      email: user.email,
+      mobileNumber: user.mobileNumber,
       emailVerified: true,
+      mobileVerified: false,
       requiresEmailVerification: false,
-      nextStep: 'POST /traders/onboarding/start',
+      requiresOtpVerification: true,
+      nextStep: APP_NEXT_STEP.VERIFY_OTP,
+      ...getOtpMeta(),
     },
   };
 };
@@ -858,7 +900,8 @@ export const resendTraderEmailOtp = async (input: ResendEmailOtpInput) => {
 
   assertAccountCanAuthenticate(user);
 
-  await generateOtp(email, 'email_verification');
+  const code = await generateOtp(email, 'email_verification');
+  await sendEmailOtpMail(email, code);
 
   return {
     message: 'A new verification code has been sent to your email address.',

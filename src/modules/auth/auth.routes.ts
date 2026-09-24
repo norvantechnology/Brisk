@@ -27,7 +27,7 @@ const router = Router();
  *     description: |
  *       **Customer:** mobile OTP only. `nextStep` = `VERIFY_PHONE`.
  *       **Trader:** mobile + email OTP. `nextStep` = `VERIFY_OTP`, `requiresEmailVerification` = true.
- *       Mock codes - mobile `123456`, email `654321`.
+ *       Mock mobile OTP: `123456`. Email OTP: dynamic 6-digit code sent to the trader's inbox (not a fixed code).
  *     requestBody:
  *       required: true
  *       content:
@@ -116,7 +116,7 @@ router.post(
  *     description: |
  *       **Customers:** send `mobileNumber` + `mobileCode` (or legacy `code`).
  *       **Traders:** send `mobileNumber` + `mobileCode` + `email` + `emailCode` on the same screen.
- *       Mock codes - mobile `123456`, email `654321`.
+ *       Mock mobile OTP: `123456`. Email OTP: use the dynamic code from the verification email (static `654321` is rejected).
  *       For forgot-password OTP use **POST /auth/verify-reset-otp** instead.
  *     requestBody:
  *       required: true
@@ -130,7 +130,7 @@ router.post(
  *               mobileCode: { type: string, example: "123456" }
  *               code: { type: string, example: "123456", description: Legacy alias for mobileCode }
  *               email: { type: string, example: "trader@example.com" }
- *               emailCode: { type: string, example: "654321" }
+ *               emailCode: { type: string, example: "482913", description: Dynamic 6-digit code from the verification email }
  *     responses:
  *       200:
  *         description: Verified. Returns user profile plus access and refresh tokens.

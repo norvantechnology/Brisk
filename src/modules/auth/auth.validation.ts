@@ -54,18 +54,18 @@ export const registerSchema = z.object({
 const verifyOtpBodySchema = z
   .object({
     mobileNumber: mobileNumberSchema,
-    /** Mobile OTP code (required). Alias: `code` kept for backward compatibility. */
+    /** Mobile OTP code. Alias: `code` kept for backward compatibility. */
     mobileCode: otpCodeSchema.optional(),
     code: otpCodeSchema.optional(),
-    /** Required for traders — email OTP on the same verify screen. */
+    /** Required for traders when email is still unverified — same screen as mobile. */
     email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
     emailCode: otpCodeSchema.optional(),
   })
   .superRefine((body, ctx) => {
-    if (!body.mobileCode && !body.code) {
+    if (!body.mobileCode && !body.code && !body.emailCode) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'mobileCode (or code) is required.',
+        message: 'Provide mobileCode (or code) and/or emailCode.',
         path: ['mobileCode'],
       });
     }
