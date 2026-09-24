@@ -502,6 +502,97 @@ const resolvePrimaryActions = (
   };
 };
 
+/** Suggested bottom-button label — FE can use as-is or map i18n from primaryAction. */
+const primaryActionLabelFor = (primaryAction: string, acceptJobAmount?: number | null): string => {
+  switch (primaryAction) {
+    case 'REQUEST_SITE_VISIT':
+      return 'Request For Site Visit';
+    case 'REQUEST_RESCHEDULE':
+      return 'Request For Reschedule Site Visit';
+    case 'WAITING_FOR_CONFIRMATION':
+      return 'Waiting for Confirmation';
+    case 'WAITING_FOR_CUSTOMER':
+      return 'Waiting for Customer';
+    case 'BACK_TO_JOB':
+      return 'Back to Job';
+    case 'SUBMIT_QUOTE':
+      return 'Submit Quote';
+    case 'UPDATE_QUOTE':
+      return 'Update Quote';
+    case 'REQUEST_JOB':
+      return acceptJobAmount != null && acceptJobAmount > 0
+        ? `Accept Job for €${acceptJobAmount.toFixed(2)}`
+        : 'Request Job';
+    default:
+      return 'View Details';
+  }
+};
+
+/**
+ * Top price/budget card for Job Details (Figma).
+ * Site visit → SITE VISIT FEE; normal quote job → ESTIMATED BUDGET (maxBudget preferred).
+ */
+const buildPriceCard = (input: {
+  isSiteVisit: boolean;
+  siteVisitFee: number | null;
+  minBudget: number | null;
+  maxBudget: number | null;
+  serviceCharge: number | null;
+  quoteAmount: number | null;
+  currencySymbol: string;
+}) => {
+  const sym = input.currencySymbol || '€';
+
+  if (input.isSiteVisit) {
+    const amount = input.siteVisitFee != null && input.siteVisitFee > 0 ? input.siteVisitFee : 0;
+    return {
+      kind: 'SITE_VISIT_FEE' as const,
+      label: 'SITE VISIT FEE',
+      amount,
+      amountFormatted: `${sym}${amount}`,
+      subtitle: null as string | null,
+      showOpenToOffers: false,
+    };
+  }
+
+  if (input.quoteAmount != null && input.quoteAmount > 0) {
+    return {
+      kind: 'QUOTE_PRICE' as const,
+      label: 'QUOTE PRICE',
+      amount: input.quoteAmount,
+      amountFormatted: `${sym}${input.quoteAmount}`,
+      subtitle: null as string | null,
+      showOpenToOffers: false,
+    };
+  }
+
+  const amount =
+    (input.maxBudget != null && input.maxBudget > 0 ? input.maxBudget : null) ??
+    (input.serviceCharge != null && input.serviceCharge > 0 ? input.serviceCharge : null) ??
+    (input.minBudget != null && input.minBudget > 0 ? input.minBudget : null);
+
+  if (amount != null) {
+    return {
+      kind: 'ESTIMATED_BUDGET' as const,
+      label: 'ESTIMATED BUDGET',
+      amount,
+      amountFormatted: `${sym}${amount}`,
+      /** Figma italic "Open to Offers" on the right of the budget card. */
+      subtitle: 'Open to Offers' as string | null,
+      showOpenToOffers: true,
+    };
+  }
+
+  return {
+    kind: 'NONE' as const,
+    label: null as string | null,
+    amount: null as number | null,
+    amountFormatted: null as string | null,
+    subtitle: null as string | null,
+    showOpenToOffers: false,
+  };
+};
+
 const areaNameOf = (job: {
   city: string | null;
   postcode: string | null;
@@ -1102,11 +1193,26 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     quoteState.isWaitingForCustomerConfirmation || waitingOnVisitConfirm;
   const isReschedule =
     (needsReschedule || siteVisit.status === 'RESCHEDULE_REQUIRED') && !waitingOnVisitConfirm;
-  // Prefer proposed / confirmed visit date over stale customer preferred scheduledDate
-  const scheduledDate =
-    (siteVisit.status === 'PENDING' || siteVisit.status === 'CONFIRMED') && siteVisit.visitDate
-      ? new Date(`${siteVisit.visitDate}T12:00:00.000Z`)
-      : job.scheduledDate;
+  /**
+   * Visit schedule date for UI:
+   * - Fresh site visit (NONE) → null (trader has not selected slots yet)
+   * - PENDING / CONFIRMED / COMPLETED → trader's proposed/confirmed visitDate
+   * - RESCHEDULE_REQUIRED → previous visitDate if any, else null
+   * - Normal (non site-visit) jobs → customer preferred job.scheduledDate
+   */
+  const scheduledDate = (() => {
+    if (!isSiteVisit) return job.scheduledDate;
+    if (
+      (siteVisit.status === 'PENDING' ||
+        siteVisit.status === 'CONFIRMED' ||
+        siteVisit.status === 'COMPLETED' ||
+        siteVisit.status === 'RESCHEDULE_REQUIRED') &&
+      siteVisit.visitDate
+    ) {
+      return new Date(`${siteVisit.visitDate}T12:00:00.000Z`);
+    }
+    return null;
+  })();
   const coords = resolveJobCoords(
     {
       id: job.id,
@@ -1172,6 +1278,17 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     (maxBudgetAmt > 0 ? maxBudgetAmt : null) ??
     (minBudgetAmt > 0 ? minBudgetAmt : null);
 
+  const priceCard = buildPriceCard({
+    isSiteVisit,
+    siteVisitFee: isSiteVisit ? fee : null,
+    minBudget: minBudgetAmt > 0 ? minBudgetAmt : null,
+    maxBudget: maxBudgetAmt > 0 ? maxBudgetAmt : null,
+    serviceCharge: serviceChargeAmt > 0 ? serviceChargeAmt : null,
+    quoteAmount: quoteState.quoteAmount,
+    currencySymbol: list.currencySymbol,
+  });
+  const primaryActionLabel = primaryActionLabelFor(actions.primaryAction, acceptJobAmount);
+
   return {
     ...list,
     description: job.description,
@@ -1180,8 +1297,12 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     /** Prefer showing fee card only when value > 0; still return 0 if DB has 0. */
     siteVisitFee: isSiteVisit ? fee : null,
     siteVisitRequested: Boolean(job.siteVisitRequested),
+    /** Top card: SITE VISIT FEE vs ESTIMATED BUDGET vs QUOTE PRICE — use this for UI. */
+    priceCard,
     isReschedule,
     ...actions,
+    /** Ready-to-show bottom button text (from primaryAction). */
+    primaryActionLabel,
     hasSubmittedQuote: quoteState.hasSubmittedQuote,
     canUpdateQuote: actions.canUpdateQuote,
     canRequestJob: actions.canRequestJob,
@@ -1235,7 +1356,11 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     subcategoryName: job.subcategory?.name ?? null,
     tags,
     scheduledDate,
-    timeSlot: siteVisit.timeSlot ?? job.timeSlot,
+    /** Visit time slot — only after trader proposed / confirmed; null on fresh site visit. */
+    timeSlot:
+      isSiteVisit && (siteVisit.status === 'NONE' || !siteVisit.timeSlot)
+        ? null
+        : siteVisit.timeSlot ?? (isSiteVisit ? null : job.timeSlot),
     durationLabel: job.durationLabel,
     location: {
       fullAddress: formatDiscoverFullAddress(job),
