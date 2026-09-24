@@ -19,6 +19,7 @@ import {
   buildOfferAppliedBanner,
   resolveQuoteTypeForCreate,
   resolveSiteVisitFee,
+  resolveSiteVisitIntent,
   str,
 } from './jobs.form-config';
 import type {
@@ -565,12 +566,19 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
       : null,
     entryPoint: offerApplied ? 'OFFER' : 'DIRECT',
   });
+  const siteVisitIntent = resolveSiteVisitIntent({
+    quoteType: input.quoteType,
+    siteVisitRequested: input.siteVisitRequested,
+    siteVisit: (input as { siteVisit?: boolean }).siteVisit,
+    isSiteVisit: (input as { isSiteVisit?: boolean }).isSiteVisit,
+  });
   const quoteType = resolveQuoteTypeForCreate({
     quoteType: input.quoteType,
     formDefault: formConfig.defaultQuoteType,
+    siteVisitIntent,
   });
-  const siteVisitRequested =
-    input.siteVisitRequested ?? quoteType === JobQuoteType.ONSITE;
+  // Keep quoteType + flag in sync — Site Visit never stays REMOTE.
+  const siteVisitRequested = siteVisitIntent || quoteType === JobQuoteType.ONSITE;
 
   // Direct Trader (offer / selected trader) requires traderId.
   // Marketplace ONSITE (site-visit quote type, no trader yet) is allowed — open Discover job.
@@ -585,8 +593,7 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
     );
   }
 
-  const siteVisitFee =
-    siteVisitRequested || quoteType === JobQuoteType.ONSITE
+  const siteVisitFee = siteVisitRequested
       ? resolveSiteVisitFee(
           subcategoryFlags
             ? {
@@ -839,6 +846,26 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
     if (!trader) throw new NotFoundError('Trader not found.');
   }
 
+  const siteVisitIntentOnUpdate = resolveSiteVisitIntent({
+    quoteType: input.quoteType,
+    siteVisitRequested: input.siteVisitRequested,
+    siteVisit: (input as { siteVisit?: boolean }).siteVisit,
+    isSiteVisit: (input as { isSiteVisit?: boolean }).isSiteVisit,
+  });
+  const nextQuoteType =
+    input.quoteType !== undefined || siteVisitIntentOnUpdate
+      ? siteVisitIntentOnUpdate
+        ? JobQuoteType.ONSITE
+        : input.quoteType
+      : undefined;
+  const nextSiteVisitRequested =
+    input.siteVisitRequested !== undefined ||
+    (input as { siteVisit?: boolean }).siteVisit !== undefined ||
+    (input as { isSiteVisit?: boolean }).isSiteVisit !== undefined ||
+    siteVisitIntentOnUpdate
+      ? Boolean(siteVisitIntentOnUpdate || nextQuoteType === JobQuoteType.ONSITE)
+      : undefined;
+
   const job = await prisma.$transaction(async (tx) => {
     if (input.photoUrls) {
       await tx.jobPhoto.deleteMany({ where: { jobId } });
@@ -861,11 +888,10 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
         durationLabel: input.durationLabel === undefined ? undefined : input.durationLabel,
         phoneNumber: input.phoneNumber === undefined ? undefined : input.phoneNumber,
         serviceCharge: input.serviceCharge === undefined ? undefined : input.serviceCharge,
-        quoteType: input.quoteType === undefined ? undefined : input.quoteType,
+        quoteType: nextQuoteType,
         minBudget: input.minBudget === undefined ? undefined : input.minBudget,
         maxBudget: input.maxBudget === undefined ? undefined : input.maxBudget,
-        siteVisitRequested:
-          input.siteVisitRequested === undefined ? undefined : input.siteVisitRequested,
+        siteVisitRequested: nextSiteVisitRequested,
         traderId: input.traderId === undefined ? undefined : input.traderId,
         qaFormAnswers:
           input.qaFormAnswers === undefined

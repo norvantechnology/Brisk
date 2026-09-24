@@ -298,4 +298,23 @@ export const buildNextJobPrefill = (input: {
 export const resolveQuoteTypeForCreate = (input: {
   quoteType?: JobQuoteType | null;
   formDefault: JobQuoteType;
-}): JobQuoteType => input.quoteType ?? input.formDefault;
+  /** When true, force ONSITE so Site Visit jobs never save as REMOTE. */
+  siteVisitIntent?: boolean;
+}): JobQuoteType => {
+  if (input.siteVisitIntent) return JobQuoteType.ONSITE;
+  return input.quoteType ?? input.formDefault;
+};
+
+/** Resolve Site Visit intent from quoteType + any of the boolean aliases. */
+export const resolveSiteVisitIntent = (input: {
+  quoteType?: JobQuoteType | string | null;
+  siteVisitRequested?: boolean | null;
+  siteVisit?: boolean | null;
+  isSiteVisit?: boolean | null;
+}): boolean => {
+  if (input.quoteType === JobQuoteType.ONSITE || input.quoteType === 'ONSITE') return true;
+  if (input.siteVisitRequested === true) return true;
+  if (input.siteVisit === true) return true;
+  if (input.isSiteVisit === true) return true;
+  return false;
+};

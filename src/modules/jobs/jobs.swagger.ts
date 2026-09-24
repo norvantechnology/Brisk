@@ -394,6 +394,15 @@
  *         siteVisitRequested:
  *           type: boolean
  *           description: |
+ *             Preferred Site Visit flag. Also accepts aliases `siteVisit` / `isSiteVisit`
+ *             and string `"true"`/`"false"`. If any is true, backend forces `quoteType=ONSITE`.
+ *             **Do not rely on UI-only state** — must send one of these (or `quoteType=ONSITE`).
+ *         siteVisit:
+ *           type: boolean
+ *           description: Alias of siteVisitRequested
+ *         isSiteVisit:
+ *           type: boolean
+ *           description: Alias of siteVisitRequested
  *             Optional. Defaults true when quoteType=ONSITE.
  *             Keep in sync with Site Visit card selection.
  *     UpdateJobRequest:
