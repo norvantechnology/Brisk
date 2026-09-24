@@ -14,6 +14,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/er
 import { buildPaginationMeta } from '../../../utils/pagination';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
+import { emitJobStatusChanged } from '../../../sockets/realtime';
 
 const EARTH_RADIUS_KM = 6371;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
@@ -2096,11 +2097,34 @@ export const confirmQuoteAssignment = async (params: {
     }
   });
 
+  const nextStatus = job.scheduledDate ? JobStatus.SCHEDULED : JobStatus.ACCEPTED;
+  const traderUser = await prisma.trader.findUnique({
+    where: { id: quote.traderId },
+    select: { userId: true },
+  });
+  const booking = await prisma.booking.findUnique({
+    where: { jobId: job.id },
+    select: { id: true },
+  });
+
+  // Realtime: trader My Jobs / Discover update when customer accepts this quote.
+  emitJobStatusChanged({
+    jobId: job.id,
+    jobRef: job.jobRef ?? undefined,
+    status: nextStatus,
+    customerId: job.customerId,
+    traderId: quote.traderId,
+    traderUserId: traderUser?.userId ?? null,
+    bookingId: booking?.id ?? null,
+    title: job.title,
+    at: new Date().toISOString(),
+  });
+
   return {
     jobId: job.id,
     traderId: quote.traderId,
     quoteId: quote.id,
-    status: job.scheduledDate ? JobStatus.SCHEDULED : JobStatus.ACCEPTED,
+    status: nextStatus,
     amount,
   };
 };
