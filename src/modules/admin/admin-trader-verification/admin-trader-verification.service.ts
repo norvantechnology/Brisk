@@ -556,16 +556,25 @@ export const reviewTraderDocument = async (
 
   const syncResult = await syncTraderVerificationFromDocuments(traderId);
 
-  void import('../../../services/trader-onboarding-notify.service').then(
-    ({ notifyTraderDocumentReviewed }) =>
-      notifyTraderDocumentReviewed({
-        userId: trader.userId,
-        documentId: updatedDocument.id,
-        documentName: updatedDocument.documentRule.name,
-        status: input.status,
-        rejectionReason: updatedDocument.rejectionReason,
-      })
-  );
+  const traderUser = await prisma.user.findUnique({
+    where: { id: trader.userId },
+    select: { id: true, email: true, fullName: true },
+  });
+
+  if (traderUser?.email) {
+    void import('../../../services/trader-onboarding-notify.service').then(
+      ({ notifyTraderDocumentReviewed }) =>
+        notifyTraderDocumentReviewed({
+          userId: traderUser.id,
+          email: traderUser.email,
+          fullName: traderUser.fullName,
+          documentId: updatedDocument.id,
+          documentName: updatedDocument.documentRule.name,
+          status: input.status,
+          rejectionReason: updatedDocument.rejectionReason,
+        })
+    );
+  }
 
   return {
     document: serializeTraderDocument(updatedDocument),

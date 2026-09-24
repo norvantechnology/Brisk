@@ -285,6 +285,8 @@ export const notifyAdminTraderDocumentUploaded = async (input: {
 /** After admin approves or rejects a single trader document. */
 export const notifyTraderDocumentReviewed = async (input: {
   userId: string;
+  email: string;
+  fullName: string;
   documentId: string;
   documentName: string;
   status: 'APPROVED' | 'REJECTED';
@@ -292,6 +294,48 @@ export const notifyTraderDocumentReviewed = async (input: {
 }) => {
   const approved = input.status === 'APPROVED';
   const reason = input.rejectionReason?.trim();
+  const name = input.fullName?.trim() || 'there';
+
+  const subject = approved
+    ? `Your BRISK document "${input.documentName}" was approved`
+    : `Action needed: your BRISK document "${input.documentName}" was rejected`;
+
+  const text = approved
+    ? [
+        `Hi ${name},`,
+        '',
+        `Good news — your document "${input.documentName}" has been approved.`,
+        '',
+        'You can continue with your BRISK trader application in the app.',
+        '',
+        'Regards,',
+        'BRISK Team',
+      ].join('\n')
+    : [
+        `Hi ${name},`,
+        '',
+        `Your document "${input.documentName}" was not approved.`,
+        reason ? `Reason: ${reason}` : 'Please upload a clearer copy and try again.',
+        '',
+        'Open the BRISK trader app to review and re-upload the document.',
+        '',
+        'Regards,',
+        'BRISK Team',
+      ].join('\n');
+
+  await sendMail({
+    to: input.email,
+    subject,
+    text,
+  }).catch((err) => {
+    logger.warn('[NOTIFY] Trader document review email failed', {
+      email: input.email,
+      documentId: input.documentId,
+      status: input.status,
+      err: String(err),
+    });
+  });
+
   await createUserNotification(
     input.userId,
     approved ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED',
