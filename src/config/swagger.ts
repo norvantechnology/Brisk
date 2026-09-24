@@ -53,6 +53,16 @@ const options: swaggerJSDoc.Options = {
     servers,
     tags: [
       { name: 'Admin / Auth', description: 'Admin login & session' },
+      {
+        name: 'Admin / Notifications',
+        description:
+          'Admin Portal inbox — GET/PATCH/DELETE /admin/notifications with pagination (page, limit, unreadOnly, type, search). Auth: admin Bearer.',
+      },
+      {
+        name: 'Notifications',
+        description:
+          'Trader Portal / Customer in-app inbox — GET/PATCH/DELETE /notifications with pagination. Auth: user Bearer from POST /auth/login.',
+      },
       { name: 'Admin / Categories', description: 'Master categories' },
       { name: 'Admin / Sub-Categories', description: 'Sub-categories' },
       { name: 'Admin / Customers', description: 'Customer directory' },

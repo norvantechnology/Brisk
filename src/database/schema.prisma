@@ -317,6 +317,7 @@ model AdminUser {
   reviewedSurveyTraders   SurveyTraderRegistration[]   @relation("SurveyTraderReviewedBy")
   reviewedContactSubmissions ContactSubmission[]       @relation("ContactSubmissionReviewedBy")
   updatedExchangeRates       ExchangeRate[]            @relation("ExchangeRateUpdatedBy")
+  notifications              AdminNotification[]
 
   @@map("admin_users")
 }
@@ -1202,7 +1203,26 @@ model Notification {
   // Relationships
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, read, createdAt])
   @@map("notifications")
+}
+
+/// In-app inbox for Admin Portal (per admin user).
+model AdminNotification {
+  id          String   @id @default(uuid()) @db.Uuid
+  adminUserId String   @map("admin_user_id") @db.Uuid
+  type        String
+  title       String
+  message     String   @db.Text
+  payload     Json?
+  actionUrl   String?  @map("action_url")
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, read, createdAt])
+  @@map("admin_notifications")
 }
 
 model AccountDeletionRequest {

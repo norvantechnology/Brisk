@@ -2,6 +2,7 @@ import { AdminStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 import { sendMail } from './email.service';
+import { createAdminNotifications } from '../modules/admin/admin-notifications/admin-notifications.service';
 
 const getAdminInbox = (): string =>
   process.env.CONTACT_ADMIN_EMAIL?.trim() || 'support@brisk.ie';
@@ -26,6 +27,21 @@ const notifyAdminsByEmail = async (subject: string, text: string, html?: string)
       })
     )
   );
+};
+
+const notifyAdminsInApp = async (input: {
+  type: string;
+  title: string;
+  message: string;
+  actionUrl?: string;
+  payload?: Record<string, unknown>;
+}) => {
+  await createAdminNotifications(input).catch((err) => {
+    logger.warn('[NOTIFY] Admin in-app notification failed', {
+      type: input.type,
+      err: String(err),
+    });
+  });
 };
 
 const createUserNotification = async (
@@ -66,10 +82,16 @@ export const notifyAdminTraderOtpVerified = async (input: {
   ].join('\n');
 
   await notifyAdminsByEmail(subject, text);
-
-  // No User-linked admin inbox for in-app; email is the admin channel.
-  logger.info('[NOTIFY] Admin informed of trader OTP verification', {
-    traderUserId: input.traderUserId,
+  await notifyAdminsInApp({
+    type: 'TRADER_OTP_VERIFIED',
+    title: 'New trader verified OTP',
+    message: `${input.fullName} verified email and mobile OTP.`,
+    actionUrl: '/traders',
+    payload: {
+      traderUserId: input.traderUserId,
+      email: input.email,
+      mobileNumber: input.mobileNumber,
+    },
   });
 };
 
@@ -95,8 +117,16 @@ export const notifyAdminTraderPendingApproval = async (input: {
   ].join('\n');
 
   await notifyAdminsByEmail(subject, text);
-  logger.info('[NOTIFY] Admin informed of pending trader approval', {
-    traderId: input.traderId,
+  await notifyAdminsInApp({
+    type: 'TRADER_PENDING_APPROVAL',
+    title: 'Trader pending approval',
+    message: `${input.fullName} submitted documents and is awaiting verification.`,
+    actionUrl: '/trader-verification',
+    payload: {
+      traderId: input.traderId,
+      traderUserId: input.traderUserId,
+      email: input.email,
+    },
   });
 };
 
