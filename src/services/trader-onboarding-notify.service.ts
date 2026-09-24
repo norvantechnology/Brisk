@@ -145,6 +145,49 @@ export const notifyAdminTraderPendingApproval = async (input: {
       email: input.email,
     },
   });
+
+  // Trader confirmation (submit previously only emailed admins).
+  await notifyTraderOnboardingSubmitted({
+    userId: input.traderUserId,
+    fullName: input.fullName,
+    email: input.email,
+  });
+};
+
+/** After trader submits onboarding — confirmation to the trader. */
+export const notifyTraderOnboardingSubmitted = async (input: {
+  userId: string;
+  fullName: string;
+  email: string;
+}) => {
+  const subject = 'We received your BRISK trader application';
+  const text = [
+    `Hi ${input.fullName},`,
+    '',
+    'Thanks for submitting your BRISK trader application.',
+    'Our team is reviewing your documents. You will receive another email once your profile is approved or if we need more information.',
+    '',
+    'Regards,',
+    'BRISK Team',
+  ].join('\n');
+
+  await sendMail({
+    to: input.email,
+    subject,
+    text,
+  }).catch((err) => {
+    logger.warn('[NOTIFY] Trader submit confirmation email failed', {
+      email: input.email,
+      err: String(err),
+    });
+  });
+
+  await createUserNotification(input.userId, 'TRADER_ONBOARDING_SUBMITTED', {
+    title: 'Application received',
+    message:
+      'Your trader application was submitted. We will email you when the review is complete.',
+    actionUrl: traderNotificationActionUrl.onboardingPendingReview(),
+  });
 };
 
 /** After admin approves trader profile. */
