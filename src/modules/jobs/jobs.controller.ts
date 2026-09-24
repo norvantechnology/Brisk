@@ -215,3 +215,47 @@ export const cancelJob = async (
     next(error);
   }
 };
+
+export const confirmSiteVisitProposal = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.confirmSiteVisitProposal(
+      req.user!.id,
+      req.params.id,
+      req.params.requestId
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit confirmed successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rejectSiteVisitProposal = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.rejectSiteVisitProposal(
+      req.user!.id,
+      req.params.id,
+      req.params.requestId
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit rejected. Trader must propose a new date.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

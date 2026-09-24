@@ -12,6 +12,7 @@ import {
   setJobLocationSchema,
   updateJobSchema,
   acceptJobQuoteSchema,
+  siteVisitProposalParamSchema,
 } from './jobs.validation';
 
 const router = Router();
@@ -550,5 +551,77 @@ router.post(
  *         description: Already cancelled
  */
 router.post('/:id/cancel', ...customerOnly, validate(jobIdParamSchema), controller.cancelJob);
+
+/**
+ * @swagger
+ * /jobs/{id}/site-visits/{requestId}/confirm:
+ *   post:
+ *     summary: Confirm a trader site-visit proposal (customer)
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       PENDING → CONFIRMED. Keeps `visitDate` / `timeSlot` as the confirmed schedule.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Site visit confirmed
+ *       400:
+ *         description: Not pending / missing date
+ *       404:
+ *         description: Proposal not found
+ *       409:
+ *         description: Already confirmed or completed
+ */
+router.post(
+  '/:id/site-visits/:requestId/confirm',
+  ...customerOnly,
+  validate(siteVisitProposalParamSchema),
+  controller.confirmSiteVisitProposal
+);
+
+/**
+ * @swagger
+ * /jobs/{id}/site-visits/{requestId}/reject:
+ *   post:
+ *     summary: Reject a trader site-visit proposal (customer)
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       PENDING → RESCHEDULE_REQUIRED.
+ *       **Keeps** `visitDate` / `timeSlot` so trader Discover shows the rejected date
+ *       as the current reschedule context before the trader picks a new date.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Rejected — trader must propose a new date; rejected date preserved
+ *       400:
+ *         description: Not pending / confirmed cannot reject here
+ *       404:
+ *         description: Proposal not found
+ *       409:
+ *         description: Already requires reschedule or completed
+ */
+router.post(
+  '/:id/site-visits/:requestId/reject',
+  ...customerOnly,
+  validate(siteVisitProposalParamSchema),
+  controller.rejectSiteVisitProposal
+);
 
 export default router;

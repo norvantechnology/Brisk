@@ -9,6 +9,7 @@ import {
   QuoteStatus,
   BookingStatus,
   InvoiceStatus,
+  TraderSiteVisitStatus,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
@@ -216,6 +217,25 @@ const jobInclude = {
     },
   },
   claim: { select: { id: true, status: true, claimedAt: true } },
+  siteVisitRequests: {
+    where: { status: { not: TraderSiteVisitStatus.CANCELLED } },
+    orderBy: { updatedAt: 'desc' as const },
+    select: {
+      id: true,
+      traderId: true,
+      status: true,
+      visitDate: true,
+      timeSlot: true,
+      updatedAt: true,
+      trader: {
+        select: {
+          id: true,
+          businessName: true,
+          user: { select: { fullName: true } },
+        },
+      },
+    },
+  },
 } satisfies Prisma.JobInclude;
 
 const serializeJob = (
@@ -414,6 +434,24 @@ const serializeJob = (
           claimedAt: job.claim.claimedAt ? job.claim.claimedAt.toISOString() : '',
         }
       : { id: '', status: '', claimedAt: '' },
+    /**
+     * Trader site-visit proposals for this job.
+     * Customer uses `requestId` with confirm/reject endpoints.
+     * On reject, visitDate is kept so trader Discover shows it as reschedule context.
+     */
+    siteVisitProposals: (job.siteVisitRequests ?? []).map((v) => ({
+      requestId: v.id,
+      traderId: v.traderId,
+      traderName: v.trader?.businessName || v.trader?.user?.fullName || null,
+      status: v.status,
+      visitDate: v.visitDate
+        ? v.visitDate.toISOString().slice(0, 10)
+        : null,
+      timeSlot: v.timeSlot,
+      updatedAt: v.updatedAt.toISOString(),
+      canConfirm: v.status === TraderSiteVisitStatus.PENDING,
+      canReject: v.status === TraderSiteVisitStatus.PENDING,
+    })),
     bookingId: str(job.booking?.id),
     invoiceId: str(job.booking?.invoice?.id),
     booking: job.booking
@@ -1505,6 +1543,143 @@ export const cancelJob = async (customerId: string, jobId: string) => {
     at: new Date().toISOString(),
   });
   return job;
+};
+
+const getOwnedPendingSiteVisitRequest = async (
+  customerId: string,
+  jobId: string,
+  requestId: string
+) => {
+  const job = await getOwnedJob(customerId, jobId);
+  const request = await prisma.traderSiteVisitRequest.findFirst({
+    where: {
+      id: requestId,
+      jobId: job.id,
+      status: { not: TraderSiteVisitStatus.CANCELLED },
+    },
+    select: {
+      id: true,
+      jobId: true,
+      traderId: true,
+      status: true,
+      visitDate: true,
+      timeSlot: true,
+    },
+  });
+  if (!request) {
+    throw new NotFoundError('Site visit proposal not found for this job.');
+  }
+  return { job, request };
+};
+
+/**
+ * Customer confirms a trader's proposed site-visit slot(s).
+ * PENDING → CONFIRMED. Keeps visitDate/timeSlot.
+ */
+export const confirmSiteVisitProposal = async (
+  customerId: string,
+  jobId: string,
+  requestId: string
+) => {
+  const { request } = await getOwnedPendingSiteVisitRequest(customerId, jobId, requestId);
+  if (request.status === TraderSiteVisitStatus.CONFIRMED) {
+    throw new ConflictError('Site visit is already confirmed.');
+  }
+  if (request.status === TraderSiteVisitStatus.COMPLETED) {
+    throw new ConflictError('Site visit is already completed.');
+  }
+  if (request.status !== TraderSiteVisitStatus.PENDING) {
+    throw new BadRequestError('Only a pending site-visit proposal can be confirmed.');
+  }
+  if (!request.visitDate || !request.timeSlot) {
+    throw new BadRequestError('Site visit proposal has no date/time to confirm.');
+  }
+
+  const updated = await prisma.traderSiteVisitRequest.update({
+    where: { id: request.id },
+    data: {
+      status: TraderSiteVisitStatus.CONFIRMED,
+      visitDate: request.visitDate,
+      timeSlot: request.timeSlot,
+    },
+    select: {
+      id: true,
+      jobId: true,
+      traderId: true,
+      status: true,
+      visitDate: true,
+      timeSlot: true,
+    },
+  });
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { scheduledDate: request.visitDate },
+  });
+
+  return {
+    requestId: updated.id,
+    jobId: updated.jobId,
+    traderId: updated.traderId,
+    status: updated.status,
+    visitDate: updated.visitDate,
+    timeSlot: updated.timeSlot,
+  };
+};
+
+/**
+ * Customer rejects a trader's proposed site-visit date/time.
+ * PENDING → RESCHEDULE_REQUIRED.
+ * Keeps visitDate/timeSlot so trader Discover shows the rejected date as reschedule context.
+ */
+export const rejectSiteVisitProposal = async (
+  customerId: string,
+  jobId: string,
+  requestId: string
+) => {
+  const { request } = await getOwnedPendingSiteVisitRequest(customerId, jobId, requestId);
+  if (request.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED) {
+    throw new ConflictError('Site visit already requires reschedule.');
+  }
+  if (request.status === TraderSiteVisitStatus.CONFIRMED) {
+    throw new BadRequestError(
+      'Confirmed site visits cannot be rejected here. Ask trader to reschedule.'
+    );
+  }
+  if (request.status === TraderSiteVisitStatus.COMPLETED) {
+    throw new ConflictError('Site visit is already completed.');
+  }
+  if (request.status !== TraderSiteVisitStatus.PENDING) {
+    throw new BadRequestError('Only a pending site-visit proposal can be rejected.');
+  }
+
+  const updated = await prisma.traderSiteVisitRequest.update({
+    where: { id: request.id },
+    data: {
+      status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
+      // Keep visitDate + timeSlot = rejected schedule for trader UI.
+    },
+    select: {
+      id: true,
+      jobId: true,
+      traderId: true,
+      status: true,
+      visitDate: true,
+      timeSlot: true,
+    },
+  });
+
+  return {
+    requestId: updated.id,
+    jobId: updated.jobId,
+    traderId: updated.traderId,
+    status: updated.status,
+    /** Rejected date/time — trader should see this as current reschedule context. */
+    rejectedVisitDate: updated.visitDate,
+    rejectedTimeSlot: updated.timeSlot,
+    visitDate: updated.visitDate,
+    timeSlot: updated.timeSlot,
+  };
 };
 
 /**
