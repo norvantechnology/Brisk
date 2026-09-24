@@ -142,7 +142,7 @@ export const buildJobFormConfig = (input: {
   ];
 
   const nextAfterLocation =
-    offerApplied || siteVisitEnabled ? 'SITE_VISIT_PAY_FEE' : 'WAITING_FOR_QUOTES';
+    offerApplied ? 'SITE_VISIT_PAY_FEE' : 'WAITING_FOR_QUOTES';
 
   const offerBanner =
     offerApplied && input.offerBanner
@@ -185,7 +185,7 @@ export const buildJobFormConfig = (input: {
         nextAfterLocation: 'SITE_VISIT_PAY_FEE',
       },
     },
-    showSiteVisitFee: siteVisitEnabled && siteVisitFeeAmount > 0,
+    showSiteVisitFee: false,
     siteVisitFee: {
       amount: siteVisitFeeAmount,
       currencyCode,
@@ -208,20 +208,24 @@ export const buildJobFormConfig = (input: {
     durationOptions: [] as Array<{ key: string; label: string }>,
     priceEnabled,
     priceEnteredBy,
-    /** Navigation keys only — CTAs owned by the mobile app. */
-    flowSteps:
-      siteVisitEnabled || offerApplied
-        ? [
-            { key: 'POST_NEW_JOB' },
-            { key: 'CHOOSE_LOCATION' },
-            { key: 'SITE_VISIT_PAY_FEE' },
-            { key: 'SUCCESS' },
-          ]
-        : [
-            { key: 'POST_NEW_JOB' },
-            { key: 'CHOOSE_LOCATION' },
-            { key: 'WAITING_FOR_QUOTES' },
-          ],
+    /**
+     * Default flow = REMOTE (waiting for quotes).
+     * When user selects Site Visit / ONSITE, use visibilityByQuoteType.ONSITE.nextAfterLocation
+     * and the ONSITE flow (SITE_VISIT_PAY_FEE) — do not use this list alone when siteVisitEnabled.
+     */
+    flowSteps: offerApplied
+      ? [
+          { key: 'POST_NEW_JOB' },
+          { key: 'CHOOSE_LOCATION' },
+          { key: 'SITE_VISIT_PAY_FEE' },
+          { key: 'SUCCESS' },
+        ]
+      : [
+          { key: 'POST_NEW_JOB' },
+          { key: 'CHOOSE_LOCATION' },
+          { key: 'WAITING_FOR_QUOTES' },
+          { key: 'SUCCESS' },
+        ],
     nextAfterJobForm: 'CHOOSE_LOCATION',
     nextAfterLocation,
     addressesPath: 'GET /addresses',
