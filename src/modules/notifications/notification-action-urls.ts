@@ -20,6 +20,7 @@ export const adminNotificationActionUrl = {
 export const traderNotificationActionUrl = {
   dashboard: () => '/dashboard',
   documents: () => '/documents',
+  documentDetail: (documentId: string) => `/documents/${documentId}`,
   onboardingPendingReview: () => '/onboarding/pending-review',
 } as const;
 
@@ -62,6 +63,7 @@ export const resolveAdminNotificationActionUrl = (
       if (traderId) return adminNotificationActionUrl.traderDetail(traderId);
       break;
     case 'TRADER_PENDING_APPROVAL':
+    case 'TRADER_DOCUMENT_UPLOADED':
       if (traderId) return adminNotificationActionUrl.traderVerificationDetail(traderId);
       break;
     default:
@@ -92,6 +94,13 @@ export const resolveUserNotificationActionUrl = (
       return traderNotificationActionUrl.dashboard();
     case 'TRADER_PROFILE_REJECTED':
       return traderNotificationActionUrl.onboardingPendingReview();
+    case 'DOCUMENT_APPROVED':
+    case 'DOCUMENT_REJECTED':
+    case 'DOCUMENT_STATUS': {
+      const documentId = str(data.documentId);
+      if (documentId) return traderNotificationActionUrl.documentDetail(documentId);
+      return traderNotificationActionUrl.documents();
+    }
     default:
       return null;
   }

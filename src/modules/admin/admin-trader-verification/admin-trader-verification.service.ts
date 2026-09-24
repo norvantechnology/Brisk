@@ -509,6 +509,7 @@ export const reviewTraderDocument = async (
     where: { id: traderId },
     select: {
       id: true,
+      userId: true,
       onboardingStatus: true,
       verificationStatus: true,
       rejectionReason: true,
@@ -554,6 +555,17 @@ export const reviewTraderDocument = async (
   });
 
   const syncResult = await syncTraderVerificationFromDocuments(traderId);
+
+  void import('../../../services/trader-onboarding-notify.service').then(
+    ({ notifyTraderDocumentReviewed }) =>
+      notifyTraderDocumentReviewed({
+        userId: trader.userId,
+        documentId: updatedDocument.id,
+        documentName: updatedDocument.documentRule.name,
+        status: input.status,
+        rejectionReason: updatedDocument.rejectionReason,
+      })
+  );
 
   return {
     document: serializeTraderDocument(updatedDocument),

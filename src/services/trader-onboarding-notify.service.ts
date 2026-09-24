@@ -210,3 +210,60 @@ export const notifyTraderProfileRejected = async (input: {
     actionUrl: traderNotificationActionUrl.onboardingPendingReview(),
   });
 };
+
+/** After trader uploads/replaces a document (admin inbox). */
+export const notifyAdminTraderDocumentUploaded = async (input: {
+  traderId: string;
+  traderUserId: string;
+  fullName: string;
+  email: string;
+  documentId: string;
+  documentRuleId: string;
+  documentName: string;
+  fileName?: string | null;
+}) => {
+  await notifyAdminsInApp({
+    type: 'TRADER_DOCUMENT_UPLOADED',
+    title: 'New document uploaded',
+    message: `${input.fullName} uploaded "${input.documentName}".`,
+    actionUrl: adminNotificationActionUrl.traderVerificationDetail(input.traderId),
+    payload: {
+      traderId: input.traderId,
+      traderUserId: input.traderUserId,
+      documentId: input.documentId,
+      documentRuleId: input.documentRuleId,
+      documentName: input.documentName,
+      fileName: input.fileName ?? null,
+      email: input.email,
+    },
+  });
+};
+
+/** After admin approves or rejects a single trader document. */
+export const notifyTraderDocumentReviewed = async (input: {
+  userId: string;
+  documentId: string;
+  documentName: string;
+  status: 'APPROVED' | 'REJECTED';
+  rejectionReason?: string | null;
+}) => {
+  const approved = input.status === 'APPROVED';
+  const reason = input.rejectionReason?.trim();
+  await createUserNotification(
+    input.userId,
+    approved ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED',
+    {
+      title: approved ? 'Document approved' : 'Document needs attention',
+      message: approved
+        ? `Your document "${input.documentName}" was approved.`
+        : reason
+          ? `Your document "${input.documentName}" was rejected. ${reason}`
+          : `Your document "${input.documentName}" was rejected.`,
+      actionUrl: traderNotificationActionUrl.documentDetail(input.documentId),
+      documentId: input.documentId,
+      documentName: input.documentName,
+      status: input.status,
+      ...(reason ? { rejectionReason: reason } : {}),
+    }
+  );
+};

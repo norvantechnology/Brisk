@@ -421,7 +421,7 @@ export const uploadDocument = async (
   input: UploadDocumentInput,
   options?: { allowAfterSubmit?: boolean }
 ) => {
-  const { trader } = await ensureTraderForUser(userId);
+  const { trader, user } = await ensureTraderForUser(userId);
   if (!options?.allowAfterSubmit) {
     assertDocumentsEditable(trader);
   }
@@ -444,7 +444,7 @@ export const uploadDocument = async (
     throw new BadRequestError('This document is not required for your business type.');
   }
 
-  await prisma.traderDocument.upsert({
+  const saved = await prisma.traderDocument.upsert({
     where: {
       traderId_documentRuleId: {
         traderId: trader.id,
@@ -463,7 +463,35 @@ export const uploadDocument = async (
       status: 'PENDING',
       rejectionReason: null,
     },
+    select: {
+      id: true,
+      fileName: true,
+      documentRuleId: true,
+    },
   });
+
+  // Notify admins when document is for review (profile / post-submit), not early onboarding drafts.
+  const shouldNotifyAdmin =
+    Boolean(options?.allowAfterSubmit) ||
+    trader.onboardingStatus === TraderOnboardingStatus.SUBMITTED ||
+    trader.onboardingStatus === TraderOnboardingStatus.APPROVED ||
+    trader.onboardingStatus === TraderOnboardingStatus.REJECTED;
+
+  if (shouldNotifyAdmin) {
+    void import('../../../services/trader-onboarding-notify.service').then(
+      ({ notifyAdminTraderDocumentUploaded }) =>
+        notifyAdminTraderDocumentUploaded({
+          traderId: trader.id,
+          traderUserId: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          documentId: saved.id,
+          documentRuleId: saved.documentRuleId,
+          documentName: rule.name,
+          fileName: saved.fileName,
+        })
+    );
+  }
 
   if (!options?.allowAfterSubmit) {
     if (registration.currentStep === ONBOARDING_STEPS.ENTITY_DOCUMENTS) {
