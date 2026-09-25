@@ -139,7 +139,14 @@ const buildSessionPayload = async (
   };
 };
 
-const sendEmailOtpMail = async (email: string, code: string) => {
+const emailAudienceForRole = (role: UserRole): 'trader' | 'customer' =>
+  role === UserRole.TRADER ? 'trader' : 'customer';
+
+const sendEmailOtpMail = async (
+  email: string,
+  code: string,
+  role: UserRole = UserRole.TRADER
+) => {
   try {
     const { escapeHtml, sendBrandedMail } = await import('../../services/email.service');
     const safeCode = escapeHtml(code);
@@ -147,7 +154,7 @@ const sendEmailOtpMail = async (email: string, code: string) => {
       to: email,
       subject: 'Your BRISK email verification code',
       title: 'Email verification',
-      audience: 'trader',
+      audience: emailAudienceForRole(role),
       text: `Your BRISK email verification code is ${code}. It expires in 10 minutes.`,
       paragraphs: [
         'Use this code to verify your email address for BRISK.',
@@ -160,7 +167,11 @@ const sendEmailOtpMail = async (email: string, code: string) => {
   }
 };
 
-const sendPasswordResetOtpMail = async (email: string, code: string) => {
+const sendPasswordResetOtpMail = async (
+  email: string,
+  code: string,
+  role: UserRole
+) => {
   try {
     const { escapeHtml, sendBrandedMail } = await import('../../services/email.service');
     const safeCode = escapeHtml(code);
@@ -168,7 +179,7 @@ const sendPasswordResetOtpMail = async (email: string, code: string) => {
       to: email,
       subject: 'Your BRISK password reset code',
       title: 'Password reset',
-      audience: 'trader',
+      audience: emailAudienceForRole(role),
       text: `Your BRISK password reset code is ${code}. It expires in 10 minutes.`,
       paragraphs: [
         'Use this code to reset your BRISK password.',
@@ -243,7 +254,7 @@ const buildOtpRequiredPayload = async (user: AuthUser) => {
     const sendResult = await trySendOtp(user.email, 'email_verification');
     if (sendResult.sent) {
       emailSent = true;
-      await sendEmailOtpMail(user.email, sendResult.code);
+      await sendEmailOtpMail(user.email, sendResult.code, user.role);
     } else if (retryAfterSeconds == null) {
       retryAfterSeconds = sendResult.retryAfterSeconds;
     }
@@ -376,7 +387,7 @@ export const registerUser = async (
   await generateOtp(mobileNumber, 'mobile_verification');
   if (isTrader) {
     const emailCode = await generateOtp(email, 'email_verification');
-    await sendEmailOtpMail(email, emailCode);
+    await sendEmailOtpMail(email, emailCode, UserRole.TRADER);
   }
 
   // Register Interest email (customer vs trader) — non-blocking
@@ -534,7 +545,7 @@ export const resendUserOtp = async (input: ResendOtpInput) => {
   }
   if (sendEmail) {
     const code = await generateOtp(user.email, 'email_verification');
-    await sendEmailOtpMail(user.email, code);
+    await sendEmailOtpMail(user.email, code, user.role);
     emailOtpSent = true;
   }
 
@@ -734,7 +745,7 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
 
   let otpSentToEmail = false;
   if (isTrader || Boolean(input.email)) {
-    await sendPasswordResetOtpMail(user.email, code);
+    await sendPasswordResetOtpMail(user.email, code, user.role);
     otpSentToEmail = true;
   }
 
@@ -994,7 +1005,7 @@ export const resendTraderEmailOtp = async (input: ResendEmailOtpInput) => {
   assertAccountCanAuthenticate(user);
 
   const code = await generateOtp(email, 'email_verification');
-  await sendEmailOtpMail(email, code);
+  await sendEmailOtpMail(email, code, UserRole.TRADER);
 
   return {
     message: 'A new verification code has been sent to your email address.',

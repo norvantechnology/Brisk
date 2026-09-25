@@ -21,7 +21,7 @@ const getPublicAssetBaseUrl = (): string =>
   ).replace(/\/$/, '');
 
 const getEmailLogoUrl = (kind: EmailLogoKind): string =>
-  `${getPublicAssetBaseUrl()}/assets/email/${EMAIL_LOGOS[kind].filename}?v=2`;
+  `${getPublicAssetBaseUrl()}/assets/email/${EMAIL_LOGOS[kind].filename}?v=3`;
 
 /** Trader portal (VPS: trader.brisk.ie). */
 export const getTraderWebBaseUrl = (): string =>
