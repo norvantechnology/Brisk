@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as categoriesController from './categories.controller';
 import { validate } from '../../middlewares/validate.middleware';
+import { optionalAuthMiddleware } from '../../middlewares/auth.middleware';
 import {
   appCategoryListSchema,
   appSubcategoryListSchema,
@@ -18,42 +19,66 @@ export const subcategoriesRouter = Router();
  *     summary: List all active service categories (Customer / Trader app)
  *     tags: ['Mobile / Categories']
  *     description: |
- *       **Use on:** Home screen category grid, post-job "pick a trade" step, trader profile category picker.
+ *       **Use on:** Home screen category grid, post-job "pick a trade" step, trader profile / onboarding category picker.
  *
- *       **Auth:** Not required.
+ *       **Auth:** Optional. Public without token. Send **trader Bearer** to get per-category document upload status
+ *       (`documentsStatus`) for blue highlight when all required category documents are uploaded.
  *
- *       **Pagination:** None — full list is returned in `data` (no `meta`, no `page`/`limit`).
+ *       **Pagination:** None — full list is returned in `data`.
  *
- *       **Response fields (each item in `data`):**
- *       - **iconName** — Text icon identifier set by admin (e.g. `Wrench`, `Zap`). Map this to a local app icon when `iconUrl` is null.
- *       - **iconUrl** — Full image URL when admin uploaded/pasted a URL in `iconName` or when `bannerImageUrl` is set; otherwise `null`.
- *       - **bannerImageUrl** — Optional banner/card image URL from admin.
- *       - **urlSlug** — SEO slug (e.g. `plumbing-services`); use with `GET /categories/slug/{slug}`.
- *       - **subcategories** — Only present when `includeSubcategories=true` (nested sub-category list with job-post flags).
+ *       **Icons — how to load:**
+ *       1. Prefer **`iconUrl`** — remote image URL (HTTP(S) in `iconName`, else `{CATEGORY_ICON_BASE_URL}/{urlSlug}.svg`).
+ *       2. If `iconUrl` is null or fails to load, map **`iconName`** (e.g. `Wrench`, `Zap`) to a **local app asset**.
+ *       3. Optional card image: **`bannerImageUrl`** (separate from icon).
+ *
+ *       **Document status (trader token only):**
+ *       - `documentsStatus`: `ACTIVE` = all required category docs uploaded (show blue) |
+ *         `PENDING` = missing required uploads | `N_A` = no required rules / guest / customer
+ *       - `documentsComplete`: boolean shortcut (`true` when ACTIVE)
+ *       - `requiredDocumentsCount` / `uploadedRequiredDocumentsCount`
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
  *     parameters:
  *       - in: query
  *         name: featured
  *         schema: { type: string, enum: [true, false] }
  *         description: |
  *           **Purpose:** Show only featured categories on homepage or "Popular services" section.
- *           **How to use:** Pass `featured=true` to get admin-marked featured categories only; omit for all active categories.
  *           **Example:** `GET /categories?featured=true`
  *       - in: query
  *         name: includeSubcategories
  *         schema: { type: string, enum: [true, false, 1, 0] }
  *         description: |
- *           **Purpose:** Avoid a second API call by nesting sub-categories under each category.
- *           **When to use:** Post-job flow step 1 — load categories + sub-categories in one request.
- *           **When not to use:** Simple category picker that loads sub-categories separately via `GET /sub-categories?categoryId=`.
- *           **Nested fields:** Each sub-category includes `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`.
+ *           Nest sub-categories under each category (`siteVisitEnabled`, `priceEnabled`, `qaFormSchema`).
  *           **Example:** `GET /categories?includeSubcategories=true`
  *     responses:
  *       200:
  *         description: |
- *           `data` = array of category objects (snake_case not used; camelCase).
- *           No `meta` object.
+ *           `data` = array of category objects (camelCase).
+ *           Example fields: `id`, `name`, `iconName`, `iconUrl`, `documentsStatus`, `documentsComplete`.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Categories retrieved successfully.
+ *               data:
+ *                 - id: 782f9eac-a393-4ab0-9377-d41d19b2fe7b
+ *                   name: Solar
+ *                   iconName: Zap
+ *                   iconUrl: https://cdn.brisk.com/icons/categories/solar.svg
+ *                   status: active
+ *                   documentsStatus: ACTIVE
+ *                   documentsComplete: true
+ *                   requiredDocumentsCount: 2
+ *                   uploadedRequiredDocumentsCount: 2
  */
-categoriesRouter.get('/', validate(appCategoryListSchema), categoriesController.listCategories);
+categoriesRouter.get(
+  '/',
+  optionalAuthMiddleware,
+  validate(appCategoryListSchema),
+  categoriesController.listCategories
+);
 
 /**
  * @swagger
@@ -62,27 +87,28 @@ categoriesRouter.get('/', validate(appCategoryListSchema), categoriesController.
  *     summary: Get one active category by URL slug (with nested sub-categories)
  *     tags: ['Mobile / Categories']
  *     description: |
- *       **Use on:** Deep links, SEO URLs, or when you only have the slug from a previous screen.
- *
- *       **Auth:** Not required.
- *
- *       Same category object as list/detail, always includes nested active **subcategories** with job-post flags.
+ *       Optional trader Bearer enriches `documentsStatus` the same as list.
+ *       Icons: use `iconUrl`, fallback local map of `iconName`.
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
  *     parameters:
  *       - in: path
  *         name: slug
  *         required: true
  *         schema: { type: string, example: plumbing-services }
- *         description: |
- *           **Purpose:** Look up a category by its public URL slug (from `urlSlug` on the category object).
- *           **How to use:** Copy `urlSlug` from list response — e.g. `plumbing-services` → `GET /categories/slug/plumbing-services`.
- *           **Not the same as:** `categoryCode` (internal code like `CAT-PLUMB`) or UUID `id`.
  *     responses:
  *       200:
  *         description: Single category object in `data` with nested `subcategories`.
  *       404:
  *         description: Category not found or inactive.
  */
-categoriesRouter.get('/slug/:slug', validate(slugParamSchema), categoriesController.getCategoryBySlug);
+categoriesRouter.get(
+  '/slug/:slug',
+  optionalAuthMiddleware,
+  validate(slugParamSchema),
+  categoriesController.getCategoryBySlug
+);
 
 /**
  * @swagger
@@ -91,27 +117,28 @@ categoriesRouter.get('/slug/:slug', validate(slugParamSchema), categoriesControl
  *     summary: Get one active category by UUID (with nested sub-categories)
  *     tags: ['Mobile / Categories']
  *     description: |
- *       **Use on:** After user taps a category card when you stored the category `id` from the list.
- *
- *       **Auth:** Not required.
- *
- *       Returns full category + all active sub-categories with **siteVisitEnabled**, **priceEnabled**, **priceEnteredBy**, **qaFormSchema**.
+ *       Optional trader Bearer enriches `documentsStatus` the same as list.
+ *       Icons: use `iconUrl`, fallback local map of `iconName`.
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: |
- *           **Purpose:** Fetch one category when you have its UUID from `GET /categories` list.
- *           **How to use:** Pass the `id` field from the category object selected by the user.
- *           **Example:** `GET /categories/536b6e62-36a7-4356-94c0-935b1653aa57`
  *     responses:
  *       200:
  *         description: Single category object in `data` with nested `subcategories`.
  *       404:
  *         description: Category not found or inactive.
  */
-categoriesRouter.get('/:id', validate(idParamSchema), categoriesController.getCategory);
+categoriesRouter.get(
+  '/:id',
+  optionalAuthMiddleware,
+  validate(idParamSchema),
+  categoriesController.getCategory
+);
 
 /**
  * @swagger

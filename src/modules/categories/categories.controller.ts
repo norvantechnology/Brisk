@@ -1,10 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import * as categoriesService from './categories.service';
 import { sendResponse } from '../../utils/apiResponse';
+import type { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 
-export const listCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+const traderUserIdFrom = (req: Request): string | null => {
+  const user = (req as AuthenticatedRequest).user;
+  return user?.role === 'TRADER' ? user.id : null;
+};
+
+export const listCategories = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
-    const data = await categoriesService.listActiveCategories(req.query);
+    const data = await categoriesService.listActiveCategories(req.query, {
+      traderUserId: traderUserIdFrom(req),
+    });
     sendResponse({
       res,
       statusCode: 200,
@@ -16,9 +28,15 @@ export const listCategories = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-export const getCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const getCategory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
-    const result = await categoriesService.getActiveCategoryById(req.params.id);
+    const result = await categoriesService.getActiveCategoryById(req.params.id, {
+      traderUserId: traderUserIdFrom(req),
+    });
     sendResponse({
       res,
       statusCode: 200,
@@ -36,7 +54,9 @@ export const getCategoryBySlug = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await categoriesService.getActiveCategoryBySlug(req.params.slug);
+    const result = await categoriesService.getActiveCategoryBySlug(req.params.slug, {
+      traderUserId: traderUserIdFrom(req),
+    });
     sendResponse({
       res,
       statusCode: 200,

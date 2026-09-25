@@ -1,13 +1,17 @@
-import { Subcategory, Category, SubcategoryPriceEnteredBy } from '@prisma/client';
+import { Category, Subcategory, SubcategoryPriceEnteredBy } from '@prisma/client';
 
 const DEFAULT_CATEGORY_ICON_BASE_URL = 'https://cdn.brisk.com/icons/categories';
 
 const isHttpUrl = (value: string | null | undefined): value is string =>
   typeof value === 'string' && /^https?:\/\//i.test(value);
 
-/** Resolve a fetchable icon URL for mobile apps from stored iconName / slug. */
+/**
+ * Resolve a fetchable icon URL for mobile apps.
+ * Priority: iconName (if full http URL) → CATEGORY_ICON_BASE_URL/{urlSlug}.svg → null.
+ * When null, map `iconName` (e.g. Wrench) to a local asset in the app.
+ */
 export const resolveCategoryIconUrl = (
-  cat: Pick<Category, 'iconName' | 'urlSlug'>
+  cat: Pick<Category, 'iconName' | 'urlSlug'> & { bannerImageUrl?: string | null }
 ): string | null => {
   if (isHttpUrl(cat.iconName)) {
     return cat.iconName;
@@ -22,7 +26,23 @@ export const resolveCategoryIconUrl = (
     return `${baseUrl}/${cat.urlSlug}.svg`;
   }
 
+  if (isHttpUrl(cat.bannerImageUrl)) {
+    return cat.bannerImageUrl;
+  }
+
   return null;
+};
+
+/** Trader category-wise required docs status (for blue highlight when complete). */
+export type CategoryDocumentsStatus = 'ACTIVE' | 'PENDING' | 'N_A';
+
+export type CategoryDocumentsExtras = {
+  /** ACTIVE = all required category docs uploaded (show blue). PENDING = missing. N_A = no required rules / guest. */
+  documentsStatus: CategoryDocumentsStatus;
+  /** true when documentsStatus === ACTIVE */
+  documentsComplete: boolean;
+  requiredDocumentsCount: number;
+  uploadedRequiredDocumentsCount: number;
 };
 
 type SubcategoryRow = Pick<
@@ -102,6 +122,7 @@ export const serializeCategory = (
     subCategoriesCount?: number;
     tradersCount?: number;
     jobsCount?: number;
+    documents?: CategoryDocumentsExtras;
   }
 ) => ({
   id: cat.id,
@@ -116,6 +137,11 @@ export const serializeCategory = (
   displayOrder: cat.displayOrder,
   status: cat.status,
   featured: cat.featured,
+  /** ACTIVE when all required category documents are uploaded (trader Bearer). Else PENDING / N_A. */
+  documentsStatus: extras?.documents?.documentsStatus ?? ('N_A' as CategoryDocumentsStatus),
+  documentsComplete: extras?.documents?.documentsComplete ?? false,
+  requiredDocumentsCount: extras?.documents?.requiredDocumentsCount ?? 0,
+  uploadedRequiredDocumentsCount: extras?.documents?.uploadedRequiredDocumentsCount ?? 0,
   subCategoriesCount: extras?.subCategoriesCount,
   tradersCount: extras?.tradersCount,
   jobsCount: extras?.jobsCount,

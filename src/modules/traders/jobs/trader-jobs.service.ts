@@ -62,7 +62,7 @@ const isSiteVisitJob = (job: {
   quoteType: JobQuoteType | null;
 }): boolean => job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
 
-/** True when trader must pick a new visit slot (past preferred date, booking rescheduled, or visit status). */
+/** True when trader must pick a new visit slot (rejected visit, booking rescheduled, or visit status). */
 const jobNeedsReschedule = (
   job: {
     siteVisitRequested: boolean;
@@ -72,7 +72,7 @@ const jobNeedsReschedule = (
   },
   traderVisitStatus?: TraderSiteVisitStatus | null
 ): boolean => {
-  // Already proposed / locked — not in "needs reschedule" CTA state anymore
+  // Already proposed / locked - not in "needs reschedule" CTA state anymore
   if (
     traderVisitStatus === TraderSiteVisitStatus.PENDING ||
     traderVisitStatus === TraderSiteVisitStatus.CONFIRMED ||
@@ -83,7 +83,9 @@ const jobNeedsReschedule = (
   if (traderVisitStatus === TraderSiteVisitStatus.RESCHEDULE_REQUIRED) return true;
   if (!isSiteVisitJob(job)) return false;
   if (job.booking?.status === 'RESCHEDULED') return true;
-  if (job.scheduledDate && job.scheduledDate.getTime() < Date.now()) return true;
+  // Customer preferred `scheduledDate` alone must NOT force Reschedule.
+  // Fresh ONSITE jobs (no trader visit yet) always use Request For Site Visit,
+  // even when preferred date is today/past (midnight < Date.now() was a false positive).
   return false;
 };
 

@@ -62,3 +62,45 @@ export const authMiddleware = async (
     }
   }
 };
+
+/**
+ * Prefer auth when Bearer is present; continue as guest if missing/invalid.
+ * Used by public list APIs that enrich for logged-in traders (e.g. category docs status).
+ */
+export const optionalAuthMiddleware = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      next();
+      return;
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, env.JWT_SECRET) as {
+      id: string;
+      email: string;
+      role: 'CUSTOMER' | 'TRADER';
+      tv?: number;
+    };
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: { id: true, email: true, role: true, tokenVersion: true },
+    });
+
+    if (user && (decoded.tv ?? 0) === user.tokenVersion) {
+      req.user = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      };
+    }
+  } catch {
+    // Ignore invalid tokens on optional auth — treat as guest.
+  }
+  next();
+};
