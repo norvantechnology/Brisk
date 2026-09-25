@@ -41,6 +41,8 @@ export type CategoryDocumentsExtras = {
   documentsStatus: CategoryDocumentsStatus;
   /** true when documentsStatus === ACTIVE */
   documentsComplete: boolean;
+  /** Alias of documentsComplete — trader mobile Profile chips. */
+  documentUpload?: boolean;
   requiredDocumentsCount: number;
   uploadedRequiredDocumentsCount: number;
 };
@@ -140,6 +142,8 @@ export const serializeCategory = (
   /** ACTIVE when all required category documents are uploaded (trader Bearer). Else PENDING / N_A. */
   documentsStatus: extras?.documents?.documentsStatus ?? ('N_A' as CategoryDocumentsStatus),
   documentsComplete: extras?.documents?.documentsComplete ?? false,
+  /** Same as documentsComplete — mobile Profile uses this key. */
+  documentUpload: extras?.documents?.documentUpload ?? extras?.documents?.documentsComplete ?? false,
   requiredDocumentsCount: extras?.documents?.requiredDocumentsCount ?? 0,
   uploadedRequiredDocumentsCount: extras?.documents?.uploadedRequiredDocumentsCount ?? 0,
   subCategoriesCount: extras?.subCategoriesCount,

@@ -85,14 +85,23 @@ const buildDocumentRequirementsWithUploads = async (
   return {
     entityRules: enrichRulesWithUploads(entityRules, documents),
     // Category Wise Documents screen: one object per selected category + documents[]
-    categoryRules: categoryRules.map((group) => ({
-      categoryId: group.categoryId,
-      categoryName: group.categoryName,
-      categoryCode: group.categoryCode,
-      title: group.title,
-      subtitle: group.subtitle,
-      documents: enrichRulesWithUploads(group.documents, documents),
-    })),
+    categoryRules: categoryRules.map((group) => {
+      const enriched = enrichRulesWithUploads(group.documents, documents);
+      const required = enriched.filter((d) => d.required);
+      const uploadedRequired = required.filter((d) => d.uploadStatus === 'UPLOADED');
+      const documentUpload =
+        required.length > 0 && uploadedRequired.length >= required.length;
+      return {
+        categoryId: group.categoryId,
+        categoryName: group.categoryName,
+        categoryCode: group.categoryCode,
+        title: group.title,
+        subtitle: group.subtitle,
+        documentUpload,
+        documentsComplete: documentUpload,
+        documents: enriched,
+      };
+    }),
   };
 };
 const traderInclude = {
@@ -582,25 +591,10 @@ export const saveCategories = async (
       data: input.categoryIds.map((categoryId) => ({ traderId: trader.id, categoryId })),
     });
 
-    const staleCategoryIds = trader.categories
-      .map((item) => item.categoryId)
-      .filter((categoryId) => !input.categoryIds.includes(categoryId));
-
-    if (staleCategoryIds.length) {
-      const staleRuleIds = await tx.documentRule.findMany({
-        where: { scope: 'CATEGORY', categoryId: { in: staleCategoryIds } },
-        select: { id: true },
-      });
-
-      if (staleRuleIds.length) {
-        await tx.traderDocument.deleteMany({
-          where: {
-            traderId: trader.id,
-            documentRuleId: { in: staleRuleIds.map((rule) => rule.id) },
-          },
-        });
-      }
-    }
+    // Keep category-scoped uploads when a trade is deselected. Re-selecting the
+    // same category restores uploadStatus without forcing a re-upload. (Deleting
+    // here caused other categories' documentUpload/documentsComplete to flip
+    // false when Profile sent a partial categoryIds list alongside a doc upload.)
 
     await tx.trader.update({
       where: { id: trader.id },

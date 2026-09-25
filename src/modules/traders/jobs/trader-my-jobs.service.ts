@@ -182,12 +182,13 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
                 },
               ],
             },
-            // Site visit in progress (may not have job.traderId yet)
+            // Confirmed site visit only (customer accepted slots). PENDING /
+            // RESCHEDULE_REQUIRED stay on Discover — not My Jobs ACTIVE.
             {
               siteVisitRequests: {
                 some: {
                   traderId,
-                  status: { notIn: [TraderSiteVisitStatus.CANCELLED, TraderSiteVisitStatus.COMPLETED] },
+                  status: TraderSiteVisitStatus.CONFIRMED,
                 },
               },
             },

@@ -23,6 +23,7 @@ export type AppSubcategoryFilters = {
 const naDocuments = (): CategoryDocumentsExtras => ({
   documentsStatus: 'N_A',
   documentsComplete: false,
+  documentUpload: false,
   requiredDocumentsCount: 0,
   uploadedRequiredDocumentsCount: 0,
 });
@@ -41,18 +42,23 @@ export const buildTraderCategoryDocumentsMap = async (
     select: {
       id: true,
       traderType: true,
+      categories: { select: { categoryId: true } },
       documents: { select: { documentRuleId: true } },
     },
   });
 
   if (!trader) return map;
 
+  const selectedCategoryIds = trader.categories.map((c) => c.categoryId);
+  if (!selectedCategoryIds.length) return map;
+
+  // Only selected trades — unselected categories stay N_A on GET /categories.
   const rules = await prisma.documentRule.findMany({
     where: {
       scope: DocumentRuleScope.CATEGORY,
       status: ACTIVE,
       required: true,
-      categoryId: { not: null },
+      categoryId: { in: selectedCategoryIds },
       OR: [{ traderType: trader.traderType }, { traderType: null }],
     },
     select: { id: true, categoryId: true },
@@ -68,7 +74,8 @@ export const buildTraderCategoryDocumentsMap = async (
     byCategory.set(rule.categoryId, row);
   }
 
-  for (const [categoryId, row] of byCategory) {
+  for (const categoryId of selectedCategoryIds) {
+    const row = byCategory.get(categoryId) ?? { requiredIds: [] };
     const requiredDocumentsCount = row.requiredIds.length;
     const uploadedRequiredDocumentsCount = row.requiredIds.filter((id) => uploaded.has(id)).length;
     const complete =
@@ -79,6 +86,8 @@ export const buildTraderCategoryDocumentsMap = async (
     map.set(categoryId, {
       documentsStatus,
       documentsComplete: complete,
+      /** Alias used by trader mobile Profile / category chips. */
+      documentUpload: complete,
       requiredDocumentsCount,
       uploadedRequiredDocumentsCount,
     });

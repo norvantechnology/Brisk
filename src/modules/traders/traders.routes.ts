@@ -364,7 +364,8 @@ router.delete(
  *       **Use on:** Profile → Categories.
  *
  *       Do **not** use `PUT /traders/onboarding/categories` after submit — that returns 403.
- *       Removing a category also drops its category-scoped uploaded docs.
+ *       Deselecting a category hides its rules from requirements but **keeps** uploaded files
+ *       so re-selecting does not wipe `documentUpload` / `documentsComplete` for other trades.
  *     requestBody:
  *       required: true
  *       content:
