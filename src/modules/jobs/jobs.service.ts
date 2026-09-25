@@ -519,10 +519,13 @@ const getOwnedJob = async (customerId: string, jobId: string) => {
   return job;
 };
 
-const assertDraft = (status: JobStatus) => {
-  if (status !== JobStatus.DRAFT) {
-    throw new BadRequestError('Only draft jobs can be updated.');
-  }
+/** Draft always editable; published marketplace jobs editable until assigned. */
+const assertJobDetailsEditable = (job: { status: JobStatus; traderId: string | null }) => {
+  if (job.status === JobStatus.DRAFT) return;
+  if (job.status === JobStatus.PUBLISHED && !job.traderId) return;
+  throw new BadRequestError(
+    'Only draft or unassigned published jobs can be updated.'
+  );
 };
 
 export const createJob = async (customerId: string, input: CreateJobInput) => {
@@ -864,7 +867,7 @@ export const getJobOutcomeDetail = async (
 
 export const updateJob = async (customerId: string, jobId: string, input: UpdateJobInput) => {
   const existing = await getOwnedJob(customerId, jobId);
-  assertDraft(existing.status);
+  assertJobDetailsEditable(existing);
 
   if (input.categoryId) {
     const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
@@ -947,6 +950,13 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
     status: serialized.status,
     customerId,
     traderId: serialized.traderId || null,
+    title: serialized.title,
+    city: serialized.city,
+    categoryId: serialized.categoryId,
+    subcategoryId: serialized.subcategoryId,
+    latitude: serialized.latitude,
+    longitude: serialized.longitude,
+    siteVisitRequested: serialized.siteVisitRequested,
     at: new Date().toISOString(),
   });
   return serialized;

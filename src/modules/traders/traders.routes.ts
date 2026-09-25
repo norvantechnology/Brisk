@@ -364,8 +364,12 @@ router.delete(
  *       **Use on:** Profile → Categories.
  *
  *       Do **not** use `PUT /traders/onboarding/categories` after submit — that returns 403.
- *       Deselecting a category hides its rules from requirements but **keeps** uploaded files
- *       so re-selecting does not wipe `documentUpload` / `documentsComplete` for other trades.
+ *
+ *       **Merge by default:** `categoryIds` are **added** to the trader's current trades.
+ *       Uploading documents for one category must send either no categories call, or the
+ *       full list / merge — never a single id unless you also pass `replace: true`.
+ *       Set `replace: true` only when the user explicitly re-picks their full trade list.
+ *       Deselecting with `replace: true` hides rules for removed trades but **keeps** uploads.
  *     requestBody:
  *       required: true
  *       content:
@@ -377,6 +381,10 @@ router.delete(
  *               categoryIds:
  *                 type: array
  *                 items: { type: string, format: uuid }
+ *               replace:
+ *                 type: boolean
+ *                 description: |
+ *                   Profile only. Default false = merge/add. true = replace full list.
  *     responses:
  *       200:
  *         description: Categories updated. Onboarding snapshot in `data` (includes documentRequirements).

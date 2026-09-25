@@ -688,6 +688,7 @@ const listCardSelect = {
   quoteType: true,
   scheduledDate: true,
   createdAt: true,
+  updatedAt: true,
   categoryId: true,
   status: true,
   traderId: true,
@@ -745,6 +746,7 @@ const toListItem = (
     currencyCode: currency?.currencyCode ?? 'EUR',
     currencySymbol: currency?.currencySymbol ?? '€',
     createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
     isBookmarked: bookmarkedIds.has(job.id),
     isSiteVisit,
     /** Actual DB job status — Discover open jobs are PUBLISHED until customer confirms. */
@@ -1109,6 +1111,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     quoteType: job.quoteType,
     scheduledDate: job.scheduledDate,
     createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
     categoryId: job.categoryId,
     status: job.status,
     traderId: job.traderId,

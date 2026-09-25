@@ -214,7 +214,13 @@ const serializeOnboardingStatus = async (
   trader: Awaited<ReturnType<typeof ensureTraderForUser>>['trader'],
   registration: { currentStep: number; entityType: TraderType; status: string; stepData: Prisma.JsonValue | null }
 ) => {
-  const categoryIds = trader.categories.map((item) => item.categoryId);
+  const selectedCategoryIds = trader.categories.map((item) => item.categoryId);
+  // Include trades that still have uploads even if temporarily deselected so
+  // Profile Category Documents does not look like files were deleted.
+  const uploadedCategoryIds = trader.documents
+    .map((d) => d.documentRule?.categoryId)
+    .filter((id): id is string => Boolean(id));
+  const categoryIds = [...new Set([...selectedCategoryIds, ...uploadedCategoryIds])];
   const documentRequirements = await buildDocumentRequirementsWithUploads(
     registration.entityType,
     categoryIds,
@@ -585,20 +591,27 @@ export const saveCategories = async (
     throw new BadRequestError('One or more selected categories are invalid or inactive.');
   }
 
+  const existingIds = trader.categories.map((item) => item.categoryId);
+  // Profile updates merge by default so a single-category save (common when
+  // uploading docs for one trade) does not drop sibling categories / their docs UI.
+  const replace =
+    !options?.allowAfterSubmit || Boolean((input as { replace?: boolean }).replace);
+  const nextCategoryIds = replace
+    ? [...new Set(input.categoryIds)]
+    : [...new Set([...existingIds, ...input.categoryIds])];
+
   await prisma.$transaction(async (tx) => {
     await tx.traderCategory.deleteMany({ where: { traderId: trader.id } });
     await tx.traderCategory.createMany({
-      data: input.categoryIds.map((categoryId) => ({ traderId: trader.id, categoryId })),
+      data: nextCategoryIds.map((categoryId) => ({ traderId: trader.id, categoryId })),
     });
 
-    // Keep category-scoped uploads when a trade is deselected. Re-selecting the
-    // same category restores uploadStatus without forcing a re-upload. (Deleting
-    // here caused other categories' documentUpload/documentsComplete to flip
-    // false when Profile sent a partial categoryIds list alongside a doc upload.)
+    // Keep category-scoped uploads when a trade is deselected (replace:true).
+    // Re-selecting restores uploadStatus without forcing a re-upload.
 
     await tx.trader.update({
       where: { id: trader.id },
-      data: { categoryId: input.categoryIds[0] },
+      data: { categoryId: nextCategoryIds[0] },
     });
 
     if (!options?.allowAfterSubmit) {
@@ -606,7 +619,9 @@ export const saveCategories = async (
         where: { userId },
         data: {
           currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.CATEGORY_DOCUMENTS),
-          stepData: mergeStepData(registration.stepData, 'categories', input),
+          stepData: mergeStepData(registration.stepData, 'categories', {
+            categoryIds: nextCategoryIds,
+          }),
         },
       });
     }

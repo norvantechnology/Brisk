@@ -50,21 +50,22 @@ export const buildTraderCategoryDocumentsMap = async (
   if (!trader) return map;
 
   const selectedCategoryIds = trader.categories.map((c) => c.categoryId);
-  if (!selectedCategoryIds.length) return map;
+  const uploadedRuleIds = new Set(trader.documents.map((d) => d.documentRuleId));
 
-  // Only selected trades — unselected categories stay N_A on GET /categories.
+  // Status for every category that has rules — upload completeness is based on
+  // files on disk, not whether the trade is currently selected. Selection only
+  // affects Discover matching; it must not clear documentUpload for other trades.
   const rules = await prisma.documentRule.findMany({
     where: {
       scope: DocumentRuleScope.CATEGORY,
       status: ACTIVE,
       required: true,
-      categoryId: { in: selectedCategoryIds },
+      categoryId: { not: null },
       OR: [{ traderType: trader.traderType }, { traderType: null }],
     },
     select: { id: true, categoryId: true },
   });
 
-  const uploaded = new Set(trader.documents.map((d) => d.documentRuleId));
   const byCategory = new Map<string, { requiredIds: string[] }>();
 
   for (const rule of rules) {
@@ -74,10 +75,19 @@ export const buildTraderCategoryDocumentsMap = async (
     byCategory.set(rule.categoryId, row);
   }
 
-  for (const categoryId of selectedCategoryIds) {
-    const row = byCategory.get(categoryId) ?? { requiredIds: [] };
+  for (const [categoryId, row] of byCategory) {
     const requiredDocumentsCount = row.requiredIds.length;
-    const uploadedRequiredDocumentsCount = row.requiredIds.filter((id) => uploaded.has(id)).length;
+    const uploadedRequiredDocumentsCount = row.requiredIds.filter((id) =>
+      uploadedRuleIds.has(id)
+    ).length;
+    const hasAnyUpload = row.requiredIds.some((id) => uploadedRuleIds.has(id));
+    const isSelected = selectedCategoryIds.includes(categoryId);
+
+    // Unselected + no uploads → N_A (not relevant). Otherwise show real status.
+    if (!isSelected && !hasAnyUpload) {
+      continue;
+    }
+
     const complete =
       requiredDocumentsCount > 0 && uploadedRequiredDocumentsCount >= requiredDocumentsCount;
     const documentsStatus: CategoryDocumentsStatus =
@@ -86,7 +96,6 @@ export const buildTraderCategoryDocumentsMap = async (
     map.set(categoryId, {
       documentsStatus,
       documentsComplete: complete,
-      /** Alias used by trader mobile Profile / category chips. */
       documentUpload: complete,
       requiredDocumentsCount,
       uploadedRequiredDocumentsCount,

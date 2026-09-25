@@ -205,6 +205,33 @@ export const emitJobCreated = (payload: JobRealtimePayload) => {
 export const emitJobUpdated = (payload: JobRealtimePayload) => {
   const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
   emit(RealtimeEvents.JOB_UPDATED, rooms, { ...payload });
+  // Marketplace card refresh for Discover listeners
+  void broadcastMarketplaceJobUpdateToTraders(payload);
+};
+
+/**
+ * Push job field changes to Discover so traders soft-refresh / upsert the card.
+ */
+const broadcastMarketplaceJobUpdateToTraders = async (payload: JobRealtimePayload) => {
+  if (payload.status !== 'PUBLISHED') return;
+  if (payload.traderId) return;
+
+  try {
+    const rooms = [roomTradersDiscover()];
+    if (payload.categoryId) {
+      rooms.push(roomTraderCategory(payload.categoryId));
+    }
+    const nearbyUserIds = await findNearbyDiscoverTraderUserIds(payload);
+    for (const userId of nearbyUserIds) {
+      rooms.push(roomUser(userId));
+    }
+    emit(RealtimeEvents.JOB_UPDATED, rooms, {
+      ...payload,
+      source: 'marketplace',
+    });
+  } catch (err) {
+    logger.warn('Realtime marketplace update broadcast failed', { err, jobId: payload.jobId });
+  }
 };
 
 export const emitJobPublished = (
