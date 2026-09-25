@@ -13,6 +13,7 @@ import {
 } from '../../utils/errors';
 import {
   generateOtp,
+  generateSharedOtp,
   getOtpMeta,
   getResendCooldownSeconds,
   matchOtp,
@@ -140,15 +141,86 @@ const buildSessionPayload = async (
 
 const sendEmailOtpMail = async (email: string, code: string) => {
   try {
-    const { sendMail } = await import('../../services/email.service');
-    await sendMail({
+    const { escapeHtml, sendBrandedMail } = await import('../../services/email.service');
+    const safeCode = escapeHtml(code);
+    await sendBrandedMail({
       to: email,
       subject: 'Your BRISK email verification code',
+      title: 'Email verification',
+      audience: 'trader',
       text: `Your BRISK email verification code is ${code}. It expires in 10 minutes.`,
+      paragraphs: [
+        'Use this code to verify your email address for BRISK.',
+        `Your verification code is: <strong style="font-size:22px;letter-spacing:3px;">${safeCode}</strong>`,
+        'This code expires in 10 minutes. If you did not request this, you can ignore this email.',
+      ],
     });
   } catch (err) {
-    // Logged in sendMail / otp mock — do not block register.
+    // Logged in sendMail / otp mock - do not block register.
   }
+};
+
+const sendPasswordResetOtpMail = async (email: string, code: string) => {
+  try {
+    const { escapeHtml, sendBrandedMail } = await import('../../services/email.service');
+    const safeCode = escapeHtml(code);
+    await sendBrandedMail({
+      to: email,
+      subject: 'Your BRISK password reset code',
+      title: 'Password reset',
+      audience: 'trader',
+      text: `Your BRISK password reset code is ${code}. It expires in 10 minutes.`,
+      paragraphs: [
+        'Use this code to reset your BRISK password.',
+        `Your password reset code is: <strong style="font-size:22px;letter-spacing:3px;">${safeCode}</strong>`,
+        'This code expires in 10 minutes. If you did not request a password reset, you can ignore this email.',
+      ],
+    });
+  } catch (err) {
+    // SMTP may be unavailable - OTP is still stored for mobile / mock verify.
+  }
+};
+
+const FORGOT_PASSWORD_GENERIC_MESSAGE =
+  'If an account exists for these details, a verification code has been sent.';
+
+const findUserForPasswordReset = async (input: {
+  email?: string;
+  mobileNumber?: string;
+}) => {
+  if (input.email) {
+    return prisma.user.findUnique({
+      where: { email: input.email },
+      select: {
+        id: true,
+        email: true,
+        mobileNumber: true,
+        role: true,
+        status: true,
+        mobileVerified: true,
+      },
+    });
+  }
+  if (input.mobileNumber) {
+    return prisma.user.findUnique({
+      where: { mobileNumber: input.mobileNumber },
+      select: {
+        id: true,
+        email: true,
+        mobileNumber: true,
+        role: true,
+        status: true,
+        mobileVerified: true,
+      },
+    });
+  }
+  return null;
+};
+
+/** Clear password_reset OTP on both email and mobile after a successful verify. */
+const consumePasswordResetOtps = (email: string, mobileNumber: string) => {
+  consumeOtp(email, 'password_reset');
+  consumeOtp(mobileNumber, 'password_reset');
 };
 
 const buildOtpRequiredPayload = async (user: AuthUser) => {
@@ -598,9 +670,6 @@ export const logoutUser = async () => ({
   message: 'Logged out successfully.',
 });
 
-const FORGOT_PASSWORD_GENERIC_MESSAGE =
-  'If an account exists for this email, a verification code has been sent to the registered mobile number.';
-
 const RESET_TOKEN_EXPIRES_IN = '15m';
 
 const createPasswordResetToken = (user: { id: string; mobileNumber: string }) =>
@@ -614,28 +683,34 @@ const createPasswordResetToken = (user: { id: string; mobileNumber: string }) =>
     { expiresIn: RESET_TOKEN_EXPIRES_IN }
   );
 
+/**
+ * Screen 1 - Forgot Password.
+ * Body: { email } OR { mobileNumber }.
+ * Traders: same OTP stored for email + mobile; emailed + logged for SMS mock.
+ * Customers: OTP on mobile (SMS mock); email channel optional when email provided.
+ */
 export const forgotPassword = async (input: ForgotPasswordInput) => {
-  const { email } = input;
-
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      id: true,
-      email: true,
-      mobileNumber: true,
-      role: true,
-      status: true,
-    },
-  });
+  const user = await findUserForPasswordReset(input);
 
   if (!user) {
-    throw new NotFoundError('No account found for this email.');
+    throw new NotFoundError(
+      input.email
+        ? 'No account found for this email.'
+        : 'No account found for this mobile number.'
+    );
   }
 
   assertAccountCanAuthenticate(user);
 
+  const isTrader = user.role === UserRole.TRADER;
+  const identifiers =
+    isTrader || input.email
+      ? [user.email, user.mobileNumber]
+      : [user.mobileNumber];
+
+  let code: string;
   try {
-    await generateOtp(user.mobileNumber, 'password_reset');
+    code = await generateSharedOtp(identifiers, 'password_reset');
   } catch (error) {
     if (error instanceof TooManyRequestsError) {
       return {
@@ -647,6 +722,8 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
           mobileNumber: user.mobileNumber,
           role: user.role,
           otpSent: false as const,
+          otpSentToEmail: false as const,
+          otpSentToMobile: false as const,
           retryAfterSeconds: getResendCooldownSeconds(),
           ...getOtpMeta(),
         },
@@ -655,8 +732,19 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
     throw error;
   }
 
+  let otpSentToEmail = false;
+  if (isTrader || Boolean(input.email)) {
+    await sendPasswordResetOtpMail(user.email, code);
+    otpSentToEmail = true;
+  }
+
+  // Mobile: SMS provider not wired - OTP is stored; mock code 123456 also accepted for testing.
+  const otpSentToMobile = true;
+
   return {
-    message: FORGOT_PASSWORD_GENERIC_MESSAGE,
+    message: isTrader
+      ? 'Verification code sent to your email and mobile. Enter the code with your new password.'
+      : FORGOT_PASSWORD_GENERIC_MESSAGE,
     data: {
       requiresPasswordReset: true as const,
       userId: user.id,
@@ -664,41 +752,40 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
       mobileNumber: user.mobileNumber,
       role: user.role,
       otpSent: true as const,
+      otpSentToEmail,
+      otpSentToMobile,
       ...getOtpMeta(),
     },
   };
 };
 
 /**
- * Forgot-password step 2 — verify OTP only.
- * Do NOT use POST /auth/verify-otp (that is for signup mobile activation).
+ * Optional step: verify OTP only (returns resetToken).
+ * Prefer POST /auth/reset-password with code + newPassword + confirmPassword.
  */
 export const verifyPasswordResetOtp = async (input: VerifyResetOtpInput) => {
-  const { mobileNumber, code } = input;
-
-  const user = await prisma.user.findUnique({
-    where: { mobileNumber },
-    select: {
-      id: true,
-      email: true,
-      mobileNumber: true,
-      role: true,
-      status: true,
-      mobileVerified: true,
-    },
-  });
+  const { code } = input;
+  const user = await findUserForPasswordReset(input);
 
   if (!user) {
-    throw new NotFoundError('User with this mobile number does not exist.');
+    throw new NotFoundError(
+      input.email
+        ? 'No account found for this email.'
+        : 'User with this mobile number does not exist.'
+    );
   }
 
   assertAccountCanAuthenticate(user);
 
-  const isValid = await verifyOtp(mobileNumber, code, 'password_reset');
-  if (!isValid) {
+  const matched =
+    matchOtp(user.email, code, 'password_reset') ||
+    matchOtp(user.mobileNumber, code, 'password_reset');
+
+  if (!matched) {
     throw new BadRequestError('Invalid or expired verification code.');
   }
 
+  consumePasswordResetOtps(user.email, user.mobileNumber);
   const resetToken = createPasswordResetToken(user);
 
   return {
@@ -756,10 +843,13 @@ const applyNewPassword = async (userId: string, newPassword: string) => {
   };
 };
 
+/**
+ * Screen 2 - OTP + newPassword + confirmPassword.
+ * Also accepts resetToken + newPassword + confirmPassword (after verify-reset-otp).
+ */
 export const resetPassword = async (input: ResetPasswordInput) => {
-  const { resetToken, mobileNumber, code, newPassword } = input;
+  const { resetToken, email, mobileNumber, code, newPassword } = input;
 
-  // Preferred app flow: OTP already verified → resetToken only
   if (resetToken) {
     try {
       const decoded = jwt.verify(resetToken, env.JWT_SECRET) as {
@@ -781,25 +871,28 @@ export const resetPassword = async (input: ResetPasswordInput) => {
     }
   }
 
-  // Legacy one-shot: mobileNumber + code + newPassword
-  if (!mobileNumber || !code) {
-    throw new BadRequestError('Provide resetToken, or mobileNumber + code.');
+  if (!code) {
+    throw new BadRequestError('Provide code, or resetToken.');
   }
 
-  const user = await prisma.user.findUnique({
-    where: { mobileNumber },
-    select: { id: true },
-  });
-
+  const user = await findUserForPasswordReset({ email, mobileNumber });
   if (!user) {
-    throw new NotFoundError('User with this mobile number does not exist.');
+    throw new NotFoundError(
+      email ? 'No account found for this email.' : 'User with this mobile number does not exist.'
+    );
   }
 
-  const isValid = await verifyOtp(mobileNumber, code, 'password_reset');
-  if (!isValid) {
+  assertAccountCanAuthenticate(user);
+
+  const matched =
+    matchOtp(user.email, code, 'password_reset') ||
+    matchOtp(user.mobileNumber, code, 'password_reset');
+
+  if (!matched) {
     throw new BadRequestError('Invalid or expired verification code.');
   }
 
+  consumePasswordResetOtps(user.email, user.mobileNumber);
   return applyNewPassword(user.id, newPassword);
 };
 

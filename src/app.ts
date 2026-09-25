@@ -4,7 +4,6 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { sendResponse } from './utils/apiResponse';
-import { sendMail } from './services/email.service';
 import { logger } from './utils/logger';
 import { setupSwagger } from './config/swagger';
 import authRoutes from './modules/auth/auth.routes';
@@ -235,7 +234,20 @@ app.get('/health/smtp-test', async (req: Request, res: Response) => {
   ].join('\n');
 
   try {
-    await sendMail({ to: email, subject, text });
+    const { sendBrandedMail } = await import('./services/email.service');
+    await sendBrandedMail({
+      to: email,
+      subject,
+      title: 'SMTP connectivity test',
+      audience: 'customer',
+      text,
+      paragraphs: [
+        'This is a BRISK SMTP connectivity test.',
+        `Sent at: <strong>${new Date().toISOString()}</strong>`,
+        `To: ${email}`,
+        'If you received this, outbound SMTP is working.',
+      ],
+    });
     smtpTestLastSentAt.set(email, Date.now());
     logger.info('[SMTP-TEST] Sent', { email });
     sendResponse({

@@ -203,41 +203,45 @@ router.post('/login', validate(loginSchema), authController.login);
  * @swagger
  * /auth/forgot-password:
  *   post:
- *     summary: Request a password reset code (SMS OTP to registered mobile)
+ *     summary: Forgot password - send OTP to email and/or mobile (same code)
  *     tags: ['Mobile / Auth']
  *     description: |
- *       Customer and Trader apps — user enters email on "Forgot Password".
- *       If the account exists, a 6-digit OTP is sent to the registered mobile number.
- *       If the email is **not registered**, returns **404** with message:
- *       `No account found for this email.`
- *       When **data.otpSent** is true and **data.mobileNumber** is present, open the OTP screen.
+ *       **Trader (and Customer) Forgot Password - screen 1.**
+ *       Send **email** OR **mobileNumber** (at least one).
+ *
+ *       For **TRADER** accounts the **same 6-digit OTP** is stored for both email and mobile,
+ *       emailed to the trader, and available for mobile verify (SMS mock / test code `123456`).
+ *
+ *       Next screen: **POST /auth/reset-password** with
+ *       `{ email|mobileNumber, code, newPassword, confirmPassword }`.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - email
  *             properties:
  *               email:
  *                 type: string
  *                 format: email
- *                 example: jane@example.com
+ *                 example: trader@example.com
+ *               mobileNumber:
+ *                 type: string
+ *                 example: "+353871234567"
+ *           examples:
+ *             byEmail:
+ *               value: { email: trader@example.com }
+ *             byMobile:
+ *               value: { mobileNumber: "+353871234567" }
  *     responses:
  *       200:
- *         description: "Account found. OTP sent to registered mobile (otpSent true)."
+ *         description: OTP issued (otpSent true). Open OTP + new password screen.
  *       403:
  *         description: Account blocked, suspended, or inactive.
  *       404:
- *         description: No account found for this email.
- *         content:
- *           application/json:
- *             example:
- *               success: false
- *               message: No account found for this email.
+ *         description: No account found for email/mobile.
  *       429:
- *         description: OTP resend cooldown active (may also return 200 with otpSent=false).
+ *         description: OTP resend cooldown (may also return 200 with otpSent=false).
  */
 router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
 
@@ -245,23 +249,22 @@ router.post('/forgot-password', validate(forgotPasswordSchema), authController.f
  * @swagger
  * /auth/verify-reset-otp:
  *   post:
- *     summary: Verify forgot-password OTP (step 2) — returns resetToken
+ *     summary: Optional - verify forgot-password OTP only (returns resetToken)
  *     tags: ['Mobile / Auth']
  *     description: |
- *       **Forgot password flow:**
- *       1. POST /auth/forgot-password { email }
- *       2. POST /auth/verify-reset-otp { mobileNumber, code } → resetToken
- *       3. POST /auth/reset-password { resetToken, newPassword }
+ *       Optional middle step. Preferred trader flow skips this and calls **POST /auth/reset-password**
+ *       with OTP + newPassword + confirmPassword in one request.
  *
- *       Do **not** call POST /auth/verify-otp here (that is for signup only).
+ *       Body: **email** OR **mobileNumber** + **code**.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [mobileNumber, code]
+ *             required: [code]
  *             properties:
+ *               email: { type: string, format: email }
  *               mobileNumber: { type: string, example: "+353871234567" }
  *               code: { type: string, example: "123456" }
  *     responses:
@@ -278,28 +281,43 @@ router.post('/verify-reset-otp', validate(verifyResetOtpSchema), authController.
  * @swagger
  * /auth/reset-password:
  *   post:
- *     summary: Set new password after forgot-password OTP (step 3)
+ *     summary: Forgot password screen 2 - OTP + new password + confirm password
  *     tags: ['Mobile / Auth']
  *     description: |
- *       Preferred: **resetToken** + **newPassword** from verify-reset-otp (no OTP again).
- *       Legacy one-shot still works: **mobileNumber** + **code** + **newPassword**.
+ *       **Preferred trader flow (2 screens):**
+ *       1. POST /auth/forgot-password `{ email }` or `{ mobileNumber }`
+ *       2. POST /auth/reset-password `{ email|mobileNumber, code, newPassword, confirmPassword }`
+ *
+ *       `newPassword` and `confirmPassword` must match.
+ *       Same OTP works on email or mobile channel.
+ *
+ *       Also accepts legacy `{ resetToken, newPassword, confirmPassword }` after verify-reset-otp.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [newPassword]
+ *             required: [newPassword, confirmPassword]
  *             properties:
- *               resetToken: { type: string, description: From verify-reset-otp }
+ *               email: { type: string, format: email }
  *               mobileNumber: { type: string, example: "+353871234567" }
  *               code: { type: string, example: "123456" }
  *               newPassword: { type: string, example: NewPassword1! }
+ *               confirmPassword: { type: string, example: NewPassword1! }
+ *               resetToken: { type: string, description: Optional, from verify-reset-otp }
+ *           examples:
+ *             traderNextScreen:
+ *               value:
+ *                 email: trader@example.com
+ *                 code: "123456"
+ *                 newPassword: NewPassword1!
+ *                 confirmPassword: NewPassword1!
  *     responses:
  *       200:
- *         description: Password updated. Returns tokens if mobile already verified.
+ *         description: Password updated (session returned when mobile already verified).
  *       400:
- *         description: Invalid OTP (legacy) or validation error.
+ *         description: Invalid OTP or passwords do not match.
  *       401:
  *         description: Invalid or expired resetToken.
  *       404:

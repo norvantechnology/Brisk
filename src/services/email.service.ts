@@ -23,6 +23,48 @@ const getPublicAssetBaseUrl = (): string =>
 const getEmailLogoUrl = (kind: EmailLogoKind): string =>
   `${getPublicAssetBaseUrl()}/assets/email/${EMAIL_LOGOS[kind].filename}?v=2`;
 
+/** Trader portal (VPS: trader.brisk.ie). */
+export const getTraderWebBaseUrl = (): string =>
+  (process.env.TRADER_WEB_URL || process.env.NEXT_PUBLIC_TRADER_APP_URL || 'https://trader.brisk.ie').replace(
+    /\/$/,
+    ''
+  );
+
+/** Admin portal (VPS: admin.brisk.ie). */
+export const getAdminWebBaseUrl = (): string =>
+  (process.env.ADMIN_WEB_URL || process.env.NEXT_PUBLIC_ADMIN_APP_URL || 'https://admin.brisk.ie').replace(
+    /\/$/,
+    ''
+  );
+
+export const absoluteTraderWebUrl = (path: string): string => {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${getTraderWebBaseUrl()}${p}`;
+};
+
+export const absoluteAdminWebUrl = (path: string): string => {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${getAdminWebBaseUrl()}${p}`;
+};
+
+/** CC on all admin-related emails (testing / ops monitoring). */
+export const getAdminEmailCc = (): string[] => {
+  const raw =
+    process.env.ADMIN_EMAIL_CC?.trim() ||
+    process.env.CONTACT_ADMIN_CC?.trim() ||
+    'vyas339@gmail.com';
+  return [
+    ...new Set(
+      raw
+        .split(/[,;]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+};
+
+export type EmailCta = { label: string; url: string };
+
 export type ContactEmailPayload = {
   referenceCode: string;
   fullName: string;
@@ -63,6 +105,90 @@ const escapeHtml = (value: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+export { escapeHtml };
+
+/** Audience drives which logo is shown (trader vs customer/consumer). */
+export type EmailAudience = 'trader' | 'customer';
+
+const logoForAudience = (audience: EmailAudience): EmailLogoKind =>
+  audience === 'trader' ? 'trader' : 'consumer';
+
+/**
+ * Same HTML shell as onboarding / waitlist emails:
+ * logo (dynamic) → title → body paragraphs → Regards closing.
+ */
+export const buildBrandedEmailHtml = (input: {
+  title: string;
+  /** Plain text or already-escaped HTML snippets. User input must be escapeHtml()'d. */
+  paragraphs: string[];
+  audience: EmailAudience;
+  closingHtml?: string;
+  footerNoteHtml?: string;
+  cta?: EmailCta;
+}): string =>
+  wrapHtmlEmail(input.title, input.paragraphs, {
+    logo: logoForAudience(input.audience),
+    closingHtml: input.closingHtml,
+    footerNoteHtml: input.footerNoteHtml,
+    cta: input.cta,
+  });
+
+/** Send a user-facing email in the standard BRISK branded format (Survey-style white card). */
+export const sendBrandedMail = async (input: {
+  to: string;
+  subject: string;
+  title: string;
+  paragraphs: string[];
+  audience: EmailAudience;
+  /** Plain-text fallback; defaults to paragraphs + Regards. */
+  text?: string;
+  closingHtml?: string;
+  footerNoteHtml?: string;
+  cta?: EmailCta;
+  cc?: string | string[];
+}): Promise<void> => {
+  const textParts = [
+    ...input.paragraphs.map((p) => p.replace(/<[^>]+>/g, '')),
+    ...(input.cta ? ['', `${input.cta.label}: ${input.cta.url}`] : []),
+    '',
+    'Regards,',
+    'BRISK Team',
+  ];
+  const text = input.text ?? textParts.join('\n');
+  await sendMail({
+    to: input.to,
+    subject: input.subject,
+    text,
+    cc: input.cc,
+    html: buildBrandedEmailHtml({
+      title: input.title,
+      paragraphs: input.paragraphs,
+      audience: input.audience,
+      closingHtml: input.closingHtml,
+      footerNoteHtml: input.footerNoteHtml,
+      cta: input.cta,
+    }),
+  });
+};
+
+const buildCtaButtonRow = (cta?: EmailCta): string => {
+  if (!cta?.url || !cta.label) return '';
+  const href = escapeHtml(cta.url);
+  const label = escapeHtml(cta.label);
+  // Blue CTA matching Survey / waitlist link accent (#2563eb)
+  return `<tr>
+                  <td align="center" style="padding:8px 0 24px 0;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" bgcolor="#2563eb" style="border-radius:6px;background:#2563eb;">
+                          <a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;line-height:1.2;color:#ffffff;text-decoration:none;border-radius:6px;">${label}</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>`;
+};
+
 const wrapHtmlEmail = (
   title: string,
   paragraphs: string[],
@@ -70,6 +196,7 @@ const wrapHtmlEmail = (
     logo?: EmailLogoKind;
     closingHtml?: string;
     footerNoteHtml?: string;
+    cta?: EmailCta;
   }
 ): string => {
   const body = paragraphs
@@ -99,8 +226,9 @@ const wrapHtmlEmail = (
                   </td>
                 </tr>`
     : '';
+  const ctaRow = buildCtaButtonRow(options?.cta);
 
-  // Table layout is more reliable in Gmail than div + width:100% images.
+  // Survey-style layout: soft grey page + white card + centered logo
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -123,6 +251,7 @@ const wrapHtmlEmail = (
                   </td>
                 </tr>
                 ${body}
+                ${ctaRow}
                 <tr>
                   <td style="padding:16px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1e293b;">
                     ${closingHtml}
@@ -141,11 +270,11 @@ const wrapHtmlEmail = (
 };
 
 const WAITLIST_REMOVAL_NOTE =
-  'At any stage you change your mind and don’t wish to be on the BRISK waitlist, email us at waitlist@brisk.ie - we will remove you from the waiting list, and you will receive an email confirmation within 48 hours.';
+  "At any stage you change your mind and don't wish to be on the BRISK waitlist, email us at waitlist@brisk.ie - we will remove you from the waiting list, and you will receive an email confirmation within 48 hours.";
 
 const WAITLIST_CLOSING_HTML = `Warm Regards,<br/><strong>BRISK team</strong>`;
 
-const WAITLIST_FOOTER_HTML = `Note: At any stage you change your mind and don’t wish to be on the BRISK waitlist, email us at <a href="mailto:waitlist@brisk.ie" style="color:#2563eb;text-decoration:none;">waitlist@brisk.ie</a> - we will remove you from the waiting list, and you will receive an email confirmation within 48 hours.`;
+const WAITLIST_FOOTER_HTML = `Note: At any stage you change your mind and don't wish to be on the BRISK waitlist, email us at <a href="mailto:waitlist@brisk.ie" style="color:#2563eb;text-decoration:none;">waitlist@brisk.ie</a> - we will remove you from the waiting list, and you will receive an email confirmation within 48 hours.`;
 
 const buildRegisterInterestEmail = (kind: 'customer' | 'trader', fullName?: string) => {
   const safeName = fullName?.trim() ? escapeHtml(fullName.trim().split(/\s+/)[0]) : '';
@@ -155,8 +284,8 @@ const buildRegisterInterestEmail = (kind: 'customer' | 'trader', fullName?: stri
 
   if (kind === 'trader') {
     return {
-      subject: 'You’re on the BRISK Trader Waitlist',
-      title: 'You’re on the BRISK Trader Waitlist',
+      subject: "You're on the BRISK Trader Waitlist",
+      title: "You're on the BRISK Trader Waitlist",
       logo: 'trader' as const,
       paragraphs: [
         thanksLine,
@@ -164,7 +293,7 @@ const buildRegisterInterestEmail = (kind: 'customer' | 'trader', fullName?: stri
         'By joining the waitlist, you will be among the first traders to hear when BRISK launches and when we are ready to welcome traders onto the platform.',
         'We will keep you updated as we get closer.',
       ],
-      text: `You’re on the BRISK Trader Waitlist
+      text: `You're on the BRISK Trader Waitlist
 
 ${thanksLine.replace(/<[^>]+>/g, '')}
 
@@ -182,8 +311,8 @@ Note: ${WAITLIST_REMOVAL_NOTE}`,
   }
 
   return {
-    subject: 'You’re on the BRISK Waitlist',
-    title: 'You’re on the BRISK Waitlist',
+    subject: "You're on the BRISK Waitlist",
+    title: "You're on the BRISK Waitlist",
     logo: 'consumer' as const,
     paragraphs: [
       thanksLine,
@@ -191,7 +320,7 @@ Note: ${WAITLIST_REMOVAL_NOTE}`,
       'By joining the waitlist, you will be among the first to hear when BRISK launches and when you can start using the platform to find the right tradesperson for your home.',
       'We will keep you updated as we get closer.',
     ],
-    text: `You’re on the BRISK Waitlist
+    text: `You're on the BRISK Waitlist
 
 ${thanksLine.replace(/<[^>]+>/g, '')}
 
@@ -296,6 +425,20 @@ type SendMailInput = {
   subject: string;
   text: string;
   html?: string;
+  cc?: string | string[];
+};
+
+const normalizeAddressList = (value?: string | string[]): string[] => {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : [value];
+  return [
+    ...new Set(
+      raw
+        .flatMap((v) => v.split(/[,;]+/))
+        .map((e) => e.trim())
+        .filter(Boolean)
+    ),
+  ];
 };
 
 const getSmtpTransport = (): Transporter | null => {
@@ -328,10 +471,14 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
   const fromAddress = getFromEmail();
   const smtpUser = getSmtpUser();
   const transport = getSmtpTransport();
+  const ccList = normalizeAddressList(input.cc).filter(
+    (e) => e.toLowerCase() !== input.to.trim().toLowerCase()
+  );
 
   if (!transport) {
     logger.info('[EMAIL] SMTP not configured - logging outbound mail', {
       to: input.to,
+      cc: ccList,
       from: fromAddress,
       subject: input.subject,
       text: input.text,
@@ -341,10 +488,12 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
 
   const useEnvelope =
     Boolean(smtpUser) && smtpUser!.toLowerCase() !== fromAddress.toLowerCase();
+  const envelopeTo = [input.to, ...ccList];
 
   await transport.sendMail({
     from: `Brisk <${fromAddress}>`,
     to: input.to,
+    ...(ccList.length ? { cc: ccList.join(', ') } : {}),
     subject: input.subject,
     text: input.text,
     html: input.html ?? input.text.replace(/\n/g, '<br/>'),
@@ -352,13 +501,14 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
     ...(useEnvelope
       ? {
           sender: smtpUser,
-          envelope: { from: smtpUser!, to: input.to },
+          envelope: { from: smtpUser!, to: envelopeTo },
         }
       : {}),
   });
 
   logger.info('[EMAIL] Sent', {
     to: input.to,
+    cc: ccList,
     from: fromAddress,
     envelopeFrom: useEnvelope ? smtpUser : fromAddress,
     subject: input.subject,
@@ -372,7 +522,7 @@ export const sendContactConfirmationToUser = async (
   const text = `Hi ${payload.fullName},
 
 Thank you for contacting BRISK. Reference: ${payload.referenceCode}.
-We will reply within 24–48 hours.
+We will reply within 24-48 hours.
 
 Brisk - Making things Quicker.`;
 
@@ -380,11 +530,15 @@ Brisk - Making things Quicker.`;
     to: payload.email,
     subject,
     text,
-    html: wrapHtmlEmail('We received your message', [
-      `Hi ${escapeHtml(payload.fullName)},`,
-      `Thank you for contacting BRISK. Reference: <strong>${escapeHtml(payload.referenceCode)}</strong>.`,
-      'We will reply within 24–48 hours.',
-    ]),
+    html: wrapHtmlEmail(
+      'We received your message',
+      [
+        `Hi ${escapeHtml(payload.fullName)},`,
+        `Thank you for contacting BRISK. Reference: <strong>${escapeHtml(payload.referenceCode)}</strong>.`,
+        'We will reply within 24-48 hours.',
+      ],
+      { logo: 'consumer' }
+    ),
   });
 };
 
@@ -398,8 +552,20 @@ ${payload.message}`;
 
   await sendMail({
     to: getAdminEmail(),
+    cc: getAdminEmailCc(),
     subject,
     text,
+    html: wrapHtmlEmail(
+      'New Contact Us submission',
+      [
+        `<strong>${escapeHtml(payload.fullName)}</strong> &lt;${escapeHtml(payload.email)}&gt;`,
+        payload.phone ? `Phone: ${escapeHtml(payload.phone)}` : 'Phone: -',
+        `Subject: ${escapeHtml(payload.subject)}`,
+        `Reference: <strong>${escapeHtml(payload.referenceCode)}</strong>`,
+        escapeHtml(payload.message).replace(/\n/g, '<br/>'),
+      ],
+      { logo: 'consumer' }
+    ),
   });
 };
 

@@ -58,19 +58,24 @@ export const getMockOtpCode = (purpose: OtpPurpose): string =>
 
 const generateDynamicOtpCode = (): string => String(randomInt(100000, 1000000));
 
-const createAndStoreOtp = (identifier: string, purpose: OtpPurpose): string => {
-  // Email = real dynamic OTP (sent via SMTP). Mobile/password_reset = mock SMS code for now.
+const createAndStoreOtp = (
+  identifier: string,
+  purpose: OtpPurpose,
+  codeOverride?: string
+): string => {
+  // Email verification + password reset use dynamic codes (delivered by email).
+  // Mobile verification stays on mock SMS code until Twilio/SNS is wired.
   const code =
-    purpose === 'email_verification' ? generateDynamicOtpCode() : getMockMobileOtpCode();
+    codeOverride ??
+    (purpose === 'mobile_verification' ? getMockMobileOtpCode() : generateDynamicOtpCode());
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
   otpStore.set(otpStoreKey(purpose, identifier), { code, expiresAt });
   lastSentAt.set(otpStoreKey(purpose, identifier), Date.now());
 
-  if (purpose === 'email_verification') {
-    // Do not log the code — it is delivered only via SMTP email.
+  if (purpose === 'email_verification' || purpose === 'password_reset') {
     logger.info(
-      `[OTP] email_verification stored for ${identifier} (dynamic code, expires in ${OTP_EXPIRY_MINUTES} mins)`
+      `[OTP] ${purpose} stored for ${identifier} (dynamic code, expires in ${OTP_EXPIRY_MINUTES} mins)`
     );
   } else {
     logger.info(
@@ -78,6 +83,36 @@ const createAndStoreOtp = (identifier: string, purpose: OtpPurpose): string => {
     );
   }
 
+  return code;
+};
+
+/**
+ * One OTP stored under every identifier (e.g. email + mobile for password reset).
+ * Cooldown is checked against all identifiers; first blocked wins.
+ */
+export const generateSharedOtp = async (
+  identifiers: string[],
+  purpose: OtpPurpose
+): Promise<string> => {
+  const unique = [...new Set(identifiers.map((i) => i.trim()).filter(Boolean))];
+  if (!unique.length) {
+    throw new Error('generateSharedOtp requires at least one identifier');
+  }
+
+  for (const id of unique) {
+    const cooldown = canResendOtp(id, purpose);
+    if (!cooldown.allowed) {
+      throw new TooManyRequestsError(
+        `Please wait ${cooldown.retryAfterSeconds} seconds before requesting a new verification code.`
+      );
+    }
+  }
+
+  const code =
+    purpose === 'mobile_verification' ? getMockMobileOtpCode() : generateDynamicOtpCode();
+  for (const id of unique) {
+    createAndStoreOtp(id, purpose, code);
+  }
   return code;
 };
 
@@ -122,9 +157,12 @@ export const verifyOtp = async (
   const key = otpStoreKey(purpose, identifier);
   const trimmed = (code || '').trim();
 
-  // Static mock OTP only for mobile / password reset (SMS not wired yet).
-  // Email must match the dynamic code from the inbox — never accept a fixed email OTP.
-  if (purpose !== 'email_verification' && trimmed === getMockMobileOtpCode()) {
+  // Static mock OTP for channels without live SMS (mobile + password_reset testing).
+  // Email verification never accepts the fixed mock — inbox code only.
+  if (
+    (purpose === 'mobile_verification' || purpose === 'password_reset') &&
+    trimmed === getMockMobileOtpCode()
+  ) {
     otpStore.delete(key);
     return true;
   }
@@ -154,7 +192,10 @@ export const matchOtp = (
   const key = otpStoreKey(purpose, identifier);
   const trimmed = (code || '').trim();
 
-  if (purpose !== 'email_verification' && trimmed === getMockMobileOtpCode()) {
+  if (
+    (purpose === 'mobile_verification' || purpose === 'password_reset') &&
+    trimmed === getMockMobileOtpCode()
+  ) {
     return true;
   }
 

@@ -127,45 +127,84 @@ export const refreshSchema = z.object({
   body: refreshBodySchema,
 });
 
-const forgotPasswordBodySchema = z.object({
-  email: z.string().trim().email('Invalid email format').toLowerCase(),
-});
+const forgotPasswordBodySchema = z
+  .object({
+    email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
+    mobileNumber: mobileNumberSchema.optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (!body.email && !body.mobileNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide email or mobileNumber.',
+        path: ['email'],
+      });
+    }
+  });
 
 export const forgotPasswordSchema = z.object({
   body: forgotPasswordBodySchema,
 });
 
 /** Step 2 of forgot-password: verify OTP only (does not change password). */
-const verifyResetOtpBodySchema = z.object({
-  mobileNumber: mobileNumberSchema,
-  code: otpCodeSchema,
-});
+const verifyResetOtpBodySchema = z
+  .object({
+    email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
+    mobileNumber: mobileNumberSchema.optional(),
+    code: otpCodeSchema,
+  })
+  .superRefine((body, ctx) => {
+    if (!body.email && !body.mobileNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide email or mobileNumber.',
+        path: ['email'],
+      });
+    }
+  });
 
 export const verifyResetOtpSchema = z.object({
   body: verifyResetOtpBodySchema,
 });
 
 /**
- * Step 3: set new password.
- * Prefer resetToken from verify-reset-otp.
- * Legacy one-shot still accepted: mobileNumber + code + newPassword.
+ * Next screen after forgot-password OTP:
+ * code + newPassword + confirmPassword (email or mobileNumber).
+ * Legacy: resetToken + newPassword (+ confirmPassword) still accepted.
  */
 const resetPasswordBodySchema = z
   .object({
     resetToken: z.string().trim().min(1).optional(),
+    email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
     mobileNumber: mobileNumberSchema.optional(),
     code: otpCodeSchema.optional(),
     newPassword: passwordSchema,
+    confirmPassword: z.string().min(1, 'Confirm password is required'),
   })
   .superRefine((body, ctx) => {
+    if (body.newPassword !== body.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'New password and confirm password do not match.',
+        path: ['confirmPassword'],
+      });
+    }
     if (body.resetToken) {
       return;
     }
-    if (!body.mobileNumber || !body.code) {
+    if (!body.code) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Provide resetToken from verify-reset-otp, or mobileNumber + code.',
-        path: ['resetToken'],
+        message: 'Provide code from the OTP screen, or resetToken from verify-reset-otp.',
+        path: ['code'],
+      });
+      return;
+    }
+    if (!body.email && !body.mobileNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide email or mobileNumber with the OTP code.',
+        path: ['email'],
       });
     }
   });

@@ -1,7 +1,15 @@
 import { AdminStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
-import { sendMail } from './email.service';
+import {
+  absoluteAdminWebUrl,
+  absoluteTraderWebUrl,
+  buildBrandedEmailHtml,
+  escapeHtml,
+  getAdminEmailCc,
+  sendBrandedMail,
+  sendMail,
+} from './email.service';
 import { createAdminNotifications } from '../modules/admin/admin-notifications/admin-notifications.service';
 import {
   adminNotificationActionUrl,
@@ -22,15 +30,53 @@ const listActiveAdminEmails = async (): Promise<string[]> => {
   return [...new Set([inbox, ...emails])];
 };
 
-const notifyAdminsByEmail = async (subject: string, text: string, html?: string) => {
+/**
+ * One branded admin email: To = primary inbox, CC = other admins + monitoring CC.
+ * Same Survey white-card layout; optional blue CTA to Admin portal.
+ */
+const notifyAdminsByEmail = async (input: {
+  subject: string;
+  text: string;
+  title: string;
+  cta?: { label: string; url: string };
+}) => {
+  const paragraphs = input.text
+    .split(/\n\n+/)
+    .map((block) => escapeHtml(block.trim()).replace(/\n/g, '<br/>'))
+    .filter(Boolean);
+  const html = buildBrandedEmailHtml({
+    title: input.title,
+    paragraphs,
+    audience: 'customer',
+    cta: input.cta,
+  });
+
   const recipients = await listActiveAdminEmails();
-  await Promise.all(
-    recipients.map((to) =>
-      sendMail({ to, subject, text, html }).catch((err) => {
-        logger.warn('[NOTIFY] Admin email failed', { to, subject, err: String(err) });
-      })
-    )
-  );
+  const primary = recipients[0] || getAdminInbox();
+  const cc = [
+    ...new Set([
+      ...recipients.slice(1),
+      ...getAdminEmailCc(),
+    ].map((e) => e.trim()).filter(Boolean)),
+  ].filter((e) => e.toLowerCase() !== primary.toLowerCase());
+
+  const textWithCta = input.cta
+    ? `${input.text}\n\n${input.cta.label}: ${input.cta.url}`
+    : input.text;
+
+  await sendMail({
+    to: primary,
+    cc,
+    subject: input.subject,
+    text: textWithCta,
+    html,
+  }).catch((err) => {
+    logger.warn('[NOTIFY] Admin email failed', {
+      to: primary,
+      subject: input.subject,
+      err: String(err),
+    });
+  });
 };
 
 const notifyAdminsInApp = async (input: {
@@ -97,7 +143,16 @@ export const notifyAdminTraderOtpVerified = async (input: {
     .filter(Boolean)
     .join('\n');
 
-  await notifyAdminsByEmail(subject, text);
+  const path = traderId
+    ? adminNotificationActionUrl.traderDetail(traderId)
+    : '/traders';
+
+  await notifyAdminsByEmail({
+    subject,
+    text,
+    title: 'New trader verified OTP',
+    cta: { label: 'View trader', url: absoluteAdminWebUrl(path) },
+  });
   await notifyAdminsInApp({
     type: 'TRADER_OTP_VERIFIED',
     title: 'New trader verified OTP',
@@ -133,7 +188,15 @@ export const notifyAdminTraderPendingApproval = async (input: {
     'Review in Admin > Trader Verification.',
   ].join('\n');
 
-  await notifyAdminsByEmail(subject, text);
+  await notifyAdminsByEmail({
+    subject,
+    text,
+    title: 'Trader pending approval',
+    cta: {
+      label: 'Open trader details',
+      url: absoluteAdminWebUrl(adminNotificationActionUrl.traderDetail(input.traderId)),
+    },
+  });
   await notifyAdminsInApp({
     type: 'TRADER_PENDING_APPROVAL',
     title: 'Trader pending approval',
@@ -146,7 +209,6 @@ export const notifyAdminTraderPendingApproval = async (input: {
     },
   });
 
-  // Trader confirmation (submit previously only emailed admins).
   await notifyTraderOnboardingSubmitted({
     userId: input.traderUserId,
     fullName: input.fullName,
@@ -154,13 +216,14 @@ export const notifyAdminTraderPendingApproval = async (input: {
   });
 };
 
-/** After trader submits onboarding — confirmation to the trader. */
+/** After trader submits onboarding - confirmation to the trader. */
 export const notifyTraderOnboardingSubmitted = async (input: {
   userId: string;
   fullName: string;
   email: string;
 }) => {
   const subject = 'We received your BRISK trader application';
+  const name = escapeHtml(input.fullName);
   const text = [
     `Hi ${input.fullName},`,
     '',
@@ -171,10 +234,21 @@ export const notifyTraderOnboardingSubmitted = async (input: {
     'BRISK Team',
   ].join('\n');
 
-  await sendMail({
+  await sendBrandedMail({
     to: input.email,
     subject,
+    title: 'Application received',
+    audience: 'trader',
     text,
+    paragraphs: [
+      `Hi ${name},`,
+      'Thanks for submitting your BRISK trader application.',
+      'Our team is reviewing your documents. You will receive another email once your profile is approved or if we need more information.',
+    ],
+    cta: {
+      label: 'View application status',
+      url: absoluteTraderWebUrl(traderNotificationActionUrl.onboardingPendingReview()),
+    },
   }).catch((err) => {
     logger.warn('[NOTIFY] Trader submit confirmation email failed', {
       email: input.email,
@@ -197,6 +271,7 @@ export const notifyTraderProfileApproved = async (input: {
   email: string;
 }) => {
   const subject = 'Your BRISK trader profile has been approved';
+  const name = escapeHtml(input.fullName);
   const text = [
     `Hi ${input.fullName},`,
     '',
@@ -207,10 +282,21 @@ export const notifyTraderProfileApproved = async (input: {
     'BRISK Team',
   ].join('\n');
 
-  await sendMail({
+  await sendBrandedMail({
     to: input.email,
     subject,
+    title: 'Profile approved',
+    audience: 'trader',
     text,
+    paragraphs: [
+      `Hi ${name},`,
+      'Great news - your BRISK trader profile has been approved.',
+      'You can now log in and start discovering jobs.',
+    ],
+    cta: {
+      label: 'Open BRISK Trader',
+      url: absoluteTraderWebUrl(traderNotificationActionUrl.dashboard()),
+    },
   }).catch((err) => {
     logger.warn('[NOTIFY] Trader approval email failed', { email: input.email, err: String(err) });
   });
@@ -243,7 +329,22 @@ export const notifyTraderProfileRejected = async (input: {
     'BRISK Team',
   ].join('\n');
 
-  await sendMail({ to: input.email, subject, text }).catch((err) => {
+  await sendBrandedMail({
+    to: input.email,
+    subject,
+    title: 'Application update',
+    audience: 'trader',
+    text,
+    paragraphs: [
+      `Hi ${escapeHtml(input.fullName)},`,
+      'Your BRISK trader application was not approved at this time.',
+      escapeHtml(reasonLine),
+    ],
+    cta: {
+      label: 'Review application',
+      url: absoluteTraderWebUrl(traderNotificationActionUrl.onboardingPendingReview()),
+    },
+  }).catch((err) => {
     logger.warn('[NOTIFY] Trader rejection email failed', { email: input.email, err: String(err) });
   });
 
@@ -254,7 +355,7 @@ export const notifyTraderProfileRejected = async (input: {
   });
 };
 
-/** After trader uploads/replaces a document (admin inbox). */
+/** After trader uploads/replaces a document (admin inbox + email with CTA). */
 export const notifyAdminTraderDocumentUploaded = async (input: {
   traderId: string;
   traderUserId: string;
@@ -265,6 +366,32 @@ export const notifyAdminTraderDocumentUploaded = async (input: {
   documentName: string;
   fileName?: string | null;
 }) => {
+  const subject = `[BRISK] Document uploaded - ${input.fullName} · ${input.documentName}`;
+  const text = [
+    'A trader uploaded or replaced a document for review.',
+    '',
+    `Name: ${input.fullName}`,
+    `Email: ${input.email}`,
+    `Document: ${input.documentName}`,
+    input.fileName ? `File: ${input.fileName}` : null,
+    `Trader ID: ${input.traderId}`,
+    `Document ID: ${input.documentId}`,
+    '',
+    'Open the trader detail page to review the document.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  await notifyAdminsByEmail({
+    subject,
+    text,
+    title: 'New document uploaded',
+    cta: {
+      label: 'Open trader details',
+      url: absoluteAdminWebUrl(adminNotificationActionUrl.traderDetail(input.traderId)),
+    },
+  });
+
   await notifyAdminsInApp({
     type: 'TRADER_DOCUMENT_UPLOADED',
     title: 'New document uploaded',
@@ -295,6 +422,10 @@ export const notifyTraderDocumentReviewed = async (input: {
   const approved = input.status === 'APPROVED';
   const reason = input.rejectionReason?.trim();
   const name = input.fullName?.trim() || 'there';
+  const docName = escapeHtml(input.documentName);
+  const documentUrl = absoluteTraderWebUrl(
+    traderNotificationActionUrl.documentDetail(input.documentId)
+  );
 
   const subject = approved
     ? `Your BRISK document "${input.documentName}" was approved`
@@ -304,9 +435,11 @@ export const notifyTraderDocumentReviewed = async (input: {
     ? [
         `Hi ${name},`,
         '',
-        `Good news — your document "${input.documentName}" has been approved.`,
+        `Good news - your document "${input.documentName}" has been approved.`,
         '',
         'You can continue with your BRISK trader application in the app.',
+        '',
+        `Open document: ${documentUrl}`,
         '',
         'Regards,',
         'BRISK Team',
@@ -319,14 +452,38 @@ export const notifyTraderDocumentReviewed = async (input: {
         '',
         'Open the BRISK trader app to review and re-upload the document.',
         '',
+        `Open document: ${documentUrl}`,
+        '',
         'Regards,',
         'BRISK Team',
       ].join('\n');
 
-  await sendMail({
+  const paragraphs = approved
+    ? [
+        `Hi ${escapeHtml(name)},`,
+        `Good news - your document "<strong>${docName}</strong>" has been approved.`,
+        'You can continue with your BRISK trader application in the app.',
+      ]
+    : [
+        `Hi ${escapeHtml(name)},`,
+        `Your document "<strong>${docName}</strong>" was not approved.`,
+        reason
+          ? `Reason: ${escapeHtml(reason)}`
+          : 'Please upload a clearer copy and try again.',
+        'Open the BRISK trader app to review and re-upload the document.',
+      ];
+
+  await sendBrandedMail({
     to: input.email,
     subject,
+    title: approved ? 'Document approved' : 'Document needs attention',
+    audience: 'trader',
     text,
+    paragraphs,
+    cta: {
+      label: approved ? 'View document' : 'Re-upload document',
+      url: documentUrl,
+    },
   }).catch((err) => {
     logger.warn('[NOTIFY] Trader document review email failed', {
       email: input.email,
