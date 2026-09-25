@@ -117,7 +117,8 @@ router.post(
  *       **Customers:** send `mobileNumber` + `mobileCode` (or legacy `code`).
  *       **Traders:** send `mobileNumber` + `mobileCode` + `email` + `emailCode` on the same screen.
  *       Mock mobile OTP: `123456`. Email OTP: use the dynamic code from the verification email (static `654321` is rejected).
- *       For forgot-password OTP use **POST /auth/verify-reset-otp** instead.
+ *       For forgot-password use **POST /auth/forgot-password** then **POST /auth/reset-password**
+ *       (not this endpoint).
  *     requestBody:
  *       required: true
  *       content:
@@ -203,31 +204,24 @@ router.post('/login', validate(loginSchema), authController.login);
  * @swagger
  * /auth/forgot-password:
  *   post:
- *     summary: Forgot password - send OTP to email and/or mobile (same code)
+ *     summary: Forgot password screen 1 - send same OTP to email and/or mobile
  *     tags: ['Mobile / Auth']
  *     description: |
- *       **Trader (and Customer) Forgot Password - screen 1.**
  *       Send **email** OR **mobileNumber** (at least one).
  *
- *       For **TRADER** accounts the **same 6-digit OTP** is stored for both email and mobile,
- *       emailed to the trader, and available for mobile verify (SMS mock / test code `123456`).
+ *       **TRADER:** one shared OTP for email + mobile (emailed; mobile SMS mock / test `123456`).
+ *       **CUSTOMER:** OTP on mobile (and email channel when looked up by email).
  *
- *       Next screen: **POST /auth/reset-password** with
+ *       Next: **POST /auth/reset-password** with
  *       `{ email|mobileNumber, code, newPassword, confirmPassword }`.
+ *
+ *       Full examples and response schema: see also Mobile / Auth forgot-password in trader onboarding swagger.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: trader@example.com
- *               mobileNumber:
- *                 type: string
- *                 example: "+353871234567"
+ *             $ref: '#/components/schemas/ForgotPasswordRequest'
  *           examples:
  *             byEmail:
  *               value: { email: trader@example.com }
@@ -235,7 +229,18 @@ router.post('/login', validate(loginSchema), authController.login);
  *               value: { mobileNumber: "+353871234567" }
  *     responses:
  *       200:
- *         description: OTP issued (otpSent true). Open OTP + new password screen.
+ *         description: |
+ *           OTP issued. `data` includes `otpSent`, `otpSentToEmail`, `otpSentToMobile`,
+ *           `otpExpiresInMinutes`, `resendCooldownSeconds`.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data:
+ *                   $ref: '#/components/schemas/ForgotPasswordResponseData'
  *       403:
  *         description: Account blocked, suspended, or inactive.
  *       404:
@@ -255,21 +260,33 @@ router.post('/forgot-password', validate(forgotPasswordSchema), authController.f
  *       Optional middle step. Preferred trader flow skips this and calls **POST /auth/reset-password**
  *       with OTP + newPassword + confirmPassword in one request.
  *
- *       Body: **email** OR **mobileNumber** + **code**.
+ *       Body: **email** OR **mobileNumber** + **code** (shared OTP).
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [code]
- *             properties:
- *               email: { type: string, format: email }
- *               mobileNumber: { type: string, example: "+353871234567" }
- *               code: { type: string, example: "123456" }
+ *             $ref: '#/components/schemas/VerifyResetOtpRequest'
+ *           examples:
+ *             byEmail:
+ *               value: { email: trader@example.com, code: "123456" }
+ *             byMobile:
+ *               value: { mobileNumber: "+353871234567", code: "123456" }
  *     responses:
  *       200:
- *         description: OTP OK. Returns resetToken for change-password screen.
+ *         description: OTP OK. Returns resetToken (15 min) for reset-password.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Verification code confirmed. You can now set a new password.
+ *               data:
+ *                 resetToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 resetTokenExpiresInMinutes: 15
+ *                 userId: 2380d295-fef3-4365-bb81-1ecfb9b3ec8c
+ *                 email: trader@example.com
+ *                 mobileNumber: "+353871234567"
+ *                 role: TRADER
  *       400:
  *         description: Invalid or expired OTP.
  *       404:
@@ -291,31 +308,40 @@ router.post('/verify-reset-otp', validate(verifyResetOtpSchema), authController.
  *       `newPassword` and `confirmPassword` must match.
  *       Same OTP works on email or mobile channel.
  *
- *       Also accepts legacy `{ resetToken, newPassword, confirmPassword }` after verify-reset-otp.
+ *       Also accepts `{ resetToken, newPassword, confirmPassword }` after verify-reset-otp.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [newPassword, confirmPassword]
- *             properties:
- *               email: { type: string, format: email }
- *               mobileNumber: { type: string, example: "+353871234567" }
- *               code: { type: string, example: "123456" }
- *               newPassword: { type: string, example: NewPassword1! }
- *               confirmPassword: { type: string, example: NewPassword1! }
- *               resetToken: { type: string, description: Optional, from verify-reset-otp }
+ *             $ref: '#/components/schemas/ResetPasswordRequest'
  *           examples:
  *             traderNextScreen:
+ *               summary: Preferred - OTP + passwords
  *               value:
  *                 email: trader@example.com
  *                 code: "123456"
  *                 newPassword: NewPassword1!
  *                 confirmPassword: NewPassword1!
+ *             withResetToken:
+ *               summary: After optional verify-reset-otp
+ *               value:
+ *                 resetToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 newPassword: NewPassword1!
+ *                 confirmPassword: NewPassword1!
  *     responses:
  *       200:
  *         description: Password updated (session returned when mobile already verified).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Password reset successfully. You are now logged in.
+ *               data:
+ *                 accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 user: { id: "2380d295-fef3-4365-bb81-1ecfb9b3ec8c", role: TRADER }
+ *                 nextStep: TRADER_HOME
  *       400:
  *         description: Invalid OTP or passwords do not match.
  *       401:
@@ -329,8 +355,11 @@ router.post('/reset-password', validate(resetPasswordSchema), authController.res
  * @swagger
  * /auth/verify-email:
  *   post:
- *     summary: Verify trader email with 6-digit OTP (after mobile OTP verification)
+ *     summary: Verify trader email with dynamic OTP (prefer POST /auth/verify-otp)
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Deprecated for signup.** Prefer `POST /auth/verify-otp` with `email` + `emailCode` together with mobile.
+ *       Email OTP is a **dynamic** 6-digit code from the inbox (not a fixed mock).
  *     requestBody:
  *       required: true
  *       content:
@@ -339,11 +368,13 @@ router.post('/reset-password', validate(resetPasswordSchema), authController.res
  *             type: object
  *             required: [email, code]
  *             properties:
- *               email: { type: string, format: email }
- *               code: { type: string, example: "123456" }
+ *               email: { type: string, format: email, example: trader@example.com }
+ *               code: { type: string, example: "482913", description: Dynamic code from email inbox }
  *     responses:
  *       200:
- *         description: Email verified. Trader can start onboarding.
+ *         description: Email verified. Returns session if mobile already verified, else nextStep VERIFY_OTP.
+ *       400:
+ *         description: Invalid/expired code, or not a trader account.
  */
 router.post('/verify-email', validate(verifyEmailSchema), authController.verifyEmail);
 
@@ -351,8 +382,11 @@ router.post('/verify-email', validate(verifyEmailSchema), authController.verifyE
  * @swagger
  * /auth/resend-email-otp:
  *   post:
- *     summary: Resend 6-digit email OTP for trader email verification
+ *     summary: Resend trader email verification OTP (prefer POST /auth/resend-otp)
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Deprecated.** Prefer `POST /auth/resend-otp` with `channel: "email"` or `channel: "both"`.
+ *       Sends a new dynamic email OTP.
  *     requestBody:
  *       required: true
  *       content:
@@ -361,10 +395,12 @@ router.post('/verify-email', validate(verifyEmailSchema), authController.verifyE
  *             type: object
  *             required: [email]
  *             properties:
- *               email: { type: string, format: email }
+ *               email: { type: string, format: email, example: trader@example.com }
  *     responses:
  *       200:
  *         description: Email OTP resent.
+ *       429:
+ *         description: Resend cooldown active.
  */
 router.post('/resend-email-otp', validate(resendEmailOtpSchema), authController.resendEmailOtp);
 

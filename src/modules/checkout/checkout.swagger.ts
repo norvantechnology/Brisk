@@ -135,7 +135,7 @@
  *             List = `briskOffers.items` (title + couponCode). Apply via
  *             POST /invoices/{id}/apply-promo with `{ "code": "<couponCode>" }`.
  *           properties:
- *             applyPath: { type: string, example: /invoices/{invoiceId}/apply-promo }
+ *             applyPath: { type: string, example: "/invoices/{invoiceId}/apply-promo" }
  *             categoryFilters:
  *               type: array
  *               items:
@@ -165,10 +165,6 @@
  *           description: Flat alias of briskOffers.items
  *         paymentStatus: { type: string, nullable: true }
  *         latestPaymentId: { type: string, format: uuid, nullable: true }
- *         promoCode:
- *           type: string
- *           nullable: true
- *           description: Currently applied promo code on GET /invoices/{id}
  *     ApplyPromoResult:
  *       type: object
  *       description: |

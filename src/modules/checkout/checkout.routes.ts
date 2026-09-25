@@ -86,6 +86,8 @@ router.get(
  *       Promo must be active and within validity window. Optional `categoryScope` must match job category.
  *
  *       List/validate codes also via Customer Offers promo endpoints when available.
+ *
+ *       After success, call GET /invoices/{id} for full invoice totals / lineItems.
  *     parameters:
  *       - in: path
  *         name: id
@@ -99,7 +101,6 @@ router.get(
  *             $ref: '#/components/schemas/ApplyPromoRequest'
  *           example:
  *             code: SAVE10
- *       After success, call `GET /invoices/{id}` for full invoice totals / lineItems.
  *     responses:
  *       200:
  *         description: Promo apply result only (no full invoice payload).

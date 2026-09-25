@@ -1525,7 +1525,7 @@ router.post(
  *     tags: ['Admin / Website / Marketing Pages']
  *     security:
  *       - bearerAuth: []
- *     description: Same as PUT — `icon: null` / `image: null` clears media.
+ *     description: "Same as PUT — send icon/image as null (or empty string) to clear media."
  *     parameters:
  *       - in: path
  *         name: itemId

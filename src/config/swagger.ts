@@ -42,6 +42,7 @@ const options: swaggerJSDoc.Options = {
         '- **Admin Trader Details tabs:** /admin/traders/{id}/documents|jobs|reviews|payouts|offers (+ /stats or /earnings/summary). Doc approve/reject: PATCH /admin/trader-verification/{traderId}/documents/{documentId} — use data.trader from response',
         '- **Trader Discover (Nearby Opportunities):** GET /traders/jobs/discover — data is job array (use data.length). Detail GET /traders/jobs/discover/{id}. Bookmark POST/DELETE .../bookmark',
         '- **Contact form submissions CRM:** Admin / Website / Contact — /admin/cms/contact-submissions (separate from contact-brisk page sections)',
+        '- **Mobile auth (trader forgot password):** POST /auth/forgot-password { email|mobileNumber } → same OTP email+mobile; then POST /auth/reset-password { email|mobileNumber, code, newPassword, confirmPassword }',
         '- **Mobile categories:** GET /categories · GET /sub-categories?categoryId={uuid} — no pagination; use iconName / iconUrl for icons',
         '- **Mobile Direct Trader UI flow:** Offers list Claim Now → GET /trader-offers/{id} → Accept Offer POST /trader-offers/{id}/accept → Post a New Job (POST /jobs) → Choose Location: either addressId OR inline location on PUT /jobs/{id}/location or POST /jobs/{id}/publish → Payment Details → POST /payments/intent → confirm/fail',
         '- **Publish body:** addressId (saved) OR location/address object (map search — backend creates address) OR {} if job already has address',
@@ -129,7 +130,7 @@ const options: swaggerJSDoc.Options = {
       { name: 'Website / Content', description: 'Public website reads — Customers/Traders pages, testimonials, bootstrap, blog, FAQ. Parameters explain which page/screen each filter is for.' },
       { name: 'Website / Surveys', description: 'Website survey forms — consumer-survey & trader-survey pages. No login needed.' },
       { name: 'Website / Contact', description: 'Website Contact Us form — public submit, no login. Saves to DB + sends confirmation/notification emails (mock until SMTP/SES).' },
-      { name: 'Mobile / Auth', description: 'Customer & Trader auth. Responses include `nextStep` (e.g. `VERIFY_OTP` for traders dual mobile+email OTP, `VERIFY_PHONE` for customers, `TRADER_ONBOARDING`, `TRADER_HOME`). Traders verify both OTPs via POST /auth/verify-otp on the same screen.' },
+      { name: 'Mobile / Auth', description: 'Customer & Trader auth. Responses include `nextStep` (e.g. `VERIFY_OTP` for traders dual mobile+email OTP, `VERIFY_PHONE` for customers, `TRADER_ONBOARDING`, `TRADER_HOME`). Traders verify both OTPs via POST /auth/verify-otp on the same screen. Forgot password (2 screens): POST /auth/forgot-password (email|mobile → same OTP) then POST /auth/reset-password (code + newPassword + confirmPassword).' },
       {
         name: 'Trader / Onboarding',
         description: [

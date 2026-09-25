@@ -71,7 +71,7 @@
  *
  *       Do **not** call separate `/auth/verify-email` for signup - email is verified here for traders.
  *
- *       **Not for forgot-password** - use `POST /auth/verify-reset-otp` instead.
+ *       **Not for forgot-password** - use `POST /auth/forgot-password` then `POST /auth/reset-password`.
  *     tags: ['Mobile / Auth']
  */
 
@@ -136,9 +136,221 @@
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     ForgotPasswordRequest:
+ *       type: object
+ *       description: Provide **email** OR **mobileNumber** (at least one).
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           example: trader@example.com
+ *         mobileNumber:
+ *           type: string
+ *           example: "+353871234567"
+ *     ForgotPasswordResponseData:
+ *       type: object
+ *       properties:
+ *         requiresPasswordReset: { type: boolean, example: true }
+ *         userId: { type: string, format: uuid }
+ *         email: { type: string, format: email }
+ *         mobileNumber: { type: string, example: "+353871234567" }
+ *         role: { type: string, enum: [CUSTOMER, TRADER] }
+ *         otpSent: { type: boolean, example: true }
+ *         otpSentToEmail: { type: boolean, example: true, description: True when password-reset email was attempted }
+ *         otpSentToMobile: { type: boolean, example: true, description: True when OTP stored for mobile (SMS mock until provider wired) }
+ *         otpExpiresInMinutes: { type: integer, example: 10 }
+ *         resendCooldownSeconds: { type: integer, example: 60 }
+ *         retryAfterSeconds: { type: integer, description: Present when otpSent is false due to cooldown }
+ *     ResetPasswordRequest:
+ *       type: object
+ *       required: [newPassword, confirmPassword]
+ *       description: |
+ *         Preferred: email|mobileNumber + code + newPassword + confirmPassword.
+ *         Legacy: resetToken + newPassword + confirmPassword.
+ *       properties:
+ *         email: { type: string, format: email }
+ *         mobileNumber: { type: string, example: "+353871234567" }
+ *         code: { type: string, example: "123456", description: Same OTP from email or mobile }
+ *         newPassword: { type: string, example: NewPassword1! }
+ *         confirmPassword: { type: string, example: NewPassword1! }
+ *         resetToken: { type: string, description: From optional POST /auth/verify-reset-otp }
+ *     VerifyResetOtpRequest:
+ *       type: object
+ *       required: [code]
+ *       description: Optional middle step. Provide email OR mobileNumber + code.
+ *       properties:
+ *         email: { type: string, format: email }
+ *         mobileNumber: { type: string, example: "+353871234567" }
+ *         code: { type: string, example: "123456" }
+ */
+
+/**
+ * @swagger
  * /auth/forgot-password:
  *   post:
- *     description: |
- *       **Figma screen:** **Forgot Password** - enter email, tap Get OTP.
+ *     summary: Forgot password screen 1 - send same OTP to email and mobile
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Figma:** Forgot Password - enter email **or** mobile, tap Get OTP.
+ *
+ *       **Trader flow (2 screens):**
+ *       1. This API - issues **one shared OTP** for email + mobile
+ *       2. `POST /auth/reset-password` - submit OTP + newPassword + confirmPassword
+ *
+ *       **Channels:**
+ *       - Email: branded password-reset email with the code
+ *       - Mobile: OTP stored (SMS provider not wired; test with `123456` or the emailed code)
+ *
+ *       Lookup accepts **email** OR **mobileNumber**.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ForgotPasswordRequest'
+ *           examples:
+ *             byEmail:
+ *               summary: Trader enters email
+ *               value: { email: trader@example.com }
+ *             byMobile:
+ *               summary: Trader enters mobile
+ *               value: { mobileNumber: "+353871234567" }
+ *     responses:
+ *       200:
+ *         description: OTP issued. Open OTP + new password screen.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Verification code sent to your email and mobile. Enter the code with your new password.
+ *               data:
+ *                 requiresPasswordReset: true
+ *                 userId: 2380d295-fef3-4365-bb81-1ecfb9b3ec8c
+ *                 email: trader@example.com
+ *                 mobileNumber: "+353871234567"
+ *                 role: TRADER
+ *                 otpSent: true
+ *                 otpSentToEmail: true
+ *                 otpSentToMobile: true
+ *                 otpExpiresInMinutes: 10
+ *                 resendCooldownSeconds: 60
+ *       403:
+ *         description: Account blocked, suspended, or inactive.
+ *       404:
+ *         description: No account found for email/mobile.
+ *       429:
+ *         description: Resend cooldown (may also return 200 with otpSent=false).
+ */
+
+/**
+ * @swagger
+ * /auth/verify-reset-otp:
+ *   post:
+ *     summary: Optional - verify forgot-password OTP only (returns resetToken)
+ *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Optional.** Preferred trader UX skips this and calls `POST /auth/reset-password`
+ *       with code + newPassword + confirmPassword in one step.
+ *
+ *       Body: **email** OR **mobileNumber** + **code** (same shared OTP).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/VerifyResetOtpRequest'
+ *           examples:
+ *             byEmail:
+ *               value: { email: trader@example.com, code: "123456" }
+ *             byMobile:
+ *               value: { mobileNumber: "+353871234567", code: "123456" }
+ *     responses:
+ *       200:
+ *         description: OTP OK. Returns resetToken (15 min) for reset-password.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Verification code confirmed. You can now set a new password.
+ *               data:
+ *                 resetToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 resetTokenExpiresInMinutes: 15
+ *                 userId: 2380d295-fef3-4365-bb81-1ecfb9b3ec8c
+ *                 email: trader@example.com
+ *                 mobileNumber: "+353871234567"
+ *                 role: TRADER
+ *       400:
+ *         description: Invalid or expired OTP.
+ *       404:
+ *         description: User not found.
+ */
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Forgot password screen 2 - OTP + new password + confirm password
+ *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Figma:** Enter OTP, new password, confirm password.
+ *
+ *       **Preferred body:**
+ *       `{ email|mobileNumber, code, newPassword, confirmPassword }`
+ *
+ *       - `newPassword` and `confirmPassword` must match
+ *       - Same OTP works whether user received it by email or mobile
+ *       - On success, returns login session if mobile is already verified
+ *
+ *       **Legacy:** `{ resetToken, newPassword, confirmPassword }` after verify-reset-otp.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ResetPasswordRequest'
+ *           examples:
+ *             traderScreen2Email:
+ *               summary: Preferred - email + OTP + passwords
+ *               value:
+ *                 email: trader@example.com
+ *                 code: "123456"
+ *                 newPassword: NewPassword1!
+ *                 confirmPassword: NewPassword1!
+ *             traderScreen2Mobile:
+ *               summary: Preferred - mobile + OTP + passwords
+ *               value:
+ *                 mobileNumber: "+353871234567"
+ *                 code: "123456"
+ *                 newPassword: NewPassword1!
+ *                 confirmPassword: NewPassword1!
+ *             withResetToken:
+ *               summary: After optional verify-reset-otp
+ *               value:
+ *                 resetToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 newPassword: NewPassword1!
+ *                 confirmPassword: NewPassword1!
+ *     responses:
+ *       200:
+ *         description: Password updated. Session tokens returned when mobile already verified.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Password reset successfully. You are now logged in.
+ *               data:
+ *                 accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 user:
+ *                   id: 2380d295-fef3-4365-bb81-1ecfb9b3ec8c
+ *                   email: trader@example.com
+ *                   role: TRADER
+ *                 nextStep: TRADER_HOME
+ *       400:
+ *         description: Invalid OTP, passwords do not match, or validation error.
+ *       401:
+ *         description: Invalid or expired resetToken.
+ *       404:
+ *         description: User not found.
  */
