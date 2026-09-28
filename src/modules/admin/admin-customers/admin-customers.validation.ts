@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { UserStatus, DeletionRequestStatus, PaymentStatus, InvoiceStatus, RefundStatus } from '@prisma/client';
+import { requireNoteWhenRejected } from '../../../utils/reject-note';
 
 export const createCustomerSchema = z.object({
   body: z.object({
@@ -67,10 +68,19 @@ export const updateDeletionRequestSchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid Deletion Request ID format.'),
   }),
-  body: z.object({
-    status: z.nativeEnum(DeletionRequestStatus),
-    notes: z.string().optional(),
-  }),
+  body: z.preprocess(
+    (body) => {
+      if (!body || typeof body !== 'object') return body;
+      const b = body as Record<string, unknown>;
+      return { ...b, notes: b.notes ?? b.adminNotes ?? b.rejectionReason };
+    },
+    z
+      .object({
+        status: z.nativeEnum(DeletionRequestStatus),
+        notes: z.string().trim().max(2000).optional(),
+      })
+      .superRefine(requireNoteWhenRejected('notes'))
+  ),
 });
 
 export const paymentTransactionFilterSchema = z.object({
@@ -106,8 +116,10 @@ export const processRefundSchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid Refund ID format.'),
   }),
-  body: z.object({
-    status: z.nativeEnum(RefundStatus),
-    notes: z.string().optional(),
-  }),
+  body: z
+    .object({
+      status: z.nativeEnum(RefundStatus),
+      notes: z.string().trim().max(2000).optional(),
+    })
+    .superRefine(requireNoteWhenRejected('notes')),
 });

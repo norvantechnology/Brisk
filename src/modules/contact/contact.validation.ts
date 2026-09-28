@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SurveyRegistrationStatus } from '@prisma/client';
+import { requireNoteWhenRejected } from '../../utils/reject-note';
 
 const paginationQuery = {
   page: z.string().optional(),
@@ -35,10 +36,12 @@ export const contactFilterSchema = z.object({
 
 export const updateContactSubmissionSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
-  body: z.object({
-    status: z.nativeEnum(SurveyRegistrationStatus).optional(),
-    notes: z.string().optional(),
-  }),
+  body: z
+    .object({
+      status: z.nativeEnum(SurveyRegistrationStatus).optional(),
+      notes: z.string().optional(),
+    })
+    .superRefine(requireNoteWhenRejected('notes')),
 });
 
 export const contactIdParamSchema = z.object({

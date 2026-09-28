@@ -10,6 +10,7 @@ import {
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../../config/database';
 import { ConflictError, NotFoundError } from '../../../utils/errors';
+import { describePersonalId } from '../../traders/personal-id';
 import {
   CreateTraderInput,
   TraderAccountStatus,
@@ -288,7 +289,7 @@ export const listTraders = async (filters: TraderListFilters) => {
   }
 
   if (filters.categoryId) {
-    where.categories = { some: { categoryId: filters.categoryId } };
+    where.categories = { some: { categoryId: filters.categoryId, isActive: true } };
   }
 
   if (filters.country?.trim()) {
@@ -318,6 +319,7 @@ export const listTraders = async (filters: TraderListFilters) => {
       },
     },
     categories: {
+      where: { isActive: true },
       include: {
         category: { select: { id: true, name: true, categoryCode: true } },
       },
@@ -376,6 +378,7 @@ export const getTraderById = async (id: string) => {
         },
       },
       categories: {
+        where: { isActive: true },
         include: {
           category: { select: { id: true, name: true, categoryCode: true, urlSlug: true } },
         },
@@ -404,6 +407,7 @@ export const getTraderById = async (id: string) => {
       fullLegalName: trader.fullLegalName,
       businessName: trader.businessName,
       ppsNumber: trader.ppsNumber,
+      ...describePersonalId(trader.country),
       croNumber: trader.croNumber,
       vatNumber: trader.vatNumber,
       directorFullName: trader.directorFullName,

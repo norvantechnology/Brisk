@@ -4,6 +4,8 @@ import { ForbiddenError, NotFoundError, BadRequestError, ConflictError } from '.
 import { splitE164Mobile } from '../../utils/phone';
 import { getSupportWebviewLinks } from '../../utils/public-urls';
 import { assertActiveCurrency } from '../../services/currency.service';
+import { describePersonalId } from './personal-id';
+import { listTraderCategoriesWithState } from './onboarding/onboarding.service';
 import type {
   UpdateTraderAccountInput,
   UpdateTraderBankDetailsInput,
@@ -84,6 +86,7 @@ export const getTraderProfile = async (userId: string) => {
         },
       },
       categories: {
+        where: { isActive: true },
         include: {
           category: { select: { id: true, name: true, categoryCode: true, iconName: true } },
         },
@@ -163,6 +166,8 @@ export const getTraderProfile = async (userId: string) => {
     category: trader.category,
     selectedCategories,
     categoriesCount: selectedCategories.length,
+    /** All trades incl. inactive — Profile → Categories activate/deactivate toggle. */
+    allCategories: await listTraderCategoriesWithState(trader.id),
     ...completion,
     bankDetails: trader.bankDetailsSkipped
       ? {
@@ -194,6 +199,7 @@ export const getTraderProfile = async (userId: string) => {
       traderType: trader.traderType,
       fullLegalName: trader.fullLegalName,
       ppsNumber: trader.ppsNumber,
+      ...describePersonalId(trader.country),
       companyName: trader.businessName,
       croNumber: trader.croNumber,
       vatNumber: trader.vatNumber,

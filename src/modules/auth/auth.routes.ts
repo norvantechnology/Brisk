@@ -340,6 +340,8 @@ router.post('/verify-reset-otp', validate(verifyResetOtpSchema), authController.
  *               data:
  *                 accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *                 refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 accessTokenExpiresAt: '2026-09-28T10:15:00.000Z'
+ *                 refreshTokenExpiresAt: '2026-10-05T10:00:00.000Z'
  *                 user: { id: "2380d295-fef3-4365-bb81-1ecfb9b3ec8c", role: TRADER }
  *                 nextStep: TRADER_HOME
  *       400:
@@ -408,8 +410,17 @@ router.post('/resend-email-otp', validate(resendEmailOtpSchema), authController.
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Issue a new access token using a valid refresh token
+ *     summary: Issue a new access token (and a rotated refresh token) using a valid refresh token
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       **Session length:** access token **15 minutes**, refresh token (= session) **7 days**.
+ *       Every refresh returns a **new refresh token** — save it; the 7-day session slides forward
+ *       while the user is active.
+ *
+ *       **Session-expiry alert:** login / verify-otp / reset-password / refresh responses include
+ *       `accessTokenExpiresAt` and `refreshTokenExpiresAt` (ISO). Refresh silently before
+ *       `accessTokenExpiresAt`; show a "Session about to expire — stay signed in?" alert a few
+ *       minutes before `refreshTokenExpiresAt` and call this endpoint if the user confirms.
  *     requestBody:
  *       required: true
  *       content:
@@ -424,7 +435,17 @@ router.post('/resend-email-otp', validate(resendEmailOtpSchema), authController.
  *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *     responses:
  *       200:
- *         description: Access token refreshed successfully.
+ *         description: Tokens refreshed.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Session token refreshed successfully.
+ *               data:
+ *                 accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 accessTokenExpiresAt: '2026-09-28T10:15:00.000Z'
+ *                 refreshTokenExpiresAt: '2026-10-05T10:00:00.000Z'
  *       401:
  *         description: |
  *           Invalid, expired, or revoked token. After admin approves a trader,

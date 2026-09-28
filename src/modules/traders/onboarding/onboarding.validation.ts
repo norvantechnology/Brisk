@@ -38,6 +38,11 @@ export const categoriesSchema = z.object({
   }),
 });
 
+export const categoryActiveSchema = z.object({
+  params: z.object({ categoryId: z.string().uuid() }),
+  body: z.object({ isActive: z.boolean() }),
+});
+
 const addressFields = {
   addressLine1: z.string().trim().min(1).max(255),
   addressLine2: z.string().trim().max(255).optional(),
@@ -47,13 +52,25 @@ const addressFields = {
 };
 
 export const soloProfileSchema = z.object({
-  body: z.object({
-    fullLegalName: z.string().trim().min(2).max(255),
-    ppsNumber: z.string().trim().min(1).max(20),
-    bio: z.string().trim().max(300).optional(),
-    yearsExperience: z.number().int().min(0).max(80).optional(),
-    ...addressFields,
-  }),
+  body: z
+    .object({
+      fullLegalName: z.string().trim().min(2).max(255),
+      /** Ireland: PPS Number. UK: send here or as `niNumber` — format checked against `country`. */
+      ppsNumber: z.string().trim().min(1).max(20).optional(),
+      niNumber: z.string().trim().min(1).max(20).optional(),
+      bio: z.string().trim().max(300).optional(),
+      yearsExperience: z.number().int().min(0).max(80).optional(),
+      ...addressFields,
+    })
+    .superRefine((body, ctx) => {
+      if (!body.ppsNumber && !body.niNumber) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'PPS Number (Ireland) or NI Number (UK) is required.',
+          path: ['ppsNumber'],
+        });
+      }
+    }),
 });
 
 export const companyProfileSchema = z.object({

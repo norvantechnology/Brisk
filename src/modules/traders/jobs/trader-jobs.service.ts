@@ -638,7 +638,7 @@ const getTraderContext = async (userId: string) => {
       serviceCenterLat: true,
       serviceCenterLng: true,
       country: true,
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
       user: { select: { preferredCurrency: true, country: true } },
     },
   });
@@ -827,8 +827,19 @@ export const listDiscoverJobs = async (
     ),
   ];
 
+  const filterIsDeactivated = query.categoryId
+    ? Boolean(
+        await prisma.traderCategory.findFirst({
+          where: { traderId: trader.id, categoryId: query.categoryId, isActive: false },
+          select: { traderId: true },
+        })
+      )
+    : false;
+
   const categoryFilter = query.categoryId
-    ? query.categoryId
+    ? filterIsDeactivated
+      ? { in: [] as string[] }
+      : query.categoryId
     : traderCategoryIds.length > 0
       ? { in: traderCategoryIds }
       : undefined;

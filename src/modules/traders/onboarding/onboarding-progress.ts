@@ -181,7 +181,7 @@ export const loadTraderForProgress = async (userId: string) => {
   return prisma.trader.findUnique({
     where: { userId },
     include: {
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
       documents: {
         include: { documentRule: { select: { documentKey: true } } },
       },

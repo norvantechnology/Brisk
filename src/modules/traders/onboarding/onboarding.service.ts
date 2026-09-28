@@ -1,5 +1,6 @@
 import {
   Prisma,
+  TraderDocumentStatus,
   TraderOnboardingStatus,
   TraderType,
   VerificationStatus,
@@ -8,6 +9,7 @@ import { prisma } from '../../../config/database';
 import {
   assertDocumentRuleExists,
   getDocumentRequirementsForTrader,
+  listCategoryDocumentRules,
   validateRequiredDocumentsUploaded,
 } from '../../document-rules/document-rules.service';
 import {
@@ -23,7 +25,9 @@ import {
   formatDocumentExpiryDate,
   parseDocumentExpiryDate,
 } from '../../document-rules/document-expiry';
+import { describePersonalId, validatePersonalId } from '../personal-id';
 import { resolveAppNextStep } from '../../navigation/app-next-step';
+import { listActiveJobsInCategories } from '../jobs/trader-my-jobs.service';
 import type {
   BankDetailsInput,
   BusinessTypeInput,
@@ -112,6 +116,7 @@ const buildDocumentRequirementsWithUploads = async (
 };
 const traderInclude = {
   categories: {
+    where: { isActive: true },
     include: {
       category: { select: { id: true, name: true, categoryCode: true, iconName: true } },
     },
@@ -271,11 +276,13 @@ const serializeOnboardingStatus = async (
     steps: progress.steps,
     stepData: registration.stepData ?? {},
     selectedCategories: trader.categories.map((item) => item.category),
+    allCategories: await listTraderCategoriesWithState(trader.id),
     documentRequirements,
     profile: {
       fullLegalName: trader.fullLegalName,
       businessName: trader.businessName,
       ppsNumber: trader.ppsNumber,
+      ...describePersonalId(trader.country),
       croNumber: trader.croNumber,
       vatNumber: trader.vatNumber,
       directorFullName: trader.directorFullName,
@@ -485,6 +492,7 @@ export const uploadDocument = async (
       fileName: input.fileName,
       // New file replaces the old one — its expiry date must not carry over.
       expiryDate: parseDocumentExpiryDate(input.expiryDate),
+      expiryReminderStage: null,
       status: 'PENDING',
       rejectionReason: null,
     },
@@ -580,6 +588,144 @@ export const removeDocument = async (
   return getOnboardingStatus(userId);
 };
 
+/**
+ * Every trade on the profile with its on/off state (Profile → Categories toggle).
+ * `selectedCategories` elsewhere lists active trades only.
+ */
+export const listTraderCategoriesWithState = async (traderId: string) => {
+  const rows = await prisma.traderCategory.findMany({
+    where: { traderId },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      isActive: true,
+      category: { select: { id: true, name: true, categoryCode: true, iconName: true } },
+    },
+  });
+  return rows.map((row) => ({ ...row.category, isActive: row.isActive }));
+};
+
+/**
+ * Reactivation gate: every required document for the trades must be uploaded and not rejected
+ * (same required-document rule as onboarding submit).
+ */
+const assertCategoryDocumentsReady = async (
+  traderId: string,
+  traderType: TraderType,
+  categoryIds: string[]
+) => {
+  if (!categoryIds.length) return;
+  const required = (await listCategoryDocumentRules(categoryIds, traderType)).filter(
+    (rule) => rule.required
+  );
+  if (!required.length) return;
+
+  const uploads = await prisma.traderDocument.findMany({
+    where: { traderId, documentRuleId: { in: required.map((rule) => rule.id) } },
+    select: { documentRuleId: true, status: true },
+  });
+  const statusByRule = new Map(uploads.map((doc) => [doc.documentRuleId, doc.status]));
+  const missingDocuments = required
+    .filter((rule) => {
+      const status = statusByRule.get(rule.id);
+      return status === undefined || status === TraderDocumentStatus.REJECTED;
+    })
+    .map((rule) => ({
+      documentRuleId: rule.id,
+      name: rule.name,
+      categoryId: rule.categoryId,
+      categoryName: rule.category?.name ?? null,
+      reason: statusByRule.has(rule.id) ? ('REJECTED' as const) : ('NOT_UPLOADED' as const),
+    }));
+
+  if (missingDocuments.length) {
+    throw new BadRequestError(
+      `Upload the required documents before reactivating: ${missingDocuments.map((d) => d.name).join(', ')}.`,
+      { code: 'CATEGORY_DOCUMENTS_REQUIRED', data: { missingDocuments } }
+    );
+  }
+};
+
+/** A trade with running jobs (My Jobs → Active) cannot be deactivated until those jobs finish. */
+const assertNoActiveJobsInCategories = async (traderId: string, categoryIds: string[]) => {
+  if (!categoryIds.length) return;
+  const activeJobs = await listActiveJobsInCategories(traderId, categoryIds);
+  if (activeJobs.length) {
+    throw new BadRequestError(
+      `You have ${activeJobs.length} active job${activeJobs.length === 1 ? '' : 's'} in this category. Complete or cancel ${activeJobs.length === 1 ? 'it' : 'them'} before deactivating.`,
+      {
+        code: 'CATEGORY_HAS_ACTIVE_JOBS',
+        data: { activeJobsCount: activeJobs.length, activeJobs },
+      }
+    );
+  }
+};
+
+/** Keep legacy `trader.categoryId` (also used for job matching) pointing at an active trade. */
+const syncPrimaryCategory = async (
+  tx: Prisma.TransactionClient,
+  traderId: string,
+  currentPrimaryId: string | null
+) => {
+  const active = await tx.traderCategory.findMany({
+    where: { traderId, isActive: true },
+    orderBy: { createdAt: 'asc' },
+    select: { categoryId: true },
+  });
+  if (active.length === 0) {
+    throw new BadRequestError('At least one trade category must stay active.', {
+      code: 'LAST_ACTIVE_CATEGORY',
+    });
+  }
+  if (currentPrimaryId && active.some((c) => c.categoryId === currentPrimaryId)) return;
+  await tx.trader.update({
+    where: { id: traderId },
+    data: { categoryId: active[0].categoryId },
+  });
+};
+
+/** Profile → Categories: activate / deactivate one of the trader's existing trades. */
+export const setTraderCategoryActive = async (
+  userId: string,
+  categoryId: string,
+  isActive: boolean
+) => {
+  const { trader } = await ensureTraderForUser(userId);
+  const link = await prisma.traderCategory.findUnique({
+    where: { traderId_categoryId: { traderId: trader.id, categoryId } },
+    select: { isActive: true },
+  });
+  if (!link) {
+    throw new NotFoundError('This trade category is not on your profile.');
+  }
+  if (isActive && !link.isActive) {
+    const category = await prisma.category.findFirst({
+      where: { id: categoryId, status: 'active' },
+      select: { id: true },
+    });
+    if (!category) {
+      throw new BadRequestError('This category is no longer available.', {
+        code: 'CATEGORY_INACTIVE',
+      });
+    }
+    await assertCategoryDocumentsReady(trader.id, trader.traderType, [categoryId]);
+  }
+  if (!isActive && link.isActive) {
+    await assertNoActiveJobsInCategories(trader.id, [categoryId]);
+  }
+
+  if (link.isActive !== isActive) {
+    await prisma.$transaction(async (tx) => {
+      await tx.traderCategory.update({
+        where: { traderId_categoryId: { traderId: trader.id, categoryId } },
+        data: { isActive },
+      });
+      await syncPrimaryCategory(tx, trader.id, trader.categoryId);
+    });
+  }
+
+  return getOnboardingStatus(userId);
+};
+
 export const saveCategories = async (
   userId: string,
   input: CategoriesInput,
@@ -601,14 +747,51 @@ export const saveCategories = async (
     throw new BadRequestError('One or more selected categories are invalid or inactive.');
   }
 
-  const existingIds = trader.categories.map((item) => item.categoryId);
-  // Profile updates merge by default so a single-category save (common when
-  // uploading docs for one trade) does not drop sibling categories / their docs UI.
-  const replace =
-    !options?.allowAfterSubmit || Boolean((input as { replace?: boolean }).replace);
-  const nextCategoryIds = replace
-    ? [...new Set(input.categoryIds)]
-    : [...new Set([...existingIds, ...input.categoryIds])];
+  const selectedIds = [...new Set(input.categoryIds)];
+
+  if (options?.allowAfterSubmit) {
+    // Profile: trades are never deleted. Selected → active; with `replace`, others → inactive.
+    // Default (merge) only adds/re-activates, so a single-category save keeps sibling trades.
+    const replace = Boolean((input as { replace?: boolean }).replace);
+    const reactivating = await prisma.traderCategory.findMany({
+      where: { traderId: trader.id, categoryId: { in: selectedIds }, isActive: false },
+      select: { categoryId: true },
+    });
+    await assertCategoryDocumentsReady(
+      trader.id,
+      trader.traderType,
+      reactivating.map((row) => row.categoryId)
+    );
+    if (replace) {
+      const deactivating = await prisma.traderCategory.findMany({
+        where: { traderId: trader.id, categoryId: { notIn: selectedIds }, isActive: true },
+        select: { categoryId: true },
+      });
+      await assertNoActiveJobsInCategories(
+        trader.id,
+        deactivating.map((row) => row.categoryId)
+      );
+    }
+    await prisma.$transaction(async (tx) => {
+      for (const categoryId of selectedIds) {
+        await tx.traderCategory.upsert({
+          where: { traderId_categoryId: { traderId: trader.id, categoryId } },
+          update: { isActive: true },
+          create: { traderId: trader.id, categoryId },
+        });
+      }
+      if (replace) {
+        await tx.traderCategory.updateMany({
+          where: { traderId: trader.id, categoryId: { notIn: selectedIds } },
+          data: { isActive: false },
+        });
+      }
+      await syncPrimaryCategory(tx, trader.id, trader.categoryId);
+    });
+    return getOnboardingStatus(userId);
+  }
+
+  const nextCategoryIds = selectedIds;
 
   await prisma.$transaction(async (tx) => {
     await tx.traderCategory.deleteMany({ where: { traderId: trader.id } });
@@ -616,7 +799,7 @@ export const saveCategories = async (
       data: nextCategoryIds.map((categoryId) => ({ traderId: trader.id, categoryId })),
     });
 
-    // Keep category-scoped uploads when a trade is deselected (replace:true).
+    // Keep category-scoped uploads when a trade is deselected.
     // Re-selecting restores uploadStatus without forcing a re-upload.
 
     await tx.trader.update({
@@ -656,11 +839,16 @@ export const saveSoloProfile = async (
     throw new BadRequestError('Personal info step is only for Sole Trader accounts.');
   }
 
+  const personalId = validatePersonalId(
+    (input.ppsNumber ?? input.niNumber)!,
+    input.country ?? trader.country
+  );
+
   await prisma.trader.update({
     where: { id: trader.id },
     data: {
       fullLegalName: input.fullLegalName,
-      ppsNumber: input.ppsNumber,
+      ppsNumber: personalId,
       bio: input.bio,
       yearsExperience: input.yearsExperience ?? 0,
       addressLine1: input.addressLine1,

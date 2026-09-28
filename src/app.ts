@@ -47,6 +47,8 @@ import propertyRoutes from './modules/property/property.routes';
 import jobsRoutes from './modules/jobs/jobs.routes';
 import checkoutRoutes from './modules/checkout/checkout.routes';
 import realtimeRoutes from './sockets/realtime.routes';
+import locationsRoutes from './modules/locations/locations.routes';
+import adminLocationsRoutes from './modules/admin/admin-locations/admin-locations.routes';
 
 const app = express();
 
@@ -110,6 +112,7 @@ app.use('/admin', adminTraderVerificationRoutes);
 app.use('/admin', adminOffersRoutes);
 app.use('/admin', adminLoyaltyRoutes);
 app.use('/admin', adminCurrencyRoutes);
+app.use('/admin', adminLocationsRoutes);
 app.use('/admin/cms', adminCmsRoutes);
 app.use('/admin/cms', adminContactRoutes);
 app.use('/admin/blog/categories', adminBlogCategoryRoutes);
@@ -127,6 +130,7 @@ app.use('/contact', contactRoutes);
 app.use('/', publicOffersRoutes);
 app.use('/loyalty', loyaltyRoutes);
 app.use('/currency', currencyRoutes);
+app.use('/locations', locationsRoutes);
 app.use('/uploads', uploadsRoutes);
 app.use('/', propertyRoutes);
 app.use('/jobs', jobsRoutes);

@@ -1,0 +1,117 @@
+import { Prisma } from '@prisma/client';
+import { prisma } from '../../config/database';
+import { ConflictError, NotFoundError } from '../../utils/errors';
+import type {
+  CreateCountryInput,
+  CreateCountyInput,
+  UpdateCountryInput,
+  UpdateCountyInput,
+} from './locations.validation';
+
+const countySelect = {
+  id: true,
+  code: true,
+  name: true,
+  isActive: true,
+  sortOrder: true,
+} satisfies Prisma.CountySelect;
+
+const countyOrder: Prisma.CountyOrderByWithRelationInput[] = [{ sortOrder: 'asc' }, { name: 'asc' }];
+const countryOrder: Prisma.CountryOrderByWithRelationInput[] = [{ sortOrder: 'asc' }, { name: 'asc' }];
+
+const rethrowUnique = (error: unknown, message: string): never => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    throw new ConflictError(message, { code: 'LOCATION_EXISTS' });
+  }
+  throw error;
+};
+
+/** Public dropdown data: only enabled countries with their enabled counties. */
+export const listActiveCountries = async (countryCode?: string) => {
+  const countries = await prisma.country.findMany({
+    where: {
+      isActive: true,
+      ...(countryCode ? { code: countryCode.toUpperCase() } : {}),
+    },
+    orderBy: countryOrder,
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      counties: {
+        where: { isActive: true },
+        orderBy: countyOrder,
+        select: { id: true, code: true, name: true },
+      },
+    },
+  });
+  return { items: countries, total: countries.length };
+};
+
+export const listCountriesForAdmin = async (isActive?: boolean) => {
+  const countries = await prisma.country.findMany({
+    where: isActive === undefined ? {} : { isActive },
+    orderBy: countryOrder,
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      isActive: true,
+      sortOrder: true,
+      updatedAt: true,
+      counties: { orderBy: countyOrder, select: countySelect },
+    },
+  });
+  const items = countries.map((country) => ({
+    ...country,
+    countiesTotal: country.counties.length,
+    countiesActive: country.counties.filter((c) => c.isActive).length,
+  }));
+  return { items, total: items.length };
+};
+
+export const createCountry = async (input: CreateCountryInput) =>
+  prisma.country
+    .create({
+      data: input,
+      select: { id: true, code: true, name: true, isActive: true, sortOrder: true },
+    })
+    .catch((e) => rethrowUnique(e, 'A country with this code or name already exists.'));
+
+export const updateCountry = async (countryId: string, input: UpdateCountryInput) => {
+  const exists = await prisma.country.findUnique({ where: { id: countryId }, select: { id: true } });
+  if (!exists) throw new NotFoundError('Country not found.');
+  return prisma.country
+    .update({
+      where: { id: countryId },
+      data: input,
+      select: { id: true, code: true, name: true, isActive: true, sortOrder: true },
+    })
+    .catch((e) => rethrowUnique(e, 'A country with this name already exists.'));
+};
+
+export const createCounty = async (countryId: string, input: CreateCountyInput) => {
+  const exists = await prisma.country.findUnique({ where: { id: countryId }, select: { id: true } });
+  if (!exists) throw new NotFoundError('Country not found.');
+  return prisma.county
+    .create({
+      data: { countryId, ...input, code: input.code?.toUpperCase() || null },
+      select: { ...countySelect, countryId: true },
+    })
+    .catch((e) => rethrowUnique(e, 'This county already exists for the country.'));
+};
+
+export const updateCounty = async (countyId: string, input: UpdateCountyInput) => {
+  const exists = await prisma.county.findUnique({ where: { id: countyId }, select: { id: true } });
+  if (!exists) throw new NotFoundError('County not found.');
+  return prisma.county
+    .update({
+      where: { id: countyId },
+      data: {
+        ...input,
+        ...(input.code !== undefined ? { code: input.code?.toUpperCase() || null } : {}),
+      },
+      select: { ...countySelect, countryId: true },
+    })
+    .catch((e) => rethrowUnique(e, 'This county already exists for the country.'));
+};

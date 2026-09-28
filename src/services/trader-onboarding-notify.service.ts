@@ -34,7 +34,7 @@ const listActiveAdminEmails = async (): Promise<string[]> => {
  * One branded admin email: To = primary inbox, CC = other admins + monitoring CC.
  * Same Survey white-card layout; optional blue CTA to Admin portal.
  */
-const notifyAdminsByEmail = async (input: {
+export const notifyAdminsByEmail = async (input: {
   subject: string;
   text: string;
   title: string;
@@ -79,7 +79,7 @@ const notifyAdminsByEmail = async (input: {
   });
 };
 
-const notifyAdminsInApp = async (input: {
+export const notifyAdminsInApp = async (input: {
   type: string;
   title: string;
   message: string;
@@ -94,7 +94,7 @@ const notifyAdminsInApp = async (input: {
   });
 };
 
-const createUserNotification = async (
+export const createUserNotification = async (
   userId: string,
   type: string,
   payload: Record<string, string>

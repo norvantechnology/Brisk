@@ -76,7 +76,7 @@ const buildTraderOnboardingSnapshot = async (userId: string): Promise<TraderOnbo
   const trader = await prisma.trader.findUnique({
     where: { userId },
     include: {
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
       documents: {
         include: { documentRule: { select: { documentKey: true } } },
       },

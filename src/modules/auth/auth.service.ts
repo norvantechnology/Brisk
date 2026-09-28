@@ -22,6 +22,7 @@ import {
   verifyOtp,
 } from './otp.service';
 import { APP_NEXT_STEP, resolveSessionExtras } from '../navigation/app-next-step';
+import { buildTokenExpiry } from '../../utils/token-expiry';
 import type {
   RegisterInput,
   VerifyOtpInput,
@@ -133,6 +134,7 @@ const buildSessionPayload = async (
     user: toPublicUser(user),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
+    ...buildTokenExpiry(tokens.accessToken, tokens.refreshToken),
     nextStep,
     traderAccountActive,
     onboarding,
@@ -635,8 +637,10 @@ export const refreshUserSession = async (token: string) => {
       });
     }
 
-    const { accessToken } = createAuthTokens(user);
-    return { accessToken };
+    // Rotate the refresh token too, so an active user's session slides forward instead of
+    // hard-expiring 7 days after login.
+    const { accessToken, refreshToken } = createAuthTokens(user);
+    return { accessToken, refreshToken, ...buildTokenExpiry(accessToken, refreshToken) };
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       throw error;

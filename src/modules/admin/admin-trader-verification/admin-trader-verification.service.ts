@@ -12,6 +12,7 @@ import {
   formatDocumentExpiryDate,
   parseDocumentExpiryDate,
 } from '../../document-rules/document-expiry';
+import { describePersonalId } from '../../traders/personal-id';
 
 type TraderForVerificationSync = {
   id: string;
@@ -107,7 +108,7 @@ export const syncTraderVerificationFromDocuments = async (traderId: string) => {
   const trader = await prisma.trader.findUnique({
     where: { id: traderId },
     include: {
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
       documents: {
         include: { documentRule: { select: { required: true, name: true } } },
       },
@@ -328,6 +329,7 @@ export const listVerificationQueue = async (filters: {
       include: {
         user: { select: { fullName: true, email: true, mobileNumber: true } },
         categories: {
+          where: { isActive: true },
           include: { category: { select: { id: true, name: true } } },
         },
       },
@@ -364,6 +366,7 @@ export const getTraderVerificationDetail = async (traderId: string) => {
         },
       },
       categories: {
+        where: { isActive: true },
         include: { category: { select: { id: true, name: true, categoryCode: true } } },
       },
       documents: {
@@ -390,6 +393,7 @@ export const getTraderVerificationDetail = async (traderId: string) => {
       businessName: trader.businessName,
       fullLegalName: trader.fullLegalName,
       ppsNumber: trader.ppsNumber,
+      ...describePersonalId(trader.country),
       croNumber: trader.croNumber,
       vatNumber: trader.vatNumber,
       directorFullName: trader.directorFullName,
@@ -550,6 +554,7 @@ export const reviewTraderDocument = async (
   const data: Prisma.TraderDocumentUpdateInput = {};
   if (input.expiryDate !== undefined) {
     data.expiryDate = parseDocumentExpiryDate(input.expiryDate);
+    data.expiryReminderStage = null;
   }
   if (input.status) {
     data.status = input.status;

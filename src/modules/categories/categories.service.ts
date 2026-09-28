@@ -42,7 +42,7 @@ export const buildTraderCategoryDocumentsMap = async (
     select: {
       id: true,
       traderType: true,
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
       documents: { select: { documentRuleId: true } },
     },
   });

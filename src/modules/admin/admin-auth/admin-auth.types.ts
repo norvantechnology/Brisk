@@ -3,6 +3,8 @@ import { AdminRole, AdminStatus } from '@prisma/client';
 export interface AdminAuthTokens {
   accessToken: string;
   refreshToken: string;
+  accessTokenExpiresAt: string | null;
+  refreshTokenExpiresAt: string | null;
 }
 
 export interface AdminUserProfile {

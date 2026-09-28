@@ -86,3 +86,10 @@ export const updateTraderBankDetailsSchema = z.object({
 export type UpdateTraderProfileInput = z.infer<typeof updateTraderProfileSchema>['body'];
 export type UpdateTraderAccountInput = z.infer<typeof updateTraderAccountSchema>['body'];
 export type UpdateTraderBankDetailsInput = z.infer<typeof updateTraderBankDetailsSchema>['body'];
+
+export const expiringDocumentsQuerySchema = z.object({
+  query: z.object({
+    /** Optional look-ahead in days (default = first reminder window, 30). */
+    withinDays: z.coerce.number().int().min(0).max(365).optional(),
+  }),
+});

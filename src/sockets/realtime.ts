@@ -80,7 +80,7 @@ export const resolveTraderDiscoverRooms = async (userId: string): Promise<string
       verificationStatus: true,
       onboardingStatus: true,
       categoryId: true,
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
     },
   });
 
@@ -113,7 +113,7 @@ const findNearbyDiscoverTraderUserIds = async (payload: JobRealtimePayload): Pro
       onboardingStatus: TraderOnboardingStatus.APPROVED,
       OR: [
         { categoryId: payload.categoryId },
-        { categories: { some: { categoryId: payload.categoryId } } },
+        { categories: { some: { categoryId: payload.categoryId, isActive: true } } },
       ],
     },
     select: {

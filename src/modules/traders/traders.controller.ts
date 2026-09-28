@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import * as tradersService from './traders.service';
 import * as onboardingService from './onboarding/onboarding.service';
+import { listExpiringDocuments } from './trader-document-expiry.service';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 
@@ -178,6 +179,45 @@ export const updateMyCategories = async (
       message: 'Categories updated successfully.',
       data,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const setMyCategoryActive = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await onboardingService.setTraderCategoryActive(
+      req.user!.id,
+      req.params.categoryId,
+      req.body.isActive
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: req.body.isActive ? 'Category activated.' : 'Category deactivated.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMyExpiringDocuments = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await listExpiringDocuments(
+      req.user!.id,
+      req.query.withinDays as number | undefined
+    );
+    sendResponse({ res, statusCode: 200, message: 'Expiring documents retrieved.', data });
   } catch (error) {
     next(error);
   }

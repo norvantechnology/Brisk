@@ -418,7 +418,8 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fullLegalName, ppsNumber, addressLine1, city, postcode]
+ *             required: [fullLegalName, addressLine1, city, postcode]
+ *             description: Send `ppsNumber` (Ireland) or `niNumber` (UK) — one is required.
  *             properties:
  *               fullLegalName:
  *                 type: string
@@ -426,8 +427,15 @@
  *                 description: As shown on ID.
  *               ppsNumber:
  *                 type: string
- *                 example: "1234567X"
- *                 description: Personal Public Service number (Ireland tax reporting).
+ *                 example: "1234567FA"
+ *                 description: |
+ *                   Ireland — PPS Number (7 digits + 1–2 letters). Validated against `country`:
+ *                   UK countries (United Kingdom, England, Scotland, Wales, Northern Ireland) expect an NI Number.
+ *                   Profile responses return `personalIdType` (`PPS` | `NI`) and `personalIdLabel` for the field title.
+ *               niNumber:
+ *                 type: string
+ *                 example: "QQ123456C"
+ *                 description: UK — National Insurance Number (alias of `ppsNumber`, stored in the same field).
  *               bio:
  *                 type: string
  *                 maxLength: 300

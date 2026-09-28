@@ -780,6 +780,8 @@ model Refund {
   currencyCode   String       @default("EUR") @map("currency_code")
   reason         String       @db.Text
   status         RefundStatus @default(PENDING)
+  /// Admin note — mandatory when status = REJECTED.
+  adminNote      String?      @map("admin_note") @db.Text
   processedById  String?      @map("processed_by_id") @db.Uuid
   processedAt    DateTime?    @map("processed_at")
   createdAt      DateTime     @default(now()) @map("created_at")
@@ -1232,6 +1234,8 @@ model AccountDeletionRequest {
   status             DeletionRequestStatus @default(PENDING)
   reason             String?               @db.Text
   additionalComments String?               @map("additional_comments") @db.Text
+  /// Admin note — mandatory when status = REJECTED.
+  adminNote          String?               @map("admin_note") @db.Text
   reviewedById       String?               @map("reviewed_by_id") @db.Uuid
   reviewedByLabel    String?               @map("reviewed_by_label")
   requestedAt        DateTime              @default(now()) @map("requested_at")
@@ -1280,6 +1284,8 @@ model TraderRegistration {
 model TraderCategory {
   traderId   String @map("trader_id") @db.Uuid
   categoryId String @map("category_id") @db.Uuid
+  /// Profile toggle — inactive trades keep documents but get no Discover jobs / leads.
+  isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
 
   trader   Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
@@ -1321,6 +1327,8 @@ model TraderDocument {
   rejectionReason String?              @map("rejection_reason") @db.Text
   /// Optional — entered by trader on upload; admin can correct during verification.
   expiryDate      DateTime?            @map("expiry_date") @db.Date
+  /// Last expiry reminder sent (days before expiry: 30 / 7 / 1 / 0). Reset whenever expiryDate changes.
+  expiryReminderStage Int?             @map("expiry_reminder_stage")
   uploadedAt      DateTime             @default(now()) @map("uploaded_at")
   reviewedAt      DateTime?            @map("reviewed_at")
   reviewedById    String?              @map("reviewed_by_id") @db.Uuid
@@ -1765,4 +1773,39 @@ model PlatformCurrencySettings {
   updatedById  String?  @map("updated_by_id") @db.Uuid
 
   @@map("platform_currency_settings")
+}
+
+// ==========================================
+// LOCATIONS — COUNTRY / COUNTY (admin enable/disable)
+// ==========================================
+
+model Country {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// ISO 3166-1 alpha-2 (IE, GB)
+  code      String   @unique
+  name      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  counties County[]
+
+  @@map("countries")
+}
+
+model County {
+  id        String   @id @default(uuid()) @db.Uuid
+  countryId String   @map("country_id") @db.Uuid
+  code      String?
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  country Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@unique([countryId, name])
+  @@map("counties")
 }

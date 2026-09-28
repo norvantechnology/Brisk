@@ -5,6 +5,7 @@ import { env } from '../../../config/env';
 import { UnauthorizedError, BadRequestError, NotFoundError } from '../../../utils/errors';
 import { AdminLoginResponse, AdminUserProfile, AdminAuthTokens } from './admin-auth.types';
 import { ActorType, AdminStatus } from '@prisma/client';
+import { buildTokenExpiry } from '../../../utils/token-expiry';
 
 /**
  * Generate Access and Refresh JWT tokens for Admin
@@ -22,7 +23,7 @@ const generateTokens = (adminId: string, email: string, role: string): AdminAuth
     { expiresIn: '7d' }
   );
 
-  return { accessToken, refreshToken };
+  return { accessToken, refreshToken, ...buildTokenExpiry(accessToken, refreshToken) };
 };
 
 /**

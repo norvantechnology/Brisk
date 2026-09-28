@@ -7,6 +7,7 @@ import {
   SurveyRegistrationStatus,
 } from '@prisma/client';
 import { parseCmsPageType } from '../../cms/cms-page-type';
+import { requireNoteWhenRejected } from '../../../utils/reject-note';
 
 const paginationQuery = {
   page: z.string().optional(),
@@ -400,18 +401,22 @@ export const surveyFilterSchema = z.object({
 
 export const updateSurveyConsumerSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
-  body: z.object({
-    status: z.nativeEnum(SurveyRegistrationStatus).optional(),
-    notes: z.string().optional(),
-  }),
+  body: z
+    .object({
+      status: z.nativeEnum(SurveyRegistrationStatus).optional(),
+      notes: z.string().optional(),
+    })
+    .superRefine(requireNoteWhenRejected('notes')),
 });
 
 export const updateSurveyTraderSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
-  body: z.object({
-    status: z.nativeEnum(SurveyRegistrationStatus).optional(),
-    notes: z.string().optional(),
-  }),
+  body: z
+    .object({
+      status: z.nativeEnum(SurveyRegistrationStatus).optional(),
+      notes: z.string().optional(),
+    })
+    .superRefine(requireNoteWhenRejected('notes')),
 });
 
 /** Bulk delete survey registrations — body: { ids: uuid[] } */

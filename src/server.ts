@@ -5,6 +5,7 @@ import { connectDatabase, prisma } from './config/database';
 import { logger } from './utils/logger';
 import { ensureUploadRoot } from './modules/uploads/storage/local.storage';
 import { initSocketServer } from './sockets/socket-server';
+import { startDocumentExpiryReminderScheduler } from './services/document-expiry-reminder.service';
 
 const startServer = async () => {
   await connectDatabase();
@@ -20,6 +21,7 @@ const startServer = async () => {
       `🚀 BRISK backend monolith running in [${env.NODE_ENV}] mode on http://localhost:${env.PORT}`
     );
     logger.info('Realtime: Socket.IO available at /socket.io');
+    startDocumentExpiryReminderScheduler();
   });
 
   const shutdown = async (signal: string) => {

@@ -46,7 +46,7 @@ const assertTraderExists = async (traderId: string) => {
       bankName: true,
       bankHolderName: true,
       accountNumber: true,
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
     },
   });
   if (!trader) throw new NotFoundError('Trader not found.');

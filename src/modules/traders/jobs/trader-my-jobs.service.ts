@@ -121,7 +121,7 @@ const getTraderContext = async (userId: string) => {
       serviceCenterLat: true,
       serviceCenterLng: true,
       country: true,
-      categories: { select: { categoryId: true } },
+      categories: { where: { isActive: true }, select: { categoryId: true } },
       user: { select: { preferredCurrency: true, country: true } },
     },
   });
@@ -217,6 +217,20 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
     ],
   };
 };
+
+/** My Jobs ACTIVE-tab jobs in the given categories (blocks deactivating those trades). */
+export const listActiveJobsInCategories = (traderId: string, categoryIds: string[]) =>
+  prisma.job.findMany({
+    where: {
+      AND: [
+        traderJobAccessWhere(traderId),
+        tabStatusWhere('ACTIVE', traderId),
+        { categoryId: { in: categoryIds } },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, jobRef: true, title: true, status: true, categoryId: true },
+  });
 
 /** Same count as My Jobs ACTIVE tab (`GET /traders/jobs/mine?tab=ACTIVE` meta.total). */
 export const countActiveJobs = (traderId: string): Promise<number> =>

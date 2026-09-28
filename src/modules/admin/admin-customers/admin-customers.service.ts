@@ -426,6 +426,9 @@ export const listDeletionRequests = async (filters: DeletionRequestQueryFilters)
         reason: req.reason || 'Privacy concerns',
         requestedAt: req.requestedAt,
         status: req.status,
+        adminNote: req.adminNote,
+        adminNotes: req.adminNote,
+        rejectionReason: req.status === DeletionRequestStatus.REJECTED ? req.adminNote : null,
         reviewedByLabel: req.reviewedByLabel || '—',
       },
     ];
@@ -472,6 +475,9 @@ export const getDeletionRequestById = async (id: string) => {
     requestedAt: req.requestedAt,
     reason: req.reason,
     additionalComments: req.additionalComments,
+    adminNote: req.adminNote,
+    adminNotes: req.adminNote,
+    rejectionReason: req.status === DeletionRequestStatus.REJECTED ? req.adminNote : null,
     reviewedByLabel: req.reviewedByLabel,
     customer: {
       id: req.user.id,
@@ -520,6 +526,7 @@ export const updateDeletionRequestStatus = async (
     where: { id },
     data: {
       status: input.status,
+      ...(input.notes !== undefined ? { adminNote: input.notes || null } : {}),
       reviewedById: adminId,
       reviewedByLabel: adminLabel,
       processedAt: input.status === DeletionRequestStatus.COMPLETED ? new Date() : undefined,
@@ -962,9 +969,9 @@ export const listRefundsQueue = async (filters: any) => {
     refunds.map(async (r) => ({
       id: r.id,
       refundRef: r.refundRef,
-      transactionRef: r.transactionRef || 'TXN-98234108',
+      transactionRef: r.transactionRef ?? null,
       customerName: r.user.fullName,
-      jobBookingTitle: r.payment?.invoice?.booking?.job?.title || 'Roof Leak Repair & Tiling',
+      jobBookingTitle: r.payment?.invoice?.booking?.job?.title ?? null,
       currencyCode: r.currencyCode,
       originalAmount: Number(r.originalAmount),
       originalAmountMoney: await toHistoricalMoney(r.originalAmount, r.currencyCode),
@@ -972,6 +979,7 @@ export const listRefundsQueue = async (filters: any) => {
       refundAmountMoney: await toHistoricalMoney(r.refundAmount, r.currencyCode),
       reason: r.reason,
       status: r.status,
+      adminNote: r.adminNote,
       requestedAt: r.createdAt,
     }))
   );
@@ -997,6 +1005,7 @@ export const processRefund = async (adminId: string, adminLabel: string, id: str
     where: { id },
     data: {
       status: input.status,
+      ...(input.notes !== undefined ? { adminNote: input.notes || null } : {}),
       processedById: adminId,
       processedAt: new Date(),
     },

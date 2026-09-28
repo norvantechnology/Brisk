@@ -4,9 +4,15 @@ import { validate } from '../../middlewares/validate.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
 import { traderVerifiedMiddleware } from '../../middlewares/trader-verified.middleware';
-import { updateTraderAccountSchema, updateTraderBankDetailsSchema, updateTraderProfileSchema } from './traders.validation';
+import {
+  expiringDocumentsQuerySchema,
+  updateTraderAccountSchema,
+  updateTraderBankDetailsSchema,
+  updateTraderProfileSchema,
+} from './traders.validation';
 import {
   categoriesSchema,
+  categoryActiveSchema,
   companyProfileSchema,
   documentRuleIdParamSchema,
   soloProfileSchema,
@@ -201,10 +207,12 @@ router.put(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fullLegalName, ppsNumber, addressLine1, city, postcode]
+ *             required: [fullLegalName, addressLine1, city, postcode]
+ *             description: Send `ppsNumber` (Ireland, e.g. 1234567FA) or `niNumber` (UK, e.g. QQ123456C). Format is checked against `country`.
  *             properties:
  *               fullLegalName: { type: string }
- *               ppsNumber: { type: string }
+ *               ppsNumber: { type: string, example: '1234567FA' }
+ *               niNumber: { type: string, example: 'QQ123456C' }
  *               bio: { type: string }
  *               yearsExperience: { type: integer }
  *               addressLine1: { type: string }
@@ -341,6 +349,59 @@ router.put('/me/documents', validate(uploadDocumentSchema), tradersController.up
 
 /**
  * @swagger
+ * /traders/me/documents/expiring:
+ *   get:
+ *     summary: Trader Dashboard — documents expired or expiring soon
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Uploaded documents (not REJECTED) whose `expiryDate` has passed or falls within `withinDays`
+ *       (default 30 — same window as the expiry reminders). Soonest first. Dates use Ireland time.
+ *       Empty `items` = nothing to show. Re-upload via `PUT /traders/me/documents` (`documentRuleId`).
+ *     parameters:
+ *       - in: query
+ *         name: withinDays
+ *         schema: { type: integer, minimum: 0, maximum: 365, default: 30 }
+ *     responses:
+ *       200:
+ *         description: Expiring documents.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Expiring documents retrieved.
+ *               data:
+ *                 items:
+ *                   - id: '8f0c2a1e-1111-4a5b-9c3d-2e4f5a6b7c8d'
+ *                     documentRuleId: 'a1b2c3d4-2222-4e5f-8a9b-0c1d2e3f4a5b'
+ *                     documentKey: 'public_liability_insurance'
+ *                     documentName: 'Public Liability Insurance'
+ *                     scope: 'CATEGORY'
+ *                     categoryId: 'c1d2e3f4-3333-4a5b-8c9d-0e1f2a3b4c5d'
+ *                     required: true
+ *                     fileUrl: 'https://api.brisk.ie/uploads/files/trader_document/insurance.pdf'
+ *                     fileName: 'insurance.pdf'
+ *                     status: 'APPROVED'
+ *                     expiryDate: '2026-10-05'
+ *                     daysLeft: 7
+ *                     expiryStatus: 'EXPIRING_SOON'
+ *                     uploadedAt: '2026-01-10T09:30:00.000Z'
+ *                 total: 1
+ *                 expiredCount: 0
+ *                 expiringSoonCount: 1
+ *                 withinDays: 30
+ *       404:
+ *         description: Trader profile not found.
+ */
+router.get(
+  '/me/documents/expiring',
+  validate(expiringDocumentsQuerySchema),
+  tradersController.getMyExpiringDocuments
+);
+
+/**
+ * @swagger
  * /traders/me/documents/{documentRuleId}:
  *   delete:
  *     summary: Remove a document from Profile (after onboarding)
@@ -375,11 +436,16 @@ router.delete(
  *
  *       Do **not** use `PUT /traders/onboarding/categories` after submit — that returns 403.
  *
- *       **Merge by default:** `categoryIds` are **added** to the trader's current trades.
- *       Uploading documents for one category must send either no categories call, or the
- *       full list / merge — never a single id unless you also pass `replace: true`.
- *       Set `replace: true` only when the user explicitly re-picks their full trade list.
- *       Deselecting with `replace: true` hides rules for removed trades but **keeps** uploads.
+ *       Trades are **never deleted** from Profile — they are activated / deactivated.
+ *       To toggle one trade use `PATCH /traders/me/categories/{categoryId}`.
+ *
+ *       **Merge by default:** `categoryIds` are added (or re-activated).
+ *       `replace: true` → listed trades active, every other trade on the profile becomes **inactive**
+ *       (documents are kept). At least one trade must stay active.
+ *       Inactive trades get no Discover jobs, incoming jobs, or realtime job alerts.
+ *       `selectedCategories` = active trades only (same as before); `allCategories[]` = every trade with `isActive`.
+ *       Re-activating an inactive trade via `categoryIds` follows the same document rule as the PATCH (`CATEGORY_DOCUMENTS_REQUIRED`).
+ *       With `replace: true`, trades being switched off must have no active jobs (`CATEGORY_HAS_ACTIVE_JOBS`).
  *     requestBody:
  *       required: true
  *       content:
@@ -400,5 +466,47 @@ router.delete(
  *         description: Categories updated. Onboarding snapshot in `data` (includes documentRequirements).
  */
 router.put('/me/categories', validate(categoriesSchema), tradersController.updateMyCategories);
+
+/**
+ * @swagger
+ * /traders/me/categories/{categoryId}:
+ *   patch:
+ *     summary: Activate / deactivate one trade category (Profile → Categories)
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Inactive trade = no Discover jobs, incoming jobs or realtime alerts for it; documents are kept.
+ *       The last active trade cannot be deactivated (`LAST_ACTIVE_CATEGORY`).
+ *       **Deactivate** is blocked while the trader has running jobs in that trade (My Jobs → Active):
+ *       400 `CATEGORY_HAS_ACTIVE_JOBS` with `data.activeJobsCount` and `data.activeJobs[] = { id, jobRef, title, status, categoryId }`.
+ *       **Reactivate** (`isActive: true`) requires every required document of that trade to be uploaded
+ *       and not rejected — otherwise 400 `CATEGORY_DOCUMENTS_REQUIRED` with
+ *       `data.missingDocuments[] = { documentRuleId, name, categoryId, categoryName, reason: NOT_UPLOADED | REJECTED }`.
+ *     parameters:
+ *       - in: path
+ *         name: categoryId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [isActive]
+ *             properties:
+ *               isActive: { type: boolean, example: false }
+ *     responses:
+ *       200:
+ *         description: Onboarding snapshot in `data`; `selectedCategories` = active trades, `allCategories[].isActive` = on/off state.
+ *       400: { description: 'LAST_ACTIVE_CATEGORY, CATEGORY_HAS_ACTIVE_JOBS, CATEGORY_INACTIVE or CATEGORY_DOCUMENTS_REQUIRED' }
+ *       404: { description: Category is not on this trader profile. }
+ */
+router.patch(
+  '/me/categories/:categoryId',
+  validate(categoryActiveSchema),
+  tradersController.setMyCategoryActive
+);
 
 export default router;

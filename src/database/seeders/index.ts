@@ -10,6 +10,7 @@ import { seedMarketingPages } from './marketing-pages.seed';
 import { seedDocumentRules } from './document-rules.seed';
 import { seedLegalPolicies } from './legal.seed';
 import { seedPropertyModule } from './property.seed';
+import { seedLocations } from './locations.seed';
 
 const prisma = new PrismaClient();
 
@@ -25,6 +26,7 @@ async function main() {
   await seedDocumentRules(prisma);
   await seedLegalPolicies(prisma);
   await seedPropertyModule(prisma);
+  await seedLocations(prisma);
   const { seedBriskOffers } = await import('./brisk-offers.seed');
   await seedBriskOffers();
   const { seedDiscoverJobs } = await import('./discover-jobs.seed');
