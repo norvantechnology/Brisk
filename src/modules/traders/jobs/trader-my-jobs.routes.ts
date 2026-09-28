@@ -51,11 +51,25 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  * /traders/jobs/incoming/latest:
  *   get:
  *     summary: Latest incoming job for map sheet
+ *     description: |
+ *       Map bottom sheet payload (Kitchen Sink Leak style).
+ *       **Accept:** `POST /traders/jobs/incoming/{id}/accept`
+ *       **Decline:** `POST /traders/jobs/incoming/{id}/decline`
+ *       **View details:** `GET /traders/jobs/discover/{id}`
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
  *         description: Incoming job payload or null
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data:
+ *                   $ref: '#/components/schemas/TraderIncomingJob'
  */
 router.get('/incoming/latest', controller.getIncomingLatest);
 
@@ -63,7 +77,11 @@ router.get('/incoming/latest', controller.getIncomingLatest);
  * @swagger
  * /traders/jobs/incoming/{id}/accept:
  *   post:
- *     summary: Accept incoming job interest
+ *     summary: Accept incoming job (View & Accept CTA)
+ *     description: |
+ *       Call when trader taps **View & Accept** on the map sheet.
+ *       - Site-visit jobs → creates/updates visit; navigate to site-visit slots (`data.redirectHint`)
+ *       - Normal jobs → seeds quote interest; navigate to quote / job detail
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -74,6 +92,16 @@ router.get('/incoming/latest', controller.getIncomingLatest);
  *     responses:
  *       200:
  *         description: Interest recorded with next-step hint
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Incoming job accepted.
+ *               data:
+ *                 jobId: e8a9b2c3-1234-5678-90ab-cdef12345678
+ *                 path: SITE_VISIT
+ *                 nextStep: SELECT_DATE_TIME
+ *                 redirectHint: /traders/jobs/discover/{id}/site-visit/slots
  *       404:
  *         description: Job not found
  */

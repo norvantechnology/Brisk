@@ -256,26 +256,40 @@
  *     TraderIncomingJob:
  *       type: object
  *       nullable: true
- *       description: Latest open marketplace job for map incoming sheet (null if none)
+ *       description: |
+ *         Latest open marketplace job for map incoming sheet (null if none).
+ *         Use for the map bottom sheet (title, distance, charges, customer, Accept/Decline).
  *       properties:
- *         id: { type: string, format: uuid, description: Job id }
- *         title: { type: string, description: Job title }
- *         distanceKm: { type: number, description: Distance km }
- *         customerName: { type: string, description: Customer name }
- *         isSiteVisit: { type: boolean, description: true if site-visit job }
- *         price:
+ *         id: { type: string, format: uuid }
+ *         title: { type: string, example: Kitchen Sink Leak }
+ *         description: { type: string }
+ *         distanceKm: { type: number, example: 2.4 }
+ *         charges:
  *           type: number
  *           nullable: true
- *           description: Display price amount EUR (fee or service charge)
+ *           description: Amount for CHARGES card (format with currencySymbol → e.g. €120)
+ *           example: 120
+ *         siteVisitFee: { type: number, nullable: true, example: 120 }
+ *         minBudget: { type: number, nullable: true, example: 100 }
+ *         maxBudget: { type: number, nullable: true, example: 150 }
+ *         currencyCode: { type: string, example: EUR }
+ *         currencySymbol: { type: string, example: € }
+ *         customer:
+ *           type: object
+ *           properties:
+ *             fullName: { type: string, example: Sarah Jenkins }
+ *             profileImage: { type: string, nullable: true, format: uri }
+ *             isVerifiedCustomer: { type: boolean, example: true }
  *         actions:
  *           type: object
- *           description: Soft accept/decline availability on map sheet
  *           properties:
- *             canAccept:
- *               type: boolean
- *               description: true means POST incoming accept is allowed
- *             canDecline:
- *               type: boolean
- *               description: true means POST incoming decline is allowed
+ *             canAccept: { type: boolean }
+ *             canDecline: { type: boolean }
+ *         isSiteVisit: { type: boolean }
+ *         areaName: { type: string }
+ *         latitude: { type: number }
+ *         longitude: { type: number }
+ *         createdAt: { type: string, format: date-time }
+ *         jobRef: { type: string, nullable: true }
  */
 export {};

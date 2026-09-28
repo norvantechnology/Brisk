@@ -2830,12 +2830,26 @@ export const getIncomingLatest = async (userId: string) => {
   const trader = await getTraderContext(userId);
   const origin = resolveOrigin(trader);
 
-  const job = await prisma.job.findFirst({
+  const traderCategoryIds = [
+    ...new Set(
+      [
+        ...trader.categories.map((c) => c.categoryId),
+        trader.categoryId,
+      ].filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  const radiusKm =
+    trader.serviceRadiusKm && trader.serviceRadiusKm > 0 ? trader.serviceRadiusKm : 50;
+
+  const candidates = await prisma.job.findMany({
     where: {
       status: JobStatus.PUBLISHED,
       traderId: null,
+      ...(traderCategoryIds.length ? { categoryId: { in: traderCategoryIds } } : {}),
     },
     orderBy: { createdAt: 'desc' },
+    take: 40,
     select: {
       id: true,
       jobRef: true,
@@ -2850,50 +2864,107 @@ export const getIncomingLatest = async (userId: string) => {
       minBudget: true,
       maxBudget: true,
       serviceCharge: true,
+      quoteType: true,
       createdAt: true,
-      customer: { select: { fullName: true, profilePhotoUrl: true } },
-      address: { select: { city: true, county: true, latitude: true, longitude: true } },
+      customer: {
+        select: {
+          fullName: true,
+          profilePhotoUrl: true,
+          mobileVerified: true,
+          emailVerified: true,
+          preferredCurrency: true,
+          country: true,
+        },
+      },
+      address: {
+        select: { city: true, county: true, country: true, latitude: true, longitude: true },
+      },
     },
   });
 
-  if (!job) {
+  const withDistance = candidates
+    .map((job) => {
+      const coords = resolveJobCoords(
+        {
+          id: job.id,
+          latitude: job.latitude ?? job.address?.latitude ?? null,
+          longitude: job.longitude ?? job.address?.longitude ?? null,
+        },
+        origin
+      );
+      const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
+      return { job, coords, distanceKm };
+    })
+    .filter((row) => row.distanceKm <= radiusKm)
+    .sort((a, b) => {
+      if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
+    });
+
+  const nearest = withDistance[0];
+  if (!nearest) {
     return null;
   }
 
-  const coords = resolveJobCoords(
-    {
-      id: job.id,
-      latitude: job.latitude ?? job.address?.latitude ?? null,
-      longitude: job.longitude ?? job.address?.longitude ?? null,
-    },
-    origin
-  );
-  const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
-  const fee = money(job.siteVisitFee);
+  const { job, coords, distanceKm } = nearest;
+  const siteVisitFee = money(job.siteVisitFee);
+  const minBudget = money(job.minBudget);
+  const maxBudget = money(job.maxBudget);
+  const serviceCharge = money(job.serviceCharge);
+  const isSiteVisit =
+    job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
+
+  /** CHARGES card: site-visit fee → service charge → budget band midpoint / min. */
+  const charges =
+    isSiteVisit && siteVisitFee > 0
+      ? siteVisitFee
+      : serviceCharge > 0
+        ? serviceCharge
+        : maxBudget > 0 && minBudget > 0
+          ? round2((minBudget + maxBudget) / 2)
+          : maxBudget > 0
+            ? maxBudget
+            : minBudget > 0
+              ? minBudget
+              : null;
+
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+  });
 
   return {
     id: job.id,
-    jobRef: job.jobRef,
     title: job.title,
     description: job.description,
-    customerName: job.customer.fullName,
-    customerPhotoUrl: job.customer.profilePhotoUrl,
-    areaName: job.city || job.address?.city || job.postcode || 'Nearby',
     distanceKm,
-    isSiteVisit: job.siteVisitRequested,
-    price:
-      job.siteVisitRequested && fee > 0
-        ? fee
-        : job.serviceCharge != null
-          ? money(job.serviceCharge)
-          : null,
-    createdAt: job.createdAt,
-    latitude: coords.lat,
-    longitude: coords.lng,
+    /** Display amount for the CHARGES card (number; format with currencySymbol). */
+    charges,
+    siteVisitFee: siteVisitFee > 0 ? siteVisitFee : null,
+    minBudget: minBudget > 0 ? minBudget : null,
+    maxBudget: maxBudget > 0 ? maxBudget : null,
+    currencyCode: currency.currencyCode,
+    currencySymbol: currency.currencySymbol,
+    customer: {
+      fullName: job.customer.fullName,
+      profileImage: job.customer.profilePhotoUrl,
+      isVerifiedCustomer: Boolean(
+        job.customer.mobileVerified || job.customer.emailVerified
+      ),
+    },
+    // Soft actions for map sheet CTAs
     actions: {
       canAccept: true,
       canDecline: true,
     },
+    // Extra context (optional for FE)
+    jobRef: job.jobRef,
+    isSiteVisit,
+    areaName: job.city || job.address?.city || job.postcode || 'Nearby',
+    latitude: coords.lat,
+    longitude: coords.lng,
+    createdAt: job.createdAt,
   };
 };
 
