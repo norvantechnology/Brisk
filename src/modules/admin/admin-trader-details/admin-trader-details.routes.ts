@@ -162,6 +162,7 @@ router.get(
  *                   fileName: insurance.pdf
  *                   status: PENDING
  *                   rejectionReason: null
+ *                   expiryDate: '2027-05-31'
  *                   uploadedAt: '2026-09-10T10:00:00.000Z'
  *                   reviewedAt: null
  *                   reviewedById: null

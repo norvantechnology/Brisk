@@ -77,7 +77,7 @@
  *               description: |
  *                 Entity docs for current trader type. Each item includes upload state:
  *                 - `uploadStatus`: `UPLOADED` | `NOT_UPLOADED`
- *                 - `uploadedDocument`: null or `{ id, fileUrl, fileName, status, uploadedAt }`
+ *                 - `uploadedDocument`: null or `{ id, fileUrl, fileName, status, expiryDate, uploadedAt }` (`expiryDate`: `YYYY-MM-DD` or null)
  *                   where `status` is admin review (`PENDING` / `APPROVED` / `REJECTED` / `EXPIRED`).
  *             categoryRules:
  *               type: array
@@ -279,7 +279,7 @@
  *
  *       **Flow:**
  *       1. `POST /uploads` — multipart: `file` + `purpose=trader_document` (Bearer trader token)
- *       2. `PUT /traders/onboarding/documents` — JSON: `{ documentRuleId, fileUrl: <url from step 1>, fileName? }`
+ *       2. `PUT /traders/onboarding/documents` — JSON: `{ documentRuleId, fileUrl: <url from step 1>, fileName?, expiryDate? }`
  *
  *       **Allowed trader upload purposes:** `GET /uploads/purposes` (includes `trader_document`).
  *
@@ -307,10 +307,20 @@
  *                 type: string
  *                 example: passport.pdf
  *                 description: Display name on uploaded file chip (optional).
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *                 example: '2030-05-31'
+ *                 description: |
+ *                   Optional document expiry date (`YYYY-MM-DD`). Omit / `null` / `""` = no date.
+ *                   Re-uploading a document replaces the file, so send the date again with the new file.
+ *                   Returned as `uploadedDocument.expiryDate`.
  *           example:
  *             documentRuleId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
  *             fileUrl: "https://cdn.example.com/passport.pdf"
  *             fileName: "passport.pdf"
+ *             expiryDate: "2030-05-31"
  *     responses:
  *       200:
  *         description: Document saved; check `uploadedDocuments` in response.

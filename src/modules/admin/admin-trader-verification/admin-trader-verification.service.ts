@@ -8,6 +8,10 @@ import {
 import { prisma } from '../../../config/database';
 import { NotFoundError, BadRequestError } from '../../../utils/errors';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
+import {
+  formatDocumentExpiryDate,
+  parseDocumentExpiryDate,
+} from '../../document-rules/document-expiry';
 
 type TraderForVerificationSync = {
   id: string;
@@ -247,6 +251,7 @@ const serializeTraderDocument = (doc: {
   fileName: string | null;
   status: TraderDocumentStatus;
   rejectionReason: string | null;
+  expiryDate: Date | null;
   uploadedAt: Date;
   reviewedAt: Date | null;
   reviewedById: string | null;
@@ -259,6 +264,7 @@ const serializeTraderDocument = (doc: {
   fileName: doc.fileName,
   status: doc.status,
   rejectionReason: doc.rejectionReason,
+  expiryDate: formatDocumentExpiryDate(doc.expiryDate),
   uploadedAt: doc.uploadedAt,
   reviewedAt: doc.reviewedAt,
   reviewedById: doc.reviewedById,
@@ -408,7 +414,10 @@ export const getTraderVerificationDetail = async (traderId: string) => {
       user: trader.user,
       categories: trader.categories.map((item) => item.category),
     },
-    documents: trader.documents,
+    documents: trader.documents.map((doc) => ({
+      ...doc,
+      expiryDate: formatDocumentExpiryDate(doc.expiryDate),
+    })),
     documentRequirements: requirements,
     registration: trader.registrations[0] ?? null,
   };
@@ -501,8 +510,9 @@ export const reviewTraderDocument = async (
   documentId: string,
   adminId: string,
   input: {
-    status: typeof TraderDocumentStatus.APPROVED | typeof TraderDocumentStatus.REJECTED;
+    status?: typeof TraderDocumentStatus.APPROVED | typeof TraderDocumentStatus.REJECTED;
     rejectionReason?: string;
+    expiryDate?: string | null;
   }
 ) => {
   const trader = await prisma.trader.findUnique({
@@ -519,7 +529,7 @@ export const reviewTraderDocument = async (
     throw new NotFoundError('Trader not found.');
   }
 
-  if (!DOCUMENT_REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
+  if (input.status && !DOCUMENT_REVIEWABLE_ONBOARDING_STATUSES.includes(trader.onboardingStatus)) {
     throw new BadRequestError(
       'Documents can only be reviewed when onboarding is SUBMITTED, REJECTED, or APPROVED (verified traders with new/replaced docs).'
     );
@@ -537,16 +547,21 @@ export const reviewTraderDocument = async (
     throw new NotFoundError('Document not found for this trader.');
   }
 
-  const reviewedAt = new Date();
+  const data: Prisma.TraderDocumentUpdateInput = {};
+  if (input.expiryDate !== undefined) {
+    data.expiryDate = parseDocumentExpiryDate(input.expiryDate);
+  }
+  if (input.status) {
+    data.status = input.status;
+    data.rejectionReason =
+      input.status === TraderDocumentStatus.REJECTED ? input.rejectionReason ?? null : null;
+    data.reviewedAt = new Date();
+    data.reviewedById = adminId;
+  }
+
   const updatedDocument = await prisma.traderDocument.update({
     where: { id: documentId },
-    data: {
-      status: input.status,
-      rejectionReason:
-        input.status === TraderDocumentStatus.REJECTED ? input.rejectionReason ?? null : null,
-      reviewedAt,
-      reviewedById: adminId,
-    },
+    data,
     include: {
       documentRule: {
         select: { id: true, documentKey: true, name: true, required: true },
@@ -554,6 +569,22 @@ export const reviewTraderDocument = async (
     },
   });
 
+  // Expiry-date correction only — no review, status sync, or trader notification.
+  if (!input.status) {
+    return {
+      document: serializeTraderDocument(updatedDocument),
+      trader: {
+        id: traderId,
+        verificationStatus: trader.verificationStatus,
+        onboardingStatus: trader.onboardingStatus,
+        rejectionReason: trader.rejectionReason,
+        statusChanged: false,
+      },
+      verificationSummary: null,
+    };
+  }
+
+  const reviewStatus = input.status;
   const syncResult = await syncTraderVerificationFromDocuments(traderId);
 
   const traderUser = await prisma.user.findUnique({
@@ -570,7 +601,7 @@ export const reviewTraderDocument = async (
           fullName: traderUser.fullName,
           documentId: updatedDocument.id,
           documentName: updatedDocument.documentRule.name,
-          status: input.status,
+          status: reviewStatus,
           rejectionReason: updatedDocument.rejectionReason,
         })
     );

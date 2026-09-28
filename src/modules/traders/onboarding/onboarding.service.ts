@@ -19,6 +19,10 @@ import {
   ONBOARDING_STEPS,
 } from './onboarding.constants';
 import { buildOnboardingProgress } from './onboarding-progress';
+import {
+  formatDocumentExpiryDate,
+  parseDocumentExpiryDate,
+} from '../../document-rules/document-expiry';
 import { resolveAppNextStep } from '../../navigation/app-next-step';
 import type {
   BankDetailsInput,
@@ -36,6 +40,7 @@ type UploadedDocRecord = {
   fileUrl: string;
   fileName: string | null;
   status: string;
+  expiryDate: Date | null;
   uploadedAt: Date;
   documentRule?: {
     id: string;
@@ -65,6 +70,7 @@ const enrichRulesWithUploads = <T extends { id: string }>(
             fileUrl: doc.fileUrl,
             fileName: doc.fileName,
             status: doc.status,
+            expiryDate: formatDocumentExpiryDate(doc.expiryDate),
             uploadedAt: doc.uploadedAt,
           }
         : null,
@@ -424,6 +430,7 @@ export const getDocumentRequirements = async (userId: string) => {
       fileUrl: true,
       fileName: true,
       status: true,
+      expiryDate: true,
       uploadedAt: true,
     },
   });
@@ -471,10 +478,13 @@ export const uploadDocument = async (
       documentRuleId: input.documentRuleId,
       fileUrl: input.fileUrl,
       fileName: input.fileName,
+      expiryDate: parseDocumentExpiryDate(input.expiryDate),
     },
     update: {
       fileUrl: input.fileUrl,
       fileName: input.fileName,
+      // New file replaces the old one — its expiry date must not carry over.
+      expiryDate: parseDocumentExpiryDate(input.expiryDate),
       status: 'PENDING',
       rejectionReason: null,
     },

@@ -129,7 +129,7 @@ router.get(
  * @swagger
  * /admin/trader-verification/{traderId}/documents/{documentId}:
  *   patch:
- *     summary: Approve or reject a single trader document
+ *     summary: Approve / reject a single trader document, and/or correct its expiry date
  *     tags:
  *       - Admin / Trader Verification
  *       - Admin / Trader Details
@@ -175,15 +175,28 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [status]
+ *             description: Send `status` and/or `expiryDate` (at least one).
  *             properties:
  *               status: { type: string, enum: [APPROVED, REJECTED] }
  *               rejectionReason:
  *                 type: string
  *                 description: Required when status is REJECTED
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *                 example: '2027-05-31'
+ *                 description: |
+ *                   Correct the document expiry date (`YYYY-MM-DD`). `null` or `""` clears it.
+ *                   Sent alone (no `status`) = date correction only: no re-review, no trader
+ *                   status change, no notification.
  *           examples:
  *             approve:
  *               value: { status: APPROVED }
+ *             approveWithExpiry:
+ *               value: { status: APPROVED, expiryDate: '2027-05-31' }
+ *             correctExpiryOnly:
+ *               value: { expiryDate: '2027-05-31' }
  *             reject:
  *               value:
  *                 status: REJECTED
@@ -201,6 +214,7 @@ router.get(
  *                   id: uuid
  *                   status: APPROVED
  *                   rejectionReason: null
+ *                   expiryDate: '2027-05-31'
  *                   reviewedAt: '2026-09-14T12:00:00.000Z'
  *                 trader:
  *                   id: uuid

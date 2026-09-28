@@ -327,6 +327,12 @@ router.put(
  *               documentRuleId: { type: string, format: uuid }
  *               fileUrl: { type: string, format: uri }
  *               fileName: { type: string }
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *                 example: '2030-05-31'
+ *                 description: Optional expiry date (`YYYY-MM-DD`). Send again when replacing the file.
  *     responses:
  *       200:
  *         description: Document saved. Same onboarding snapshot shape in `data`.

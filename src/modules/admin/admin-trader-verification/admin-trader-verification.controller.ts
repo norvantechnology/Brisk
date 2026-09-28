@@ -94,7 +94,9 @@ export const reviewDocument = async (
       message:
         req.body.status === 'APPROVED'
           ? 'Document approved successfully.'
-          : 'Document rejected successfully.',
+          : req.body.status === 'REJECTED'
+            ? 'Document rejected successfully.'
+            : 'Document expiry date updated successfully.',
       data,
     });
   } catch (error) {

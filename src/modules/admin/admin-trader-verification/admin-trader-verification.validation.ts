@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TraderDocumentStatus, VerificationStatus } from '@prisma/client';
+import { documentExpiryDateSchema } from '../../document-rules/document-expiry';
 
 export const verificationQueueSchema = z.object({
   query: z.object({
@@ -44,10 +45,18 @@ export const reviewTraderDocumentSchema = z.object({
   }),
   body: z
     .object({
-      status: z.enum([TraderDocumentStatus.APPROVED, TraderDocumentStatus.REJECTED]),
+      status: z.enum([TraderDocumentStatus.APPROVED, TraderDocumentStatus.REJECTED]).optional(),
       rejectionReason: z.string().trim().min(1).max(2000).optional(),
+      expiryDate: documentExpiryDateSchema,
     })
     .superRefine((body, ctx) => {
+      if (body.status === undefined && body.expiryDate === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Send status and/or expiryDate.',
+          path: ['status'],
+        });
+      }
       if (body.status === TraderDocumentStatus.REJECTED && !body.rejectionReason) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

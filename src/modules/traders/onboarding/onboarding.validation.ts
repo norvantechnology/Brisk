@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { documentExpiryDateSchema } from '../../document-rules/document-expiry';
 
 const urlSchema = z.string().trim().url('Must be a valid URL');
 
@@ -13,6 +14,7 @@ export const uploadDocumentSchema = z.object({
     documentRuleId: z.string().uuid(),
     fileUrl: urlSchema,
     fileName: z.string().trim().min(1).max(255).optional(),
+    expiryDate: documentExpiryDateSchema,
   }),
 });
 

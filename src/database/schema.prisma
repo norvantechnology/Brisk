@@ -1319,6 +1319,8 @@ model TraderDocument {
   fileName        String?              @map("file_name")
   status          TraderDocumentStatus @default(PENDING)
   rejectionReason String?              @map("rejection_reason") @db.Text
+  /// Optional — entered by trader on upload; admin can correct during verification.
+  expiryDate      DateTime?            @map("expiry_date") @db.Date
   uploadedAt      DateTime             @default(now()) @map("uploaded_at")
   reviewedAt      DateTime?            @map("reviewed_at")
   reviewedById    String?              @map("reviewed_by_id") @db.Uuid

@@ -13,6 +13,7 @@ import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
 import { offerInclude, serializeOffer } from '../../offers/offers.serializers';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
+import { formatDocumentExpiryDate } from '../../document-rules/document-expiry';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -220,6 +221,7 @@ export const listTraderDocuments = async (
       fileName: doc.fileName,
       status: doc.status,
       rejectionReason: doc.rejectionReason,
+      expiryDate: formatDocumentExpiryDate(doc.expiryDate),
       uploadedAt: doc.uploadedAt,
       reviewedAt: doc.reviewedAt,
       reviewedById: doc.reviewedById,
