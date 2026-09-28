@@ -218,6 +218,12 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
   };
 };
 
+/** Same count as My Jobs ACTIVE tab (`GET /traders/jobs/mine?tab=ACTIVE` meta.total). */
+export const countActiveJobs = (traderId: string): Promise<number> =>
+  prisma.job.count({
+    where: { AND: [traderJobAccessWhere(traderId), tabStatusWhere('ACTIVE', traderId)] },
+  });
+
 const statusBadgeFor = (
   status: JobStatus,
   bookingStatus?: string | null,
