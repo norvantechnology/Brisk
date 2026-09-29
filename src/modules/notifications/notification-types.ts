@@ -32,6 +32,12 @@ export const ADMIN_NOTIFICATION_TYPE_CATALOG: NotificationTypeMeta[] = [
     description: 'Trader uploaded or replaced a verification document.',
   },
   {
+    type: 'TRADER_DOCUMENT_EXPIRY',
+    label: 'Document expiry',
+    category: 'verification',
+    description: 'Trader document expires in 30 / 7 / 1 days, today, or has expired.',
+  },
+  {
     type: 'SYSTEM',
     label: 'System',
     category: 'system',
@@ -41,6 +47,12 @@ export const ADMIN_NOTIFICATION_TYPE_CATALOG: NotificationTypeMeta[] = [
 
 /** Trader Portal / Customer inbox types (`Notification.type`). */
 export const USER_NOTIFICATION_TYPE_CATALOG: NotificationTypeMeta[] = [
+  {
+    type: 'TRADER_ONBOARDING_SUBMITTED',
+    label: 'Application submitted',
+    category: 'account',
+    description: 'Trader onboarding was submitted for admin review.',
+  },
   {
     type: 'TRADER_PROFILE_APPROVED',
     label: 'Profile approved',
@@ -70,6 +82,12 @@ export const USER_NOTIFICATION_TYPE_CATALOG: NotificationTypeMeta[] = [
     label: 'Document update',
     category: 'documents',
     description: 'Legacy document status update.',
+  },
+  {
+    type: 'DOCUMENT_EXPIRY_REMINDER',
+    label: 'Document expiring',
+    category: 'documents',
+    description: 'A document expires in 30 / 7 / 1 days, today, or has expired — upload a renewed copy.',
   },
   {
     type: 'SYSTEM',
