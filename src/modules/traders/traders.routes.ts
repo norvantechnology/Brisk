@@ -324,6 +324,10 @@ router.put(
  *
  *       Do **not** use `PUT /traders/onboarding/documents` after submit — that returns 403.
  *       List docs with `GET /traders/onboarding` (`documentRequirements.*.uploadStatus`).
+ *
+ *       Category documents can be uploaded for **active and inactive** trades on the profile
+ *       (e.g. before reactivating). For inactive trades, refresh with
+ *       `GET /traders/onboarding/document-requirements` (`categoryRules[].isActive`).
  *     requestBody:
  *       required: true
  *       content:

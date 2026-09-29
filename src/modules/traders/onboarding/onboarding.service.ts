@@ -480,8 +480,14 @@ export const uploadDocument = async (
   const rule = await assertDocumentRuleExists(input.documentRuleId);
 
   if (rule.scope === 'CATEGORY') {
-    const selectedCategoryIds = trader.categories.map((item) => item.categoryId);
-    if (!rule.categoryId || !selectedCategoryIds.includes(rule.categoryId)) {
+    // Inactive trades stay on the profile — their docs can be uploaded before reactivating.
+    const linked = rule.categoryId
+      ? await prisma.traderCategory.findUnique({
+          where: { traderId_categoryId: { traderId: trader.id, categoryId: rule.categoryId } },
+          select: { categoryId: true },
+        })
+      : null;
+    if (!linked) {
       throw new BadRequestError('This document belongs to a category you have not selected.');
     }
   }
