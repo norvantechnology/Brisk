@@ -85,7 +85,9 @@ const enrichRulesWithUploads = <T extends { id: string }>(
 const buildDocumentRequirementsWithUploads = async (
   traderType: TraderType,
   categoryIds: string[],
-  documents: UploadedDocRecord[]
+  documents: UploadedDocRecord[],
+  /** Trader-level on/off per category; omitted → every listed category is active. */
+  activeByCategoryId?: Map<string, boolean>
 ) => {
   const { entityRules, categoryRules } = await getDocumentRequirementsForTrader(
     traderType,
@@ -105,6 +107,7 @@ const buildDocumentRequirementsWithUploads = async (
         categoryId: group.categoryId,
         categoryName: group.categoryName,
         categoryCode: group.categoryCode,
+        isActive: activeByCategoryId?.get(group.categoryId) ?? true,
         title: group.title,
         subtitle: group.subtitle,
         documentUpload,
@@ -428,7 +431,16 @@ export const getDocumentRequirements = async (userId: string) => {
     throw new BadRequestError('Start onboarding first via POST /traders/onboarding/start.');
   }
 
-  const categoryIds = trader.categories.map((item) => item.categoryId);
+  // Active + inactive trades so the trader can keep docs current before reactivating.
+  const traderCategories = await prisma.traderCategory.findMany({
+    where: { traderId: trader.id },
+    orderBy: { createdAt: 'asc' },
+    select: { categoryId: true, isActive: true },
+  });
+  const categoryIds = traderCategories.map((item) => item.categoryId);
+  const activeByCategoryId = new Map(
+    traderCategories.map((item) => [item.categoryId, item.isActive])
+  );
   const documents = await prisma.traderDocument.findMany({
     where: { traderId: trader.id },
     select: {
@@ -442,7 +454,12 @@ export const getDocumentRequirements = async (userId: string) => {
     },
   });
 
-  return buildDocumentRequirementsWithUploads(registration.entityType, categoryIds, documents);
+  return buildDocumentRequirementsWithUploads(
+    registration.entityType,
+    categoryIds,
+    documents,
+    activeByCategoryId
+  );
 };
 
 export const uploadDocument = async (

@@ -239,11 +239,16 @@
  *       ```
  *       categoryRules: [{
  *         categoryId, categoryName, categoryCode,
+ *         isActive: true,
  *         title: "Electrical & Wiring Category",
  *         subtitle: "Upload the required documents for your Electrical & Wiring category.",
  *         documents: [{ id, name, required, uploadStatus, uploadedDocument, ... }]
  *       }]
  *       ```
+ *
+ *       Includes **active and inactive** trades on the profile. `isActive: false` = trade is deactivated
+ *       (no jobs); its documents stay listed so they can be kept up to date before reactivating
+ *       (`PATCH /traders/me/categories/{categoryId}`).
  *
  *       **When to call:**
  *       - On document upload screens to build the list (REQUIRED / OPTIONAL badges)
