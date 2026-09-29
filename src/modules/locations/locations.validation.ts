@@ -13,6 +13,15 @@ export const publicCountriesQuerySchema = z.object({
   }),
 });
 
+export const publicCountiesQuerySchema = z.object({
+  query: z
+    .object({
+      countryId: z.string().uuid().optional(),
+      countryCode: z.string().trim().min(2).max(3).optional(),
+    })
+    .refine((q) => q.countryId || q.countryCode, 'Send countryId or countryCode.'),
+});
+
 export const adminCountriesQuerySchema = z.object({
   query: z.object({
     isActive: booleanQuery,

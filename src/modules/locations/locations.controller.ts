@@ -42,3 +42,7 @@ export const adminCreateCounty = handle(
 export const adminUpdateCounty = handle('County updated.', (req) =>
   locationsService.updateCounty(req.params.countyId, req.body)
 );
+
+export const listActiveCounties = handle('Counties retrieved.', (req) =>
+  locationsService.listActiveCounties(req.query as { countryId?: string; countryCode?: string })
+);

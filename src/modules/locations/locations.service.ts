@@ -115,3 +115,26 @@ export const updateCounty = async (countyId: string, input: UpdateCountyInput) =
     })
     .catch((e) => rethrowUnique(e, 'This county already exists for the country.'));
 };
+
+/** Public: enabled counties of one enabled country (by id or ISO code). */
+export const listActiveCounties = async (query: { countryId?: string; countryCode?: string }) => {
+  const country = await prisma.country.findFirst({
+    where: {
+      isActive: true,
+      ...(query.countryId ? { id: query.countryId } : { code: query.countryCode!.toUpperCase() }),
+    },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      counties: {
+        where: { isActive: true },
+        orderBy: countyOrder,
+        select: { id: true, code: true, name: true },
+      },
+    },
+  });
+  if (!country) throw new NotFoundError('Country not found or not available.');
+  const { counties, ...countryInfo } = country;
+  return { country: countryInfo, items: counties, total: counties.length };
+};
