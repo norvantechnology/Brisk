@@ -7,6 +7,7 @@ import {
   type CategoryDocumentsExtras,
   type CategoryDocumentsStatus,
 } from './categories.serializers';
+import { listApplicableOffersBySubcategory } from '../offers/public-offers.service';
 
 const ACTIVE = 'active';
 
@@ -286,7 +287,10 @@ export const getActiveCategoryBySlug = async (
   });
 };
 
-export const listActiveSubcategories = async (filters: AppSubcategoryFilters = {}) => {
+export const listActiveSubcategories = async (
+  filters: AppSubcategoryFilters = {},
+  options?: { userId?: string | null }
+) => {
   const where: {
     status: string;
     categoryId?: string;
@@ -313,15 +317,22 @@ export const listActiveSubcategories = async (filters: AppSubcategoryFilters = {
     },
   });
 
-  return subcategories.map((sub) =>
-    serializeSubcategory(sub, {
-      parentCategory: {
-        id: sub.category.id,
-        name: sub.category.name,
-        categoryCode: sub.category.categoryCode,
-      },
-    })
-  );
+  const offersBySub = await listApplicableOffersBySubcategory(subcategories, options?.userId);
+
+  return subcategories.map((sub) => {
+    const offers = offersBySub.get(sub.id) ?? [];
+    return {
+      ...serializeSubcategory(sub, {
+        parentCategory: {
+          id: sub.category.id,
+          name: sub.category.name,
+          categoryCode: sub.category.categoryCode,
+        },
+      }),
+      offers,
+      offersCount: offers.length,
+    };
+  });
 };
 
 export const getActiveSubcategoryById = async (id: string) => {

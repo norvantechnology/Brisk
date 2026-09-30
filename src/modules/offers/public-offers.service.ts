@@ -196,6 +196,83 @@ export const listPublicOffers = async (
   };
 };
 
+/**
+ * Live offers that apply to each sub-category: linked to that sub-category, or linked to its
+ * parent category with no sub-category restriction. Offers the viewer already used are skipped.
+ */
+export const listApplicableOffersBySubcategory = async (
+  subcategories: Array<{ id: string; categoryId: string }>,
+  userId?: string | null
+) => {
+  const result = new Map<string, Awaited<ReturnType<typeof enrichOfferWithCurrency>>[]>();
+  if (!subcategories.length) return result;
+
+  const subIds = subcategories.map((sub) => sub.id);
+  const categoryIds = [...new Set(subcategories.map((sub) => sub.categoryId))];
+
+  const offers = await prisma.offer.findMany({
+    where: {
+      AND: [
+        buildOfferWhere({ publicOnly: true }),
+        {
+          OR: [
+            { subcategories: { some: { subcategoryId: { in: subIds } } } },
+            {
+              subcategories: { none: {} },
+              categories: { some: { categoryId: { in: categoryIds } } },
+            },
+          ],
+        },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    include: publicInclude,
+  });
+  if (!offers.length) return result;
+
+  const blockedIds = new Set<string>();
+  if (userId) {
+    const claims = await prisma.offerClaim.findMany({
+      where: {
+        userId,
+        offerId: { in: offers.map((offer) => offer.id) },
+        OR: [
+          { status: OfferClaimStatus.USED },
+          { status: OfferClaimStatus.CLAIMED, jobId: { not: null } },
+        ],
+      },
+      select: { offerId: true },
+    });
+    claims.forEach((claim) => blockedIds.add(claim.offerId));
+  }
+
+  const viewerCurrency = userId ? await resolveUserCurrency(userId) : null;
+  const usable = await Promise.all(
+    offers
+      .filter((offer) => !blockedIds.has(offer.id))
+      .map(async (offer) => ({
+        subIds: new Set(offer.subcategories.map((item) => item.subcategoryId)),
+        categoryIds: new Set(offer.categories.map((item) => item.categoryId)),
+        data: await enrichOfferWithCurrency(
+          { ...(await serializeOfferWithMeta(offer)), claimed: false, canApply: true },
+          viewerCurrency
+        ),
+      }))
+  );
+
+  for (const sub of subcategories) {
+    result.set(
+      sub.id,
+      usable
+        .filter((offer) =>
+          offer.subIds.size ? offer.subIds.has(sub.id) : offer.categoryIds.has(sub.categoryId)
+        )
+        .map((offer) => offer.data)
+    );
+  }
+  return result;
+};
+
 export const getPublicOffer = async (id: string, userId?: string) => {
   const offer = await prisma.offer.findUnique({
     where: { id },

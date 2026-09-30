@@ -154,6 +154,15 @@ categoriesRouter.get(
  *       - Omit `categoryId`, or send empty / `null` → all active sub-categories.
  *
  *       Each item includes `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`, and `categoryId`.
+ *
+ *       **Offers:** each item has `offers[]` + `offersCount` — live offers (Brisk + trader) that match
+ *       this sub-category: linked to this sub-category, or linked to its main category with no
+ *       sub-category restriction. Same offer object as `GET /brisk-offers` / `GET /trader-offers`.
+ *       Empty array = no matching offer (hide the banner). Send customer Bearer (optional) to skip
+ *       offers the user already used.
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
  *     parameters:
  *       - in: query
  *         name: categoryId
@@ -171,7 +180,12 @@ categoriesRouter.get(
  *       200:
  *         description: Array of sub-category objects in `data`.
  */
-subcategoriesRouter.get('/', validate(appSubcategoryListSchema), categoriesController.listSubcategories);
+subcategoriesRouter.get(
+  '/',
+  optionalAuthMiddleware,
+  validate(appSubcategoryListSchema),
+  categoriesController.listSubcategories
+);
 
 /**
  * @swagger

@@ -74,7 +74,9 @@ export const listSubcategories = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await categoriesService.listActiveSubcategories(req.query);
+    const data = await categoriesService.listActiveSubcategories(req.query, {
+      userId: (req as AuthenticatedRequest).user?.id ?? null,
+    });
     sendResponse({
       res,
       statusCode: 200,
