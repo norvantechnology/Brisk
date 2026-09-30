@@ -85,6 +85,7 @@ router.use(adminAuthMiddleware);
  *                 addressLine2: { type: string, nullable: true }
  *                 city: { type: string, nullable: true }
  *                 postcode: { type: string, nullable: true }
+ *                 county: { type: string, nullable: true }
  *                 country: { type: string, nullable: true }
  *                 serviceRadiusKm: { type: integer, nullable: true }
  *                 serviceCenterLabel: { type: string, nullable: true }
@@ -522,6 +523,7 @@ router.get('/traders/:id', validate(traderIdParamSchema), controller.getTrader);
  *               addressLine1: { type: string, nullable: true }
  *               addressLine2: { type: string, nullable: true }
  *               postcode: { type: string, nullable: true }
+ *               county: { type: string, nullable: true }
  *               status: { type: string, enum: [ACTIVE, INACTIVE, PENDING, SUSPENDED] }
  *               verificationStatus: { type: string, enum: [PENDING, VERIFIED, REJECTED, SUSPENDED] }
  *               categoryIds:

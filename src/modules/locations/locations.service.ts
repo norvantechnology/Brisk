@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
-import { ConflictError, NotFoundError } from '../../utils/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
 import type {
   CreateCountryInput,
   CreateCountyInput,
@@ -146,4 +146,47 @@ export const listActiveCounties = async (query: { countryId?: string; countryCod
   if (!country) throw new NotFoundError('Country not found or not available.');
   const { counties, ...countryInfo } = country;
   return { country: withFlag(countryInfo), items: counties, total: counties.length };
+};
+
+/**
+ * Validates a Country + County pair against admin-enabled locations (name or code, case-insensitive)
+ * and returns the canonical names to store.
+ */
+export const resolveEnabledLocation = async (countryInput: string, countyInput: string) => {
+  const countryValue = countryInput.trim();
+  const countyValue = countyInput.trim();
+  const country = await prisma.country.findFirst({
+    where: {
+      isActive: true,
+      OR: [
+        { name: { equals: countryValue, mode: 'insensitive' } },
+        { code: { equals: countryValue, mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true, name: true },
+  });
+  if (!country) {
+    throw new BadRequestError('Select a valid country.', {
+      code: 'INVALID_COUNTRY',
+      data: { field: 'country' },
+    });
+  }
+  const county = await prisma.county.findFirst({
+    where: {
+      countryId: country.id,
+      isActive: true,
+      OR: [
+        { name: { equals: countyValue, mode: 'insensitive' } },
+        { code: { equals: countyValue, mode: 'insensitive' } },
+      ],
+    },
+    select: { name: true },
+  });
+  if (!county) {
+    throw new BadRequestError(`Select a valid county for ${country.name}.`, {
+      code: 'INVALID_COUNTY',
+      data: { field: 'county' },
+    });
+  }
+  return { country: country.name, county: county.name };
 };

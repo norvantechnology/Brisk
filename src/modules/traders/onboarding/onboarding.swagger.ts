@@ -423,7 +423,7 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fullLegalName, addressLine1, city, postcode]
+ *             required: [fullLegalName, addressLine1, city, postcode, country, county]
  *             description: Send `ppsNumber` (Ireland) or `niNumber` (UK) — one is required.
  *             properties:
  *               fullLegalName:
@@ -466,7 +466,11 @@
  *               country:
  *                 type: string
  *                 example: Ireland
- *                 default: Ireland
+ *                 description: Required. Country name (or ISO code) from `GET /locations/countries`. Stored as name.
+ *               county:
+ *                 type: string
+ *                 example: Dublin
+ *                 description: Required. County name (or code) from `GET /locations/counties?countryCode=` for the selected country. Stored as name.
  *     responses:
  *       200:
  *         description: Personal info saved; advances to bank details step.
@@ -504,7 +508,7 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required: [companyName, croNumber, directorFullName, addressLine1, city, postcode]
+ *             required: [companyName, croNumber, directorFullName, addressLine1, city, postcode, country, county]
  *             properties:
  *               companyName:
  *                 type: string
@@ -540,6 +544,11 @@
  *               country:
  *                 type: string
  *                 example: Ireland
+ *                 description: Required. Country name (or ISO code) from `GET /locations/countries`. Stored as name.
+ *               county:
+ *                 type: string
+ *                 example: Dublin
+ *                 description: Required. County name (or code) from `GET /locations/counties?countryCode=` for the selected country. Stored as name.
  *     responses:
  *       200:
  *         description: Company info saved.

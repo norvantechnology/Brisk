@@ -28,6 +28,7 @@ import {
 import { describePersonalId, validatePersonalId } from '../personal-id';
 import { resolveAppNextStep } from '../../navigation/app-next-step';
 import { listActiveJobsInCategories } from '../jobs/trader-my-jobs.service';
+import { resolveEnabledLocation } from '../../locations/locations.service';
 import type {
   BankDetailsInput,
   BusinessTypeInput,
@@ -295,6 +296,7 @@ const serializeOnboardingStatus = async (
       addressLine2: trader.addressLine2,
       city: trader.city,
       postcode: trader.postcode,
+      county: trader.county,
       country: trader.country,
     },
     bankDetails: trader.bankDetailsSkipped
@@ -867,6 +869,8 @@ export const saveSoloProfile = async (
     input.country ?? trader.country
   );
 
+  const location = await resolveEnabledLocation(input.country, input.county);
+
   await prisma.trader.update({
     where: { id: trader.id },
     data: {
@@ -878,7 +882,8 @@ export const saveSoloProfile = async (
       addressLine2: input.addressLine2,
       city: input.city,
       postcode: input.postcode,
-      country: input.country ?? 'Ireland',
+      country: location.country,
+      county: location.county,
     },
   });
 
@@ -911,6 +916,8 @@ export const saveCompanyProfile = async (
     throw new BadRequestError('Company info step is only for Company Trader accounts.');
   }
 
+  const location = await resolveEnabledLocation(input.country, input.county);
+
   await prisma.trader.update({
     where: { id: trader.id },
     data: {
@@ -924,7 +931,8 @@ export const saveCompanyProfile = async (
       addressLine2: input.addressLine2,
       city: input.city,
       postcode: input.postcode,
-      country: input.country ?? 'Ireland',
+      country: location.country,
+      county: location.county,
     },
   });
 

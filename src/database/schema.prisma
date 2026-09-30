@@ -353,6 +353,8 @@ model Trader {
   addressLine2       String?            @map("address_line_2")
   city               String?
   postcode           String?
+  /// County name from GET /locations/counties (required on Sole/Company info save).
+  county             String?
   country            String?            @default("Ireland")
   bankHolderName     String?            @map("bank_holder_name")
   bankName           String?            @map("bank_name")

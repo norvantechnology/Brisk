@@ -56,6 +56,7 @@ export type UpdateTraderInput = {
   addressLine1?: string | null;
   addressLine2?: string | null;
   postcode?: string | null;
+  county?: string | null;
   status?: TraderAccountStatus;
   verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
   categoryIds?: string[];

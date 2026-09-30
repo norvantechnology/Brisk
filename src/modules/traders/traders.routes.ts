@@ -207,7 +207,7 @@ router.put(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fullLegalName, addressLine1, city, postcode]
+ *             required: [fullLegalName, addressLine1, city, postcode, country, county]
  *             description: Send `ppsNumber` (Ireland, e.g. 1234567FA) or `niNumber` (UK, e.g. QQ123456C). Format is checked against `country`.
  *             properties:
  *               fullLegalName: { type: string }
@@ -219,7 +219,8 @@ router.put(
  *               addressLine2: { type: string }
  *               city: { type: string }
  *               postcode: { type: string }
- *               country: { type: string, example: Ireland }
+ *               country: { type: string, example: Ireland, description: 'Name or ISO code from GET /locations/countries (stored as name)' }
+ *               county: { type: string, example: Dublin, description: 'Name or code from GET /locations/counties for the country (stored as name). 400 INVALID_COUNTY if not enabled for that country.' }
  *     responses:
  *       200:
  *         description: Updated. Full profile in `data` (includes `businessInfo`).
@@ -250,7 +251,7 @@ router.put(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [companyName, croNumber, directorFullName, addressLine1, city, postcode]
+ *             required: [companyName, croNumber, directorFullName, addressLine1, city, postcode, country, county]
  *             properties:
  *               companyName: { type: string }
  *               croNumber: { type: string, example: "12345678" }
@@ -262,7 +263,8 @@ router.put(
  *               addressLine2: { type: string }
  *               city: { type: string }
  *               postcode: { type: string }
- *               country: { type: string }
+ *               country: { type: string, example: Ireland, description: 'Name or ISO code from GET /locations/countries (stored as name)' }
+ *               county: { type: string, example: Dublin, description: 'Name or code from GET /locations/counties for the country (stored as name). 400 INVALID_COUNTY if not enabled for that country.' }
  *     responses:
  *       200:
  *         description: Updated. Full profile in `data` (includes `businessInfo`).

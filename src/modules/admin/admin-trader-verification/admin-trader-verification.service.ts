@@ -26,6 +26,7 @@ type TraderForVerificationSync = {
   addressLine1: string | null;
   city: string | null;
   postcode: string | null;
+  county: string | null;
   bankDetailsSkipped: boolean;
   bankHolderName: string | null;
   bankName: string | null;
@@ -403,6 +404,7 @@ export const getTraderVerificationDetail = async (traderId: string) => {
       addressLine2: trader.addressLine2,
       city: trader.city,
       postcode: trader.postcode,
+      county: trader.county,
       country: trader.country,
       bankHolderName: trader.bankHolderName,
       bankName: trader.bankName,

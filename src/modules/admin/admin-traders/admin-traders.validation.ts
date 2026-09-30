@@ -99,6 +99,7 @@ export const updateTraderSchema = z.object({
       addressLine1: z.string().trim().max(255).nullable().optional(),
       addressLine2: z.string().trim().max(255).nullable().optional(),
       postcode: z.string().trim().max(32).nullable().optional(),
+      county: z.string().trim().max(100).nullable().optional(),
       status: traderAccountStatus.optional(),
       verificationStatus: verificationStatus.optional(),
       categoryIds: z.array(z.string().uuid()).optional(),

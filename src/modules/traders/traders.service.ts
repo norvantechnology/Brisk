@@ -210,6 +210,7 @@ export const getTraderProfile = async (userId: string) => {
       addressLine2: trader.addressLine2,
       city: trader.city,
       postcode: trader.postcode,
+      county: trader.county,
       country: trader.country,
       bio: trader.bio,
       yearsExperience: trader.yearsExperience,

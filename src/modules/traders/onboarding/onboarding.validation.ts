@@ -48,7 +48,10 @@ const addressFields = {
   addressLine2: z.string().trim().max(255).optional(),
   city: z.string().trim().min(1).max(100),
   postcode: z.string().trim().min(1).max(20),
-  country: z.string().trim().min(1).max(100).optional(),
+  /** Country name or ISO code from GET /locations/countries (stored as name). */
+  country: z.string().trim().min(1, 'Country is required').max(100),
+  /** County name or code from GET /locations/counties for that country (stored as name). */
+  county: z.string().trim().min(1, 'County is required').max(100),
 };
 
 export const soloProfileSchema = z.object({
