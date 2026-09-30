@@ -19,6 +19,14 @@ const countySelect = {
 const countyOrder: Prisma.CountyOrderByWithRelationInput[] = [{ sortOrder: 'asc' }, { name: 'asc' }];
 const countryOrder: Prisma.CountryOrderByWithRelationInput[] = [{ sortOrder: 'asc' }, { name: 'asc' }];
 
+/** Flag emoji from ISO 3166-1 alpha-2 code (IE → 🇮🇪). */
+const flagEmoji = (code: string): string =>
+  /^[A-Za-z]{2}$/.test(code)
+    ? String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
+    : '';
+
+const withFlag = <T extends { code: string }>(country: T) => ({ ...country, flag: flagEmoji(country.code) });
+
 const rethrowUnique = (error: unknown, message: string): never => {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     throw new ConflictError(message, { code: 'LOCATION_EXISTS' });
@@ -45,7 +53,8 @@ export const listActiveCountries = async (countryCode?: string) => {
       },
     },
   });
-  return { items: countries, total: countries.length };
+  const items = countries.map(withFlag);
+  return { items, total: items.length };
 };
 
 export const listCountriesForAdmin = async (isActive?: boolean) => {
@@ -63,7 +72,7 @@ export const listCountriesForAdmin = async (isActive?: boolean) => {
     },
   });
   const items = countries.map((country) => ({
-    ...country,
+    ...withFlag(country),
     countiesTotal: country.counties.length,
     countiesActive: country.counties.filter((c) => c.isActive).length,
   }));
@@ -136,5 +145,5 @@ export const listActiveCounties = async (query: { countryId?: string; countryCod
   });
   if (!country) throw new NotFoundError('Country not found or not available.');
   const { counties, ...countryInfo } = country;
-  return { country: countryInfo, items: counties, total: counties.length };
+  return { country: withFlag(countryInfo), items: counties, total: counties.length };
 };
