@@ -197,38 +197,30 @@ export const listPublicOffers = async (
 };
 
 /**
- * Live offers that apply to each sub-category: linked to that sub-category, or linked to its
- * parent category with no sub-category restriction. Offers the viewer already used are skipped.
+ * Live offers valid for a main category (linked to it, or to one of its sub-categories).
+ * Brisk (PLATFORM) offers first, then newest. Offers the viewer already used are skipped.
  */
-export const listApplicableOffersBySubcategory = async (
-  subcategories: Array<{ id: string; categoryId: string }>,
-  userId?: string | null
+export const listApplicableOffersForCategory = async (
+  categoryId: string,
+  userId?: string | null,
+  categoryName?: string | null
 ) => {
-  const result = new Map<string, Awaited<ReturnType<typeof enrichOfferWithCurrency>>[]>();
-  if (!subcategories.length) return result;
-
-  const subIds = subcategories.map((sub) => sub.id);
-  const categoryIds = [...new Set(subcategories.map((sub) => sub.categoryId))];
-
   const offers = await prisma.offer.findMany({
     where: {
       AND: [
         buildOfferWhere({ publicOnly: true }),
         {
           OR: [
-            { subcategories: { some: { subcategoryId: { in: subIds } } } },
-            {
-              subcategories: { none: {} },
-              categories: { some: { categoryId: { in: categoryIds } } },
-            },
+            { categories: { some: { categoryId } } },
+            { subcategories: { some: { subcategory: { categoryId } } } },
           ],
         },
       ],
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ offerType: 'asc' }, { createdAt: 'desc' }],
     include: publicInclude,
   });
-  if (!offers.length) return result;
+  if (!offers.length) return [];
 
   const blockedIds = new Set<string>();
   if (userId) {
@@ -247,30 +239,38 @@ export const listApplicableOffersBySubcategory = async (
   }
 
   const viewerCurrency = userId ? await resolveUserCurrency(userId) : null;
-  const usable = await Promise.all(
+  return Promise.all(
     offers
       .filter((offer) => !blockedIds.has(offer.id))
-      .map(async (offer) => ({
-        subIds: new Set(offer.subcategories.map((item) => item.subcategoryId)),
-        categoryIds: new Set(offer.categories.map((item) => item.categoryId)),
-        data: await enrichOfferWithCurrency(
+      .map(async (offer) => {
+        const data = await enrichOfferWithCurrency(
           { ...(await serializeOfferWithMeta(offer)), claimed: false, canApply: true },
           viewerCurrency
-        ),
-      }))
+        );
+        const validSubcategories = data.subcategories.filter((sub) => sub.categoryId === categoryId);
+        const validCategory = data.categories.find((cat) => cat.id === categoryId);
+        return {
+          id: data.id,
+          offerId: data.offerId,
+          offerCode: data.offerCode,
+          offerType: data.offerType,
+          title: data.title,
+          shortDescription: data.shortDescription,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+          currencyCode: data.currencyCode,
+          discountLabel: data.displayDiscountLabel ?? data.discountLabel,
+          validUntil: data.validUntil,
+          validCategoryId: categoryId,
+          validCategoryName: validCategory?.name ?? categoryName ?? null,
+          validSubcategoryIds: validSubcategories.map((sub) => sub.id),
+          validSubcategoryName: validSubcategories.map((sub) => sub.name).join(', ') || null,
+          traderId: data.traderId,
+          bannerImageUrl: data.bannerImageUrl,
+          isActive: data.status === OfferStatus.ACTIVE,
+        };
+      })
   );
-
-  for (const sub of subcategories) {
-    result.set(
-      sub.id,
-      usable
-        .filter((offer) =>
-          offer.subIds.size ? offer.subIds.has(sub.id) : offer.categoryIds.has(sub.categoryId)
-        )
-        .map((offer) => offer.data)
-    );
-  }
-  return result;
 };
 
 export const getPublicOffer = async (id: string, userId?: string) => {

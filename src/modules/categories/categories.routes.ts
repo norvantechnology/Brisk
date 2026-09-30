@@ -155,11 +155,14 @@ categoriesRouter.get(
  *
  *       Each item includes `siteVisitEnabled`, `priceEnabled`, `priceEnteredBy`, `qaFormSchema`, and `categoryId`.
  *
- *       **Offers:** each item has `offers[]` + `offersCount` — live offers (Brisk + trader) that match
- *       this sub-category: linked to this sub-category, or linked to its main category with no
- *       sub-category restriction. Same offer object as `GET /brisk-offers` / `GET /trader-offers`.
- *       Empty array = no matching offer (hide the banner). Send customer Bearer (optional) to skip
- *       offers the user already used.
+ *       **Response shape:**
+ *       - With `categoryId` → `data` is an object: `{ offer, offers, offersCount, subCategories }`.
+ *         `offer` = live offer valid for this main category (Brisk offers first, then newest), or `null`
+ *         when none matches (hide the banner). `offers` = every matching live offer.
+ *         `validCategoryName` / `validSubcategoryName` feed the "Valid For" line.
+ *       - Without `categoryId` → `data` is the plain sub-category array (unchanged).
+ *
+ *       Send customer Bearer (optional) to skip offers the user already used.
  *     security:
  *       - bearerAuth: []
  *       - {}
@@ -178,7 +181,39 @@ categoriesRouter.get(
  *         description: Optional. `true` = featured sub-categories only; omit for all.
  *     responses:
  *       200:
- *         description: Array of sub-category objects in `data`.
+ *         description: Object with `offer` + `subCategories` when `categoryId` is sent; otherwise an array.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Sub-categories retrieved successfully.
+ *               data:
+ *                 offer:
+ *                   id: 7c1e2a4b-1f7d-4c55-9a0e-2b8f3f7d9a10
+ *                   offerId: 7c1e2a4b-1f7d-4c55-9a0e-2b8f3f7d9a10
+ *                   offerCode: OFF-1004
+ *                   offerType: PLATFORM
+ *                   title: €5 off on your first job
+ *                   shortDescription: null
+ *                   discountType: FLAT
+ *                   discountValue: 5
+ *                   currencyCode: EUR
+ *                   discountLabel: Fixed €5.00
+ *                   validUntil: '2026-12-31T23:59:59.000Z'
+ *                   validCategoryId: 3a07ea99-4d74-45b9-86ba-6f95ca85b8a2
+ *                   validCategoryName: Pest Control
+ *                   validSubcategoryIds: [15532727-16c1-4e72-b3c0-dfb59293bad7]
+ *                   validSubcategoryName: Residential
+ *                   traderId: null
+ *                   bannerImageUrl: null
+ *                   isActive: true
+ *                 offersCount: 1
+ *                 subCategories:
+ *                   - id: 15532727-16c1-4e72-b3c0-dfb59293bad7
+ *                     categoryId: 3a07ea99-4d74-45b9-86ba-6f95ca85b8a2
+ *                     name: Residential
+ *                     siteVisitEnabled: false
+ *                     priceEnabled: true
  */
 subcategoriesRouter.get(
   '/',

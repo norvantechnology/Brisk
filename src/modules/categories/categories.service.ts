@@ -7,7 +7,7 @@ import {
   type CategoryDocumentsExtras,
   type CategoryDocumentsStatus,
 } from './categories.serializers';
-import { listApplicableOffersBySubcategory } from '../offers/public-offers.service';
+import { listApplicableOffersForCategory } from '../offers/public-offers.service';
 
 const ACTIVE = 'active';
 
@@ -317,22 +317,30 @@ export const listActiveSubcategories = async (
     },
   });
 
-  const offersBySub = await listApplicableOffersBySubcategory(subcategories, options?.userId);
+  const items = subcategories.map((sub) =>
+    serializeSubcategory(sub, {
+      parentCategory: {
+        id: sub.category.id,
+        name: sub.category.name,
+        categoryCode: sub.category.categoryCode,
+      },
+    })
+  );
 
-  return subcategories.map((sub) => {
-    const offers = offersBySub.get(sub.id) ?? [];
-    return {
-      ...serializeSubcategory(sub, {
-        parentCategory: {
-          id: sub.category.id,
-          name: sub.category.name,
-          categoryCode: sub.category.categoryCode,
-        },
-      }),
-      offers,
-      offersCount: offers.length,
-    };
-  });
+  if (!filters.categoryId) return items;
+
+  const offers = await listApplicableOffersForCategory(
+    filters.categoryId,
+    options?.userId,
+    subcategories[0]?.category.name
+  );
+
+  return {
+    offer: offers[0] ?? null,
+    offers,
+    offersCount: offers.length,
+    subCategories: items,
+  };
 };
 
 export const getActiveSubcategoryById = async (id: string) => {
