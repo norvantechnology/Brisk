@@ -28,12 +28,22 @@ const acceptedTermsField = z.preprocess(
   })
 );
 
+/** Multipart-safe optional boolean ("true"/"1" → true, "false"/"0" → false, omitted → undefined). */
+const optionalBooleanField = z.preprocess(
+  (value) =>
+    value === undefined || value === null || value === ''
+      ? undefined
+      : value === true || value === 1 || value === 'true' || value === 'True' || value === '1',
+  z.boolean().optional()
+);
+
 const optionalProfilePhotoUrl = z.preprocess(
   (value) => (value === '' || value === null || value === undefined ? undefined : value),
   z.string().trim().url('Invalid profile photo URL').optional()
 );
 
-const registerBodySchema = z.object({
+const registerBodySchema = z
+  .object({
   fullName: z.string().trim().min(2, 'Name must be at least 2 characters long'),
   email: z.string().trim().email('Invalid email format').toLowerCase(),
   mobileNumber: mobileNumberSchema,
@@ -45,7 +55,18 @@ const registerBodySchema = z.object({
   /** Country selected during sign-up (e.g. Ireland, United Kingdom). Saved on user profile. */
   country: z.string().trim().min(1, 'Country is required').max(100).optional(),
   profilePhotoUrl: optionalProfilePhotoUrl,
-});
+  /** Trader signup: "I confirm that I am 18 years of age or older." */
+  isAgeConfirmed: optionalBooleanField,
+})
+  .superRefine((body, ctx) => {
+    if (body.role === 'TRADER' && body.isAgeConfirmed === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'You must confirm that you are 18 years of age or older.',
+        path: ['isAgeConfirmed'],
+      });
+    }
+  });
 
 export const registerSchema = z.object({
   body: registerBodySchema,

@@ -335,7 +335,8 @@ export const registerUser = async (
   input: RegisterInput,
   options?: { profilePhotoFile?: Express.Multer.File; reqHost?: string }
 ) => {
-  const { fullName, email, mobileNumber, password, role, country, profilePhotoUrl } = input;
+  const { fullName, email, mobileNumber, password, role, country, profilePhotoUrl, isAgeConfirmed } =
+    input;
 
   const [existingEmail, existingMobile] = await Promise.all([
     prisma.user.findUnique({ where: { email }, select: { id: true } }),
@@ -366,6 +367,8 @@ export const registerUser = async (
       // Traders must verify email OTP too; customers keep email verified at register.
       emailVerified: !isTrader,
       status: UserStatus.PENDING,
+      isAgeConfirmed: isAgeConfirmed === true,
+      ageConfirmedAt: isAgeConfirmed === true ? new Date() : null,
     },
   });
 

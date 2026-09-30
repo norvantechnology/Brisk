@@ -71,6 +71,10 @@ const router = Router();
  *                 type: string
  *                 format: uri
  *                 description: Optional profile photo URL (if not sending file).
+ *               isAgeConfirmed:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Trader signup checkbox "I confirm that I am 18 years of age or older." `false` is rejected for TRADER.
  *         multipart/form-data:
  *           schema:
  *             type: object
@@ -84,6 +88,7 @@ const router = Router();
  *               acceptedTerms: { type: boolean, example: true }
  *               country: { type: string, example: Ireland }
  *               profilePhotoUrl: { type: string, format: uri, description: Optional URL instead of file. }
+ *               isAgeConfirmed: { type: boolean, example: true, description: 'Trader 18+ confirmation. `false` rejected for TRADER.' }
  *               profilePhoto:
  *                 type: string
  *                 format: binary
