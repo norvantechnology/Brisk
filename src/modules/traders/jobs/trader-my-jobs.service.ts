@@ -473,6 +473,13 @@ const assertJobForQuote = async (traderId: string, jobId: string) => {
     if (linked.traderId && linked.traderId !== traderId) {
       throw new ConflictError('Job is already assigned to another trader.');
     }
+    if (
+      linked.status === JobStatus.COMPLETED ||
+      linked.status === JobStatus.PAYMENT_PENDING ||
+      linked.status === JobStatus.CANCELLED
+    ) {
+      throw new BadRequestError('Quotes can no longer be submitted for this job.');
+    }
     return linked;
   }
 
@@ -574,6 +581,9 @@ const buildActions = (job: MyJobRow, traderId: string) => {
       job.status === JobStatus.SCHEDULED ||
       job.status === JobStatus.IN_PROGRESS);
   const canSubmitQuote =
+    !bookingFinished &&
+    job.status !== JobStatus.COMPLETED &&
+    job.status !== JobStatus.PAYMENT_PENDING &&
     (!job.quotes[0] || job.quotes[0].status === QuoteStatus.PENDING) &&
     (job.status === JobStatus.PUBLISHED ||
       job.status === JobStatus.QUOTED ||
