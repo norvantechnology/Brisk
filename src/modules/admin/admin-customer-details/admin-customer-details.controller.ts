@@ -113,6 +113,24 @@ export const getJob = async (
   }
 };
 
+export const getJobSiteVisits = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.getCustomerJobSiteVisits(req.params.id, req.params.jobId);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job site visit requests retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getPaymentsStats = async (
   req: AuthenticatedAdminRequest,
   res: Response,

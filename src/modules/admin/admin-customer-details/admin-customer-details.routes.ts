@@ -197,6 +197,61 @@ router.get(
 
 /**
  * @swagger
+ * /admin/customers/{id}/jobs/{jobId}/site-visits:
+ *   get:
+ *     summary: Traders who requested a site visit on this customer's job
+ *     description: |
+ *       Full list (no pagination) — one row per trader, oldest request first.
+ *       Same item shape and statuses as `GET /admin/traders/{id}/site-visits` and `GET /traders/site-visits`.
+ *
+ *       **status** (`statusLabel`):
+ *       - `PENDING` (Waiting for Customer) · `CONFIRMED` (Visit Confirmed) · `RESCHEDULE_REQUIRED` (Reschedule Requested)
+ *         → `group: REQUESTED`
+ *       - `COMPLETED` (Site Visited) → `group: VISITED`
+ *       - `CANCELLED` (Cancelled) · `CLOSED` (Closed — job cancelled/completed or awarded to another trader,
+ *         see `closedReason`) → `group: CLOSED`
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Site visit requests for the job.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Job site visit requests retrieved successfully. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     job:
+ *                       type: object
+ *                       example: { id: 1f2e3d4c-5b6a-4789-8abc-def012345678, jobRef: JOB-1042, title: Boiler not heating, status: PUBLISHED }
+ *                     summary: { $ref: '#/components/schemas/SiteVisitSummary' }
+ *                     items:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/SiteVisitItem' }
+ *       404:
+ *         description: Customer or job not found.
+ */
+router.get(
+  '/customers/:id/jobs/:jobId/site-visits',
+  validate(customerJobIdParamSchema),
+  controller.getJobSiteVisits
+);
+
+/**
+ * @swagger
  * /admin/customers/{id}/payments/stats:
  *   get:
  *     summary: Customer payments KPIs

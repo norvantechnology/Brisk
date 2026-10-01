@@ -24,6 +24,7 @@ import traderJobsRoutes from './jobs/trader-jobs.routes';
 import traderMyJobsRoutes from './jobs/trader-my-jobs.routes';
 import traderPaymentsRoutes from './payments/trader-payments.routes';
 import traderEarningsRoutes from './earnings/trader-earnings.routes';
+import traderSiteVisitsRoutes from './site-visits/trader-site-visits.routes';
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.use('/jobs', traderVerifiedMiddleware, traderMyJobsRoutes);
 router.use('/jobs', traderVerifiedMiddleware, traderJobsRoutes);
 router.use('/payments', traderVerifiedMiddleware, traderPaymentsRoutes);
 router.use('/earnings', traderVerifiedMiddleware, traderEarningsRoutes);
+router.use('/site-visits', traderVerifiedMiddleware, traderSiteVisitsRoutes);
 
 /**
  * @swagger

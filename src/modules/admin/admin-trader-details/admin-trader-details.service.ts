@@ -14,6 +14,10 @@ import { NotFoundError } from '../../../utils/errors';
 import { offerInclude, serializeOffer } from '../../offers/offers.serializers';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
 import { formatDocumentExpiryDate } from '../../document-rules/document-expiry';
+import {
+  listTraderSiteVisits,
+  type TraderSiteVisitListQuery,
+} from '../../site-visits/site-visits.service';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -442,6 +446,15 @@ export const listTraderJobs = async (
       };
     }),
   };
+};
+
+/** Trader Details → jobs this trader requested a site visit on (paginated, filterable). */
+export const listTraderSiteVisitRequests = async (
+  traderId: string,
+  query: TraderSiteVisitListQuery
+) => {
+  await assertTraderExists(traderId);
+  return listTraderSiteVisits(traderId, query, 'ADMIN');
 };
 
 // ---------------------------------------------------------------------------

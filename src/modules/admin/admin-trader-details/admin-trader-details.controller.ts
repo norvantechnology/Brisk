@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
 import * as service from './admin-trader-details.service';
+import type { TraderSiteVisitListQuery } from '../../site-visits/site-visits.service';
 
 export const getDocumentsStats = async (
   req: AuthenticatedAdminRequest,
@@ -71,6 +72,27 @@ export const listJobs = async (
       message: 'Trader jobs retrieved successfully.',
       data: result.jobs,
       meta: result.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listSiteVisits = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.listTraderSiteVisitRequests(
+      req.params.id,
+      req.query as TraderSiteVisitListQuery
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Trader site visits retrieved successfully.',
+      data,
     });
   } catch (error) {
     next(error);

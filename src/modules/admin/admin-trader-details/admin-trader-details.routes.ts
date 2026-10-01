@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware';
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-trader-details.controller';
+import { adminTraderSiteVisitsSchema } from '../../site-visits/site-visits.validation';
 import {
   traderDetailsIdParamSchema,
   traderDocumentsQuerySchema,
@@ -305,6 +306,69 @@ router.get(
   '/traders/:id/jobs',
   validate(traderJobsQuerySchema),
   controller.listJobs
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/site-visits:
+ *   get:
+ *     summary: Jobs this trader requested a site visit on
+ *     description: |
+ *       Paginated list of the trader's site-visit requests (one per job), newest activity first.
+ *       Same item shape and statuses as `GET /admin/customers/{id}/jobs/{jobId}/site-visits`
+ *       and the Trader Portal `GET /traders/site-visits`.
+ *
+ *       `summary` counts cover all of this trader's requests matching `search` / `categoryId` / dates
+ *       (not affected by `group`, `status` or pagination).
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - in: query
+ *         name: group
+ *         schema: { type: string, enum: [REQUESTED, VISITED, CLOSED] }
+ *         description: Tab filter. REQUESTED = PENDING/CONFIRMED/RESCHEDULE_REQUIRED, VISITED = COMPLETED, CLOSED = CANCELLED/CLOSED.
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED, CANCELLED, CLOSED] }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Job ref, job title or customer name.
+ *       - { in: query, name: categoryId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: from, schema: { type: string, example: '2026-10-01' }, description: Visit date from (YYYY-MM-DD) }
+ *       - { in: query, name: to, schema: { type: string, example: '2026-10-31' }, description: Visit date to (YYYY-MM-DD) }
+ *       - { in: query, name: sortBy, schema: { type: string, enum: [updatedAt, requestedAt, visitDate], default: updatedAt } }
+ *       - { in: query, name: sortOrder, schema: { type: string, enum: [asc, desc], default: desc } }
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+ *     responses:
+ *       200:
+ *         description: Trader site visits.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Trader site visits retrieved successfully. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/SiteVisitItem' }
+ *                     summary: { $ref: '#/components/schemas/SiteVisitSummary' }
+ *                     meta:
+ *                       type: object
+ *                       example: { total: 4, page: 1, limit: 20, totalPages: 1 }
+ *       404:
+ *         description: Trader not found.
+ */
+router.get(
+  '/traders/:id/site-visits',
+  validate(adminTraderSiteVisitsSchema),
+  controller.listSiteVisits
 );
 
 /**

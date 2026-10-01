@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
+import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -368,6 +369,18 @@ export const listCustomerJobs = async (
         : null,
     })),
   };
+};
+
+/** Job details → traders who requested a site visit on this customer's job. */
+export const getCustomerJobSiteVisits = async (customerId: string, jobId: string) => {
+  await assertCustomerExists(customerId);
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, customerId },
+    select: { id: true, jobRef: true, title: true, status: true },
+  });
+  if (!job) throw new NotFoundError('Job not found for this customer.');
+
+  return { job, ...(await listJobSiteVisits(job.id)) };
 };
 
 export const getCustomerJobById = async (customerId: string, jobId: string) => {

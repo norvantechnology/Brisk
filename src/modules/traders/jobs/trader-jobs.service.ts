@@ -20,7 +20,7 @@ const SITE_VISIT_DATE_DAYS = 14;
 const DUBLIN_ORIGIN: Origin = { lat: 53.3498, lng: -6.2603 };
 
 /** Figma Site Visit Date & Time bottom sheet — fixed windows. */
-const SITE_VISIT_SLOT_DEFS: Record<
+export const SITE_VISIT_SLOT_DEFS: Record<
   SiteVisitTimeSlot,
   { startTime: string; endTime: string; icon: string }
 > = {
