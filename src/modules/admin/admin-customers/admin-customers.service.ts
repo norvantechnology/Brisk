@@ -533,7 +533,7 @@ export const updateDeletionRequestStatus = async (
     },
   });
 
-  // If status is COMPLETED, perform GDPR anonymization per Brisk.md §13.4.2
+  // If status is COMPLETED, perform GDPR anonymization per docs/Brisk.md §13.4.2
   if (input.status === DeletionRequestStatus.COMPLETED) {
     await prisma.user.update({
       where: { id: req.userId },

@@ -63,7 +63,7 @@ export const dateRangeBounds = (filters: {
   return null;
 };
 
-/** Maps Brisk.md filter modal params (snake_case) plus admin camelCase aliases. */
+/** Maps docs/Brisk.md filter modal params (snake_case) plus admin camelCase aliases. */
 export const normalizeOfferListFilters = (
   query: Record<string, unknown>,
   options?: { forceOfferType?: OfferType; publicOnly?: boolean }
