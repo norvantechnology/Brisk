@@ -65,6 +65,19 @@ const formatDisplayDate = (date: Date, timeZone: string): string => {
 const paymentStatusLabel = (status: TraderPaymentRequestStatus): 'PAID' | 'PENDING' =>
   status === TraderPaymentRequestStatus.PAID ? 'PAID' : 'PENDING';
 
+/** Trader view: customer has paid → RECEIVED, otherwise still PENDING. */
+const traderPaymentStatus = (status: TraderPaymentRequestStatus): 'RECEIVED' | 'PENDING' =>
+  status === TraderPaymentRequestStatus.PAID ? 'RECEIVED' : 'PENDING';
+
+const readableStatus = (status: string): string => status.replace(/_/g, ' ');
+
+/** e.g. "€ +40" / "€ +40.50" — payment requests are always money in for the trader. */
+const formatSignedAmount = (amount: number, symbol: string): string => {
+  const abs = Math.abs(amount);
+  const value = Number.isInteger(abs) ? String(abs) : abs.toFixed(2);
+  return `${symbol} ${amount < 0 ? '-' : '+'}${value}`;
+};
+
 const toCurrency = async (
   amount: number,
   from: string,
@@ -220,16 +233,21 @@ export const getEarningsDashboard = async (userId: string, query: EarningsDashbo
     recentTransactions: transactionRows.map((row) => {
       const code = row.currencyCode || 'EUR';
       const isPaid = row.status === TraderPaymentRequestStatus.PAID;
+      const symbol = symbolByCode.get(code) || code;
+      const amount = money(row.totalAmount);
       return {
         id: row.id,
         jobId: row.jobId,
         title: row.job.title,
         formattedDate: formatDisplayDate(isPaid ? row.updatedAt : row.createdAt, timeZone),
         jobStatus: row.job.status,
-        amount: money(row.totalAmount),
+        jobStatusLabel: readableStatus(row.job.status),
+        amount,
+        formattedAmount: formatSignedAmount(amount, symbol),
         currencyCode: code,
-        currencySymbol: symbolByCode.get(code) || code,
+        currencySymbol: symbol,
         payoutStatus: paymentStatusLabel(row.status),
+        paymentStatus: traderPaymentStatus(row.status),
       };
     }),
     recentFeedbacks: feedbackRows.map((row) => ({

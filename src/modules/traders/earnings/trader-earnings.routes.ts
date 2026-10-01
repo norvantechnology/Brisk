@@ -20,6 +20,9 @@ const router = Router();
  *       - **overview** — average rating + total reviews, latest reviewer avatars, and
  *         `jobsInProgressCount` (same as My Jobs ACTIVE tab total).
  *       - **recentTransactions** — latest payment requests (full list: `GET /traders/payments/history`).
+ *         Display fields: `formattedAmount` (e.g. `€ +120`), `jobStatusLabel` (e.g. `IN PROGRESS`),
+ *         `paymentStatus` (`RECEIVED` = customer paid, `PENDING` = awaiting payment).
+ *         Raw `amount`, `jobStatus` and `payoutStatus` are unchanged.
  *       - **recentFeedbacks** — latest customer reviews.
  *
  *       **Query**
@@ -61,11 +64,14 @@ const router = Router();
  *                     jobId: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
  *                     title: Kitchen Sink Leak
  *                     formattedDate: 28 Sep 2026, 2:30 PM
- *                     jobStatus: COMPLETED
+ *                     jobStatus: IN_PROGRESS
+ *                     jobStatusLabel: IN PROGRESS
  *                     amount: 120
+ *                     formattedAmount: € +120
  *                     currencyCode: EUR
  *                     currencySymbol: €
  *                     payoutStatus: PAID
+ *                     paymentStatus: RECEIVED
  *                 recentFeedbacks:
  *                   - id: 99999999-8888-7777-6666-555555555555
  *                     rating: 5
