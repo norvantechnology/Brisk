@@ -15,6 +15,7 @@ import { buildPaginationMeta } from '../../../utils/pagination';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import { emitJobStatusChanged } from '../../../sockets/realtime';
+import { isAwaitingUpfrontPayment } from '../../jobs/job-payment-state';
 
 const EARTH_RADIUS_KM = 6371;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
@@ -198,11 +199,12 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
     };
   }
   if (tab === 'COMPLETED') {
-    // Only after trader finishes the job (booking.finishedAt set) or status COMPLETED.
+    // Only after trader finishes the job (booking.finishedAt set): COMPLETED, or
+    // PAYMENT_PENDING once the final payment request is sent.
     // Arrived / proof-pending / in-progress must NEVER appear here.
   return {
       traderId,
-      status: JobStatus.COMPLETED,
+      status: { in: [JobStatus.COMPLETED, JobStatus.PAYMENT_PENDING] },
           booking: {
             traderId,
         finishedAt: { not: null },
@@ -265,7 +267,7 @@ const statusBadgeFor = (
       case 'PARTIALLY_PAID':
         return 'Partially Paid';
       case 'AWAITING_PAYMENT':
-        return 'Awaiting Payout';
+        return 'Awaiting Customer Payment';
       case 'COMPLETED':
         return 'Completed';
       case 'CANCELLED':
@@ -337,8 +339,9 @@ const resolveFlowStatus = (input: {
     }
     return { flowStatus: 'COMPLETED', statusLabel: 'Completed' };
   }
+  // Reached only before finish: unpaid upfront invoice (trader offer / Direct Trader).
   if (status === JobStatus.PAYMENT_PENDING) {
-    return { flowStatus: 'AWAITING_PAYMENT', statusLabel: 'Awaiting Payment' };
+    return { flowStatus: 'AWAITING_PAYMENT', statusLabel: 'Awaiting Customer Payment' };
   }
 
   if (arrivedAt && !finishedAt) {
@@ -650,7 +653,9 @@ const resolvePrimaryAction = (
   if (actions.canAcceptJob) return { primaryAction: 'ACCEPT_JOB' };
   if (actions.canSubmitQuote) return { primaryAction: 'SUBMIT_QUOTE' };
   if (actions.canAddMaterials) return { primaryAction: 'ADD_MATERIALS' };
-  if (job.status === JobStatus.PAYMENT_PENDING) return { primaryAction: 'AWAITING_PAYOUT' };
+  if (job.status === JobStatus.PAYMENT_PENDING && !isAwaitingUpfrontPayment(job)) {
+    return { primaryAction: 'AWAITING_PAYOUT' };
+  }
   return { primaryAction: 'VIEW_DETAILS' };
 };
 
@@ -880,7 +885,7 @@ export const listMyJobs = async (
     // Prefer ARRIVE before site-visit CTAs when trader has not marked arrival yet
     // (matches detail resolvePrimaryAction / app "I have arrived" button).
     let primaryAction = 'VIEW_DETAILS';
-    if (cancelled) {
+    if (cancelled || isAwaitingUpfrontPayment(job)) {
       primaryAction = 'VIEW_DETAILS';
     } else if (job.booking && !job.booking.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'ARRIVE';
@@ -1368,7 +1373,8 @@ export const getJobOutcomeDetail = async (
   const job = await assertMyJob(trader.id, jobId);
   const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
   const completedLike =
-    job.status === JobStatus.COMPLETED || job.status === JobStatus.PAYMENT_PENDING;
+    job.status === JobStatus.COMPLETED ||
+    (job.status === JobStatus.PAYMENT_PENDING && !isAwaitingUpfrontPayment(job));
 
   if (expected === 'COMPLETED' && !completedLike) {
     throw new BadRequestError('Job is not completed.');
@@ -1538,6 +1544,11 @@ export const arriveAtJob = async (userId: string, jobId: string) => {
   }
   if (job.booking.finishedAt) {
     throw new ConflictError('Job already finished.');
+  }
+  if (isAwaitingUpfrontPayment(job)) {
+    throw new BadRequestError('Customer has not completed payment for this job yet.', {
+      code: 'CUSTOMER_PAYMENT_PENDING',
+    });
   }
 
   const now = new Date();

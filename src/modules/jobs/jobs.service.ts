@@ -31,6 +31,7 @@ import type {
   UpdateJobInput,
 } from './jobs.validation';
 import type { JobFormEntryPoint } from './jobs.form-config';
+import { isAwaitingUpfrontPayment } from './job-payment-state';
 import {
   emitJobCreated,
   emitJobPublished,
@@ -46,11 +47,13 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Same badge labels as trader My Jobs — keep customer & trader UIs aligned. */
 const customerStatusBadgeFor = (
   status: JobStatus,
-  bookingStatus?: string | null
+  bookingStatus?: string | null,
+  finishedAt?: Date | null
 ): string => {
   if (status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED) {
     return 'Cancelled';
   }
+  if (isAwaitingUpfrontPayment({ status, booking: { finishedAt } })) return 'Payment Pending';
   if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
   if (status === JobStatus.COMPLETED) return 'Completed';
   if (
@@ -273,7 +276,11 @@ const serializeJob = (
     siteVisitRequested: job.siteVisitRequested,
     siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
     status: job.status,
-    statusBadge: customerStatusBadgeFor(job.status, job.booking?.status ?? null),
+    statusBadge: customerStatusBadgeFor(
+      job.status,
+      job.booking?.status ?? null,
+      job.booking?.finishedAt ?? null
+    ),
     scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : '',
     qaFormAnswers: job.qaFormAnswers ?? {},
     createdAt: job.createdAt,
@@ -782,7 +789,8 @@ export const getJobOutcomeDetail = async (
   const cancelled =
     job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
   const completedLike =
-    job.status === JobStatus.COMPLETED || job.status === JobStatus.PAYMENT_PENDING;
+    job.status === JobStatus.COMPLETED ||
+    (job.status === JobStatus.PAYMENT_PENDING && !isAwaitingUpfrontPayment(job));
 
   if (expected === 'COMPLETED' && !completedLike) {
     throw new BadRequestError('Job is not completed.');
@@ -830,7 +838,11 @@ export const getJobOutcomeDetail = async (
     title: job.title,
     category: categoryLabel,
     status: cancelled ? JobStatus.CANCELLED : job.status,
-    statusBadge: customerStatusBadgeFor(job.status, job.booking?.status ?? null),
+    statusBadge: customerStatusBadgeFor(
+      job.status,
+      job.booking?.status ?? null,
+      job.booking?.finishedAt ?? null
+    ),
     completedAt: expected === 'COMPLETED' ? eventAt : null,
     cancelledAt: expected === 'CANCELLED' ? eventAt : null,
     formattedCompletedDate: formatOutcomeDateLabel(eventAt, expected),
