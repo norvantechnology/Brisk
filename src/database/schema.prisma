@@ -320,9 +320,23 @@ model AdminUser {
   reviewedSurveyTraders   SurveyTraderRegistration[]   @relation("SurveyTraderReviewedBy")
   reviewedContactSubmissions ContactSubmission[]       @relation("ContactSubmissionReviewedBy")
   updatedExchangeRates       ExchangeRate[]            @relation("ExchangeRateUpdatedBy")
+  updatedPlatformSettings    PlatformSetting[]         @relation("PlatformSettingUpdatedBy")
   notifications              AdminNotification[]
 
   @@map("admin_users")
+}
+
+/// Admin-overridden platform settings. Keys/defaults live in code (platform-settings.registry.ts); no row = default.
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("PlatformSettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("platform_settings")
 }
 
 model Trader {

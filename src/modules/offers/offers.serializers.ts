@@ -5,6 +5,17 @@ import {
   getCurrencyMeta,
   serializeDisplayMoney,
 } from '../../services/currency.service';
+import { resolveSiteVisitFee } from '../jobs/jobs.form-config';
+
+const offerSubcategorySiteVisitFee = (
+  sub?: { siteVisitEnabled?: boolean; siteVisitFee?: { toString(): string } | number | null } | null
+): number => {
+  if (!sub) return 0;
+  if (sub.siteVisitEnabled) {
+    return resolveSiteVisitFee({ siteVisitEnabled: true, siteVisitFee: sub.siteVisitFee });
+  }
+  return sub.siteVisitFee != null && Number(sub.siteVisitFee) >= 0 ? Number(sub.siteVisitFee) : 0;
+};
 
 export const offerInclude = {
   createdBy: { select: { id: true, fullName: true, email: true } },
@@ -243,10 +254,7 @@ export const serializeOffer = (offer: OfferRecord) => {
         name: sub.name,
         categoryId: sub.categoryId,
         siteVisitEnabled: Boolean(sub.siteVisitEnabled),
-        siteVisitFee:
-          sub.siteVisitFee != null && Number(sub.siteVisitFee) >= 0
-            ? Number(sub.siteVisitFee)
-            : 0,
+        siteVisitFee: offerSubcategorySiteVisitFee(sub),
         priceEnabled: Boolean(sub.priceEnabled),
         priceEnteredBy: sub.priceEnteredBy ?? '',
       };
@@ -257,11 +265,7 @@ export const serializeOffer = (offer: OfferRecord) => {
      */
     siteVisitEnabled: Boolean(offer.subcategories[0]?.subcategory?.siteVisitEnabled),
     priceEnabled: Boolean(offer.subcategories[0]?.subcategory?.priceEnabled),
-    siteVisitFee:
-      offer.subcategories[0]?.subcategory?.siteVisitFee != null &&
-      Number(offer.subcategories[0].subcategory.siteVisitFee) >= 0
-        ? Number(offer.subcategories[0].subcategory.siteVisitFee)
-        : 0,
+    siteVisitFee: offerSubcategorySiteVisitFee(offer.subcategories[0]?.subcategory),
     priceEnteredBy: offer.subcategories[0]?.subcategory?.priceEnteredBy ?? '',
   };
 };

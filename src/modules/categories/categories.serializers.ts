@@ -102,7 +102,7 @@ export const serializeSubcategory = (
   featured: sub.featured,
   status: sub.status,
   siteVisitEnabled: sub.siteVisitEnabled,
-  /** Site-visit fee from admin subcategory. Null/unset = 0 — no platform default amount. */
+  /** Site-visit fee set on this subcategory. Null = not set; job form falls back to admin setting `site_visit.default_fee`. */
   siteVisitFee: sub.siteVisitFee != null ? Number(sub.siteVisitFee) : null,
   priceEnabled: sub.priceEnabled,
   /** Who fills price when priceEnabled=true. Ignore when priceEnabled=false. */

@@ -187,7 +187,7 @@ const options: swaggerJSDoc.Options = {
           '7. POST /payments/intent → POST /payments/{id}/confirm → Success (offer USED)',
           '',
           '**Claim timing:** Accept=prefill. Publish=soft CLAIMED. Payment confirm=USED.',
-          '**Fee:** subcategory.siteVisitFee only (unset → 0). No API default amount. UI copy owned by mobile.',
+          '**Fee:** subcategory.siteVisitFee; if unset → admin setting `site_visit.default_fee` (GET/PATCH /admin/settings). UI copy owned by mobile.',
           '',
           'Schemas: Job, JobFormConfig, CreateJobRequest, PublishJobResponse.',
         ].join('\n'),

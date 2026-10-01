@@ -1,4 +1,5 @@
 import { DiscountType, JobQuoteType, SubcategoryPriceEnteredBy } from '@prisma/client';
+import { getPlatformSetting } from '../settings/platform-settings.service';
 
 type SubcategoryFlags = {
   id?: string;
@@ -22,15 +23,19 @@ export const str = (value: string | null | undefined): string =>
   value == null ? '' : String(value);
 
 /**
- * Site visit fee is **only** from subcategory.siteVisitFee (admin/DB).
- * No platform default amount — if unset while site visit is enabled, amount is 0.
+ * Site visit fee from subcategory.siteVisitFee (admin/DB).
+ * If unset while site visit is enabled, falls back to admin setting `site_visit.default_fee`.
  */
-export const resolveSiteVisitFee = (subcategory?: SubcategoryFlags): number => {
+export const resolveSiteVisitFee = (
+  subcategory?:
+    | SubcategoryFlags
+    | Pick<NonNullable<SubcategoryFlags>, 'siteVisitEnabled' | 'siteVisitFee'>
+): number => {
   if (!subcategory?.siteVisitEnabled) return 0;
   if (subcategory.siteVisitFee != null && Number(subcategory.siteVisitFee) >= 0) {
     return Number(subcategory.siteVisitFee);
   }
-  return 0;
+  return getPlatformSetting('site_visit.default_fee');
 };
 
 const currencySymbol = (currencyCode: string) =>

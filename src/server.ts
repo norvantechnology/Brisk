@@ -6,9 +6,11 @@ import { logger } from './utils/logger';
 import { ensureUploadRoot } from './modules/uploads/storage/local.storage';
 import { initSocketServer } from './sockets/socket-server';
 import { startDocumentExpiryReminderScheduler } from './services/document-expiry-reminder.service';
+import { startPlatformSettingsSync } from './modules/settings/platform-settings.service';
 
 const startServer = async () => {
   await connectDatabase();
+  await startPlatformSettingsSync();
 
   await ensureUploadRoot();
   logger.info(`Upload storage: ${env.UPLOAD_STORAGE} at ${env.UPLOAD_DIR}`);

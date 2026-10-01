@@ -11,11 +11,10 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/er
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { requestJob } from './trader-my-jobs.service';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
+import { getPlatformSetting } from '../../settings/platform-settings.service';
 
 const EARTH_RADIUS_KM = 6371;
-const DEFAULT_RADIUS_KM = 50;
 const URGENT_WINDOW_MS = 48 * 60 * 60 * 1000;
-const SITE_VISIT_DATE_DAYS = 14;
 /** Dublin city centre — used when trader has no service center / job missing coords (testing + demo). */
 const DUBLIN_ORIGIN: Origin = { lat: 53.3498, lng: -6.2603 };
 
@@ -133,7 +132,7 @@ const formatVisitDateKey = (d: Date): string => {
   return `${y}-${m}-${day}`;
 };
 
-const buildAvailableDates = (days = SITE_VISIT_DATE_DAYS) => {
+const buildAvailableDates = (days = getPlatformSetting('site_visit.booking_window_days')) => {
   const out: Array<{
     date: string;
     month: string;
@@ -812,10 +811,9 @@ export const listDiscoverJobs = async (
       }
       return n;
     }
-    // Wide default so Discover always returns jobs for testing when radius not passed.
     return trader.serviceRadiusKm && trader.serviceRadiusKm > 0
       ? trader.serviceRadiusKm
-      : DEFAULT_RADIUS_KM;
+      : getPlatformSetting('jobs.default_discover_radius_km');
   })();
 
   const traderCategoryIds = [

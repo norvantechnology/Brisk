@@ -5,6 +5,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { getPlatformSetting } from '../modules/settings/platform-settings.service';
 import {
   RealtimeEvents,
   type InvoiceRealtimePayload,
@@ -15,7 +16,6 @@ import {
 
 let io: SocketServer | null = null;
 
-const DEFAULT_DISCOVER_RADIUS_KM = 50;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
 
 export const setRealtimeServer = (server: SocketServer) => {
@@ -145,7 +145,7 @@ const findNearbyDiscoverTraderUserIds = async (payload: JobRealtimePayload): Pro
       const radiusKm =
         t.serviceRadiusKm && t.serviceRadiusKm > 0
           ? t.serviceRadiusKm
-          : DEFAULT_DISCOVER_RADIUS_KM;
+          : getPlatformSetting('jobs.default_discover_radius_km');
       return haversineKm(origin, jobPoint) <= radiusKm;
     })
     .map((t) => t.userId);
