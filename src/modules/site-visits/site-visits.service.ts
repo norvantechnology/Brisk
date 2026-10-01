@@ -259,14 +259,52 @@ export type TraderSiteVisitListQuery = {
   limit?: number | string;
 };
 
+/** Displayed visit date = selected slot date, else the request's visitDate (same as serializer). */
+const effectiveVisitDate = (row: {
+  visitDate: Date | null;
+  slots: Array<{ visitDate: Date; isSelected: boolean }>;
+}): Date | null => row.slots.find((s) => s.isSelected)?.visitDate ?? row.visitDate;
+
 const visitDateRange = (from?: string, to?: string): Prisma.TraderSiteVisitRequestWhereInput => {
   if (!from && !to) return {};
-  return {
-    visitDate: {
-      ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
-      ...(to ? { lte: new Date(`${to}T00:00:00.000Z`) } : {}),
-    },
+  const range = {
+    ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
+    ...(to ? { lte: new Date(`${to}T00:00:00.000Z`) } : {}),
   };
+  return {
+    OR: [
+      { slots: { some: { isSelected: true, visitDate: range } } },
+      { slots: { none: { isSelected: true } }, visitDate: range },
+    ],
+  };
+};
+
+/** Page of ids ordered by displayed visit date (nulls last), so sort matches what the UI shows. */
+const pageIdsByVisitDate = async (
+  where: Prisma.TraderSiteVisitRequestWhereInput,
+  sortOrder: 'asc' | 'desc',
+  skip: number,
+  take: number
+): Promise<string[]> => {
+  const rows = await prisma.traderSiteVisitRequest.findMany({
+    where,
+    select: {
+      id: true,
+      visitDate: true,
+      slots: { where: { isSelected: true }, select: { visitDate: true, isSelected: true } },
+    },
+  });
+  const dir = sortOrder === 'asc' ? 1 : -1;
+  return rows
+    .map((row) => ({ id: row.id, time: effectiveVisitDate(row)?.getTime() ?? null }))
+    .sort((a, b) => {
+      if (a.time === b.time) return a.id.localeCompare(b.id);
+      if (a.time === null) return 1;
+      if (b.time === null) return -1;
+      return (a.time - b.time) * dir;
+    })
+    .slice(skip, skip + take)
+    .map((row) => row.id);
 };
 
 /** Paginated site visits for one trader (Admin Trader Details + Trader Portal). */
@@ -279,24 +317,22 @@ export const listTraderSiteVisits = async (
   const search = query.search?.trim();
 
   const baseWhere: Prisma.TraderSiteVisitRequestWhereInput = {
-    traderId,
-    ...visitDateRange(query.from, query.to),
-    ...(query.categoryId ? { job: { categoryId: query.categoryId } } : {}),
-    ...(search
-      ? {
-          AND: [
-            {
-              job: {
-                OR: [
-                  { jobRef: { contains: search, mode: 'insensitive' } },
-                  { title: { contains: search, mode: 'insensitive' } },
-                  { customer: { fullName: { contains: search, mode: 'insensitive' } } },
-                ],
-              },
+    AND: [
+      { traderId },
+      visitDateRange(query.from, query.to),
+      query.categoryId ? { job: { categoryId: query.categoryId } } : {},
+      search
+        ? {
+            job: {
+              OR: [
+                { jobRef: { contains: search, mode: 'insensitive' } },
+                { title: { contains: search, mode: 'insensitive' } },
+                { customer: { fullName: { contains: search, mode: 'insensitive' } } },
+              ],
             },
-          ],
-        }
-      : {}),
+          }
+        : {},
+    ],
   };
 
   const filters: Prisma.TraderSiteVisitRequestWhereInput[] = [baseWhere];
@@ -305,12 +341,28 @@ export const listTraderSiteVisits = async (
   const listWhere: Prisma.TraderSiteVisitRequestWhereInput = { AND: filters };
 
   const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
-  const orderBy: Prisma.TraderSiteVisitRequestOrderByWithRelationInput[] =
-    query.sortBy === 'visitDate'
-      ? [{ visitDate: { sort: sortOrder, nulls: 'last' } }, { id: 'asc' }]
-      : query.sortBy === 'requestedAt'
-        ? [{ createdAt: sortOrder }, { id: 'asc' }]
-        : [{ updatedAt: sortOrder }, { id: 'asc' }];
+
+  const loadPage = async () => {
+    if (query.sortBy === 'visitDate') {
+      const ids = await pageIdsByVisitDate(listWhere, sortOrder, skip, limit);
+      const found = await prisma.traderSiteVisitRequest.findMany({
+        where: { id: { in: ids } },
+        select: siteVisitSelect,
+      });
+      const byId = new Map(found.map((row) => [row.id, row]));
+      return ids.map((id) => byId.get(id)).filter((row): row is SiteVisitRow => Boolean(row));
+    }
+    return prisma.traderSiteVisitRequest.findMany({
+      where: listWhere,
+      orderBy:
+        query.sortBy === 'requestedAt'
+          ? [{ createdAt: sortOrder }, { id: 'asc' }]
+          : [{ updatedAt: sortOrder }, { id: 'asc' }],
+      skip,
+      take: limit,
+      select: siteVisitSelect,
+    });
+  };
 
   const countGroup = (group: SiteVisitGroup) =>
     prisma.traderSiteVisitRequest.count({
@@ -319,13 +371,7 @@ export const listTraderSiteVisits = async (
 
   const [total, rows, requestedCount, visitedCount, closedCount] = await Promise.all([
     prisma.traderSiteVisitRequest.count({ where: listWhere }),
-    prisma.traderSiteVisitRequest.findMany({
-      where: listWhere,
-      orderBy,
-      skip,
-      take: limit,
-      select: siteVisitSelect,
-    }),
+    loadPage(),
     countGroup('REQUESTED'),
     countGroup('VISITED'),
     countGroup('CLOSED'),
