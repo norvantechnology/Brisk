@@ -10,7 +10,7 @@ import {
 
 export type DocumentExpiryStatus = 'EXPIRED' | 'EXPIRES_TODAY' | 'EXPIRING_SOON';
 
-const expiryStatusFor = (daysLeft: number): DocumentExpiryStatus => {
+export const expiryStatusFor = (daysLeft: number): DocumentExpiryStatus => {
   if (daysLeft < 0) return 'EXPIRED';
   if (daysLeft === 0) return 'EXPIRES_TODAY';
   return 'EXPIRING_SOON';

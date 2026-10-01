@@ -50,6 +50,17 @@ export const traderStatsFilterSchema = z.object({
   }),
 });
 
+export const adminExpiringDocumentsSchema = z.object({
+  query: z.object({
+    withinDays: z.coerce.number().int().min(0).max(365).optional(),
+    expiryStatus: z.enum(['EXPIRED', 'EXPIRES_TODAY', 'EXPIRING_SOON']).optional(),
+    search: z.string().trim().max(100).optional(),
+    traderId: z.string().uuid('Invalid trader ID format.').optional(),
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  }),
+});
+
 export const traderIdParamSchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid trader ID format.'),

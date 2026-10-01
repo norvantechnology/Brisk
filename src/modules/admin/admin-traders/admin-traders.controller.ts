@@ -2,6 +2,10 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
 import * as service from './admin-traders.service';
+import {
+  listAllExpiringDocuments,
+  type AdminExpiringDocumentsQuery,
+} from './admin-document-expiry.service';
 
 export const getStats = async (
   req: AuthenticatedAdminRequest,
@@ -18,6 +22,24 @@ export const getStats = async (
       statusCode: 200,
       message: 'Trader directory stats retrieved successfully.',
       data: stats,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listExpiringDocuments = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await listAllExpiringDocuments(req.query as AdminExpiringDocumentsQuery);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Expiring documents retrieved successfully.',
+      data,
     });
   } catch (error) {
     next(error);

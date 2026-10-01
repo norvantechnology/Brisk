@@ -3,6 +3,7 @@ import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware'
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-traders.controller';
 import {
+  adminExpiringDocumentsSchema,
   createTraderSchema,
   traderFilterSchema,
   traderIdParamSchema,
@@ -227,6 +228,95 @@ router.use(adminAuthMiddleware);
  *             schema: { $ref: '#/components/schemas/ApiErrorEnvelope' }
  */
 router.get('/traders/stats', validate(traderStatsFilterSchema), controller.getStats);
+
+/**
+ * @swagger
+ * /admin/traders/documents/expiring:
+ *   get:
+ *     summary: Admin dashboard — expired / expiring trader documents (all traders)
+ *     description: |
+ *       Same rules as trader `GET /traders/me/documents/expiring`, across every trader.
+ *       Uploaded documents (not REJECTED) that are expired or expire within `withinDays` (default 30), soonest first.
+ *
+ *       **summary** counters cover all matching documents (ignore `expiryStatus` and pagination):
+ *       `totalDocuments`, `expiredCount`, `expiresTodayCount`, `expiringSoonCount`, `tradersAffected`.
+ *
+ *       `lastReminderStage` = last reminder sent to the trader (30 / 7 / 1 / 0 days before expiry), `null` = none yet.
+ *     tags: ['Admin / Traders']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: withinDays
+ *         schema: { type: integer, minimum: 0, maximum: 365, default: 30 }
+ *       - in: query
+ *         name: expiryStatus
+ *         schema: { type: string, enum: [EXPIRED, EXPIRES_TODAY, EXPIRING_SOON] }
+ *         description: Filter the list (tabs). Summary counters are not affected.
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Trader business name, full name, email or mobile.
+ *       - in: query
+ *         name: traderId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *     responses:
+ *       200:
+ *         description: Expiring documents retrieved.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Expiring documents retrieved successfully.
+ *               data:
+ *                 summary:
+ *                   totalDocuments: 12
+ *                   expiredCount: 3
+ *                   expiresTodayCount: 1
+ *                   expiringSoonCount: 8
+ *                   tradersAffected: 7
+ *                 withinDays: 30
+ *                 items:
+ *                   - id: 0b3f2c1e-5d6a-4f7b-9c8d-1e2f3a4b5c6d
+ *                     documentRuleId: 9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d
+ *                     documentKey: public_liability_insurance
+ *                     documentName: Public Liability Insurance
+ *                     scope: CATEGORY
+ *                     categoryId: 3a07ea99-4d74-45b9-86ba-6f95ca85b8a2
+ *                     categoryName: Plumbing Services
+ *                     required: true
+ *                     fileUrl: https://api.brisk.ie/uploads/documents/insurance.pdf
+ *                     fileName: insurance.pdf
+ *                     status: APPROVED
+ *                     expiryDate: '2026-10-05'
+ *                     daysLeft: 4
+ *                     expiryStatus: EXPIRING_SOON
+ *                     lastReminderStage: 7
+ *                     uploadedAt: '2025-10-05T10:00:00.000Z'
+ *                     trader:
+ *                       id: 5c4b3a2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d
+ *                       name: Murphy Plumbing
+ *                       fullName: John Murphy
+ *                       businessName: Murphy Plumbing
+ *                       traderType: SOLO
+ *                       email: john@example.com
+ *                       mobileNumber: '+353871234567'
+ *                       profilePhotoUrl: null
+ *                 meta: { total: 12, page: 1, limit: 20, totalPages: 1 }
+ *       401:
+ *         description: Missing/invalid admin token.
+ */
+router.get(
+  '/traders/documents/expiring',
+  validate(adminExpiringDocumentsSchema),
+  controller.listExpiringDocuments
+);
 
 /**
  * @swagger
