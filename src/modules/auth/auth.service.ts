@@ -194,41 +194,45 @@ const sendPasswordResetOtpMail = async (
   }
 };
 
-const FORGOT_PASSWORD_GENERIC_MESSAGE =
-  'If an account exists for these details, a verification code has been sent.';
+const FORGOT_PASSWORD_COOLDOWN_MESSAGE =
+  'A verification code was sent recently. Please wait before requesting a new one.';
 
-const findUserForPasswordReset = async (input: {
-  email?: string;
-  mobileNumber?: string;
-}) => {
+const PASSWORD_RESET_USER_SELECT = {
+  id: true,
+  email: true,
+  mobileNumber: true,
+  role: true,
+  status: true,
+  mobileVerified: true,
+} as const;
+
+/** When both email and mobile are sent, both must belong to the same registered account. */
+const findUserForPasswordReset = async (input: { email?: string; mobileNumber?: string }) => {
   if (input.email) {
-    return prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { email: input.email },
-      select: {
-        id: true,
-        email: true,
-        mobileNumber: true,
-        role: true,
-        status: true,
-        mobileVerified: true,
-      },
+      select: PASSWORD_RESET_USER_SELECT,
     });
+    if (user && input.mobileNumber && user.mobileNumber !== input.mobileNumber) return null;
+    return user;
   }
   if (input.mobileNumber) {
     return prisma.user.findUnique({
       where: { mobileNumber: input.mobileNumber },
-      select: {
-        id: true,
-        email: true,
-        mobileNumber: true,
-        role: true,
-        status: true,
-        mobileVerified: true,
-      },
+      select: PASSWORD_RESET_USER_SELECT,
     });
   }
   return null;
 };
+
+const passwordResetAccountNotFound = (input: { email?: string; mobileNumber?: string }) =>
+  new NotFoundError(
+    input.email && input.mobileNumber
+      ? 'Email and mobile number do not match a registered account.'
+      : input.email
+        ? 'No account found for this email.'
+        : 'No account found for this mobile number.'
+  );
 
 /** Clear password_reset OTP on both email and mobile after a successful verify. */
 const consumePasswordResetOtps = (email: string, mobileNumber: string) => {
@@ -709,14 +713,7 @@ const createPasswordResetToken = (user: { id: string; mobileNumber: string }) =>
  */
 export const forgotPassword = async (input: ForgotPasswordInput) => {
   const user = await findUserForPasswordReset(input);
-
-  if (!user) {
-    throw new NotFoundError(
-      input.email
-        ? 'No account found for this email.'
-        : 'No account found for this mobile number.'
-    );
-  }
+  if (!user) throw passwordResetAccountNotFound(input);
 
   assertAccountCanAuthenticate(user);
 
@@ -732,7 +729,7 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
   } catch (error) {
     if (error instanceof TooManyRequestsError) {
       return {
-        message: FORGOT_PASSWORD_GENERIC_MESSAGE,
+        message: FORGOT_PASSWORD_COOLDOWN_MESSAGE,
         data: {
           requiresPasswordReset: true as const,
           userId: user.id,
@@ -760,9 +757,9 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
   const otpSentToMobile = true;
 
   return {
-    message: isTrader
-      ? 'Verification code sent to your email and mobile. Enter the code with your new password.'
-      : FORGOT_PASSWORD_GENERIC_MESSAGE,
+    message: otpSentToEmail
+      ? 'Verification code sent to your registered email and mobile. Enter the code with your new password.'
+      : 'Verification code sent to your registered mobile number. Enter the code with your new password.',
     data: {
       requiresPasswordReset: true as const,
       userId: user.id,
@@ -784,14 +781,7 @@ export const forgotPassword = async (input: ForgotPasswordInput) => {
 export const verifyPasswordResetOtp = async (input: VerifyResetOtpInput) => {
   const { code } = input;
   const user = await findUserForPasswordReset(input);
-
-  if (!user) {
-    throw new NotFoundError(
-      input.email
-        ? 'No account found for this email.'
-        : 'User with this mobile number does not exist.'
-    );
-  }
+  if (!user) throw passwordResetAccountNotFound(input);
 
   assertAccountCanAuthenticate(user);
 
@@ -894,11 +884,7 @@ export const resetPassword = async (input: ResetPasswordInput) => {
   }
 
   const user = await findUserForPasswordReset({ email, mobileNumber });
-  if (!user) {
-    throw new NotFoundError(
-      email ? 'No account found for this email.' : 'User with this mobile number does not exist.'
-    );
-  }
+  if (!user) throw passwordResetAccountNotFound({ email, mobileNumber });
 
   assertAccountCanAuthenticate(user);
 
