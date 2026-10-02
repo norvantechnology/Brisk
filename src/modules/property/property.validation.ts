@@ -2,30 +2,39 @@ import { z } from 'zod';
 
 const addressTypeSchema = z.enum(['Home', 'Work', 'Custom']);
 
+const addressBodySchema = z.object({
+  addressType: addressTypeSchema.optional().default('Home'),
+  label: z.string().trim().min(1).optional(),
+  houseNumber: z.string().trim().optional(),
+  addressLine1: z.string().trim().min(1, 'Street address is required.'),
+  addressLine2: z.string().trim().optional(),
+  city: z.string().trim().min(1, 'City is required.'),
+  county: z.string().trim().optional(),
+  eircode: z.string().trim().optional(),
+  country: z.string().trim().optional(),
+  mprnNumber: z.string().trim().optional(),
+  gprnNumber: z.string().trim().optional(),
+  utnNumber: z.string().trim().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  mapImageUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
+  isDefault: z.boolean().optional(),
+  /** Alias of `isDefault` (responses expose both). */
+  isPrimary: z.boolean().optional(),
+});
+
+const withPrimaryAlias = <T extends { isDefault?: boolean; isPrimary?: boolean }>({ isPrimary, ...rest }: T) => ({
+  ...rest,
+  isDefault: rest.isDefault ?? isPrimary,
+});
+
 export const createAddressSchema = z.object({
-  body: z.object({
-    addressType: addressTypeSchema.optional().default('Home'),
-    label: z.string().trim().min(1).optional(),
-    houseNumber: z.string().trim().optional(),
-    addressLine1: z.string().trim().min(1, 'Street address is required.'),
-    addressLine2: z.string().trim().optional(),
-    city: z.string().trim().min(1, 'City is required.'),
-    county: z.string().trim().optional(),
-    eircode: z.string().trim().optional(),
-    country: z.string().trim().optional(),
-    mprnNumber: z.string().trim().optional(),
-    gprnNumber: z.string().trim().optional(),
-    utnNumber: z.string().trim().optional(),
-    latitude: z.number().optional(),
-    longitude: z.number().optional(),
-    mapImageUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
-    isDefault: z.boolean().optional(),
-  }),
+  body: addressBodySchema.transform(withPrimaryAlias),
 });
 
 export const updateAddressSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
-  body: createAddressSchema.shape.body.partial(),
+  body: addressBodySchema.partial().transform(withPrimaryAlias),
 });
 
 export const addressIdParamSchema = z.object({

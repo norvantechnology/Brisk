@@ -91,7 +91,7 @@ router.get('/utility-providers', ...customerOnly, controller.listUtilityProvider
  *       - `houseNumber`, `addressLine1` (**required**), `addressLine2`, `city` (**required**)
  *       - `county`, `eircode`, `country` (default Ireland)
  *       - `latitude` / `longitude` — from map / current location
- *       - `isDefault` — mark as primary
+ *       - `isDefault` (or `isPrimary`) — mark as primary
  *       - Optional meters: `mprnNumber`, `gprnNumber`, `utnNumber`
  *     requestBody:
  *       required: true
