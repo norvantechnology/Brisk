@@ -27,7 +27,7 @@ const parseDateBoundary = (value: string | undefined, endOfDay: boolean) => {
   return Number.isNaN(d.getTime()) ? undefined : d;
 };
 
-const dateRangeFilter = (from?: string, to?: string, field = 'createdAt') => {
+export const dateRangeFilter = (from?: string, to?: string, field = 'createdAt') => {
   const gte = parseDateBoundary(from, false);
   const lte = parseDateBoundary(to, true);
   if (!gte && !lte) return {};
@@ -385,10 +385,24 @@ export const getCustomerJobSiteVisits = async (customerId: string, jobId: string
 
 export const getCustomerJobById = async (customerId: string, jobId: string) => {
   await assertCustomerExists(customerId);
+  return getAdminJobDetail({ id: jobId, customerId }, 'Job not found for this customer.');
+};
 
+/** Admin job drawer payload — shared by customer details and the global Jobs screen. */
+export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMessage = 'Job not found.') => {
   const job = await prisma.job.findFirst({
-    where: { id: jobId, customerId },
+    where,
     include: {
+      customer: {
+        select: {
+          id: true,
+          customerCode: true,
+          fullName: true,
+          email: true,
+          mobileNumber: true,
+          profilePhotoUrl: true,
+        },
+      },
       category: true,
       subcategory: true,
       trader: {
@@ -397,6 +411,7 @@ export const getCustomerJobById = async (customerId: string, jobId: string) => {
           businessName: true,
           traderCode: true,
           avgRating: true,
+          traderType: true,
           user: { select: { fullName: true, email: true, mobileNumber: true, profilePhotoUrl: true } },
         },
       },
@@ -434,13 +449,14 @@ export const getCustomerJobById = async (customerId: string, jobId: string) => {
     },
   });
 
-  if (!job) throw new NotFoundError('Job not found for this customer.');
+  if (!job) throw new NotFoundError(notFoundMessage);
 
   return {
     id: job.id,
     jobRef: job.jobRef,
     title: job.title,
     description: job.description,
+    customer: job.customer,
     status: job.status,
     quoteType: job.quoteType,
     siteVisitRequested: job.siteVisitRequested,
@@ -470,6 +486,7 @@ export const getCustomerJobById = async (customerId: string, jobId: string) => {
           traderCode: job.trader.traderCode,
           businessName: job.trader.businessName,
           avgRating: Number(job.trader.avgRating ?? 0),
+          traderType: job.trader.traderType,
           fullName: job.trader.user?.fullName ?? null,
           email: job.trader.user?.email ?? null,
           mobileNumber: job.trader.user?.mobileNumber ?? null,
