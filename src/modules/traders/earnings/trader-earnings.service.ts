@@ -6,8 +6,13 @@ import {
   getCurrencyMeta,
   resolveUserCurrency,
 } from '../../../services/currency.service';
+import { buildPaginationMeta, parsePageLimit } from '../../../utils/pagination';
 import { countActiveJobs } from '../jobs/trader-my-jobs.service';
-import type { EarningsDashboardQuery } from './trader-earnings.validation';
+import { buildTraderPaymentRequestWhere } from '../payments/trader-payments.service';
+import type {
+  EarningsDashboardQuery,
+  PaymentTransactionsQuery,
+} from './trader-earnings.validation';
 
 const DEFAULT_TIMEZONE = process.env.APP_TIMEZONE || 'Europe/Dublin';
 const DEFAULT_RECENT_LIMIT = 5;
@@ -76,6 +81,57 @@ const formatSignedAmount = (amount: number, symbol: string): string => {
   const abs = Math.abs(amount);
   const value = Number.isInteger(abs) ? String(abs) : abs.toFixed(2);
   return `${symbol} ${amount < 0 ? '-' : '+'}${value}`;
+};
+
+const transactionSelect = {
+  id: true,
+  jobId: true,
+  type: true,
+  status: true,
+  totalAmount: true,
+  currencyCode: true,
+  createdAt: true,
+  updatedAt: true,
+  job: { select: { title: true, status: true } },
+} satisfies Prisma.TraderPaymentRequestSelect;
+
+type TransactionRow = Prisma.TraderPaymentRequestGetPayload<{ select: typeof transactionSelect }>;
+
+const loadCurrencySymbols = async (codes: Iterable<string>) => {
+  const symbolByCode = new Map<string, string>();
+  await Promise.all(
+    [...new Set(codes)].map(async (code) =>
+      symbolByCode.set(code, (await getCurrencyMeta(code)).symbol)
+    )
+  );
+  return symbolByCode;
+};
+
+/** Same row shape for dashboard recentTransactions and the full payment-transactions list. */
+const serializeTransaction = (
+  row: TransactionRow,
+  symbolByCode: Map<string, string>,
+  timeZone: string
+) => {
+  const code = row.currencyCode || 'EUR';
+  const isPaid = row.status === TraderPaymentRequestStatus.PAID;
+  const symbol = symbolByCode.get(code) || code;
+  const amount = money(row.totalAmount);
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    title: row.job.title,
+    formattedDate: formatDisplayDate(isPaid ? row.updatedAt : row.createdAt, timeZone),
+    jobStatus: row.job.status,
+    jobStatusLabel: readableStatus(row.job.status),
+    amount,
+    formattedAmount: formatSignedAmount(amount, symbol),
+    currencyCode: code,
+    currencySymbol: symbol,
+    payoutStatus: paymentStatusLabel(row.status),
+    paymentStatus: traderPaymentStatus(row.status),
+    paymentType: row.type,
+  };
 };
 
 const toCurrency = async (
@@ -158,16 +214,7 @@ export const getEarningsDashboard = async (userId: string, query: EarningsDashbo
       },
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
       take: recentLimit,
-      select: {
-        id: true,
-        jobId: true,
-        status: true,
-        totalAmount: true,
-        currencyCode: true,
-        createdAt: true,
-        updatedAt: true,
-        job: { select: { title: true, status: true } },
-      },
+      select: transactionSelect,
     }),
     prisma.ratingReview.findMany({
       where: { traderId: trader.id },
@@ -206,11 +253,10 @@ export const getEarningsDashboard = async (userId: string, query: EarningsDashbo
   const dailyGoalPercentage =
     dailyGoalAmount > 0 ? Math.round((todayRevenue / dailyGoalAmount) * 100) : 0;
 
-  const symbolByCode = new Map<string, string>();
-  const codes = new Set([currencyCode, ...transactionRows.map((r) => r.currencyCode || 'EUR')]);
-  await Promise.all(
-    [...codes].map(async (code) => symbolByCode.set(code, (await getCurrencyMeta(code)).symbol))
-  );
+  const symbolByCode = await loadCurrencySymbols([
+    currencyCode,
+    ...transactionRows.map((r) => r.currencyCode || 'EUR'),
+  ]);
 
   return {
     revenue: {
@@ -230,26 +276,9 @@ export const getEarningsDashboard = async (userId: string, query: EarningsDashbo
         .filter((url): url is string => Boolean(url)),
       jobsInProgressCount,
     },
-    recentTransactions: transactionRows.map((row) => {
-      const code = row.currencyCode || 'EUR';
-      const isPaid = row.status === TraderPaymentRequestStatus.PAID;
-      const symbol = symbolByCode.get(code) || code;
-      const amount = money(row.totalAmount);
-      return {
-        id: row.id,
-        jobId: row.jobId,
-        title: row.job.title,
-        formattedDate: formatDisplayDate(isPaid ? row.updatedAt : row.createdAt, timeZone),
-        jobStatus: row.job.status,
-        jobStatusLabel: readableStatus(row.job.status),
-        amount,
-        formattedAmount: formatSignedAmount(amount, symbol),
-        currencyCode: code,
-        currencySymbol: symbol,
-        payoutStatus: paymentStatusLabel(row.status),
-        paymentStatus: traderPaymentStatus(row.status),
-      };
-    }),
+    recentTransactions: transactionRows.map((row) =>
+      serializeTransaction(row, symbolByCode, timeZone)
+    ),
     recentFeedbacks: feedbackRows.map((row) => ({
       id: row.id,
       rating: row.stars,
@@ -259,5 +288,44 @@ export const getEarningsDashboard = async (userId: string, query: EarningsDashbo
       customerImage: row.customer.profilePhotoUrl,
       createdAt: row.createdAt.toISOString(),
     })),
+  };
+};
+
+/**
+ * Trader Earnings — full payment transactions list (same rows as dashboard recentTransactions).
+ * GET /traders/earnings/payment-transactions
+ */
+export const listPaymentTransactions = async (
+  userId: string,
+  query: PaymentTransactionsQuery
+) => {
+  const trader = await prisma.trader.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!trader) {
+    throw new NotFoundError('Trader profile not found.');
+  }
+
+  const timeZone = query.timezone || DEFAULT_TIMEZONE;
+  const { page, limit, skip } = parsePageLimit(query, { defaultLimit: 10, maxLimit: 50 });
+  const where = buildTraderPaymentRequestWhere(trader.id, query);
+
+  const [total, rows] = await Promise.all([
+    prisma.traderPaymentRequest.count({ where }),
+    prisma.traderPaymentRequest.findMany({
+      where,
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      skip,
+      take: limit,
+      select: transactionSelect,
+    }),
+  ]);
+
+  const symbolByCode = await loadCurrencySymbols(rows.map((r) => r.currencyCode || 'EUR'));
+
+  return {
+    data: rows.map((row) => serializeTransaction(row, symbolByCode, timeZone)),
+    meta: buildPaginationMeta(total, page, limit),
   };
 };

@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './trader-earnings.controller';
-import { earningsDashboardQuerySchema } from './trader-earnings.validation';
+import {
+  earningsDashboardQuerySchema,
+  paymentTransactionsQuerySchema,
+} from './trader-earnings.validation';
 
 const router = Router();
 
@@ -72,6 +75,7 @@ const router = Router();
  *                     currencySymbol: €
  *                     payoutStatus: PAID
  *                     paymentStatus: RECEIVED
+ *                     paymentType: FULL_JOB
  *                 recentFeedbacks:
  *                   - id: 99999999-8888-7777-6666-555555555555
  *                     rating: 5
@@ -82,5 +86,83 @@ const router = Router();
  *                     createdAt: '2026-09-27T10:00:00.000Z'
  */
 router.get('/dashboard', validate(earningsDashboardQuerySchema), controller.getEarningsDashboard);
+
+/**
+ * @swagger
+ * /traders/earnings/payment-transactions:
+ *   get:
+ *     summary: Trader payment transactions (full list, filters + search)
+ *     description: |
+ *       Paginated payment requests of the logged-in trader. Each item has the **same shape as
+ *       dashboard `recentTransactions`**, so the same row widget can be reused.
+ *
+ *       - `formattedAmount` e.g. `€ +250`, `jobStatusLabel` e.g. `IN PROGRESS`
+ *       - `payoutStatus` `PAID` | `PENDING`; `paymentStatus` `RECEIVED` (customer paid) | `PENDING`
+ *       - `paymentType` `FULL_JOB` | `PARTIAL` | `SITE_VISIT_FEE`
+ *       - `formattedDate` = paid date for paid items, request date otherwise (in `timezone`)
+ *
+ *       **Filters** (`filter`): `all` (default) | `last_30_days` | `last_6_months` | `last_1_year` | `custom`
+ *       (`custom` requires `startDate` + `endDate`, YYYY-MM-DD). Date applies to paid date for paid items,
+ *       request date otherwise.
+ *       **Search** (`search`): job title, job ref, or customer name.
+ *       Cancelled payment requests are excluded. Sorted newest first.
+ *     tags: ['Trader / Earnings']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: filter
+ *         schema: { type: string, enum: [all, last_30_days, last_6_months, last_1_year, custom], default: all }
+ *       - in: query
+ *         name: startDate
+ *         schema: { type: string, example: '2026-09-01' }
+ *         description: Required when filter=custom (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema: { type: string, example: '2026-09-30' }
+ *         description: Required when filter=custom (YYYY-MM-DD)
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10, maximum: 50 }
+ *       - in: query
+ *         name: timezone
+ *         schema: { type: string, example: Europe/Dublin }
+ *         description: IANA zone for formattedDate (default Europe/Dublin)
+ *     responses:
+ *       200:
+ *         description: Payment transactions
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Payment transactions fetched successfully.
+ *               data:
+ *                 - id: 11111111-2222-3333-4444-555555555555
+ *                   jobId: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+ *                   title: Bathroom Pipe Leakage Repair
+ *                   formattedDate: 24 Oct 2026, 10:30 AM
+ *                   jobStatus: COMPLETED
+ *                   jobStatusLabel: COMPLETED
+ *                   amount: 250
+ *                   formattedAmount: € +250
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
+ *                   payoutStatus: PAID
+ *                   paymentStatus: RECEIVED
+ *                   paymentType: FULL_JOB
+ *               meta: { page: 1, limit: 10, total: 25, totalPages: 3 }
+ *       400:
+ *         description: Invalid filter / missing custom dates
+ */
+router.get(
+  '/payment-transactions',
+  validate(paymentTransactionsQuerySchema),
+  controller.listPaymentTransactions
+);
 
 export default router;

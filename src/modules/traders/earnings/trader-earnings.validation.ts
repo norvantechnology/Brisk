@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { paymentListQueryBase, requireCustomRange } from '../payments/trader-payments.validation';
 
 const isValidTimeZone = (tz: string): boolean => {
   try {
@@ -24,3 +25,17 @@ export const earningsDashboardQuerySchema = z.object({
 });
 
 export type EarningsDashboardQuery = z.infer<typeof earningsDashboardQuerySchema>['query'];
+
+export const paymentTransactionsQuerySchema = z.object({
+  query: paymentListQueryBase
+    .extend({
+      timezone: z
+        .string()
+        .trim()
+        .refine(isValidTimeZone, 'timezone must be a valid IANA zone, e.g. Europe/Dublin')
+        .optional(),
+    })
+    .superRefine(requireCustomRange),
+});
+
+export type PaymentTransactionsQuery = z.infer<typeof paymentTransactionsQuerySchema>['query'];

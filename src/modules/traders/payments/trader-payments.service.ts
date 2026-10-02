@@ -3,7 +3,7 @@ import { prisma } from '../../../config/database';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
 import { buildPaginationMeta, parsePageLimit } from '../../../utils/pagination';
 import { getCurrencyMeta } from '../../../services/currency.service';
-import type { PaymentHistoryQuery } from './trader-payments.validation';
+import type { PaymentHistoryQuery, PaymentListFilters } from './trader-payments.validation';
 
 const money = (v: Prisma.Decimal | number | null | undefined): number => {
   if (v == null) return 0;
@@ -32,7 +32,7 @@ const mapPaymentStatus = (
 };
 
 const resolveDateRange = (
-  filter: PaymentHistoryQuery['filter'],
+  filter: PaymentListFilters['filter'],
   startDate?: string,
   endDate?: string
 ): { gte?: Date; lte?: Date } | undefined => {
@@ -62,19 +62,13 @@ const resolveDateRange = (
 };
 
 /**
- * Trader Payment History — paginated list for Profile / Payments screen.
- * GET /traders/payments/history
+ * Non-cancelled payment requests of a trader, filtered by date range (paid date for PAID,
+ * request date otherwise) and search (job ref / title / customer name).
  */
-export const listPaymentHistory = async (userId: string, query: PaymentHistoryQuery) => {
-  const trader = await prisma.trader.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-  if (!trader) {
-    throw new NotFoundError('Trader profile not found.');
-  }
-
-  const { page, limit, skip } = parsePageLimit(query, { defaultLimit: 10, maxLimit: 50 });
+export const buildTraderPaymentRequestWhere = (
+  traderId: string,
+  query: Pick<PaymentListFilters, 'filter' | 'startDate' | 'endDate' | 'search'>
+): Prisma.TraderPaymentRequestWhereInput => {
   const search = query.search?.trim() || '';
   const dateRange = resolveDateRange(query.filter, query.startDate, query.endDate);
 
@@ -106,11 +100,28 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
     });
   }
 
-  const where: Prisma.TraderPaymentRequestWhereInput = {
-    traderId: trader.id,
+  return {
+    traderId,
     status: { not: TraderPaymentRequestStatus.CANCELLED },
     ...(andFilters.length ? { AND: andFilters } : {}),
   };
+};
+
+/**
+ * Trader Payment History — paginated list for Profile / Payments screen.
+ * GET /traders/payments/history
+ */
+export const listPaymentHistory = async (userId: string, query: PaymentHistoryQuery) => {
+  const trader = await prisma.trader.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!trader) {
+    throw new NotFoundError('Trader profile not found.');
+  }
+
+  const { page, limit, skip } = parsePageLimit(query, { defaultLimit: 10, maxLimit: 50 });
+  const where = buildTraderPaymentRequestWhere(trader.id, query);
 
   const [total, rows] = await Promise.all([
     prisma.traderPaymentRequest.count({ where }),
