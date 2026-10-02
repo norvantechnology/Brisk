@@ -59,6 +59,12 @@ export class TooManyRequestsError extends AppError {
   }
 }
 
+export class ServiceUnavailableError extends AppError {
+  constructor(message = 'Service Unavailable', options?: { code?: string; data?: unknown }) {
+    super(message, 503, options);
+  }
+}
+
 export class InternalServerError extends AppError {
   constructor(message = 'Internal Server Error') {
     super(message, 500, { isOperational: false });

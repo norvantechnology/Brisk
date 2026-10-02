@@ -305,8 +305,11 @@ type DiscoverQuoteState = {
   canRequestJob: boolean;
   isJobRequested: boolean;
   isWaitingForCustomerConfirmation: boolean;
-  /** NONE | QUOTED | WAITING_FOR_CUSTOMER | ASSIGNED — never treat WAITING as My Jobs ACTIVE */
-  assignmentStatus: 'NONE' | 'QUOTED' | 'WAITING_FOR_CUSTOMER' | 'ASSIGNED';
+  /**
+   * NONE | QUOTED | WAITING_FOR_CUSTOMER | CUSTOMER_ACCEPTED | ASSIGNED.
+   * CUSTOMER_ACCEPTED = customer picked this trader's quote; trader must View & Accept (not Active yet).
+   */
+  assignmentStatus: 'NONE' | 'QUOTED' | 'WAITING_FOR_CUSTOMER' | 'CUSTOMER_ACCEPTED' | 'ASSIGNED';
   quoteId: string | null;
   quoteAmount: number | null;
   quoteNotes: string | null;
@@ -389,6 +392,22 @@ const resolveDiscoverQuoteFlags = (params: {
     };
   }
 
+  if (quote.status === QuoteStatus.ACCEPTED && isOpenMarketplace) {
+    return {
+      hasSubmittedQuote: true,
+      canUpdateQuote: false,
+      canSubmitQuote: false,
+      canRequestJob: false,
+      isJobRequested,
+      isWaitingForCustomerConfirmation: false,
+      assignmentStatus: 'CUSTOMER_ACCEPTED',
+      quoteId: quote.id,
+      quoteAmount: money(quote.quotedAmount),
+      quoteNotes: quote.notes,
+      quoteStatus: quote.status,
+    };
+  }
+
   const pending = quote.status === QuoteStatus.PENDING || quote.status === 'PENDING';
 
   return {
@@ -414,6 +433,19 @@ const resolvePrimaryActions = (
   quote: DiscoverQuoteState,
   needsReschedule = false
 ) => {
+  // Customer accepted this trader's quote → trader confirms via POST /traders/jobs/incoming/{id}/accept.
+  if (quote.assignmentStatus === 'CUSTOMER_ACCEPTED') {
+    return {
+      canSelectDateTime: false,
+      canRequestSiteVisit: false,
+      canRequestReschedule: false,
+      canSubmitQuote: false,
+      canUpdateQuote: false,
+      canRequestJob: false,
+      primaryAction: 'CONFIRM_JOB' as const,
+    };
+  }
+
   if (quote.isWaitingForCustomerConfirmation) {
     return {
       canSelectDateTime: false,
@@ -514,6 +546,8 @@ const primaryActionLabelFor = (primaryAction: string, acceptJobAmount?: number |
       return 'Waiting for Confirmation';
     case 'WAITING_FOR_CUSTOMER':
       return 'Waiting for Customer';
+    case 'CONFIRM_JOB':
+      return 'View & Accept';
     case 'BACK_TO_JOB':
       return 'Back to Job';
     case 'SUBMIT_QUOTE':
@@ -1645,15 +1679,18 @@ export const listWaitingJobs = async (userId: string) => {
   const quotes = await prisma.quote.findMany({
     where: {
       traderId: trader.id,
-      status: QuoteStatus.PENDING,
-      requestedAt: { not: null },
+      OR: [
+        { status: QuoteStatus.PENDING, requestedAt: { not: null } },
+        { status: QuoteStatus.ACCEPTED },
+      ],
       job: { status: JobStatus.PUBLISHED, traderId: null },
     },
-    orderBy: { requestedAt: 'desc' },
+    orderBy: [{ requestedAt: { sort: 'desc', nulls: 'last' } }, { updatedAt: 'desc' }],
     select: {
       id: true,
       quotedAmount: true,
       requestedAt: true,
+      status: true,
       job: {
         select: {
           id: true,
@@ -1675,22 +1712,24 @@ export const listWaitingJobs = async (userId: string) => {
       const amount = money(q.quotedAmount) ?? 0;
       const coords = resolveJobCoords(q.job, origin);
       const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
+      const customerAccepted = q.status === QuoteStatus.ACCEPTED;
       return {
         id: q.job.id,
+        quoteId: q.id,
         title: q.job.title,
         customerName: q.job.customer.fullName,
         areaName: areaNameOf(q.job),
         distanceKm,
         quoteAmount: amount,
-        statusBadge: 'Waiting',
-        colorHint: 'blue',
-        isJobRequested: true,
-        isWaitingForCustomerConfirmation: true,
-        assignmentStatus: 'WAITING_FOR_CUSTOMER',
+        statusBadge: customerAccepted ? 'Customer Accepted' : 'Waiting',
+        colorHint: customerAccepted ? 'green' : 'blue',
+        isJobRequested: Boolean(q.requestedAt),
+        isWaitingForCustomerConfirmation: !customerAccepted,
+        assignmentStatus: customerAccepted ? 'CUSTOMER_ACCEPTED' : 'WAITING_FOR_CUSTOMER',
         hasSubmittedQuote: true,
         requestedAt: q.requestedAt,
         jobStatus: JobStatus.PUBLISHED,
-        primaryAction: 'WAITING_FOR_CUSTOMER',
+        primaryAction: customerAccepted ? 'CONFIRM_JOB' : 'WAITING_FOR_CUSTOMER',
       };
     }),
     count: quotes.length,

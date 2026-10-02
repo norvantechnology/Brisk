@@ -65,11 +65,7 @@ export const confirmPayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await checkoutService.confirmPayment(
-      req.user!.id,
-      req.params.id,
-      req.body ?? {}
-    );
+    const data = await checkoutService.confirmPayment(req.user!.id, req.params.id);
     sendResponse({
       res,
       statusCode: 200,

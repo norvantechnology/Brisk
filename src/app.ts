@@ -47,6 +47,8 @@ import { getUploadRoot } from './modules/uploads/storage/local.storage';
 import propertyRoutes from './modules/property/property.routes';
 import jobsRoutes from './modules/jobs/jobs.routes';
 import checkoutRoutes from './modules/checkout/checkout.routes';
+import paymentRequestsRoutes from './modules/payment-requests/payment-requests.routes';
+import stripeWebhookRoutes from './modules/webhooks/stripe-webhook.routes';
 import realtimeRoutes from './sockets/realtime.routes';
 import locationsRoutes from './modules/locations/locations.routes';
 import adminLocationsRoutes from './modules/admin/admin-locations/admin-locations.routes';
@@ -70,6 +72,9 @@ app.use(
 
 // Enable CORS
 app.use(cors());
+
+// Stripe signs the raw bytes — must be mounted before express.json().
+app.use('/webhooks/stripe', stripeWebhookRoutes);
 
 // Parse JSON request body
 app.use(express.json());
@@ -135,6 +140,7 @@ app.use('/currency', currencyRoutes);
 app.use('/locations', locationsRoutes);
 app.use('/uploads', uploadsRoutes);
 app.use('/', propertyRoutes);
+app.use('/', paymentRequestsRoutes);
 app.use('/jobs', jobsRoutes);
 app.use('/', checkoutRoutes);
 app.use('/realtime', realtimeRoutes);

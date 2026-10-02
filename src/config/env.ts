@@ -5,6 +5,11 @@ import { z } from 'zod';
 // Load environment variables from .env file
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
+const optionalEnvString = z
+  .string()
+  .optional()
+  .transform((value) => value?.trim() || undefined);
+
 const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -17,10 +22,17 @@ const envSchema = z.object({
   UPLOAD_PUBLIC_BASE_URL: z.string().url().optional(),
   UPLOAD_MAX_MB: z.coerce.number().default(10),
   UPLOAD_STORAGE: z.enum(['local', 's3']).default('local'),
-  /** Stripe publishable key returned on POST /payments/intent (mobile must not hardcode). */
-  STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
-  /** Apple Pay merchant id returned on POST /payments/intent. */
-  STRIPE_MERCHANT_IDENTIFIER: z.string().min(1).optional(),
+  /** Stripe secret key (sk_test_… / sk_live_…). Payments return 503 until set. */
+  STRIPE_SECRET_KEY: optionalEnvString,
+  /** Stripe publishable key returned on payment-intent responses (mobile must not hardcode). */
+  STRIPE_PUBLISHABLE_KEY: optionalEnvString,
+  /** Signing secret of the /webhooks/stripe endpoint (whsec_…). */
+  STRIPE_WEBHOOK_SECRET: optionalEnvString,
+  /** Apple Pay merchant id returned on payment-intent responses. */
+  STRIPE_MERCHANT_IDENTIFIER: optionalEnvString,
+  /** Default return/refresh URLs for trader Stripe Connect onboarding (app deep link or web page). */
+  STRIPE_CONNECT_RETURN_URL: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+  STRIPE_CONNECT_REFRESH_URL: z.string().url().optional().or(z.literal('').transform(() => undefined)),
 });
 
 const parseEnv = () => {

@@ -7,14 +7,28 @@ import {
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import {
+  type ChargeDetails,
+  STRIPE_KIND_INVOICE,
+  assertIntentMatches,
+  buildClientPaymentConfig,
+  cancelPaymentIntentQuietly,
+  ensureStripeCustomer,
+  getChargeDetails,
+  getStripe,
+  isStripeConfigured,
+  paymentMethodFromCharge,
+  retrieveSucceededIntent,
+  toMinorUnits,
+  toPaymentError,
+} from '../../services/stripe.service';
 import { computeInvoiceBreakdown } from '../jobs/jobs.service';
 import type {
   ApplyPromoInput,
-  ConfirmPaymentInput,
   CreatePaymentIntentInput,
   FailPaymentInput,
 } from './checkout.validation';
@@ -374,9 +388,13 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
         }
       : null,
     paymentMethods: [
-      { key: 'APPLE_PAY', enabled: true },
-      { key: 'GOOGLE_PAY', enabled: true },
-      { key: 'CARD', provider: 'stripe', enabled: true },
+      {
+        key: 'APPLE_PAY',
+        provider: 'stripe',
+        enabled: isStripeConfigured() && Boolean(env.STRIPE_MERCHANT_IDENTIFIER),
+      },
+      { key: 'GOOGLE_PAY', provider: 'stripe', enabled: isStripeConfigured() },
+      { key: 'CARD', provider: 'stripe', enabled: isStripeConfigured() },
     ],
     billingTypes: [
       { key: 'INDIVIDUAL' },
@@ -718,7 +736,16 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     throw new BadRequestError('A completed payment already exists for this invoice.');
   }
 
-  // New Pay Now attempt: supersede older pending/failed intents so mobile uses this paymentId.
+  const amount = money(invoice.totalAmount);
+  const requiresPayment = amount > 0;
+  if (requiresPayment) getStripe();
+
+  // New Pay Now attempt: supersede older pending/failed intents so mobile uses this paymentId,
+  // and cancel their Stripe intents so an old sheet can never charge twice.
+  const stale = invoice.payments.filter(
+    (p) => p.status === PaymentStatus.PENDING || p.status === PaymentStatus.FAILED
+  );
+  await Promise.all(stale.map((p) => cancelPaymentIntentQuietly(p.stripePaymentIntentId)));
   await prisma.payment.updateMany({
     where: {
       invoiceId: invoice.id,
@@ -727,15 +754,11 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     data: { status: PaymentStatus.FAILED },
   });
 
-  const amount = money(invoice.totalAmount);
-  const stripePaymentIntentId = `pi_mock_${randomUUID()}`;
-
   const payment = await prisma.payment.create({
     data: {
       transactionRef: generateTransactionRef(),
       invoiceId: invoice.id,
       userId,
-      stripePaymentIntentId,
       method: input.method,
       billingType: input.billingType,
       companyName: input.companyName,
@@ -751,38 +774,72 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     },
   });
 
-  const publishableKey =
-    env.STRIPE_PUBLISHABLE_KEY ?? 'pk_test_brisk_mock_replace_via_env';
-  const stripeMerchantIdentifier =
-    env.STRIPE_MERCHANT_IDENTIFIER ?? 'merchant.com.brisk';
-  const usingLiveStripe = Boolean(env.STRIPE_PUBLISHABLE_KEY);
-
-  return {
+  const base = {
     paymentId: payment.id,
     transactionId: payment.transactionRef,
     transactionRef: payment.transactionRef,
-    clientSecret: usingLiveStripe
-      ? `pi_pending_${payment.id}_secret_${payment.id}`
-      : `mock_secret_${payment.id}`,
-    publishableKey,
-    stripeMerchantIdentifier,
     amount: money(payment.amount),
     currencyCode: payment.currencyCode,
     currencySymbol: currencySymbol(payment.currencyCode),
     method: payment.method,
     status: payment.status,
-    mock: !usingLiveStripe,
     billingAddress: input.billingAddress ?? null,
     invoiceId: invoice.id,
     orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
   };
+
+  // Fully discounted invoice (e.g. free site visit): nothing to charge — confirm completes it.
+  if (!requiresPayment) {
+    return {
+      ...base,
+      requiresPayment: false,
+      paymentIntentId: null,
+      clientSecret: null,
+      customerId: null,
+      ephemeralKey: null,
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null,
+      stripeMerchantIdentifier: env.STRIPE_MERCHANT_IDENTIFIER ?? null,
+    };
+  }
+
+  try {
+    const customerId = await ensureStripeCustomer(userId);
+    const intent = await getStripe().paymentIntents.create(
+      {
+        amount: toMinorUnits(amount, payment.currencyCode),
+        currency: payment.currencyCode.toLowerCase(),
+        customer: customerId,
+        automatic_payment_methods: { enabled: true },
+        description: `Brisk ${invoice.invoiceNumber || invoice.booking.bookingRef} — ${invoice.booking.job.title}`,
+        metadata: {
+          kind: STRIPE_KIND_INVOICE,
+          paymentId: payment.id,
+          invoiceId: invoice.id,
+          jobId: invoice.booking.job.id,
+          userId,
+        },
+      },
+      { idempotencyKey: `invoice-payment-${payment.id}` }
+    );
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { stripePaymentIntentId: intent.id },
+    });
+    return {
+      ...base,
+      requiresPayment: true,
+      ...(await buildClientPaymentConfig(customerId, intent)),
+    };
+  } catch (error) {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.FAILED },
+    });
+    throw toPaymentError(error);
+  }
 };
 
-export const confirmPayment = async (
-  userId: string,
-  paymentId: string,
-  input: ConfirmPaymentInput
-) => {
+export const confirmPayment = async (userId: string, paymentId: string) => {
   const payment = await prisma.payment.findFirst({
     where: { id: paymentId, userId },
     include: { invoice: true },
@@ -818,18 +875,60 @@ export const confirmPayment = async (
     throw new BadRequestError(`Payment cannot be confirmed from status ${payment.status}.`);
   }
 
-  const paidAt = new Date();
+  if (money(payment.amount) > 0) {
+    if (!payment.stripePaymentIntentId) {
+      throw new BadRequestError('This payment was not started. Please tap Pay Now again.', {
+        code: 'PAYMENT_INTENT_MISSING',
+      });
+    }
+    try {
+      const intent = await retrieveSucceededIntent(
+        payment.stripePaymentIntentId,
+        money(payment.amount),
+        payment.currencyCode
+      );
+      await finalizeInvoicePayment(payment.id, await getChargeDetails(intent));
+    } catch (error) {
+      throw toPaymentError(error);
+    }
+  } else {
+    await finalizeInvoicePayment(payment.id, null);
+  }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.payment.update({
-      where: { id: payment.id },
+  return buildReceipt(payment.id, userId);
+};
+
+/**
+ * Marks an invoice payment as successful (invoice PAID, offer claim USED, job SCHEDULED).
+ * Idempotent — called by both the confirm API and the Stripe webhook; returns false if
+ * the payment was already finalized.
+ */
+export const finalizeInvoicePayment = async (
+  paymentId: string,
+  charge: ChargeDetails | null
+): Promise<boolean> => {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: { invoice: true },
+  });
+  if (!payment || payment.status === PaymentStatus.COMPLETED) return false;
+
+  const userId = payment.userId;
+  const paidAt = new Date();
+  const method = paymentMethodFromCharge(charge);
+
+  const finalized = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.payment.updateMany({
+      where: { id: payment.id, status: { not: PaymentStatus.COMPLETED } },
       data: {
         status: PaymentStatus.COMPLETED,
         paidAt,
-        cardLast4: input.cardLast4,
-        cardBrand: input.cardBrand,
+        cardLast4: charge?.cardLast4 ?? null,
+        cardBrand: charge?.cardBrand ?? null,
+        ...(method ? { method } : {}),
       },
     });
+    if (claimed.count === 0) return false;
 
     await tx.payment.updateMany({
       where: {
@@ -919,9 +1018,10 @@ export const confirmPayment = async (
         });
       }
     }
+    return true;
   });
+  if (!finalized) return false;
 
-  const receipt = await buildReceipt(payment.id, userId);
   const booking = await prisma.booking.findUnique({
     where: { id: payment.invoice.bookingId },
     select: {
@@ -944,7 +1044,7 @@ export const confirmPayment = async (
     traderUserId: booking?.trader?.userId ?? null,
     at: new Date().toISOString(),
   });
-  return receipt;
+  return true;
 };
 
 export const failPayment = async (
@@ -960,6 +1060,22 @@ export const failPayment = async (
 
   if (payment.status === PaymentStatus.COMPLETED) {
     throw new BadRequestError('This payment is already completed.');
+  }
+
+  // The sheet can report an error after Stripe already captured (e.g. network drop) —
+  // never mark a captured payment as failed.
+  if (payment.stripePaymentIntentId && isStripeConfigured()) {
+    const intent = await getStripe()
+      .paymentIntents.retrieve(payment.stripePaymentIntentId)
+      .catch(() => null);
+    if (intent?.status === 'succeeded') {
+      assertIntentMatches(intent, money(payment.amount), payment.currencyCode);
+      await finalizeInvoicePayment(payment.id, await getChargeDetails(intent));
+      throw new ConflictError('This payment has already succeeded.', {
+        code: 'PAYMENT_ALREADY_SUCCEEDED',
+        data: { receipt: await buildReceipt(payment.id, userId) },
+      });
+    }
   }
 
   if (payment.status !== PaymentStatus.FAILED) {

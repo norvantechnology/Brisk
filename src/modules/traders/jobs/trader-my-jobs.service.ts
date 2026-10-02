@@ -14,7 +14,13 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/er
 import { buildPaginationMeta } from '../../../utils/pagination';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
-import { emitJobStatusChanged } from '../../../sockets/realtime';
+import {
+  emitJobAccept,
+  emitJobAcceptCancelled,
+  emitJobDeclined,
+  emitJobStatusChanged,
+  emitQuoteReceived,
+} from '../../../sockets/realtime';
 import { isAwaitingUpfrontPayment } from '../../jobs/job-payment-state';
 
 const EARTH_RADIUS_KM = 6371;
@@ -1812,18 +1818,51 @@ export const getPaymentRequestScreen = async (userId: string, jobId: string) => 
   return buildPaymentRequestScreenPayload(job);
 };
 
+/** Customer realtime: a trader submitted / updated / requested a quotation on their open job. */
+const notifyQuoteReceived = async (
+  traderId: string,
+  jobId: string,
+  quote: { id: string; quotedAmount: Prisma.Decimal | number; currencyCode: string }
+) => {
+  const [job, trader] = await Promise.all([
+    prisma.job.findUnique({ where: { id: jobId }, select: { customerId: true } }),
+    prisma.trader.findUnique({
+      where: { id: traderId },
+      select: { businessName: true, user: { select: { fullName: true } } },
+    }),
+  ]);
+  if (!job) return;
+  emitQuoteReceived({
+    jobId,
+    quoteId: quote.id,
+    customerId: job.customerId,
+    traderId,
+    traderName: trader?.businessName || trader?.user.fullName || null,
+    amount: money(quote.quotedAmount),
+    currencyCode: quote.currencyCode,
+    at: new Date().toISOString(),
+  });
+};
+
 export const upsertQuote = async (
   userId: string,
   jobId: string,
   body: { amount: number; notes?: string }
 ) => {
   const trader = await getTraderContext(userId);
-  await assertJobForQuote(trader.id, jobId);
+  const target = await assertJobForQuote(trader.id, jobId);
 
   const existing = await prisma.quote.findFirst({
     where: { jobId, traderId: trader.id },
     orderBy: { createdAt: 'desc' },
   });
+  const isOpenJob = !target.traderId;
+  if (isOpenJob && existing?.status === QuoteStatus.ACCEPTED) {
+    throw new ConflictError(
+      'The customer has accepted your quotation. Accept or decline the job instead of editing it.',
+      { code: 'QUOTE_ALREADY_ACCEPTED' }
+    );
+  }
 
   const quote = existing
     ? await prisma.quote.update({
@@ -1831,7 +1870,10 @@ export const upsertQuote = async (
         data: {
           quotedAmount: body.amount,
           notes: body.notes ?? existing.notes,
-          status: QuoteStatus.PENDING,
+          status:
+            target.traderId === trader.id && existing.status === QuoteStatus.ACCEPTED
+              ? QuoteStatus.ACCEPTED
+              : QuoteStatus.PENDING,
         },
       })
     : await prisma.quote.create({
@@ -1843,6 +1885,8 @@ export const upsertQuote = async (
           status: QuoteStatus.PENDING,
         },
       });
+
+  if (isOpenJob) await notifyQuoteReceived(trader.id, jobId, quote);
 
   // Keep job PUBLISHED on Discover until customer confirms the trader.
   const isJobRequested = Boolean(quote.requestedAt);
@@ -1880,6 +1924,7 @@ export const requestJob = async (
     where: { id: jobId, status: { in: [JobStatus.PUBLISHED, JobStatus.QUOTED] }, traderId: null },
     select: {
       id: true,
+      customerId: true,
       serviceCharge: true,
       siteVisitRequested: true,
       quoteType: true,
@@ -1920,16 +1965,23 @@ export const requestJob = async (
     throw new BadRequestError('Submit a quotation (amount) before requesting this job.');
   }
 
-  if (existingQuote?.requestedAt) {
-  return {
+  // Customer-accepted, or already requested and pending — rejected/expired quotes are re-requested.
+  if (
+    existingQuote?.status === QuoteStatus.ACCEPTED ||
+    (existingQuote?.requestedAt && existingQuote.status === QuoteStatus.PENDING)
+  ) {
+    const customerAccepted = existingQuote.status === QuoteStatus.ACCEPTED;
+    return {
       jobId,
       quoteId: existingQuote.id,
       amount: money(existingQuote.quotedAmount),
       jobStatus: JobStatus.PUBLISHED,
-      assignmentStatus: 'WAITING_FOR_CUSTOMER' as const,
+      assignmentStatus: customerAccepted
+        ? ('CUSTOMER_ACCEPTED' as const)
+        : ('WAITING_FOR_CUSTOMER' as const),
       hasSubmittedQuote: true,
       isJobRequested: true,
-      isWaitingForCustomerConfirmation: true,
+      isWaitingForCustomerConfirmation: !customerAccepted,
     };
   }
 
@@ -1953,6 +2005,8 @@ export const requestJob = async (
           requestedAt: new Date(),
         },
       });
+
+  await notifyQuoteReceived(trader.id, jobId, quote);
 
   return {
     jobId,
@@ -1983,6 +2037,11 @@ export const acceptJob = async (
     select: { id: true },
   });
   if (open) {
+    const customerAccepted = await prisma.quote.count({
+      where: { jobId, traderId: trader.id, status: QuoteStatus.ACCEPTED },
+    });
+    if (customerAccepted) return acceptIncomingJob(userId, jobId);
+
     await requestJob(userId, jobId, body);
     return {
       id: jobId,
@@ -2061,8 +2120,12 @@ export const acceptJob = async (
   return getMyJobDetail(userId, jobId);
 };
 
+const OPEN_FOR_QUOTES: JobStatus[] = [JobStatus.PUBLISHED, JobStatus.QUOTED];
+
 /**
- * Customer confirms a trader quote → assign job, create booking, move to My Jobs running.
+ * Customer accepts a trader quotation. Job stays open (not assigned) until the trader taps
+ * View & Accept on the `job:accept` bottom sheet. Accepting another quote moves the
+ * selection to that trader (previous trader gets `job:accept_cancelled`).
  */
 export const confirmQuoteAssignment = async (params: {
   customerId: string;
@@ -2071,10 +2134,7 @@ export const confirmQuoteAssignment = async (params: {
 }) => {
   const job = await prisma.job.findFirst({
     where: { id: params.jobId, customerId: params.customerId },
-    include: {
-      booking: true,
-      quotes: { where: { id: params.quoteId }, take: 1 },
-    },
+    include: { quotes: { where: { id: params.quoteId }, take: 1 } },
   });
   if (!job) {
     throw new NotFoundError('Job not found.');
@@ -2082,7 +2142,7 @@ export const confirmQuoteAssignment = async (params: {
   if (job.traderId) {
     throw new ConflictError('A trader is already confirmed for this job.');
   }
-  if (job.status !== JobStatus.PUBLISHED && job.status !== JobStatus.QUOTED) {
+  if (!OPEN_FOR_QUOTES.includes(job.status)) {
     throw new BadRequestError('Job is not open for trader confirmation.');
   }
 
@@ -2091,30 +2151,125 @@ export const confirmQuoteAssignment = async (params: {
     throw new NotFoundError('Quote not found or no longer available.');
   }
 
+  // Row lock on the job serialises this with the trader's View & Accept (assignAcceptedQuote).
+  const previouslySelected = await prisma.$transaction(async (tx) => {
+    const open = await tx.job.updateMany({
+      where: { id: job.id, traderId: null, status: { in: OPEN_FOR_QUOTES } },
+      data: { updatedAt: new Date() },
+    });
+    if (open.count === 0) {
+      throw new ConflictError('A trader is already confirmed for this job.');
+    }
+    const selected = await tx.quote.updateMany({
+      where: {
+        id: quote.id,
+        status: { notIn: [QuoteStatus.REJECTED, QuoteStatus.EXPIRED] },
+      },
+      data: { status: QuoteStatus.ACCEPTED },
+    });
+    if (selected.count === 0) {
+      throw new NotFoundError('Quote not found or no longer available.');
+    }
+    const previous = await tx.quote.findMany({
+      where: { jobId: job.id, status: QuoteStatus.ACCEPTED, id: { not: quote.id } },
+      select: { id: true, traderId: true, trader: { select: { userId: true } } },
+    });
+    if (previous.length) {
+      await tx.quote.updateMany({
+        where: { id: { in: previous.map((q) => q.id) } },
+        data: { status: QuoteStatus.PENDING },
+      });
+    }
+    return previous;
+  });
+
+  const at = new Date().toISOString();
+  for (const prev of previouslySelected) {
+    emitJobAcceptCancelled(prev.trader.userId, {
+      jobId: job.id,
+      quoteId: prev.id,
+      customerId: job.customerId,
+      traderId: prev.traderId,
+      at,
+    });
+  }
+
+  const traderUser = await prisma.trader.findUnique({
+    where: { id: quote.traderId },
+    select: { userId: true },
+  });
+  if (traderUser) {
+    const sheet = await getIncomingForQuote(traderUser.userId, quote.id);
+    if (sheet) emitJobAccept(traderUser.userId, { ...sheet, at });
+  }
+
+  return {
+    jobId: job.id,
+    traderId: quote.traderId,
+    quoteId: quote.id,
+    status: job.status,
+    assignmentStatus: 'AWAITING_TRADER_CONFIRMATION' as const,
+    amount: money(quote.quotedAmount),
+  };
+};
+
+/**
+ * Trader taps View & Accept on a customer-accepted quote → assign job, create booking,
+ * reject the other open quotes, job moves to My Jobs ACTIVE.
+ */
+const assignAcceptedQuote = async (traderId: string, jobId: string) => {
+  const job = await prisma.job.findFirst({
+    where: { id: jobId },
+    include: {
+      booking: true,
+      quotes: { where: { traderId, status: QuoteStatus.ACCEPTED }, take: 1 },
+    },
+  });
+  if (!job) {
+    throw new NotFoundError('Job not found.');
+  }
+  if (job.traderId === traderId) return { job, alreadyAssigned: true };
+  if (job.traderId) {
+    throw new ConflictError('Job is already assigned to another trader.');
+  }
+  const quote = job.quotes[0];
+  if (!quote || !OPEN_FOR_QUOTES.includes(job.status)) {
+    throw new NotFoundError('This job is no longer waiting for your confirmation.', {
+      code: 'NO_ACCEPTED_QUOTE',
+    });
+  }
+
   const scheduledDate = job.scheduledDate ?? new Date();
   const amount = money(quote.quotedAmount);
 
   await prisma.$transaction(async (tx) => {
-    await tx.quote.update({
-      where: { id: quote.id },
-      data: { status: QuoteStatus.ACCEPTED },
-    });
-    await tx.quote.updateMany({
-      where: {
-        jobId: job.id,
-        id: { not: quote.id },
-        status: QuoteStatus.PENDING,
-      },
-      data: { status: QuoteStatus.REJECTED },
-    });
-
-    await tx.job.update({
-      where: { id: job.id },
+    const claimed = await tx.job.updateMany({
+      where: { id: job.id, traderId: null, status: { in: OPEN_FOR_QUOTES } },
       data: {
         traderId: quote.traderId,
         status: job.scheduledDate ? JobStatus.SCHEDULED : JobStatus.ACCEPTED,
         serviceCharge: amount,
       },
+    });
+    if (claimed.count === 0) {
+      throw new ConflictError('Job is no longer available.');
+    }
+    // Fresh read after the row lock: customer may have switched to another quote meanwhile.
+    const stillSelected = await tx.quote.count({
+      where: { id: quote.id, status: QuoteStatus.ACCEPTED },
+    });
+    if (stillSelected === 0) {
+      throw new NotFoundError('This job is no longer waiting for your confirmation.', {
+        code: 'NO_ACCEPTED_QUOTE',
+      });
+    }
+    await tx.quote.updateMany({
+      where: {
+        jobId: job.id,
+        id: { not: quote.id },
+        status: { in: [QuoteStatus.PENDING, QuoteStatus.ACCEPTED] },
+      },
+      data: { status: QuoteStatus.REJECTED },
     });
 
     await tx.traderSiteVisitRequest.updateMany({
@@ -2149,7 +2304,7 @@ export const confirmQuoteAssignment = async (params: {
     select: { id: true },
   });
 
-  // Realtime: trader My Jobs / Discover update when customer accepts this quote.
+  // Realtime: customer job detail + trader My Jobs move to Active.
   emitJobStatusChanged({
     jobId: job.id,
     jobRef: job.jobRef ?? undefined,
@@ -2162,13 +2317,7 @@ export const confirmQuoteAssignment = async (params: {
     at: new Date().toISOString(),
   });
 
-  return {
-    jobId: job.id,
-    traderId: quote.traderId,
-    quoteId: quote.id,
-    status: nextStatus,
-    amount,
-  };
+  return { job, alreadyAssigned: false };
 };
 
 export const listMaterials = async (userId: string, jobId: string) => {
@@ -2444,12 +2593,12 @@ export const getPartialPaymentScreen = async (userId: string, jobId: string) => 
         status: r.status,
         statusLabel:
           r.status === TraderPaymentRequestStatus.PAID
-            ? `Paid • ${formatPaidDateLabel(r.updatedAt)}`
+            ? `Paid • ${formatPaidDateLabel(r.paidAt ?? r.updatedAt)}`
             : r.status === TraderPaymentRequestStatus.SENT
               ? 'Pending'
               : r.status,
         createdAt: r.createdAt,
-        paidAt: r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : null,
+        paidAt: r.status === TraderPaymentRequestStatus.PAID ? (r.paidAt ?? r.updatedAt) : null,
         type: r.type,
       };
     });
@@ -2635,6 +2784,13 @@ export const requestPartialPayment = async (
     ...new Set([...(input.photoUrls ?? []), ...(input.photoUrl ? [input.photoUrl] : [])]),
   ].filter(Boolean);
 
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+
   const paymentRequest = await prisma.$transaction(async (tx) => {
     if (photoUrls.length > 0) {
       await tx.jobPhoto.createMany({
@@ -2662,6 +2818,7 @@ export const requestPartialPayment = async (
         vatRate: 0,
         vatAmount: 0,
         totalAmount: amount,
+        currencyCode: currency.currencyCode,
       },
     });
   });
@@ -2674,12 +2831,6 @@ export const requestPartialPayment = async (
     proofCount > 0 ? 'READY_TO_FINISH' : 'WORK_PROOF_PENDING'
   ) as FlowStatus;
 
-  const currency = await resolveDiscoverCurrency({
-    customerPreferredCurrency: job.customer.preferredCurrency,
-    traderPreferredCurrency: trader.user.preferredCurrency,
-    jobCountry: job.address?.country ?? job.customer.country,
-    traderCountry: trader.user.country ?? trader.country,
-  });
   const formatAmountLabel = (value: number) => {
     const amountDisplay =
       Number.isInteger(round2(value)) ? String(round2(value)) : round2(value).toFixed(2);
@@ -2740,6 +2891,12 @@ export const requestPayment = async (userId: string, jobId: string) => {
   }
 
   const breakdown = computePaymentBreakdown(job);
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
 
   const paymentRequest = await prisma.$transaction(async (tx) => {
     const pr = await tx.traderPaymentRequest.create({
@@ -2756,6 +2913,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
         vatRate: breakdown.vatRate,
         vatAmount: breakdown.vatAmount,
         totalAmount: breakdown.totalAmount,
+        currencyCode: currency.currencyCode,
       },
     });
     await tx.job.update({
@@ -2837,6 +2995,12 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
   if (breakdown.siteVisitFee <= 0) {
     throw new BadRequestError('This job has no site visit fee.');
   }
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
 
   const paymentRequest = await prisma.traderPaymentRequest.create({
     data: {
@@ -2852,6 +3016,7 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
       vatRate: breakdown.vatRate,
       vatAmount: breakdown.vatAmount,
       totalAmount: breakdown.totalAmount,
+      currencyCode: currency.currencyCode,
     },
   });
 
@@ -2866,31 +3031,18 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
   };
 };
 
-/** Latest open marketplace job near trader (map sheet). Optional / soft. */
-export const getIncomingLatest = async (userId: string) => {
-  const trader = await getTraderContext(userId);
-  const origin = resolveOrigin(trader);
+const KM_PER_MILE = 1.609344;
 
-  const traderCategoryIds = [
-    ...new Set(
-      [
-        ...trader.categories.map((c) => c.categoryId),
-        trader.categoryId,
-      ].filter((id): id is string => Boolean(id))
-    ),
-  ];
+/** Customer accepted this trader's quote; job still open until the trader taps View & Accept. */
+const awaitingTraderConfirmationWhere = (traderId: string): Prisma.QuoteWhereInput => ({
+  traderId,
+  status: QuoteStatus.ACCEPTED,
+  job: { traderId: null, status: { in: OPEN_FOR_QUOTES } },
+});
 
-  const radiusKm =
-    trader.serviceRadiusKm && trader.serviceRadiusKm > 0 ? trader.serviceRadiusKm : 50;
-
-  const candidates = await prisma.job.findMany({
-    where: {
-      status: JobStatus.PUBLISHED,
-      traderId: null,
-      ...(traderCategoryIds.length ? { categoryId: { in: traderCategoryIds } } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 40,
+const incomingQuoteInclude = {
+  trader: { select: { businessName: true, user: { select: { fullName: true } } } },
+  job: {
     select: {
       id: true,
       jobRef: true,
@@ -2901,11 +3053,8 @@ export const getIncomingLatest = async (userId: string) => {
       latitude: true,
       longitude: true,
       siteVisitRequested: true,
-      siteVisitFee: true,
-      minBudget: true,
-      maxBudget: true,
-      serviceCharge: true,
       quoteType: true,
+      customerId: true,
       createdAt: true,
       customer: {
         select: {
@@ -2921,170 +3070,122 @@ export const getIncomingLatest = async (userId: string) => {
         select: { city: true, county: true, country: true, latitude: true, longitude: true },
       },
     },
-  });
+  },
+} satisfies Prisma.QuoteInclude;
 
-  const withDistance = candidates
-    .map((job) => {
-      const coords = resolveJobCoords(
-        {
-          id: job.id,
-          latitude: job.latitude ?? job.address?.latitude ?? null,
-          longitude: job.longitude ?? job.address?.longitude ?? null,
-        },
-        origin
-      );
-      const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
-      return { job, coords, distanceKm };
-    })
-    .filter((row) => row.distanceKm <= radiusKm)
-    .sort((a, b) => {
-      if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
-      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
-    });
+type IncomingQuoteRow = Prisma.QuoteGetPayload<{ include: typeof incomingQuoteInclude }>;
 
-  const nearest = withDistance[0];
-  if (!nearest) {
-    return null;
-  }
-
-  const { job, coords, distanceKm } = nearest;
-  const siteVisitFee = money(job.siteVisitFee);
-  const minBudget = money(job.minBudget);
-  const maxBudget = money(job.maxBudget);
-  const serviceCharge = money(job.serviceCharge);
-  const isSiteVisit =
-    job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
-
-  /** CHARGES card: site-visit fee → service charge → budget band midpoint / min. */
-  const charges =
-    isSiteVisit && siteVisitFee > 0
-      ? siteVisitFee
-      : serviceCharge > 0
-        ? serviceCharge
-        : maxBudget > 0 && minBudget > 0
-          ? round2((minBudget + maxBudget) / 2)
-          : maxBudget > 0
-            ? maxBudget
-            : minBudget > 0
-              ? minBudget
-              : null;
-
+/** Bottom-sheet payload — same shape for `job:accept` socket and GET /traders/jobs/incoming/latest. */
+const buildIncomingSheet = async (
+  trader: Awaited<ReturnType<typeof getTraderContext>>,
+  quote: IncomingQuoteRow
+) => {
+  const { job } = quote;
+  const origin = resolveOrigin(trader);
+  const coords = resolveJobCoords(
+    {
+      id: job.id,
+      latitude: job.latitude ?? job.address?.latitude ?? null,
+      longitude: job.longitude ?? job.address?.longitude ?? null,
+    },
+    origin
+  );
+  const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
   const currency = await resolveDiscoverCurrency({
     customerPreferredCurrency: job.customer.preferredCurrency,
     traderPreferredCurrency: trader.user.preferredCurrency,
     jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
   });
+  const amount = money(quote.quotedAmount);
 
   return {
     id: job.id,
+    jobId: job.id,
+    quoteId: quote.id,
+    jobRef: job.jobRef,
     title: job.title,
     description: job.description,
     distanceKm,
-    /** Display amount for the CHARGES card (number; format with currencySymbol). */
-    charges,
-    siteVisitFee: siteVisitFee > 0 ? siteVisitFee : null,
-    minBudget: minBudget > 0 ? minBudget : null,
-    maxBudget: maxBudget > 0 ? maxBudget : null,
+    distanceMiles: Math.round((distanceKm / KM_PER_MILE) * 10) / 10,
+    /** Accepted quotation amount (CHARGES card). */
+    charges: amount,
+    quoteAmount: amount,
     currencyCode: currency.currencyCode,
     currencySymbol: currency.currencySymbol,
     customer: {
       fullName: job.customer.fullName,
       profileImage: job.customer.profilePhotoUrl,
-      isVerifiedCustomer: Boolean(
-        job.customer.mobileVerified || job.customer.emailVerified
-      ),
+      isVerifiedCustomer: Boolean(job.customer.mobileVerified || job.customer.emailVerified),
     },
-    // Soft actions for map sheet CTAs
-    actions: {
-      canAccept: true,
-      canDecline: true,
-    },
-    // Extra context (optional for FE)
-    jobRef: job.jobRef,
-    isSiteVisit,
-    areaName: job.city || job.address?.city || job.postcode || 'Nearby',
+    actions: { canAccept: true, canDecline: true },
+    assignmentStatus: 'CUSTOMER_ACCEPTED' as const,
+    isSiteVisit: job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE,
+    areaName: job.city || job.address?.city || job.postcode || null,
     latitude: coords.lat,
     longitude: coords.lng,
     createdAt: job.createdAt,
+    acceptedAt: quote.updatedAt,
   };
 };
 
+export const getIncomingForQuote = async (traderUserId: string, quoteId: string) => {
+  const trader = await getTraderContext(traderUserId);
+  const quote = await prisma.quote.findFirst({
+    where: { id: quoteId, ...awaitingTraderConfirmationWhere(trader.id) },
+    include: incomingQuoteInclude,
+  });
+  return quote ? buildIncomingSheet(trader, quote) : null;
+};
+
+/** Latest customer-accepted quotation awaiting this trader (re-open the sheet on app launch). */
+export const getIncomingLatest = async (userId: string) => {
+  const trader = await getTraderContext(userId);
+  const quote = await prisma.quote.findFirst({
+    where: awaitingTraderConfirmationWhere(trader.id),
+    orderBy: { updatedAt: 'desc' },
+    include: incomingQuoteInclude,
+  });
+  return quote ? buildIncomingSheet(trader, quote) : null;
+};
+
+/** View & Accept → job assigned to this trader and moves to My Jobs ACTIVE. */
 export const acceptIncomingJob = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
-
-  const job = await prisma.job.findFirst({
-    where: { id: jobId, status: JobStatus.PUBLISHED, traderId: null },
-    select: {
-      id: true,
-      siteVisitRequested: true,
-      quoteType: true,
-      serviceCharge: true,
-      minBudget: true,
-    },
-  });
-  if (!job) {
-    throw new NotFoundError('Incoming job not found or no longer available.');
-  }
-
-  const isSiteVisit = job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE;
-
-  if (isSiteVisit) {
-    await prisma.traderSiteVisitRequest.upsert({
-      where: { jobId_traderId: { jobId, traderId: trader.id } },
-      create: {
-        jobId,
-        traderId: trader.id,
-        status: TraderSiteVisitStatus.CONFIRMED,
-      },
-      update: {
-        status: TraderSiteVisitStatus.CONFIRMED,
-      },
-    });
-    return {
-      jobId,
-      path: 'SITE_VISIT',
-      nextStep: 'SELECT_DATE_TIME',
-      redirectHint: `/traders/jobs/discover/${jobId}/site-visit/slots`,
-    };
-  }
-
-  const stubAmount = money(job.serviceCharge) || money(job.minBudget) || 0;
-  if (stubAmount > 0) {
-    const existing = await prisma.quote.findFirst({
-      where: { jobId, traderId: trader.id },
-    });
-    if (existing) {
-      await prisma.quote.update({
-        where: { id: existing.id },
-        data: { status: QuoteStatus.PENDING, quotedAmount: stubAmount },
-      });
-    } else {
-      await prisma.quote.create({
-        data: {
-          jobId,
-          traderId: trader.id,
-          quotedAmount: stubAmount,
-          status: QuoteStatus.PENDING,
-        },
-      });
-    }
-  }
-
-  return {
-    jobId,
-    path: 'QUOTE',
-    nextStep: 'SUBMIT_QUOTE',
-    redirectHint: `/traders/jobs/mine/${jobId}`,
-  };
+  await assignAcceptedQuote(trader.id, jobId);
+  return getMyJobDetail(userId, jobId);
 };
 
+/** Decline → quote rejected; job stays open so the customer can accept another quotation. */
 export const declineIncomingJob = async (userId: string, jobId: string) => {
-  await getTraderContext(userId);
-  // Soft ignore — no persistence required for MVP map sheet decline.
-  return {
-    jobId,
-    declined: true,
-  };
+  const trader = await getTraderContext(userId);
+  const quote = await prisma.quote.findFirst({
+    where: { jobId, ...awaitingTraderConfirmationWhere(trader.id) },
+    include: incomingQuoteInclude,
+  });
+  if (!quote) {
+    throw new NotFoundError('This job is no longer waiting for your confirmation.', {
+      code: 'NO_ACCEPTED_QUOTE',
+    });
+  }
+
+  const declined = await prisma.quote.updateMany({
+    where: { id: quote.id, status: QuoteStatus.ACCEPTED },
+    data: { status: QuoteStatus.REJECTED },
+  });
+  if (declined.count > 0) {
+    emitJobDeclined({
+      jobId,
+      quoteId: quote.id,
+      customerId: quote.job.customerId,
+      traderId: trader.id,
+      traderName: quote.trader.businessName || quote.trader.user.fullName,
+      amount: money(quote.quotedAmount),
+      currencyCode: quote.currencyCode,
+      at: new Date().toISOString(),
+    });
+  }
+  return { jobId, quoteId: quote.id, declined: true };
 };
 
 /**

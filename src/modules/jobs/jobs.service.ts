@@ -32,7 +32,9 @@ import type {
 } from './jobs.validation';
 import type { JobFormEntryPoint } from './jobs.form-config';
 import { isAwaitingUpfrontPayment } from './job-payment-state';
+import { getCurrencyMeta } from '../../services/currency.service';
 import {
+  emitJobAcceptCancelled,
   emitJobCreated,
   emitJobPublished,
   emitJobStatusChanged,
@@ -775,6 +777,93 @@ const formatOutcomeDateLabel = (date: Date, kind: 'COMPLETED' | 'CANCELLED') => 
   hours = hours % 12 || 12;
   const prefix = kind === 'COMPLETED' ? 'Finished on' : 'Cancelled on';
   return `${prefix} ${month} ${day}, ${year} • ${hours}:${minutes} ${ampm}`;
+};
+
+/**
+ * Quotations traders sent for the customer's job (compare + accept).
+ * selectionStatus: PENDING → customer can accept; AWAITING_TRADER_CONFIRMATION → customer accepted,
+ * trader has not tapped View & Accept yet; CONFIRMED → trader assigned; REJECTED / EXPIRED.
+ */
+export const listJobQuotes = async (customerId: string, jobId: string) => {
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, customerId },
+    select: { id: true, status: true, traderId: true },
+  });
+  if (!job) throw new NotFoundError('Job not found.');
+
+  const quotes = await prisma.quote.findMany({
+    where: { jobId },
+    orderBy: [{ requestedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+    include: {
+      trader: {
+        select: {
+          id: true,
+          businessName: true,
+          profilePhotoUrl: true,
+          avgRating: true,
+          topRated: true,
+          verificationStatus: true,
+          yearsExperience: true,
+          city: true,
+          user: { select: { fullName: true, profilePhotoUrl: true } },
+          _count: { select: { ratingsReceived: true } },
+        },
+      },
+    },
+  });
+
+  const symbols = new Map<string, string>();
+  for (const code of new Set(quotes.map((q) => q.currencyCode))) {
+    symbols.set(code, (await getCurrencyMeta(code)).symbol);
+  }
+  const isOpen =
+    !job.traderId && (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
+
+  const items = quotes.map((q) => {
+    const selectionStatus =
+      job.traderId === q.traderId && q.status === QuoteStatus.ACCEPTED
+        ? 'CONFIRMED'
+        : q.status === QuoteStatus.ACCEPTED && isOpen
+          ? 'AWAITING_TRADER_CONFIRMATION'
+          : q.status;
+    return {
+      id: q.id,
+      quoteId: q.id,
+      jobId: q.jobId,
+      amount: money(q.quotedAmount),
+      currencyCode: q.currencyCode,
+      currencySymbol: symbols.get(q.currencyCode) ?? q.currencyCode,
+      notes: q.notes,
+      estimatedDays: q.estimatedDays,
+      status: q.status,
+      selectionStatus,
+      canAccept: isOpen && q.status === QuoteStatus.PENDING,
+      requestedAt: q.requestedAt,
+      createdAt: q.createdAt,
+      trader: {
+        id: q.trader.id,
+        displayName: q.trader.businessName || q.trader.user.fullName,
+        fullName: q.trader.user.fullName,
+        profilePhotoUrl: q.trader.profilePhotoUrl ?? q.trader.user.profilePhotoUrl ?? null,
+        avgRating: Number(q.trader.avgRating ?? 0),
+        reviewsCount: q.trader._count.ratingsReceived,
+        topRated: q.trader.topRated,
+        isVerified: q.trader.verificationStatus === 'VERIFIED',
+        yearsExperience: q.trader.yearsExperience ?? 0,
+        city: q.trader.city,
+      },
+    };
+  });
+
+  return {
+    jobId: job.id,
+    jobStatus: job.status,
+    assignedTraderId: job.traderId,
+    awaitingTraderConfirmation: items.some(
+      (i) => i.selectionStatus === 'AWAITING_TRADER_CONFIRMATION'
+    ),
+    quotes: items,
+  };
 };
 
 /**
@@ -1539,6 +1628,13 @@ export const cancelJob = async (customerId: string, jobId: string) => {
       )?.userId
     : null;
 
+  const awaitingTrader = existing.traderId
+    ? []
+    : await prisma.quote.findMany({
+        where: { jobId, status: QuoteStatus.ACCEPTED },
+        select: { id: true, traderId: true, trader: { select: { userId: true } } },
+      });
+
   await prisma.$transaction(async (tx) => {
     await tx.job.update({
       where: { id: jobId },
@@ -1564,6 +1660,15 @@ export const cancelJob = async (customerId: string, jobId: string) => {
     invoiceId: existing.booking?.invoice?.id ?? null,
     at: new Date().toISOString(),
   });
+  for (const q of awaitingTrader) {
+    emitJobAcceptCancelled(q.trader.userId, {
+      jobId,
+      quoteId: q.id,
+      customerId,
+      traderId: q.traderId,
+      at: new Date().toISOString(),
+    });
+  }
   return job;
 };
 

@@ -50,12 +50,21 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  * @swagger
  * /traders/jobs/incoming/latest:
  *   get:
- *     summary: Latest incoming job for map sheet
+ *     summary: Latest customer-accepted quotation awaiting my confirmation (bottom sheet)
  *     description: |
- *       Map bottom sheet payload (Kitchen Sink Leak style).
- *       **Accept:** `POST /traders/jobs/incoming/{id}/accept`
+ *       Bottom sheet (Kitchen Sink Leak style) is opened by socket event **`job:accept`**
+ *       (same payload) when a customer accepts this trader's quotation. Call this on app
+ *       launch / reconnect to re-open a sheet that was missed. `null` when nothing is waiting.
+ *       New marketplace jobs (`job:created` / `job:published`) must NOT open this sheet —
+ *       they only refresh Discover.
+ *
+ *       **View & Accept:** `POST /traders/jobs/incoming/{id}/accept` → job moves to My Jobs ACTIVE
  *       **Decline:** `POST /traders/jobs/incoming/{id}/decline`
- *       **View details:** `GET /traders/jobs/discover/{id}`
+ *       Close the sheet on `job:accept_cancelled` (customer picked another trader).
+ *
+ *       Fields: `jobId`, `quoteId`, `title`, `description` (note), `distanceKm`, `distanceMiles`,
+ *       `charges` (accepted quote amount), `currencyCode`, `currencySymbol`,
+ *       `customer{fullName, profileImage, isVerifiedCustomer}`, `actions`, `acceptedAt`.
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     responses:
@@ -77,11 +86,13 @@ router.get('/incoming/latest', controller.getIncomingLatest);
  * @swagger
  * /traders/jobs/incoming/{id}/accept:
  *   post:
- *     summary: Accept incoming job (View & Accept CTA)
+ *     summary: View & Accept — confirm customer-accepted job (moves to My Jobs ACTIVE)
  *     description: |
- *       Call when trader taps **View & Accept** on the map sheet.
- *       - Site-visit jobs → creates/updates visit; navigate to site-visit slots (`data.redirectHint`)
- *       - Normal jobs → seeds quote interest; navigate to quote / job detail
+ *       Call when trader taps **View & Accept** on the `job:accept` sheet. Assigns the job to this
+ *       trader, creates the booking, rejects other open quotations, job → ACCEPTED/SCHEDULED.
+ *       Customer receives `job:status_changed`. Idempotent if already assigned to this trader.
+ *
+ *       Returns the same payload as `GET /traders/jobs/mine/{id}` — open My Job detail.
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -91,19 +102,11 @@ router.get('/incoming/latest', controller.getIncomingLatest);
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Interest recorded with next-step hint
- *         content:
- *           application/json:
- *             example:
- *               success: true
- *               message: Incoming job accepted.
- *               data:
- *                 jobId: e8a9b2c3-1234-5678-90ab-cdef12345678
- *                 path: SITE_VISIT
- *                 nextStep: SELECT_DATE_TIME
- *                 redirectHint: /traders/jobs/discover/{id}/site-visit/slots
+ *         description: My Job detail (ACTIVE)
  *       404:
- *         description: Job not found
+ *         description: "`NO_ACCEPTED_QUOTE` — customer has not accepted this trader's quote (or switched to another trader)."
+ *       409:
+ *         description: Job already assigned to another trader
  */
 router.post(
   '/incoming/:id/accept',
@@ -115,7 +118,10 @@ router.post(
  * @swagger
  * /traders/jobs/incoming/{id}/decline:
  *   post:
- *     summary: Decline incoming job
+ *     summary: Decline customer-accepted job
+ *     description: |
+ *       Trader declines on the `job:accept` sheet. The quotation becomes REJECTED; the job stays
+ *       open and the customer receives `job:declined` so they can accept another quotation.
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -125,7 +131,9 @@ router.post(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Soft decline success
+ *         description: "`jobId`, `quoteId`, `declined: true`"
+ *       404:
+ *         description: "`NO_ACCEPTED_QUOTE`"
  */
 router.post(
   '/incoming/:id/decline',

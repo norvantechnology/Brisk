@@ -173,6 +173,20 @@ export const listPayouts = async (
   }
 };
 
+export const createPayout = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const data = await service.createTraderPayout(req.adminUser!.id, adminLabel, req.params.id, req.body);
+    sendResponse({ res, statusCode: 201, message: 'Payout sent successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getOffersStats = async (
   req: AuthenticatedAdminRequest,
   res: Response,

@@ -239,27 +239,23 @@
  *           description: Pass this id to POST /payments/{id}/confirm or /fail.
  *         transactionId: { type: string, example: TXN-DBBA9C9F }
  *         transactionRef: { type: string, example: TXN-DBBA9C9F }
- *         clientSecret: { type: string, example: mock_secret_..., description: Stripe client secret (mock until live keys) }
- *         publishableKey: { type: string, example: pk_test_brisk_mock_replace_via_env, description: From STRIPE_PUBLISHABLE_KEY env (mobile must not hardcode) }
- *         stripeMerchantIdentifier: { type: string, example: merchant.com.brisk, description: Apple Pay merchant id from STRIPE_MERCHANT_IDENTIFIER }
+ *         requiresPayment:
+ *           type: boolean
+ *           description: False when the invoice total is 0 (fully discounted) — skip PaymentSheet and call confirm directly.
+ *         paymentIntentId: { type: string, nullable: true, example: pi_3Q... }
+ *         clientSecret: { type: string, nullable: true, example: pi_3Q..._secret_..., description: Stripe PaymentIntent client secret for PaymentSheet }
+ *         customerId: { type: string, nullable: true, example: cus_..., description: Stripe Customer (saved cards) }
+ *         ephemeralKey: { type: string, nullable: true, example: ek_test_..., description: Customer ephemeral key for PaymentSheet }
+ *         publishableKey: { type: string, nullable: true, example: pk_test_..., description: From STRIPE_PUBLISHABLE_KEY env (mobile must not hardcode) }
+ *         stripeMerchantIdentifier: { type: string, nullable: true, example: merchant.com.brisk, description: Apple Pay merchant id from STRIPE_MERCHANT_IDENTIFIER }
  *         amount: { type: number, example: 30, description: Amount due now (site visit fee or service total) }
  *         currencyCode: { type: string, example: EUR }
  *         currencySymbol: { type: string, example: "€" }
  *         method: { $ref: '#/components/schemas/PaymentMethod' }
  *         status: { $ref: '#/components/schemas/PaymentStatus' }
- *         mock:
- *           type: boolean
- *           example: true
- *           description: True until real Stripe is wired. Client can skip Stripe SDK and call confirm directly.
  *         billingAddress: { type: object, nullable: true }
  *         invoiceId: { type: string, format: uuid }
  *         orderId: { type: string }
- *     ConfirmPaymentRequest:
- *       type: object
- *       description: Optional card metadata after Stripe success (for receipt display).
- *       properties:
- *         cardLast4: { type: string, minLength: 4, maxLength: 4, example: "4567", description: Last 4 digits if CARD method }
- *         cardBrand: { type: string, example: visa, description: Card brand for receipt }
  *     ReceiptTimelineStep:
  *       type: object
  *       properties:

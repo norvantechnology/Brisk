@@ -493,15 +493,53 @@ router.post(
 
 /**
  * @swagger
- * /jobs/{id}/quotes/{quoteId}/accept:
- *   post:
- *     summary: Confirm trader quotation (customer)
+ * /jobs/{id}/quotes:
+ *   get:
+ *     summary: Quotations received for my job (compare traders)
  *     tags: ['Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Customer confirms a trader who requested the job.
- *       Assigns trader, accepts quote, confirms pending site visit, creates booking.
- *       Trader then sees the job in My Jobs ACTIVE (leaves Discover / Waiting).
+ *       All trader quotations for the job, newest request first. Accept one with
+ *       `POST /jobs/{id}/quotes/{quoteId}/accept` when `canAccept=true`.
+ *
+ *       `selectionStatus`: `PENDING` | `AWAITING_TRADER_CONFIRMATION` (you accepted, trader has not
+ *       confirmed yet) | `CONFIRMED` (trader assigned) | `REJECTED` | `EXPIRED`.
+ *
+ *       Realtime (customer room): `quote:received` when a trader quotes, `job:declined` when the
+ *       selected trader declines, `job:status_changed` when the trader confirms.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: |
+ *           `jobId`, `jobStatus`, `assignedTraderId`, `awaitingTraderConfirmation`, `quotes[]`
+ *           (id, amount, currencyCode, currencySymbol, notes, estimatedDays, status, selectionStatus,
+ *           canAccept, requestedAt, createdAt, trader{id, displayName, fullName, profilePhotoUrl,
+ *           avgRating, reviewsCount, topRated, isVerified, yearsExperience, city}).
+ *       404:
+ *         description: Job not found
+ */
+router.get('/:id/quotes', ...customerOnly, validate(jobIdParamSchema), controller.listJobQuotes);
+
+/**
+ * @swagger
+ * /jobs/{id}/quotes/{quoteId}/accept:
+ *   post:
+ *     summary: Accept trader quotation (customer) — trader must then confirm
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Marks the quote ACCEPTED and sends `job:accept` to that trader (bottom sheet with
+ *       View & Accept / Decline). The job stays open (`status` PUBLISHED, not assigned) until the
+ *       trader taps View & Accept → then trader is assigned, booking created, other quotes
+ *       rejected, job ACCEPTED/SCHEDULED (`job:status_changed`).
+ *
+ *       Accepting a different quote before the trader confirms moves the selection to that
+ *       trader (previous trader receives `job:accept_cancelled`). If the trader declines, the
+ *       customer gets `job:declined` and can accept another quote.
  *     parameters:
  *       - in: path
  *         name: id
@@ -513,7 +551,9 @@ router.post(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Trader confirmed — job ACCEPTED/SCHEDULED
+ *         description: |
+ *           `jobId`, `traderId`, `quoteId`, `status` (still PUBLISHED),
+ *           `assignmentStatus: AWAITING_TRADER_CONFIRMATION`, `amount`.
  *       404:
  *         description: Job or quote not found
  *       409:

@@ -1,5 +1,13 @@
 import { prisma } from '../../../config/database';
-import { NotFoundError, ConflictError } from '../../../utils/errors';
+import { NotFoundError, ConflictError, BadRequestError } from '../../../utils/errors';
+import { getStripe, toPaymentError } from '../../../services/stripe.service';
+import {
+  createStripeRefund,
+  isStripeCharge,
+  mapStripeRefundStatus,
+  markInvoiceRefundedIfFull,
+} from '../../../services/stripe-refunds.service';
+import { emitRefundUpdated } from '../../../sockets/realtime';
 import {
   CustomerQueryFilters,
   DeletionRequestQueryFilters,
@@ -7,7 +15,7 @@ import {
   UpdateCustomerInput,
   UpdateDeletionRequestInput,
 } from './admin-customers.types';
-import { ActorType, UserRole, UserStatus, DeletionRequestStatus, Prisma, User, PaymentMethod } from '@prisma/client';
+import { ActorType, UserRole, UserStatus, DeletionRequestStatus, Prisma, User, PaymentMethod, RefundStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { serializeHistoricalMoney } from '../../../services/currency.service';
 
@@ -996,19 +1004,69 @@ export const listRefundsQueue = async (filters: any) => {
 };
 
 export const processRefund = async (adminId: string, adminLabel: string, id: string, input: any) => {
-  const refund = await prisma.refund.findUnique({ where: { id } });
+  const refund = await prisma.refund.findUnique({ where: { id }, include: { payment: true } });
   if (!refund) {
     throw new NotFoundError('Refund record not found.');
+  }
+
+  // Once money is sent back via Stripe, Stripe owns the status (webhook keeps it in sync).
+  let status: RefundStatus = input.status;
+  let stripeRefundId = refund.stripeRefundId;
+  if (refund.stripeRefundId) {
+    if (status === RefundStatus.REJECTED || status === RefundStatus.PENDING) {
+      throw new BadRequestError('This refund was already sent to Stripe and cannot be reverted.', {
+        code: 'REFUND_ALREADY_ISSUED',
+      });
+    }
+    try {
+      const stripeRefund = await getStripe().refunds.retrieve(refund.stripeRefundId);
+      status = mapStripeRefundStatus(stripeRefund.status) ?? refund.status;
+    } catch (error) {
+      throw toPaymentError(error);
+    }
+  } else if (
+    (status === RefundStatus.APPROVED || status === RefundStatus.COMPLETED) &&
+    refund.payment &&
+    isStripeCharge(refund.payment)
+  ) {
+    try {
+      const stripeRefund = await createStripeRefund(refund, refund.payment);
+      const mapped = mapStripeRefundStatus(stripeRefund.status);
+      if (!mapped) {
+        throw new BadRequestError('Stripe could not process this refund.', {
+          code: 'REFUND_FAILED',
+          data: { stripeStatus: stripeRefund.status, reason: stripeRefund.failure_reason ?? null },
+        });
+      }
+      stripeRefundId = stripeRefund.id;
+      status = mapped;
+    } catch (error) {
+      throw toPaymentError(error);
+    }
   }
 
   const updatedRefund = await prisma.refund.update({
     where: { id },
     data: {
-      status: input.status,
+      status,
+      stripeRefundId,
       ...(input.notes !== undefined ? { adminNote: input.notes || null } : {}),
       processedById: adminId,
       processedAt: new Date(),
     },
+  });
+
+  if (updatedRefund.status === RefundStatus.COMPLETED && updatedRefund.paymentId) {
+    await markInvoiceRefundedIfFull(updatedRefund.paymentId);
+  }
+  emitRefundUpdated({
+    refundId: updatedRefund.id,
+    paymentId: updatedRefund.paymentId,
+    status: updatedRefund.status,
+    amount: Number(updatedRefund.refundAmount),
+    currencyCode: updatedRefund.currencyCode,
+    customerId: updatedRefund.userId,
+    at: new Date().toISOString(),
   });
 
   await prisma.auditLog.create({
@@ -1019,7 +1077,7 @@ export const processRefund = async (adminId: string, adminLabel: string, id: str
       actorLabel: adminLabel,
       subjectType: 'Refund',
       subjectId: id,
-      description: `Processed Refund "${updatedRefund.refundRef}" to status "${input.status}".`,
+      description: `Processed Refund "${updatedRefund.refundRef}" to status "${updatedRefund.status}"${stripeRefundId ? ` (Stripe ${stripeRefundId})` : ''}.`,
     },
   });
 

@@ -492,7 +492,7 @@ export const acceptIncomingJob = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Incoming job accepted.',
+      message: 'Job accepted. It is now in your active jobs.',
       data,
     });
   } catch (error) {
@@ -511,7 +511,7 @@ export const declineIncomingJob = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Incoming job declined.',
+      message: 'Job declined. The customer has been notified.',
       data,
     });
   } catch (error) {

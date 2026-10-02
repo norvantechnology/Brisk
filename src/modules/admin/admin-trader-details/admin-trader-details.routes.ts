@@ -4,6 +4,7 @@ import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-trader-details.controller';
 import { adminTraderSiteVisitsSchema } from '../../site-visits/site-visits.validation';
 import {
+  createTraderPayoutSchema,
   traderDetailsIdParamSchema,
   traderDocumentsQuerySchema,
   traderJobsQuerySchema,
@@ -604,6 +605,51 @@ router.get(
   '/traders/:id/payouts',
   validate(traderPayoutsQuerySchema),
   controller.listPayouts
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/payouts:
+ *   post:
+ *     summary: Payouts & Earnings — send payout to trader (Stripe transfer)
+ *     description: |
+ *       Transfers `amount` from the Brisk Stripe balance to the trader's connected Stripe
+ *       account (trader must finish `POST /traders/payouts/stripe/onboarding-link`). Stripe then
+ *       pays out to the trader's bank on their payout schedule. The row appears in
+ *       `GET /admin/traders/{id}/payouts` as COMPLETED (or FAILED if Stripe rejects it).
+ *
+ *       `currencyCode` defaults to the trader's Stripe account currency. The Brisk Stripe
+ *       balance must have enough available funds in that currency.
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount]
+ *             properties:
+ *               amount: { type: number, example: 420.5 }
+ *               currencyCode: { type: string, example: EUR }
+ *               note: { type: string, example: September payout }
+ *     responses:
+ *       201:
+ *         description: Payout row (same shape as the payouts list).
+ *       400:
+ *         description: "`STRIPE_ACCOUNT_MISSING`, `STRIPE_ACCOUNT_NOT_READY`, or Stripe error (e.g. insufficient balance)."
+ *       404:
+ *         description: Trader not found.
+ */
+router.post(
+  '/traders/:id/payouts',
+  validate(createTraderPayoutSchema),
+  controller.createPayout
 );
 
 /**

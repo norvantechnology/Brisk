@@ -250,6 +250,8 @@ model User {
   passwordHash       String     @map("password_hash")
   profilePhotoUrl    String?    @map("profile_photo_url")
   appleIdToken       String?    @map("apple_id_token")
+  /// Stripe Customer (saved cards / PaymentSheet). Created on first payment.
+  stripeCustomerId   String?    @unique @map("stripe_customer_id")
   mobileVerified     Boolean    @default(false) @map("mobile_verified")
   emailVerified      Boolean    @default(false) @map("email_verified")
   /// Signup checkbox "I confirm that I am 18 years of age or older" (Trader signup).
@@ -763,7 +765,7 @@ model Payment {
   transactionRef        String?       @unique @map("transaction_ref")
   invoiceId             String        @map("invoice_id") @db.Uuid
   userId                String        @map("user_id") @db.Uuid
-  stripePaymentIntentId String?       @map("stripe_payment_intent_id")
+  stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
   method                PaymentMethod @default(CARD)
   billingType           BillingType   @default(INDIVIDUAL) @map("billing_type")
   companyName           String?       @map("company_name")
@@ -799,6 +801,7 @@ model Refund {
   currencyCode   String       @default("EUR") @map("currency_code")
   reason         String       @db.Text
   status         RefundStatus @default(PENDING)
+  stripeRefundId String?      @unique @map("stripe_refund_id")
   /// Admin note — mandatory when status = REJECTED.
   adminNote      String?      @map("admin_note") @db.Text
   processedById  String?      @map("processed_by_id") @db.Uuid
@@ -1167,6 +1170,12 @@ model TraderPaymentRequest {
   vatAmount       Decimal                    @default(0) @map("vat_amount") @db.Decimal(10, 2)
   totalAmount     Decimal                    @map("total_amount") @db.Decimal(10, 2)
   currencyCode    String                     @default("EUR") @map("currency_code")
+  /// Latest Stripe PaymentIntent created when the customer taps Pay.
+  stripePaymentIntentId String?              @unique @map("stripe_payment_intent_id")
+  paymentMethod   PaymentMethod?             @map("payment_method")
+  cardBrand       String?                    @map("card_brand")
+  cardLast4       String?                    @map("card_last4")
+  paidAt          DateTime?                  @map("paid_at")
   createdAt       DateTime                   @default(now()) @map("created_at")
   updatedAt       DateTime                   @updatedAt @map("updated_at")
 

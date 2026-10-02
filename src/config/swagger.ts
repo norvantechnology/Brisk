@@ -206,7 +206,7 @@ const options: swaggerJSDoc.Options = {
           '4. Fail — POST /payments/{id}/fail',
           '',
           'Use purpose + numeric amounts + timeline keys. No UI label / formatted-money keys.',
-          'Payments currently mock (mock: true).',
+          'Payments use Stripe PaymentIntents (PaymentSheet: clientSecret + customerId + ephemeralKey). Server verifies with Stripe; webhook POST /webhooks/stripe finalizes too.',
         ].join('\n'),
       },
       {

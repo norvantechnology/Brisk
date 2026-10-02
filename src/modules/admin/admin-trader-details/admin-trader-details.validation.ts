@@ -64,6 +64,20 @@ export const traderPayoutsQuerySchema = z.object({
   }),
 });
 
+export const createTraderPayoutSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid trader ID format.'),
+  }),
+  body: z.object({
+    amount: z.coerce.number().positive('Amount must be greater than 0.').multipleOf(0.01),
+    /** Defaults to the trader's Stripe account currency. */
+    currencyCode: z.string().trim().length(3).toUpperCase().optional(),
+    note: z.string().trim().max(500).optional(),
+  }),
+});
+
+export type CreateTraderPayoutInput = z.infer<typeof createTraderPayoutSchema>['body'];
+
 export const traderOffersQuerySchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid trader ID format.'),

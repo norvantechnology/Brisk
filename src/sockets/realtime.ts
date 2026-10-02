@@ -11,7 +11,10 @@ import {
   type InvoiceRealtimePayload,
   type JobRealtimePayload,
   type PaymentRealtimePayload,
+  type PaymentRequestRealtimePayload,
+  type QuoteRealtimePayload,
   type RealtimeEventName,
+  type RefundRealtimePayload,
 } from './events';
 
 let io: SocketServer | null = null;
@@ -268,6 +271,43 @@ export const emitJobStatusChanged = (
   });
 };
 
+/** Customer accepted this trader's quote — payload matches GET /traders/jobs/incoming/latest. */
+export const emitJobAccept = (traderUserId: string, sheet: Record<string, unknown> & { at: string }) => {
+  emit(RealtimeEvents.JOB_ACCEPT, [roomUser(traderUserId)], sheet);
+  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(traderUserId)], {
+    type: RealtimeEvents.JOB_ACCEPT,
+    title: 'Customer accepted your quotation',
+    data: sheet,
+    at: sheet.at,
+  });
+};
+
+export const emitJobAcceptCancelled = (traderUserId: string, payload: QuoteRealtimePayload) => {
+  emit(RealtimeEvents.JOB_ACCEPT_CANCELLED, [roomUser(traderUserId)], { ...payload });
+};
+
+export const emitJobDeclined = (payload: QuoteRealtimePayload) => {
+  const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
+  emit(RealtimeEvents.JOB_DECLINED, rooms, { ...payload });
+  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.customerId)], {
+    type: RealtimeEvents.JOB_DECLINED,
+    title: 'Trader declined the job',
+    data: payload,
+    at: payload.at,
+  });
+};
+
+export const emitQuoteReceived = (payload: QuoteRealtimePayload) => {
+  const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
+  emit(RealtimeEvents.QUOTE_RECEIVED, rooms, { ...payload });
+  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.customerId)], {
+    type: RealtimeEvents.QUOTE_RECEIVED,
+    title: 'New quotation received',
+    data: payload,
+    at: payload.at,
+  });
+};
+
 export const emitPaymentCompleted = (
   payload: PaymentRealtimePayload & { traderUserId?: string | null }
 ) => {
@@ -305,6 +345,33 @@ export const emitPaymentFailed = (payload: PaymentRealtimePayload) => {
     data: payload,
     at: payload.at,
   });
+};
+
+export const emitPaymentRequestPaid = (payload: PaymentRequestRealtimePayload) => {
+  const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
+  if (payload.traderUserId) rooms.push(roomUser(payload.traderUserId));
+  emit(RealtimeEvents.PAYMENT_REQUEST_PAID, rooms, { ...payload });
+  if (payload.jobStatus) {
+    emit(RealtimeEvents.JOB_STATUS_CHANGED, rooms, {
+      jobId: payload.jobId,
+      status: payload.jobStatus,
+      customerId: payload.customerId,
+      traderId: payload.traderId,
+      at: payload.at,
+    });
+  }
+  if (payload.traderUserId) {
+    emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.traderUserId)], {
+      type: RealtimeEvents.PAYMENT_REQUEST_PAID,
+      title: 'Payment received',
+      data: payload,
+      at: payload.at,
+    });
+  }
+};
+
+export const emitRefundUpdated = (payload: RefundRealtimePayload) => {
+  emit(RealtimeEvents.REFUND_UPDATED, [roomUser(payload.customerId)], { ...payload });
 };
 
 export const emitInvoiceUpdated = (payload: InvoiceRealtimePayload) => {

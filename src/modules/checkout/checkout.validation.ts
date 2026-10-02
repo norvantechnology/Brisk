@@ -50,15 +50,9 @@ export const paymentIdParamSchema = z.object({
   params: z.object({ id: uuid }),
 });
 
+/** Card details are read from Stripe, never from the client. */
 export const confirmPaymentSchema = z.object({
   params: z.object({ id: uuid }),
-  body: z
-    .object({
-      cardLast4: z.string().trim().length(4).optional(),
-      cardBrand: z.string().trim().optional(),
-    })
-    .optional()
-    .default({}),
 });
 
 export const failPaymentSchema = z.object({
@@ -77,5 +71,4 @@ export const bookingIdParamSchema = z.object({
 
 export type ApplyPromoInput = z.infer<typeof applyPromoSchema>['body'];
 export type CreatePaymentIntentInput = z.infer<typeof createPaymentIntentSchema>['body'];
-export type ConfirmPaymentInput = z.infer<typeof confirmPaymentSchema>['body'];
 export type FailPaymentInput = z.infer<typeof failPaymentSchema>['body'];

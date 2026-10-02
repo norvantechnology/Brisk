@@ -1,4 +1,5 @@
 import {
+  ActorType,
   DocumentRuleScope,
   JobStatus,
   OfferStatus,
@@ -8,9 +9,13 @@ import {
   Prisma,
   QuoteStatus,
   TraderDocumentStatus,
+  type Payout,
 } from '@prisma/client';
+import type Stripe from 'stripe';
 import { prisma } from '../../../config/database';
-import { NotFoundError } from '../../../utils/errors';
+import { getStripe, toMinorUnits, toPaymentError } from '../../../services/stripe.service';
+import { BadRequestError, NotFoundError } from '../../../utils/errors';
+import type { CreateTraderPayoutInput } from './admin-trader-details.validation';
 import { offerInclude, serializeOffer } from '../../offers/offers.serializers';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
 import { formatDocumentExpiryDate } from '../../document-rules/document-expiry';
@@ -50,6 +55,7 @@ const assertTraderExists = async (traderId: string) => {
       bankName: true,
       bankHolderName: true,
       accountNumber: true,
+      stripeAccountId: true,
       categories: { where: { isActive: true }, select: { categoryId: true } },
     },
   });
@@ -693,24 +699,107 @@ export const listTraderPayouts = async (
 
   return {
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
-    payouts: rows.map((p) => ({
-      id: p.id,
-      payoutRef: `PO-${p.id.slice(0, 8).toUpperCase()}`,
-      amount: money(p.amount),
-      currencyCode: p.currencyCode,
-      status: p.status,
-      stripeTransferId: p.stripeTransferId,
-      processedAt: p.processedAt,
-      createdAt: p.createdAt,
-      bank: {
-        bankName: trader.bankName,
-        bankHolderName: trader.bankHolderName,
-        accountNumberMasked: trader.accountNumber
-          ? `****${trader.accountNumber.slice(-4)}`
-          : null,
-      },
-    })),
+    payouts: rows.map((p) => serializePayout(p, trader)),
   };
+};
+
+const serializePayout = (
+  p: Payout,
+  trader: Pick<Awaited<ReturnType<typeof assertTraderExists>>, 'bankName' | 'bankHolderName' | 'accountNumber'>
+) => ({
+  id: p.id,
+  payoutRef: `PO-${p.id.slice(0, 8).toUpperCase()}`,
+  amount: money(p.amount),
+  currencyCode: p.currencyCode,
+  status: p.status,
+  stripeTransferId: p.stripeTransferId,
+  processedAt: p.processedAt,
+  createdAt: p.createdAt,
+  bank: {
+    bankName: trader.bankName,
+    bankHolderName: trader.bankHolderName,
+    accountNumberMasked: trader.accountNumber ? `****${trader.accountNumber.slice(-4)}` : null,
+  },
+});
+
+/** Admin sends money from the Brisk Stripe balance to the trader's connected account. */
+export const createTraderPayout = async (
+  adminId: string,
+  adminLabel: string,
+  traderId: string,
+  input: CreateTraderPayoutInput
+) => {
+  const trader = await assertTraderExists(traderId);
+  if (!trader.stripeAccountId) {
+    throw new BadRequestError('Trader has not connected a Stripe payout account yet.', {
+      code: 'STRIPE_ACCOUNT_MISSING',
+    });
+  }
+
+  let account: Stripe.Account;
+  try {
+    account = await getStripe().accounts.retrieve(trader.stripeAccountId);
+  } catch (error) {
+    throw toPaymentError(error);
+  }
+  if (account.capabilities?.transfers !== 'active') {
+    throw new BadRequestError('Trader Stripe account cannot receive payouts yet (onboarding incomplete).', {
+      code: 'STRIPE_ACCOUNT_NOT_READY',
+      data: { requirementsDue: account.requirements?.currently_due ?? [] },
+    });
+  }
+  const currencyCode = input.currencyCode ?? account.default_currency?.toUpperCase();
+  if (!currencyCode) {
+    throw new BadRequestError('currencyCode is required.', { code: 'CURRENCY_REQUIRED' });
+  }
+
+  const payout = await prisma.payout.create({
+    data: {
+      traderId,
+      amount: input.amount,
+      currencyCode,
+      status: PayoutStatus.PROCESSING,
+      processedById: adminId,
+    },
+  });
+
+  let completed: Payout;
+  try {
+    const transfer = await getStripe().transfers.create(
+      {
+        amount: toMinorUnits(input.amount, currencyCode),
+        currency: currencyCode.toLowerCase(),
+        destination: trader.stripeAccountId,
+        description: input.note,
+        metadata: { payoutId: payout.id, traderId },
+      },
+      { idempotencyKey: `payout-${payout.id}` }
+    );
+    completed = await prisma.payout.update({
+      where: { id: payout.id },
+      data: { status: PayoutStatus.COMPLETED, stripeTransferId: transfer.id, processedAt: new Date() },
+    });
+  } catch (error) {
+    await prisma.payout.update({
+      where: { id: payout.id },
+      data: { status: PayoutStatus.FAILED, processedAt: new Date() },
+    });
+    throw toPaymentError(error);
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: 'TRADER_PAYOUT_SENT',
+      actorType: ActorType.ADMIN,
+      actorId: adminId,
+      actorLabel: adminLabel,
+      subjectType: 'Trader',
+      subjectId: traderId,
+      description: `Sent payout ${currencyCode} ${input.amount} to trader (Stripe ${completed.stripeTransferId})${input.note ? ` — ${input.note}` : ''}.`,
+    },
+  });
+
+  return serializePayout(completed, trader);
 };
 
 // ---------------------------------------------------------------------------

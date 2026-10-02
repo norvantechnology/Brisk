@@ -1,0 +1,275 @@
+import {
+  JobStatus,
+  Prisma,
+  TraderPaymentRequestStatus,
+  TraderPaymentRequestType,
+  type TraderPaymentRequest,
+} from '@prisma/client';
+import type Stripe from 'stripe';
+import { prisma } from '../../config/database';
+import { getCurrencyMeta } from '../../services/currency.service';
+import {
+  type ChargeDetails,
+  STRIPE_KIND_PAYMENT_REQUEST,
+  buildClientPaymentConfig,
+  ensureStripeCustomer,
+  getChargeDetails,
+  getStripe,
+  paymentMethodFromCharge,
+  retrieveSucceededIntent,
+  toMinorUnits,
+  toPaymentError,
+} from '../../services/stripe.service';
+import { emitPaymentRequestPaid } from '../../sockets/realtime';
+import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
+
+const PAYABLE_STATUSES: TraderPaymentRequestStatus[] = [
+  TraderPaymentRequestStatus.SENT,
+  TraderPaymentRequestStatus.PENDING,
+];
+
+/** Intents that can still be completed by the same PaymentSheet — reuse instead of creating another. */
+const REUSABLE_INTENT_STATUSES: Stripe.PaymentIntent.Status[] = [
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+];
+
+const TYPE_TITLES: Record<TraderPaymentRequestType, string> = {
+  FULL_JOB: 'Job Payment',
+  SITE_VISIT_FEE: 'Site Visit Fee',
+  PARTIAL: 'Installment',
+};
+
+const money = (value: Prisma.Decimal | number | null | undefined): number =>
+  value == null ? 0 : Number(value);
+
+const isPayable = (r: Pick<TraderPaymentRequest, 'status'>) => PAYABLE_STATUSES.includes(r.status);
+
+const serialize = (r: TraderPaymentRequest, currencySymbol: string) => {
+  const totalAmount = money(r.totalAmount);
+  return {
+    id: r.id,
+    jobId: r.jobId,
+    traderId: r.traderId,
+    type: r.type,
+    title: r.description?.trim() || TYPE_TITLES[r.type],
+    description: r.description,
+    status: r.status,
+    serviceCharge: money(r.serviceCharge),
+    materialsTotal: money(r.materialsTotal),
+    siteVisitFee: money(r.siteVisitFee),
+    platformFee: money(r.platformFee),
+    vatRate: money(r.vatRate),
+    vatAmount: money(r.vatAmount),
+    totalAmount,
+    currencyCode: r.currencyCode,
+    currencySymbol,
+    formattedAmount: `${currencySymbol}${totalAmount.toFixed(2)}`,
+    paymentMethod: r.paymentMethod,
+    cardBrand: r.cardBrand,
+    cardLast4: r.cardLast4,
+    paidAt: r.paidAt,
+    createdAt: r.createdAt,
+    canPay: isPayable(r) && totalAmount > 0,
+  };
+};
+
+const serializeOne = async (r: TraderPaymentRequest) =>
+  serialize(r, (await getCurrencyMeta(r.currencyCode)).symbol);
+
+const getOwnedRequest = async (customerId: string, id: string) => {
+  const request = await prisma.traderPaymentRequest.findFirst({ where: { id, customerId } });
+  if (!request) throw new NotFoundError('Payment request not found.');
+  return request;
+};
+
+export const listJobPaymentRequests = async (customerId: string, jobId: string) => {
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, customerId },
+    select: { id: true, status: true },
+  });
+  if (!job) throw new NotFoundError('Job not found.');
+
+  const requests = await prisma.traderPaymentRequest.findMany({
+    where: { jobId, customerId, status: { not: TraderPaymentRequestStatus.CANCELLED } },
+    orderBy: { createdAt: 'desc' },
+  });
+  const symbols = new Map<string, string>();
+  for (const code of new Set(requests.map((r) => r.currencyCode))) {
+    symbols.set(code, (await getCurrencyMeta(code)).symbol);
+  }
+
+  return {
+    jobId: job.id,
+    jobStatus: job.status,
+    paymentRequests: requests.map((r) => serialize(r, symbols.get(r.currencyCode) ?? r.currencyCode)),
+  };
+};
+
+export const getPaymentRequest = async (customerId: string, id: string) =>
+  serializeOne(await getOwnedRequest(customerId, id));
+
+/** Start (or resume) Stripe payment for a trader payment request — PaymentSheet config. */
+export const createPaymentRequestIntent = async (customerId: string, id: string) => {
+  const request = await getOwnedRequest(customerId, id);
+  if (request.status === TraderPaymentRequestStatus.PAID) {
+    throw new ConflictError('This payment request is already paid.', { code: 'ALREADY_PAID' });
+  }
+  if (!isPayable(request)) {
+    throw new BadRequestError(`Payment request cannot be paid from status ${request.status}.`);
+  }
+  const amount = money(request.totalAmount);
+  if (amount <= 0) throw new BadRequestError('Nothing to pay for this request.');
+
+  try {
+    const stripe = getStripe();
+    const customerStripeId = await ensureStripeCustomer(customerId);
+    const amountMinor = toMinorUnits(amount, request.currencyCode);
+    const currency = request.currencyCode.toLowerCase();
+
+    let intent: Stripe.PaymentIntent | null = null;
+    if (request.stripePaymentIntentId) {
+      const previous = await stripe.paymentIntents.retrieve(request.stripePaymentIntentId);
+      if (previous.status === 'succeeded') {
+        await finalizePaymentRequest(request.id, previous);
+        throw new ConflictError('This payment request is already paid.', { code: 'ALREADY_PAID' });
+      }
+      if (previous.status === 'processing') {
+        throw new ConflictError('Your payment is still processing. Please check again shortly.', {
+          code: 'PAYMENT_PROCESSING',
+        });
+      }
+      if (
+        REUSABLE_INTENT_STATUSES.includes(previous.status) &&
+        previous.amount === amountMinor &&
+        previous.currency === currency
+      ) {
+        intent = previous;
+      } else if (REUSABLE_INTENT_STATUSES.includes(previous.status)) {
+        await stripe.paymentIntents.cancel(previous.id);
+      }
+    }
+
+    if (!intent) {
+      intent = await stripe.paymentIntents.create(
+        {
+          amount: amountMinor,
+          currency,
+          customer: customerStripeId,
+          automatic_payment_methods: { enabled: true },
+          description: `Brisk ${TYPE_TITLES[request.type]} — job ${request.jobId}`,
+          metadata: {
+            kind: STRIPE_KIND_PAYMENT_REQUEST,
+            paymentRequestId: request.id,
+            jobId: request.jobId,
+            traderId: request.traderId,
+            userId: customerId,
+          },
+        },
+        { idempotencyKey: `payment-request-${request.id}-${request.stripePaymentIntentId ?? 'first'}` }
+      );
+      await prisma.traderPaymentRequest.update({
+        where: { id: request.id },
+        data: { stripePaymentIntentId: intent.id },
+      });
+    }
+
+    return {
+      paymentRequestId: request.id,
+      type: request.type,
+      amount,
+      currencyCode: request.currencyCode,
+      currencySymbol: (await getCurrencyMeta(request.currencyCode)).symbol,
+      requiresPayment: true,
+      ...(await buildClientPaymentConfig(customerStripeId, intent)),
+    };
+  } catch (error) {
+    throw toPaymentError(error);
+  }
+};
+
+/** Called after PaymentSheet success — verifies with Stripe, then marks the request PAID. */
+export const confirmPaymentRequest = async (customerId: string, id: string) => {
+  const request = await getOwnedRequest(customerId, id);
+  if (request.status === TraderPaymentRequestStatus.PAID) return serializeOne(request);
+  if (!isPayable(request)) {
+    throw new BadRequestError(`Payment request cannot be paid from status ${request.status}.`);
+  }
+  if (!request.stripePaymentIntentId) {
+    throw new BadRequestError('This payment was not started. Please tap Pay again.', {
+      code: 'PAYMENT_INTENT_MISSING',
+    });
+  }
+
+  try {
+    const intent = await retrieveSucceededIntent(
+      request.stripePaymentIntentId,
+      money(request.totalAmount),
+      request.currencyCode
+    );
+    await finalizePaymentRequest(request.id, intent);
+  } catch (error) {
+    throw toPaymentError(error);
+  }
+  return serializeOne(await getOwnedRequest(customerId, id));
+};
+
+/**
+ * Idempotent PAID transition (confirm API + Stripe webhook). FULL_JOB also completes the job
+ * (PAYMENT_PENDING → COMPLETED). Returns false if already finalized.
+ */
+export const finalizePaymentRequest = async (
+  id: string,
+  intent: Stripe.PaymentIntent,
+  charge?: ChargeDetails
+): Promise<boolean> => {
+  const details = charge ?? (await getChargeDetails(intent));
+  const paidAt = new Date();
+  const method = paymentMethodFromCharge(details);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.traderPaymentRequest.updateMany({
+      where: { id, status: { in: PAYABLE_STATUSES } },
+      data: {
+        status: TraderPaymentRequestStatus.PAID,
+        paidAt,
+        stripePaymentIntentId: intent.id,
+        cardBrand: details.cardBrand,
+        cardLast4: details.cardLast4,
+        ...(method ? { paymentMethod: method } : {}),
+      },
+    });
+    if (claimed.count === 0) return null;
+
+    const request = await tx.traderPaymentRequest.findUniqueOrThrow({
+      where: { id },
+      include: { trader: { select: { userId: true } } },
+    });
+    let jobStatus: JobStatus | null = null;
+    if (request.type === TraderPaymentRequestType.FULL_JOB) {
+      const moved = await tx.job.updateMany({
+        where: { id: request.jobId, status: JobStatus.PAYMENT_PENDING },
+        data: { status: JobStatus.COMPLETED },
+      });
+      if (moved.count > 0) jobStatus = JobStatus.COMPLETED;
+    }
+    return { request, jobStatus };
+  });
+  if (!result) return false;
+
+  emitPaymentRequestPaid({
+    paymentRequestId: result.request.id,
+    type: result.request.type,
+    jobId: result.request.jobId,
+    jobStatus: result.jobStatus,
+    status: TraderPaymentRequestStatus.PAID,
+    amount: money(result.request.totalAmount),
+    currencyCode: result.request.currencyCode,
+    customerId: result.request.customerId,
+    traderId: result.request.traderId,
+    traderUserId: result.request.trader.userId,
+    at: paidAt.toISOString(),
+  });
+  return true;
+};

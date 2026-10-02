@@ -138,8 +138,13 @@ router.post(
  *       **Mobile:** After Publish, on Site Visit & Pay Fee or Payment Details.
  *       User picks Apple Pay / Google Pay / Card, fills billing, taps Confirm & Pay.
  *
- *       Creates PENDING payment. Mock Stripe returns `clientSecret` + `paymentId`.
- *       Then call `POST /payments/{paymentId}/confirm` (Success) or `/fail` (Fail).
+ *       Creates a PENDING payment + Stripe PaymentIntent. Present Stripe PaymentSheet with
+ *       `clientSecret`, `customerId`, `ephemeralKey`, `publishableKey`
+ *       (Apple Pay: `stripeMerchantIdentifier`). Then call `POST /payments/{paymentId}/confirm`
+ *       on success or `/fail` on error/cancel. Calling intent again cancels the previous attempt.
+ *
+ *       `requiresPayment=false` (total 0): skip PaymentSheet, call confirm directly.
+ *       503 `PAYMENTS_NOT_CONFIGURED` when Stripe keys are missing on the server.
  *
  *       **billingType=COMPANY** requires `companyName` (TIN optional). Matches Company Billing form.
  *
@@ -227,7 +232,11 @@ router.post(
  *       `receiptSummary` (transactionId, date, amountPaid), timeline Paid→Confirmed→Service,
  *       `actions.viewJob` → GET /jobs/{jobId}.
  *
- *       Idempotent if already COMPLETED.
+ *       Idempotent if already COMPLETED. No body — the server verifies the PaymentIntent with
+ *       Stripe and reads card brand / last4 / wallet from the charge.
+ *
+ *       The Stripe webhook finalizes the same way, so the job still goes live if the app
+ *       closes before calling confirm.
  *     parameters:
  *       - in: path
  *         name: id
@@ -235,14 +244,6 @@ router.post(
  *         schema: { type: string, format: uuid }
  *         description: |
  *           `paymentId` from POST /payments/intent (`data.paymentId`). Not the invoice id.
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ConfirmPaymentRequest'
- *           example:
- *             cardLast4: "4567"
- *             cardBrand: visa
  *     responses:
  *       200:
  *         description: Payment confirmed; receipt payload for success screen.
@@ -255,9 +256,13 @@ router.post(
  *                 message: { type: string }
  *                 data: { $ref: '#/components/schemas/PaymentReceipt' }
  *       400:
- *         description: Payment FAILED, or invoice already paid (conflict path).
+ *         description: |
+ *           `PAYMENT_NOT_COMPLETED` (Stripe intent not succeeded), `PAYMENT_AMOUNT_MISMATCH`,
+ *           `PAYMENT_INTENT_MISSING`, or invoice already paid.
  *       404:
  *         description: Payment not found for this user.
+ *       409:
+ *         description: "`PAYMENT_PROCESSING` — bank still processing; retry confirm shortly."
  */
 router.post(
   '/payments/:id/confirm',

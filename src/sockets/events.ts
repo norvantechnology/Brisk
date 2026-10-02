@@ -4,8 +4,18 @@ export const RealtimeEvents = {
   JOB_UPDATED: 'job:updated',
   JOB_PUBLISHED: 'job:published',
   JOB_STATUS_CHANGED: 'job:status_changed',
+  /** Customer accepted this trader's quote → trader bottom sheet (View & Accept / Decline). */
+  JOB_ACCEPT: 'job:accept',
+  /** Customer switched to another trader's quote → close this trader's sheet. */
+  JOB_ACCEPT_CANCELLED: 'job:accept_cancelled',
+  /** Trader declined the customer's acceptance → customer can pick another quote. */
+  JOB_DECLINED: 'job:declined',
+  /** Trader submitted / requested a quote on the customer's job. */
+  QUOTE_RECEIVED: 'quote:received',
   PAYMENT_COMPLETED: 'payment:completed',
   PAYMENT_FAILED: 'payment:failed',
+  PAYMENT_REQUEST_PAID: 'payment_request:paid',
+  REFUND_UPDATED: 'refund:updated',
   INVOICE_UPDATED: 'invoice:updated',
   NOTIFICATION_NEW: 'notification:new',
 } as const;
@@ -40,6 +50,42 @@ export type PaymentRealtimePayload = {
   amount?: number;
   customerId: string;
   traderId?: string | null;
+  at: string;
+};
+
+export type QuoteRealtimePayload = {
+  jobId: string;
+  quoteId: string;
+  customerId: string;
+  traderId: string;
+  traderName?: string | null;
+  amount?: number;
+  currencyCode?: string;
+  at: string;
+};
+
+export type PaymentRequestRealtimePayload = {
+  paymentRequestId: string;
+  type: string;
+  jobId: string;
+  /** Set when paying this request moved the job (FULL_JOB → COMPLETED). */
+  jobStatus?: string | null;
+  status: string;
+  amount: number;
+  currencyCode: string;
+  customerId: string;
+  traderId: string;
+  traderUserId?: string | null;
+  at: string;
+};
+
+export type RefundRealtimePayload = {
+  refundId: string;
+  paymentId?: string | null;
+  status: string;
+  amount: number;
+  currencyCode: string;
+  customerId: string;
   at: string;
 };
 
