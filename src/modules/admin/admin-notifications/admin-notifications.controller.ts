@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
 import * as service from './admin-notifications.service';
+import * as companyUpdates from '../../notifications/company-updates.service';
 
 export const listNotifications = async (
   req: AuthenticatedAdminRequest,
@@ -98,6 +99,24 @@ export const markAllAsRead = async (
       res,
       statusCode: 200,
       message: 'All admin notifications marked as read.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const sendCompanyUpdate = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await companyUpdates.sendCompanyUpdate(req.body);
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: 'Company update sent.',
       data,
     });
   } catch (error) {

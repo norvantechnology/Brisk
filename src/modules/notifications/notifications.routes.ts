@@ -5,6 +5,7 @@ import * as controller from './notifications.controller';
 import {
   notificationIdParamSchema,
   notificationListQuerySchema,
+  notificationReadAllQuerySchema,
 } from './notifications.validation';
 
 const router = Router();
@@ -26,7 +27,10 @@ router.use(authMiddleware);
  *       type: object
  *       properties:
  *         id: { type: string, format: uuid, example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' }
- *         type: { type: string, example: 'TRADER_PROFILE_APPROVED' }
+ *         type: { type: string, example: 'NEW_MATCHING_JOB', description: 'See GET /notifications/types for every type.' }
+ *         tab: { type: string, enum: [REGULAR, BRISK] }
+ *         section: { type: string, enum: [NEW_MATCHING_JOBS, QUOTATIONS, INCOMING_CHATS, BOOKING_UPDATES, ACCOUNT_UPDATES, OTHER, COMPANY_UPDATES] }
+ *         sectionTitle: { type: string, example: 'New Matching Jobs' }
  *         title: { type: string, example: 'Profile approved' }
  *         message: { type: string, example: 'Your BRISK trader profile has been approved.' }
  *         read: { type: boolean, example: false }
@@ -52,7 +56,11 @@ router.use(authMiddleware);
  *     summary: List my notifications (paginated)
  *     description: |
  *       Trader Portal / Customer inbox.
- *       Query: `page`, `limit` (max 100, default 20), `unreadOnly=true|false`, `type`.
+ *       Query: `page`, `limit` (max 100, default 20), `unreadOnly=true|false`, `type`,
+ *       `tab=REGULAR|BRISK`, `section` (e.g. `NEW_MATCHING_JOBS`).
+ *       Read notifications stay in the list (`read: true`); only DELETE removes them.
+ *       `sections` = the same page grouped under section headers (display order);
+ *       `unreadByTab` = badge per tab. Live updates: socket `notification:new` (`notification` = same item shape).
  *     tags: ['Notifications']
  *     security:
  *       - bearerAuth: []
@@ -70,6 +78,12 @@ router.use(authMiddleware);
  *       - in: query
  *         name: type
  *         schema: { type: string, example: 'TRADER_PROFILE_APPROVED' }
+ *       - in: query
+ *         name: tab
+ *         schema: { type: string, enum: [REGULAR, BRISK] }
+ *       - in: query
+ *         name: section
+ *         schema: { type: string, example: 'BOOKING_UPDATES' }
  *     responses:
  *       200:
  *         description: Paginated notification list
@@ -91,6 +105,12 @@ router.use(authMiddleware);
  *                       message: Your BRISK trader profile has been approved. You can now use the app.
  *                     createdAt: '2026-09-24T10:00:00.000Z'
  *                 unreadCount: 3
+ *                 unreadByTab: { REGULAR: 2, BRISK: 1 }
+ *                 sections:
+ *                   - key: ACCOUNT_UPDATES
+ *                     title: Account Updates
+ *                     tab: REGULAR
+ *                     notifications: []
  *               meta:
  *                 total: 12
  *                 page: 1
@@ -107,8 +127,9 @@ router.get('/', validate(notificationListQuerySchema), controller.listNotificati
  *   get:
  *     summary: List notification types (for FE filters)
  *     description: |
- *       Returns the catalog of user notification `type` values with labels/categories
- *       plus `count` / `unreadCount` for the logged-in user.
+ *       Returns the catalog of user notification `type` values with labels/categories,
+ *       `tab`, `section`, `audience`, plus `count` / `unreadCount` for the logged-in user.
+ *       `tabs` = Regular / BRISK with their sections (display order) and the types in each.
  *       Use `type` from each item as `GET /notifications?type=...`.
  *     tags: ['Notifications']
  *     security:
@@ -156,6 +177,7 @@ router.get('/types', controller.listTypes);
  *               message: Unread notification count retrieved successfully.
  *               data:
  *                 count: 3
+ *                 byTab: { REGULAR: 2, BRISK: 1 }
  */
 router.get('/unread-count', controller.getUnreadCount);
 
@@ -164,9 +186,14 @@ router.get('/unread-count', controller.getUnreadCount);
  * /notifications/read-all:
  *   post:
  *     summary: Mark all my notifications as read
+ *     description: Optional `tab` marks only that tab (Regular / BRISK). Rows are not removed.
  *     tags: ['Notifications']
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: tab
+ *         schema: { type: string, enum: [REGULAR, BRISK] }
  *     responses:
  *       200:
  *         description: All marked read
@@ -178,7 +205,7 @@ router.get('/unread-count', controller.getUnreadCount);
  *               data:
  *                 updatedCount: 3
  */
-router.post('/read-all', controller.markAllAsRead);
+router.post('/read-all', validate(notificationReadAllQuerySchema), controller.markAllAsRead);
 
 /**
  * @swagger

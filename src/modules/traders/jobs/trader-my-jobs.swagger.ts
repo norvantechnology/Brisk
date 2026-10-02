@@ -257,21 +257,20 @@
  *       type: object
  *       nullable: true
  *       description: |
- *         Latest open marketplace job for map incoming sheet (null if none).
- *         Use for the map bottom sheet (title, distance, charges, customer, Accept/Decline).
+ *         "Customer accepted your quotation" bottom sheet (View & Accept / Decline).
+ *         Same payload as socket **`job:accept`** and `GET /traders/jobs/incoming/latest`
+ *         (`null` when nothing is waiting). Never sent for new marketplace jobs.
  *       properties:
- *         id: { type: string, format: uuid }
+ *         id: { type: string, format: uuid, description: Job id (same as jobId) }
+ *         jobId: { type: string, format: uuid, description: 'Use in POST /traders/jobs/incoming/{jobId}/accept|decline' }
+ *         quoteId: { type: string, format: uuid, description: The quotation the customer accepted }
+ *         jobRef: { type: string, nullable: true }
  *         title: { type: string, example: Kitchen Sink Leak }
- *         description: { type: string }
+ *         description: { type: string, description: Customer note, example: Water leaking under the sink. }
  *         distanceKm: { type: number, example: 2.4 }
- *         charges:
- *           type: number
- *           nullable: true
- *           description: Amount for CHARGES card (format with currencySymbol → e.g. €120)
- *           example: 120
- *         siteVisitFee: { type: number, nullable: true, example: 120 }
- *         minBudget: { type: number, nullable: true, example: 100 }
- *         maxBudget: { type: number, nullable: true, example: 150 }
+ *         distanceMiles: { type: number, example: 1.5, description: DISTANCE card }
+ *         charges: { type: number, example: 120, description: 'Accepted quotation amount (CHARGES card → €120)' }
+ *         quoteAmount: { type: number, example: 120, description: Alias of charges }
  *         currencyCode: { type: string, example: EUR }
  *         currencySymbol: { type: string, example: € }
  *         customer:
@@ -279,17 +278,19 @@
  *           properties:
  *             fullName: { type: string, example: Sarah Jenkins }
  *             profileImage: { type: string, nullable: true, format: uri }
- *             isVerifiedCustomer: { type: boolean, example: true }
+ *             isVerifiedCustomer: { type: boolean, example: true, description: '"Verified Customer" label' }
  *         actions:
  *           type: object
  *           properties:
- *             canAccept: { type: boolean }
- *             canDecline: { type: boolean }
+ *             canAccept: { type: boolean, example: true }
+ *             canDecline: { type: boolean, example: true }
+ *         assignmentStatus: { type: string, enum: [CUSTOMER_ACCEPTED] }
  *         isSiteVisit: { type: boolean }
- *         areaName: { type: string }
+ *         areaName: { type: string, nullable: true, example: Dublin }
  *         latitude: { type: number }
  *         longitude: { type: number }
- *         createdAt: { type: string, format: date-time }
- *         jobRef: { type: string, nullable: true }
+ *         createdAt: { type: string, format: date-time, description: Job posted at }
+ *         acceptedAt: { type: string, format: date-time, description: Customer accepted the quote at }
+ *         at: { type: string, format: date-time, description: Socket job:accept only — event time }
  */
 export {};

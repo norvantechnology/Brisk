@@ -61,6 +61,8 @@ export type QuoteRealtimePayload = {
   traderName?: string | null;
   amount?: number;
   currencyCode?: string;
+  /** quote:received only — NEW submit, UPDATED edit, REQUESTED job request. */
+  kind?: 'NEW' | 'UPDATED' | 'REQUESTED';
   at: string;
 };
 

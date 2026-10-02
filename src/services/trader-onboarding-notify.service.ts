@@ -11,6 +11,7 @@ import {
   sendMail,
 } from './email.service';
 import { createAdminNotifications } from '../modules/admin/admin-notifications/admin-notifications.service';
+import { pushUserNotification } from '../sockets/realtime';
 import {
   adminNotificationActionUrl,
   traderNotificationActionUrl,
@@ -94,22 +95,19 @@ export const notifyAdminsInApp = async (input: {
   });
 };
 
+/** Inbox row + live `notification:new` (never throws). */
 export const createUserNotification = async (
   userId: string,
   type: string,
   payload: Record<string, string>
 ) => {
-  try {
-    await prisma.notification.create({
-      data: {
-        userId,
-        type,
-        payload,
-      },
-    });
-  } catch (err) {
-    logger.warn('[NOTIFY] In-app notification failed', { userId, type, err: String(err) });
-  }
+  const { title, message, ...data } = payload;
+  await pushUserNotification([userId], {
+    type,
+    title: title || type.replace(/_/g, ' '),
+    message: message || '',
+    data,
+  });
 };
 
 const resolveTraderIdForUser = async (traderUserId: string): Promise<string | null> => {

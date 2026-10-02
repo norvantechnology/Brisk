@@ -540,6 +540,16 @@ router.get('/:id/quotes', ...customerOnly, validate(jobIdParamSchema), controlle
  *       Accepting a different quote before the trader confirms moves the selection to that
  *       trader (previous trader receives `job:accept_cancelled`). If the trader declines, the
  *       customer gets `job:declined` and can accept another quote.
+ *
+ *       **Realtime / inbox**
+ *       | Who | Socket event | Inbox type |
+ *       |---|---|---|
+ *       | Selected trader | `job:accept` (sheet payload) | `QUOTE_ACCEPTED` |
+ *       | Previously selected trader | `job:accept_cancelled` | `QUOTE_SELECTION_CANCELLED` |
+ *       | Customer (trader confirms) | `job:status_changed` | `JOB_STATUS_CHANGED` |
+ *       | Customer (trader declines) | `job:declined` | `JOB_DECLINED` |
+ *
+ *       Trader endpoints: `POST /traders/jobs/incoming/{jobId}/accept` · `/decline`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -551,13 +561,40 @@ router.get('/:id/quotes', ...customerOnly, validate(jobIdParamSchema), controlle
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: |
- *           `jobId`, `traderId`, `quoteId`, `status` (still PUBLISHED),
- *           `assignmentStatus: AWAITING_TRADER_CONFIRMATION`, `amount`.
+ *         description: Quotation accepted — waiting for the trader to confirm.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Quotation accepted. Waiting for the trader to confirm.
+ *               data:
+ *                 jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc
+ *                 traderId: d920daf6-0a24-4afc-a698-7df83602387a
+ *                 quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2
+ *                 status: PUBLISHED
+ *                 assignmentStatus: AWAITING_TRADER_CONFIRMATION
+ *                 amount: 120
+ *       400:
+ *         description: Job is not open (e.g. cancelled / completed).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: Job is not open for trader confirmation.
  *       404:
- *         description: Job or quote not found
+ *         description: Job not found, or quote not found / rejected (trader declined) / expired.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: Quote not found or no longer available.
  *       409:
- *         description: Trader already confirmed
+ *         description: A trader already confirmed this job.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: A trader is already confirmed for this job.
  */
 router.post(
   '/:id/quotes/:quoteId/accept',

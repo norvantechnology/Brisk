@@ -79,6 +79,31 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *                 message: { type: string }
  *                 data:
  *                   $ref: '#/components/schemas/TraderIncomingJob'
+ *             example:
+ *               success: true
+ *               message: Incoming job retrieved successfully.
+ *               data:
+ *                 id: 0100839a-7364-4d00-9323-a2b6e44d81bc
+ *                 jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc
+ *                 quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2
+ *                 jobRef: BRK-1042
+ *                 title: Kitchen Sink Leak
+ *                 description: Water leaking under the sink, needs urgent fix.
+ *                 distanceKm: 2.4
+ *                 distanceMiles: 1.5
+ *                 charges: 120
+ *                 quoteAmount: 120
+ *                 currencyCode: EUR
+ *                 currencySymbol: €
+ *                 customer: { fullName: Sarah Jenkins, profileImage: null, isVerifiedCustomer: true }
+ *                 actions: { canAccept: true, canDecline: true }
+ *                 assignmentStatus: CUSTOMER_ACCEPTED
+ *                 isSiteVisit: false
+ *                 areaName: Dublin
+ *                 latitude: 53.36
+ *                 longitude: -6.25
+ *                 createdAt: '2026-10-02T09:00:00.000Z'
+ *                 acceptedAt: '2026-10-02T10:15:00.000Z'
  */
 router.get('/incoming/latest', controller.getIncomingLatest);
 
@@ -88,25 +113,58 @@ router.get('/incoming/latest', controller.getIncomingLatest);
  *   post:
  *     summary: View & Accept — confirm customer-accepted job (moves to My Jobs ACTIVE)
  *     description: |
- *       Call when trader taps **View & Accept** on the `job:accept` sheet. Assigns the job to this
- *       trader, creates the booking, rejects other open quotations, job → ACCEPTED/SCHEDULED.
- *       Customer receives `job:status_changed`. Idempotent if already assigned to this trader.
+ *       Call when the trader taps **View & Accept** on the `job:accept` sheet (`id` = `jobId`).
  *
- *       Returns the same payload as `GET /traders/jobs/mine/{id}` — open My Job detail.
+ *       **What happens**
+ *       - Job is assigned to this trader → `ACCEPTED` (or `SCHEDULED` when the job has a date).
+ *       - Booking is created, other open quotations are rejected, pending site visit is confirmed.
+ *       - Job appears in `GET /traders/jobs/mine?tab=ACTIVE`.
+ *       - Customer receives socket `job:status_changed` + inbox notification `JOB_STATUS_CHANGED` ("Job confirmed").
+ *
+ *       **Safe to retry** — returns 200 again if the job is already assigned to this trader.
+ *       Same result as `POST /traders/jobs/mine/{id}/accept` for a customer-accepted quote.
+ *
+ *       Response `data` = same payload as `GET /traders/jobs/mine/{id}` (open My Job detail).
+ *
+ *       **404 `NO_ACCEPTED_QUOTE`** → close the sheet: the customer switched to another trader,
+ *       cancelled the job, or never accepted this quote.
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         description: Job id (`jobId` from the job:accept sheet)
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: My Job detail (ACTIVE)
+ *         description: My Job detail (now ACTIVE)
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job accepted. It is now in your active jobs.
+ *               data:
+ *                 id: 0100839a-7364-4d00-9323-a2b6e44d81bc
+ *                 jobRef: BRK-1042
+ *                 title: Kitchen Sink Leak
+ *                 status: ACCEPTED
+ *                 '...': Same fields as GET /traders/jobs/mine/{id}
  *       404:
- *         description: "`NO_ACCEPTED_QUOTE` — customer has not accepted this trader's quote (or switched to another trader)."
+ *         description: Nothing waiting for this trader on this job — close the sheet.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: This job is no longer waiting for your confirmation.
+ *               data: { code: NO_ACCEPTED_QUOTE }
  *       409:
- *         description: Job already assigned to another trader
+ *         description: Job already assigned to another trader.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: Job is already assigned to another trader.
  */
 router.post(
   '/incoming/:id/accept',
@@ -120,20 +178,43 @@ router.post(
  *   post:
  *     summary: Decline customer-accepted job
  *     description: |
- *       Trader declines on the `job:accept` sheet. The quotation becomes REJECTED; the job stays
- *       open and the customer receives `job:declined` so they can accept another quotation.
+ *       Trader taps **Decline** on the `job:accept` sheet (`id` = `jobId`).
+ *
+ *       **What happens**
+ *       - This trader's quotation → `REJECTED`; job stays open (not assigned).
+ *       - Customer receives socket `job:declined` + inbox notification `JOB_DECLINED`
+ *         and can accept another trader's quotation.
+ *       - Trader can still send a new quotation later from Discover.
+ *
+ *       **404 `NO_ACCEPTED_QUOTE`** → close the sheet (customer switched trader / cancelled).
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         description: Job id (`jobId` from the job:accept sheet)
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: "`jobId`, `quoteId`, `declined: true`"
+ *         description: Declined
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job declined. The customer has been notified.
+ *               data:
+ *                 jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc
+ *                 quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2
+ *                 declined: true
  *       404:
- *         description: "`NO_ACCEPTED_QUOTE`"
+ *         description: Nothing waiting for this trader on this job — close the sheet.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: This job is no longer waiting for your confirmation.
+ *               data: { code: NO_ACCEPTED_QUOTE }
  */
 router.post(
   '/incoming/:id/decline',
@@ -472,14 +553,16 @@ router.post('/mine/:id/quotes', validate(myJobQuoteBodySchema), controller.upser
  * @swagger
  * /traders/jobs/mine/{id}/accept:
  *   post:
- *     summary: Request job (marketplace) or confirm assigned Direct Trader job
+ *     summary: Request job (marketplace), confirm customer-accepted quote, or confirm Direct Trader job
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Marketplace (PUBLISHED, unassigned): same as POST /traders/jobs/discover/{id}/request —
- *       sets waiting-for-customer flags; does NOT assign trader.
- *       Prefer Discover request endpoint from Job Details.
- *       Already-assigned Direct Trader jobs: ensures booking / ACCEPTED state.
+ *       - **Customer already accepted this trader's quote:** same as
+ *         `POST /traders/jobs/incoming/{id}/accept` (View & Accept) → job ACTIVE, returns My Job detail.
+ *       - **Marketplace (PUBLISHED, unassigned), not accepted yet:** same as
+ *         `POST /traders/jobs/discover/{id}/request` — waiting for customer; does NOT assign trader.
+ *         Prefer the Discover request endpoint from Job Details.
+ *       - **Already-assigned Direct Trader job:** ensures booking / ACCEPTED state.
  *     parameters:
  *       - in: path
  *         name: id

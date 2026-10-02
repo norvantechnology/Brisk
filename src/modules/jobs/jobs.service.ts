@@ -39,6 +39,7 @@ import {
   emitJobPublished,
   emitJobStatusChanged,
   emitJobUpdated,
+  emitSiteVisitUpdate,
 } from '../../sockets/realtime';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
@@ -1658,6 +1659,8 @@ export const cancelJob = async (customerId: string, jobId: string) => {
     traderUserId: traderUserId ?? null,
     bookingId: existing.booking?.id ?? null,
     invoiceId: existing.booking?.invoice?.id ?? null,
+    title: job.title,
+    actor: 'CUSTOMER',
     at: new Date().toISOString(),
   });
   for (const q of awaitingTrader) {
@@ -1697,6 +1700,32 @@ const getOwnedPendingSiteVisitRequest = async (
     throw new NotFoundError('Site visit proposal not found for this job.');
   }
   return { job, request };
+};
+
+const notifyTraderSiteVisit = async (
+  type: 'SITE_VISIT_CONFIRMED' | 'SITE_VISIT_RESCHEDULE_REQUESTED',
+  request: {
+    id: string;
+    jobId: string | null;
+    traderId: string;
+    visitDate: Date | null;
+    timeSlot: string | null;
+  }
+) => {
+  if (!request.jobId) return;
+  const trader = await prisma.trader.findUnique({
+    where: { id: request.traderId },
+    select: { userId: true },
+  });
+  if (!trader) return;
+  emitSiteVisitUpdate({
+    type,
+    recipientUserId: trader.userId,
+    jobId: request.jobId,
+    requestId: request.id,
+    visitDate: request.visitDate,
+    timeSlot: request.timeSlot,
+  });
 };
 
 /**
@@ -1743,6 +1772,7 @@ export const confirmSiteVisitProposal = async (
     where: { id: jobId },
     data: { scheduledDate: request.visitDate },
   });
+  await notifyTraderSiteVisit('SITE_VISIT_CONFIRMED', updated);
 
   return {
     requestId: updated.id,
@@ -1795,6 +1825,7 @@ export const rejectSiteVisitProposal = async (
       timeSlot: true,
     },
   });
+  await notifyTraderSiteVisit('SITE_VISIT_RESCHEDULE_REQUESTED', updated);
 
   return {
     requestId: updated.id,

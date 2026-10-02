@@ -3,6 +3,7 @@ import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware'
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-notifications.controller';
 import {
+  companyUpdateBodySchema,
   notificationIdParamSchema,
   notificationListQuerySchema,
 } from '../../notifications/notifications.validation';
@@ -190,6 +191,52 @@ router.get('/unread-count', controller.getUnreadCount);
  *                 updatedCount: 2
  */
 router.post('/read-all', controller.markAllAsRead);
+
+/**
+ * @swagger
+ * /admin/notifications/company-updates:
+ *   post:
+ *     summary: Send a company update (BRISK tab) to traders and/or customers
+ *     description: |
+ *       Creates one inbox notification per active user (tab `BRISK`, section `COMPANY_UPDATES`)
+ *       and pushes socket `notification:new`. Optional `actionLabel` + `actionUrl` = "View Now" button.
+ *     tags: ['Admin / Notifications']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [type, title, message]
+ *             properties:
+ *               type: { type: string, enum: [PLATFORM_UPDATE, POLICY_CHANGE, SYSTEM_MESSAGE] }
+ *               title: { type: string, maxLength: 120, example: 'Platform Updates' }
+ *               message: { type: string, maxLength: 1000, example: 'New earnings dashboard is now live!' }
+ *               audience: { type: string, enum: [ALL, TRADERS, CUSTOMERS], default: ALL }
+ *               actionLabel: { type: string, maxLength: 40, example: 'View Now' }
+ *               actionUrl: { type: string, maxLength: 500, example: '/earnings' }
+ *     responses:
+ *       201:
+ *         description: Sent
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Company update sent.
+ *               data:
+ *                 broadcastId: 0b9d1c1e-7a52-4c39-9d3f-2f7b8b0f1a11
+ *                 type: PLATFORM_UPDATE
+ *                 audience: TRADERS
+ *                 recipients: 128
+ *                 sentAt: '2026-10-02T10:00:00.000Z'
+ */
+router.post(
+  '/company-updates',
+  validate(companyUpdateBodySchema),
+  controller.sendCompanyUpdate
+);
 
 /**
  * @swagger

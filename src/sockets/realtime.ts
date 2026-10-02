@@ -6,6 +6,9 @@ import {
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 import { getPlatformSetting } from '../modules/settings/platform-settings.service';
+import { createUserNotifications } from '../modules/notifications/notifications.service';
+import { userNotificationMeta } from '../modules/notifications/notification-types';
+import { getCurrencyMeta } from '../services/currency.service';
 import {
   RealtimeEvents,
   type InvoiceRealtimePayload,
@@ -55,6 +58,81 @@ const emit = (
     logger.warn('Realtime emit failed', { event, err });
   }
 };
+
+export type UserNotificationPush = {
+  /** Inbox type (see USER_NOTIFICATION_TYPE_CATALOG). */
+  type: string;
+  title: string;
+  message: string;
+  /** Stored in the inbox row (`notification.data`) — ids for mobile navigation. */
+  data?: Record<string, unknown>;
+  /** Legacy socket `type` / `data` kept for existing listeners (e.g. `job:accept` + sheet). */
+  legacyEvent?: string;
+  legacyData?: Record<string, unknown>;
+  at?: string;
+  dedupeKey?: string;
+};
+
+/**
+ * Single path for user notifications: persist to the inbox (GET /notifications)
+ * and emit `notification:new` so list + live toast never differ. Never throws.
+ */
+export const pushUserNotification = async (
+  userIds: Array<string | null | undefined>,
+  input: UserNotificationPush
+) => {
+  const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return;
+  const at = input.at ?? new Date().toISOString();
+
+  let persisted: Awaited<ReturnType<typeof createUserNotifications>> | null = null;
+  try {
+    persisted = await createUserNotifications(ids, {
+      type: input.type,
+      title: input.title,
+      message: input.message,
+      data: input.data,
+      dedupeKey: input.dedupeKey,
+    });
+  } catch (err) {
+    logger.warn('Notification persist failed', { type: input.type, err: String(err) });
+  }
+
+  const byUser = new Map((persisted ?? []).map((p) => [p.userId, p.notification]));
+  const meta = userNotificationMeta(input.type);
+  for (const userId of ids) {
+    const notification = byUser.get(userId);
+    // Deduped (already notified) — skip the duplicate toast too.
+    if (persisted && !notification) continue;
+    emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(userId)], {
+      type: input.legacyEvent ?? input.type,
+      notificationType: input.type,
+      title: input.title,
+      message: input.message,
+      data: input.legacyData ?? input.data ?? {},
+      at,
+      ...meta,
+      ...(notification ? { id: notification.id, notification } : {}),
+    });
+  }
+};
+
+const jobTitleOf = async (jobId?: string | null): Promise<string> => {
+  if (!jobId) return 'your job';
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { title: true } });
+  return job?.title ?? 'your job';
+};
+
+const formatMoney = async (amount?: number | null, currencyCode?: string | null) => {
+  if (amount == null) return '';
+  const symbol = currencyCode ? (await getCurrencyMeta(currencyCode)).symbol : '';
+  return `${symbol}${Number(amount).toFixed(2)}`;
+};
+
+const formatDay = (d?: Date | string | null) =>
+  d
+    ? new Date(d).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '';
 
 const haversineKm = (
   a: { lat: number; lng: number },
@@ -182,6 +260,32 @@ const broadcastMarketplaceJobToTraders = async (payload: JobRealtimePayload) => 
     emit(RealtimeEvents.JOB_PUBLISHED, rooms, body);
     emit(RealtimeEvents.JOB_CREATED, rooms, body);
 
+    if (nearbyUserIds.length) {
+      const category = payload.categoryId
+        ? await prisma.category.findUnique({
+            where: { id: payload.categoryId },
+            select: { name: true },
+          })
+        : null;
+      const jobTitle = payload.title ?? (await jobTitleOf(payload.jobId));
+      await pushUserNotification(nearbyUserIds, {
+        type: 'NEW_MATCHING_JOB',
+        title: category?.name ? `New ${category.name} Job` : 'New Matching Job',
+        message: payload.city ? `${jobTitle} requested in ${payload.city}.` : jobTitle,
+        data: {
+          jobId: payload.jobId,
+          jobRef: payload.jobRef ?? null,
+          jobTitle,
+          categoryId: payload.categoryId ?? null,
+          categoryName: category?.name ?? null,
+          city: payload.city ?? null,
+          siteVisitRequested: payload.siteVisitRequested ?? false,
+        },
+        at: payload.at,
+        dedupeKey: `job:${payload.jobId}`,
+      });
+    }
+
     logger.info('Realtime marketplace job broadcast', {
       jobId: payload.jobId,
       categoryId: payload.categoryId,
@@ -245,10 +349,34 @@ export const emitJobPublished = (
   if (payload.bookingId) rooms.push(roomBooking(payload.bookingId));
   emit(RealtimeEvents.JOB_PUBLISHED, rooms, { ...payload });
   emit(RealtimeEvents.JOB_STATUS_CHANGED, rooms, { ...payload });
-  emit(RealtimeEvents.NOTIFICATION_NEW, rooms, {
-    type: RealtimeEvents.JOB_PUBLISHED,
-    title: 'Job published',
-    data: payload,
+
+  const jobTitle = payload.title ?? 'your job';
+  const data = {
+    jobId: payload.jobId,
+    jobRef: payload.jobRef ?? null,
+    jobTitle,
+    bookingId: payload.bookingId ?? null,
+    invoiceId: payload.invoiceId ?? null,
+    status: payload.status,
+  };
+  void pushUserNotification([payload.customerId], {
+    type: 'JOB_PUBLISHED',
+    title: 'Your job is live',
+    message: payload.traderId
+      ? `"${jobTitle}" has been sent to your trader.`
+      : `"${jobTitle}" is now visible to traders.`,
+    data,
+    legacyEvent: RealtimeEvents.JOB_PUBLISHED,
+    legacyData: payload,
+    at: payload.at,
+  });
+  void pushUserNotification([payload.traderUserId], {
+    type: 'DIRECT_JOB_RECEIVED',
+    title: 'New booking',
+    message: `A customer booked "${jobTitle}" with you.`,
+    data,
+    legacyEvent: RealtimeEvents.JOB_PUBLISHED,
+    legacyData: payload,
     at: payload.at,
   });
 
@@ -256,56 +384,157 @@ export const emitJobPublished = (
   void broadcastMarketplaceJobToTraders(payload);
 };
 
+const jobStatusCopy = (status: string, jobTitle: string, actor?: string) => {
+  switch (status) {
+    case 'ACCEPTED':
+    case 'SCHEDULED':
+      return { title: 'Job confirmed', message: `"${jobTitle}" is confirmed and scheduled.` };
+    case 'CANCELLED':
+      return {
+        title: 'Job cancelled',
+        message: `"${jobTitle}" was cancelled${actor === 'CUSTOMER' ? ' by the customer' : ''}.`,
+      };
+    case 'COMPLETED':
+      return { title: 'Job completed', message: `"${jobTitle}" is completed.` };
+    default:
+      return {
+        title: 'Job status updated',
+        message: `"${jobTitle}" is now ${status.toLowerCase().replace(/_/g, ' ')}.`,
+      };
+  }
+};
+
+/**
+ * `actor` = who caused the change; the inbox notification goes to the other party
+ * (no actor → customer, legacy behaviour).
+ */
 export const emitJobStatusChanged = (
-  payload: JobRealtimePayload & { traderUserId?: string | null }
+  payload: JobRealtimePayload & {
+    traderUserId?: string | null;
+    actor?: 'CUSTOMER' | 'TRADER' | 'SYSTEM';
+  }
 ) => {
   const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
   if (payload.traderUserId) rooms.push(roomUser(payload.traderUserId));
   if (payload.bookingId) rooms.push(roomBooking(payload.bookingId));
   emit(RealtimeEvents.JOB_STATUS_CHANGED, rooms, { ...payload });
-  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.customerId)], {
-    type: RealtimeEvents.JOB_STATUS_CHANGED,
-    title: 'Job status updated',
-    data: payload,
-    at: payload.at,
-  });
+
+  const recipient = payload.actor === 'CUSTOMER' ? payload.traderUserId : payload.customerId;
+  if (!recipient) return;
+  void (async () => {
+    const jobTitle = payload.title ?? (await jobTitleOf(payload.jobId));
+    await pushUserNotification([recipient], {
+      type: 'JOB_STATUS_CHANGED',
+      ...jobStatusCopy(payload.status, jobTitle, payload.actor),
+      data: {
+        jobId: payload.jobId,
+        jobRef: payload.jobRef ?? null,
+        jobTitle,
+        status: payload.status,
+        bookingId: payload.bookingId ?? null,
+      },
+      legacyEvent: RealtimeEvents.JOB_STATUS_CHANGED,
+      legacyData: payload,
+      at: payload.at,
+    });
+  })();
 };
 
 /** Customer accepted this trader's quote — payload matches GET /traders/jobs/incoming/latest. */
 export const emitJobAccept = (traderUserId: string, sheet: Record<string, unknown> & { at: string }) => {
   emit(RealtimeEvents.JOB_ACCEPT, [roomUser(traderUserId)], sheet);
-  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(traderUserId)], {
-    type: RealtimeEvents.JOB_ACCEPT,
+  const customer = sheet.customer as { fullName?: string } | undefined;
+  const jobTitle = typeof sheet.title === 'string' ? sheet.title : 'your job';
+  void pushUserNotification([traderUserId], {
+    type: 'QUOTE_ACCEPTED',
     title: 'Customer accepted your quotation',
-    data: sheet,
+    message: `${customer?.fullName ?? 'The customer'} accepted your quotation for "${jobTitle}". Tap View & Accept to start.`,
+    data: {
+      jobId: sheet.jobId,
+      quoteId: sheet.quoteId,
+      jobTitle,
+      amount: sheet.charges ?? null,
+      currencyCode: sheet.currencyCode ?? null,
+      customerName: customer?.fullName ?? null,
+    },
+    legacyEvent: RealtimeEvents.JOB_ACCEPT,
+    legacyData: sheet,
     at: sheet.at,
   });
 };
 
 export const emitJobAcceptCancelled = (traderUserId: string, payload: QuoteRealtimePayload) => {
   emit(RealtimeEvents.JOB_ACCEPT_CANCELLED, [roomUser(traderUserId)], { ...payload });
+  void (async () => {
+    const jobTitle = await jobTitleOf(payload.jobId);
+    await pushUserNotification([traderUserId], {
+      type: 'QUOTE_SELECTION_CANCELLED',
+      title: 'Quotation no longer selected',
+      message: `The customer chose another quotation or cancelled "${jobTitle}".`,
+      data: { jobId: payload.jobId, quoteId: payload.quoteId, jobTitle },
+      legacyEvent: RealtimeEvents.JOB_ACCEPT_CANCELLED,
+      legacyData: payload,
+      at: payload.at,
+    });
+  })();
 };
 
 export const emitJobDeclined = (payload: QuoteRealtimePayload) => {
   const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
   emit(RealtimeEvents.JOB_DECLINED, rooms, { ...payload });
-  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.customerId)], {
-    type: RealtimeEvents.JOB_DECLINED,
-    title: 'Trader declined the job',
-    data: payload,
-    at: payload.at,
-  });
+  void (async () => {
+    const jobTitle = await jobTitleOf(payload.jobId);
+    await pushUserNotification([payload.customerId], {
+      type: 'JOB_DECLINED',
+      title: 'Trader declined the job',
+      message: `${payload.traderName ?? 'The trader'} declined "${jobTitle}". You can accept another quotation.`,
+      data: {
+        jobId: payload.jobId,
+        quoteId: payload.quoteId,
+        traderId: payload.traderId,
+        traderName: payload.traderName ?? null,
+        jobTitle,
+      },
+      legacyEvent: RealtimeEvents.JOB_DECLINED,
+      legacyData: payload,
+      at: payload.at,
+    });
+  })();
 };
 
 export const emitQuoteReceived = (payload: QuoteRealtimePayload) => {
   const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
   emit(RealtimeEvents.QUOTE_RECEIVED, rooms, { ...payload });
-  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.customerId)], {
-    type: RealtimeEvents.QUOTE_RECEIVED,
-    title: 'New quotation received',
-    data: payload,
-    at: payload.at,
-  });
+  void (async () => {
+    const [jobTitle, amount] = await Promise.all([
+      jobTitleOf(payload.jobId),
+      formatMoney(payload.amount, payload.currencyCode),
+    ]);
+    const trader = payload.traderName ?? 'A trader';
+    const copy =
+      payload.kind === 'REQUESTED'
+        ? { title: 'Job request received', message: `${trader} requested "${jobTitle}" for ${amount}.` }
+        : payload.kind === 'UPDATED'
+          ? { title: 'Quotation updated', message: `${trader} updated their quotation to ${amount} for "${jobTitle}".` }
+          : { title: 'New quotation received', message: `${trader} sent a quotation of ${amount} for "${jobTitle}".` };
+    await pushUserNotification([payload.customerId], {
+      type: 'QUOTE_RECEIVED',
+      ...copy,
+      data: {
+        jobId: payload.jobId,
+        quoteId: payload.quoteId,
+        traderId: payload.traderId,
+        traderName: payload.traderName ?? null,
+        amount: payload.amount ?? null,
+        currencyCode: payload.currencyCode ?? null,
+        kind: payload.kind ?? 'NEW',
+        jobTitle,
+      },
+      legacyEvent: RealtimeEvents.QUOTE_RECEIVED,
+      legacyData: payload,
+      at: payload.at,
+    });
+  })();
 };
 
 export const emitPaymentCompleted = (
@@ -327,24 +556,68 @@ export const emitPaymentCompleted = (
       at: payload.at,
     });
   }
-  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.customerId)], {
-    type: RealtimeEvents.PAYMENT_COMPLETED,
-    title: 'Payment successful',
-    data: payload,
-    at: payload.at,
-  });
+  void (async () => {
+    const [jobTitle, currency] = await Promise.all([
+      jobTitleOf(payload.jobId),
+      payload.invoiceId
+        ? prisma.invoice.findUnique({
+            where: { id: payload.invoiceId },
+            select: { currencyCode: true },
+          })
+        : null,
+    ]);
+    const amount = await formatMoney(payload.amount, currency?.currencyCode);
+    const data = {
+      jobId: payload.jobId ?? null,
+      jobTitle,
+      paymentId: payload.paymentId,
+      invoiceId: payload.invoiceId,
+      bookingId: payload.bookingId ?? null,
+      amount: payload.amount ?? null,
+      currencyCode: currency?.currencyCode ?? null,
+    };
+    await pushUserNotification([payload.customerId], {
+      type: 'PAYMENT_SUCCESSFUL',
+      title: 'Payment successful',
+      message: `Payment${amount ? ` of ${amount}` : ''} for "${jobTitle}" was successful.`,
+      data,
+      legacyEvent: RealtimeEvents.PAYMENT_COMPLETED,
+      legacyData: payload,
+      at: payload.at,
+    });
+    await pushUserNotification([payload.traderUserId], {
+      type: 'PAYMENT_RECEIVED',
+      title: 'Payment received',
+      message: `The customer paid${amount ? ` ${amount}` : ''} for "${jobTitle}".`,
+      data,
+      legacyEvent: RealtimeEvents.PAYMENT_COMPLETED,
+      legacyData: payload,
+      at: payload.at,
+    });
+  })();
 };
 
 export const emitPaymentFailed = (payload: PaymentRealtimePayload) => {
   const rooms = [roomUser(payload.customerId)];
   if (payload.jobId) rooms.push(roomJob(payload.jobId));
   emit(RealtimeEvents.PAYMENT_FAILED, rooms, { ...payload });
-  emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.customerId)], {
-    type: RealtimeEvents.PAYMENT_FAILED,
-    title: 'Payment failed',
-    data: payload,
-    at: payload.at,
-  });
+  void (async () => {
+    const jobTitle = await jobTitleOf(payload.jobId);
+    await pushUserNotification([payload.customerId], {
+      type: 'PAYMENT_FAILED',
+      title: 'Payment failed',
+      message: `Your payment for "${jobTitle}" failed. Please try again.`,
+      data: {
+        jobId: payload.jobId ?? null,
+        jobTitle,
+        paymentId: payload.paymentId,
+        invoiceId: payload.invoiceId,
+      },
+      legacyEvent: RealtimeEvents.PAYMENT_FAILED,
+      legacyData: payload,
+      at: payload.at,
+    });
+  })();
 };
 
 export const emitPaymentRequestPaid = (payload: PaymentRequestRealtimePayload) => {
@@ -360,18 +633,176 @@ export const emitPaymentRequestPaid = (payload: PaymentRequestRealtimePayload) =
       at: payload.at,
     });
   }
-  if (payload.traderUserId) {
-    emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(payload.traderUserId)], {
-      type: RealtimeEvents.PAYMENT_REQUEST_PAID,
-      title: 'Payment received',
-      data: payload,
+  void (async () => {
+    const [jobTitle, amount] = await Promise.all([
+      jobTitleOf(payload.jobId),
+      formatMoney(payload.amount, payload.currencyCode),
+    ]);
+    await pushUserNotification([payload.traderUserId], {
+      type: 'PAYMENT_RECEIVED',
+      title: payload.jobStatus === 'COMPLETED' ? 'Job Completed & Paid' : 'Payment received',
+      message: `Payment of ${amount} for "${jobTitle}" has been received.`,
+      data: {
+        jobId: payload.jobId,
+        jobTitle,
+        paymentRequestId: payload.paymentRequestId,
+        paymentRequestType: payload.type,
+        amount: payload.amount,
+        currencyCode: payload.currencyCode,
+        jobStatus: payload.jobStatus ?? null,
+      },
+      legacyEvent: RealtimeEvents.PAYMENT_REQUEST_PAID,
+      legacyData: payload,
       at: payload.at,
     });
-  }
+  })();
+};
+
+const REFUND_COPY: Record<string, { title: string; verb: string }> = {
+  APPROVED: { title: 'Refund approved', verb: 'has been approved' },
+  COMPLETED: { title: 'Refund completed', verb: 'has been sent to your payment method' },
+  REJECTED: { title: 'Refund rejected', verb: 'was rejected' },
 };
 
 export const emitRefundUpdated = (payload: RefundRealtimePayload) => {
   emit(RealtimeEvents.REFUND_UPDATED, [roomUser(payload.customerId)], { ...payload });
+  const copy = REFUND_COPY[payload.status];
+  if (!copy) return;
+  void (async () => {
+    const amount = await formatMoney(payload.amount, payload.currencyCode);
+    await pushUserNotification([payload.customerId], {
+      type: 'REFUND_UPDATE',
+      title: copy.title,
+      message: `Your refund of ${amount} ${copy.verb}.`,
+      data: {
+        refundId: payload.refundId,
+        paymentId: payload.paymentId ?? null,
+        status: payload.status,
+        amount: payload.amount,
+        currencyCode: payload.currencyCode,
+      },
+      legacyEvent: RealtimeEvents.REFUND_UPDATED,
+      legacyData: payload,
+      at: payload.at,
+      dedupeKey: `refund:${payload.refundId}:${payload.status}`,
+    });
+  })();
+};
+
+/** Trader sent a chat message on a job → the other party's Incoming Chats. */
+export const emitChatMessage = (input: {
+  recipientUserId: string;
+  jobId: string;
+  bookingId?: string | null;
+  messageId: string;
+  senderName: string;
+  senderPhotoUrl?: string | null;
+  message: string;
+}) => {
+  void (async () => {
+    const jobTitle = await jobTitleOf(input.jobId);
+    const text = input.message.length > 140 ? `${input.message.slice(0, 137)}...` : input.message;
+    await pushUserNotification([input.recipientUserId], {
+      type: 'NEW_CHAT_MESSAGE',
+      title: input.senderName,
+      message: text,
+      data: {
+        jobId: input.jobId,
+        jobTitle,
+        bookingId: input.bookingId ?? null,
+        messageId: input.messageId,
+        senderName: input.senderName,
+        senderPhotoUrl: input.senderPhotoUrl ?? null,
+      },
+    });
+  })();
+};
+
+const SITE_VISIT_COPY = {
+  SITE_VISIT_REQUESTED: (who: string, job: string, day: string) => ({
+    title: 'Site visit requested',
+    message: `${who} proposed a site visit for "${job}"${day ? ` on ${day}` : ''}.`,
+  }),
+  SITE_VISIT_RESCHEDULED: (who: string, job: string, day: string) => ({
+    title: 'Site visit rescheduled',
+    message: `${who} proposed a new site visit time for "${job}"${day ? ` (${day})` : ''}.`,
+  }),
+  SITE_VISIT_CONFIRMED: (_who: string, job: string, day: string) => ({
+    title: 'Site visit confirmed',
+    message: `The customer confirmed your site visit for "${job}"${day ? ` on ${day}` : ''}.`,
+  }),
+  SITE_VISIT_RESCHEDULE_REQUESTED: (_who: string, job: string, day: string) => ({
+    title: 'Rescheduling Request',
+    message: `The customer asked to move the site visit for "${job}"${day ? ` from ${day}` : ''}. Please pick a new time.`,
+  }),
+} as const;
+
+export const emitSiteVisitUpdate = (input: {
+  type: keyof typeof SITE_VISIT_COPY;
+  recipientUserId: string;
+  jobId: string;
+  requestId: string;
+  traderName?: string | null;
+  visitDate?: Date | null;
+  timeSlot?: string | null;
+}) => {
+  void (async () => {
+    const jobTitle = await jobTitleOf(input.jobId);
+    await pushUserNotification([input.recipientUserId], {
+      type: input.type,
+      ...SITE_VISIT_COPY[input.type](
+        input.traderName ?? 'The trader',
+        jobTitle,
+        formatDay(input.visitDate)
+      ),
+      data: {
+        jobId: input.jobId,
+        jobTitle,
+        siteVisitRequestId: input.requestId,
+        traderName: input.traderName ?? null,
+        visitDate: input.visitDate ?? null,
+        timeSlot: input.timeSlot ?? null,
+      },
+    });
+  })();
+};
+
+const PAYMENT_REQUEST_LABEL: Record<string, string> = {
+  FULL_JOB: 'the job',
+  PARTIAL: 'a part payment',
+  SITE_VISIT_FEE: 'the site visit fee',
+};
+
+/** Trader requested a payment → customer Booking Updates. */
+export const emitPaymentRequested = (input: {
+  customerId: string;
+  jobId: string;
+  paymentRequestId: string;
+  type: string;
+  amount: number;
+  currencyCode: string;
+  traderName?: string | null;
+}) => {
+  void (async () => {
+    const [jobTitle, amount] = await Promise.all([
+      jobTitleOf(input.jobId),
+      formatMoney(input.amount, input.currencyCode),
+    ]);
+    await pushUserNotification([input.customerId], {
+      type: 'PAYMENT_REQUESTED',
+      title: 'Payment requested',
+      message: `${input.traderName ?? 'Your trader'} requested ${amount} for ${PAYMENT_REQUEST_LABEL[input.type] ?? 'the job'} on "${jobTitle}".`,
+      data: {
+        jobId: input.jobId,
+        jobTitle,
+        paymentRequestId: input.paymentRequestId,
+        paymentRequestType: input.type,
+        amount: input.amount,
+        currencyCode: input.currencyCode,
+        traderName: input.traderName ?? null,
+      },
+    });
+  })();
 };
 
 export const emitInvoiceUpdated = (payload: InvoiceRealtimePayload) => {

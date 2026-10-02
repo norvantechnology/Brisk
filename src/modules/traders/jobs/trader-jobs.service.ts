@@ -12,6 +12,7 @@ import { resolveCategoryIconUrl } from '../../categories/categories.serializers'
 import { requestJob } from './trader-my-jobs.service';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import { getPlatformSetting } from '../../settings/platform-settings.service';
+import { emitSiteVisitUpdate } from '../../../sockets/realtime';
 
 const EARTH_RADIUS_KM = 6371;
 const URGENT_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -1507,6 +1508,7 @@ const upsertSiteVisit = async (
   const job = await prisma.job.findUnique({
     where: { id: jobId },
     select: {
+      customerId: true,
       siteVisitRequested: true,
       quoteType: true,
       scheduledDate: true,
@@ -1578,6 +1580,25 @@ const upsertSiteVisit = async (
       include: { slots: { orderBy: { sortOrder: 'asc' } } },
     });
   });
+
+  if (job) {
+    const trader = await prisma.trader.findUnique({
+      where: { id: traderId },
+      select: { businessName: true, user: { select: { fullName: true } } },
+    });
+    emitSiteVisitUpdate({
+      type:
+        mode === 'reschedule' || existing?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+          ? 'SITE_VISIT_RESCHEDULED'
+          : 'SITE_VISIT_REQUESTED',
+      recipientUserId: job.customerId,
+      jobId,
+      requestId: row.id,
+      traderName: trader?.businessName || trader?.user.fullName || null,
+      visitDate: row.visitDate,
+      timeSlot: row.timeSlot,
+    });
+  }
 
   return toSiteVisitPayload(row);
 };

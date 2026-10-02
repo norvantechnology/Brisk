@@ -15,10 +15,12 @@ import { buildPaginationMeta } from '../../../utils/pagination';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import {
+  emitChatMessage,
   emitJobAccept,
   emitJobAcceptCancelled,
   emitJobDeclined,
   emitJobStatusChanged,
+  emitPaymentRequested,
   emitQuoteReceived,
 } from '../../../sockets/realtime';
 import { isAwaitingUpfrontPayment } from '../../jobs/job-payment-state';
@@ -1822,7 +1824,8 @@ export const getPaymentRequestScreen = async (userId: string, jobId: string) => 
 const notifyQuoteReceived = async (
   traderId: string,
   jobId: string,
-  quote: { id: string; quotedAmount: Prisma.Decimal | number; currencyCode: string }
+  quote: { id: string; quotedAmount: Prisma.Decimal | number; currencyCode: string },
+  kind: 'NEW' | 'UPDATED' | 'REQUESTED'
 ) => {
   const [job, trader] = await Promise.all([
     prisma.job.findUnique({ where: { id: jobId }, select: { customerId: true } }),
@@ -1840,7 +1843,35 @@ const notifyQuoteReceived = async (
     traderName: trader?.businessName || trader?.user.fullName || null,
     amount: money(quote.quotedAmount),
     currencyCode: quote.currencyCode,
+    kind,
     at: new Date().toISOString(),
+  });
+};
+
+/** Customer inbox: trader sent a payment request (full / partial / site visit fee). */
+const notifyPaymentRequested = async (
+  traderId: string,
+  pr: {
+    id: string;
+    jobId: string;
+    customerId: string;
+    type: TraderPaymentRequestType;
+    totalAmount: Prisma.Decimal | number;
+    currencyCode: string;
+  }
+) => {
+  const trader = await prisma.trader.findUnique({
+    where: { id: traderId },
+    select: { businessName: true, user: { select: { fullName: true } } },
+  });
+  emitPaymentRequested({
+    customerId: pr.customerId,
+    jobId: pr.jobId,
+    paymentRequestId: pr.id,
+    type: pr.type,
+    amount: money(pr.totalAmount) ?? 0,
+    currencyCode: pr.currencyCode,
+    traderName: trader?.businessName || trader?.user.fullName || null,
   });
 };
 
@@ -1886,7 +1917,7 @@ export const upsertQuote = async (
         },
       });
 
-  if (isOpenJob) await notifyQuoteReceived(trader.id, jobId, quote);
+  if (isOpenJob) await notifyQuoteReceived(trader.id, jobId, quote, existing ? 'UPDATED' : 'NEW');
 
   // Keep job PUBLISHED on Discover until customer confirms the trader.
   const isJobRequested = Boolean(quote.requestedAt);
@@ -2006,7 +2037,7 @@ export const requestJob = async (
         },
       });
 
-  await notifyQuoteReceived(trader.id, jobId, quote);
+  await notifyQuoteReceived(trader.id, jobId, quote, 'REQUESTED');
 
   return {
     jobId,
@@ -2314,6 +2345,7 @@ const assignAcceptedQuote = async (traderId: string, jobId: string) => {
     traderUserId: traderUser?.userId ?? null,
     bookingId: booking?.id ?? null,
     title: job.title,
+    actor: 'TRADER',
     at: new Date().toISOString(),
   });
 
@@ -2450,8 +2482,18 @@ export const sendMessage = async (userId: string, jobId: string, message: string
       message,
     },
     include: {
-      sender: { select: { id: true, fullName: true, role: true } },
+      sender: { select: { id: true, fullName: true, role: true, profilePhotoUrl: true } },
     },
+  });
+
+  emitChatMessage({
+    recipientUserId: job.customerId,
+    jobId,
+    bookingId: created.bookingId,
+    messageId: created.id,
+    senderName: created.sender.fullName,
+    senderPhotoUrl: created.sender.profilePhotoUrl,
+    message: created.message,
   });
 
   return {
@@ -2823,6 +2865,8 @@ export const requestPartialPayment = async (
     });
   });
 
+  await notifyPaymentRequested(trader.id, paymentRequest);
+
   const alreadyPaidAfter = alreadyPaid;
   const remainingAfter = round2(Math.max(0, jobAmount - alreadyPaidAfter));
   const paymentStatus = resolvePartialPaymentStatus(jobAmount, alreadyPaidAfter, true);
@@ -2923,6 +2967,8 @@ export const requestPayment = async (userId: string, jobId: string) => {
     return pr;
   });
 
+  await notifyPaymentRequested(trader.id, paymentRequest);
+
   return {
     paymentRequestId: paymentRequest.id,
     jobRef: job.jobRef,
@@ -3019,6 +3065,8 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
       currencyCode: currency.currencyCode,
     },
   });
+
+  await notifyPaymentRequested(trader.id, paymentRequest);
 
   return {
     paymentRequestId: paymentRequest.id,

@@ -17,6 +17,8 @@ export const listNotifications = async (
       data: {
         notifications: result.notifications,
         unreadCount: result.meta.unreadCount,
+        unreadByTab: result.meta.unreadByTab,
+        sections: result.sections,
       },
       meta: {
         total: result.meta.total,
@@ -90,7 +92,10 @@ export const markAllAsRead = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await service.markAllUserNotificationsRead(req.user!.id);
+    const data = await service.markAllUserNotificationsRead(
+      req.user!.id,
+      req.query.tab as string | undefined
+    );
     sendResponse({
       res,
       statusCode: 200,
