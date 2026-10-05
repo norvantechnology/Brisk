@@ -256,7 +256,8 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - `OTHER` — cancelled only.
  *
  *       **Card fields**
- *       - `id` (uuid string), `jobRef`, `title`, `status`, `statusLabel`
+ *       - `id` (uuid string), `jobRef`, `title`, `statusLabel`
+ *       - `status` — job status as display text, underscores replaced by spaces (e.g. `IN PROGRESS`, `PAYMENT PENDING`, `PUBLISHED`)
  *       - `date` — "October 24, 2026" (ACTIVE: scheduled/posted day · COMPLETED: finished day · OTHER: cancelled day); `dateAt` ISO
  *       - `provider` — assigned trader name (null until assigned)
  *       - `amount` (number or null) + `amountType`:

@@ -887,7 +887,7 @@ export const listMyJobsByTab = async (
       id: job.id,
       jobRef: job.jobRef,
       title: job.title,
-      status: cancelled ? JobStatus.CANCELLED : job.status,
+      status: (cancelled ? JobStatus.CANCELLED : job.status).replace(/_/g, ' '),
       statusLabel: customerStatusBadgeFor(job.status, job.booking?.status ?? null, job.booking?.finishedAt ?? null),
       date: formatDisplayDay(dateAt),
       dateAt,
