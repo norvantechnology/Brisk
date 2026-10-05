@@ -13,6 +13,8 @@ import {
   customerNotificationsQuerySchema,
   customerOffersQuerySchema,
   customerPaymentsQuerySchema,
+  customerPropertiesQuerySchema,
+  customerPropertyIdParamSchema,
   customerReviewsQuerySchema,
 } from './admin-customer-details.validation';
 
@@ -103,6 +105,156 @@ router.get(
   '/customers/:id/addresses',
   validate(customerAddressesQuerySchema),
   controller.listAddresses
+);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/properties:
+ *   get:
+ *     summary: Customer properties list (Property Details tab)
+ *     description: |
+ *       Customer's saved properties (My Property). `data` is an array; pagination in `meta`.
+ *       Each row: address fields, `fullAddress`, `isPrimary`, `mprnNumber` / `gprnNumber` / `utnNumber`,
+ *       `metersCount`, `activeSubscriptionsCount`, `jobsCount`.
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: search
+ *         description: Property name, address line, city, county or eircode
+ *         schema: { type: string }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [createdAt, propertyName, city], default: createdAt }
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc], default: desc }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer properties retrieved successfully.
+ *               data:
+ *                 - id: 7c1d2e3f-0000-4000-8000-000000000001
+ *                   propertyName: Home
+ *                   label: Home
+ *                   addressId: 8d2e3f40-0000-4000-8000-000000000002
+ *                   addressType: Home
+ *                   houseNumber: '12'
+ *                   addressLine1: Main Street
+ *                   addressLine2: null
+ *                   city: Dublin
+ *                   county: Dublin
+ *                   eircode: D02 X285
+ *                   country: Ireland
+ *                   fullAddress: 12 Main Street, Dublin, Dublin, D02 X285
+ *                   latitude: 53.3498
+ *                   longitude: -6.2603
+ *                   mapImageUrl: null
+ *                   isPrimary: true
+ *                   mprnNumber: '10012345678'
+ *                   gprnNumber: '1234567'
+ *                   utnNumber: null
+ *                   metersCount: 2
+ *                   activeSubscriptionsCount: 2
+ *                   jobsCount: 3
+ *                   createdAt: '2026-09-20T10:00:00.000Z'
+ *                   updatedAt: '2026-09-20T10:00:00.000Z'
+ *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *       404: { description: Customer not found. }
+ */
+router.get(
+  '/customers/:id/properties',
+  validate(customerPropertiesQuerySchema),
+  controller.listProperties
+);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/properties/{propertyId}:
+ *   get:
+ *     summary: Customer property detail
+ *     description: |
+ *       Same fields as the list row plus:
+ *       - `meters[]` — electricity (MPRN) / gas (GPRN) meters with full `readings[]` history (latest first)
+ *       - `subscriptions[]` — utility provider subscriptions (active and cancelled, with `status`)
+ *       - `jobs[]` — jobs posted at this property's address (latest first)
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: propertyId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer property retrieved successfully.
+ *               data:
+ *                 id: 7c1d2e3f-0000-4000-8000-000000000001
+ *                 propertyName: Home
+ *                 fullAddress: 12 Main Street, Dublin, Dublin, D02 X285
+ *                 isPrimary: true
+ *                 mprnNumber: '10012345678'
+ *                 gprnNumber: '1234567'
+ *                 utnNumber: null
+ *                 meters:
+ *                   - id: 9e3f4051-0000-4000-8000-000000000003
+ *                     meterType: electricity
+ *                     referenceLabel: MPRN
+ *                     referenceNumber: '10012345678'
+ *                     serialNumber: null
+ *                     unitLabel: kWh
+ *                     readingsCount: 1
+ *                     readings:
+ *                       - id: a0405162-0000-4000-8000-000000000004
+ *                         value: 15234.5
+ *                         readingDate: '2026-10-01T09:00:00.000Z'
+ *                         status: pending
+ *                         photoUrl: null
+ *                         createdAt: '2026-10-01T09:00:00.000Z'
+ *                 subscriptions:
+ *                   - id: b1516273-0000-4000-8000-000000000005
+ *                     serviceType: electricity
+ *                     serviceLabel: Electricity
+ *                     status: active
+ *                     accountNumber: null
+ *                     provider: { id: c2627384-0000-4000-8000-000000000006, name: Electric Ireland, logoUrl: null, iconUrl: null }
+ *                     createdAt: '2026-09-20T10:00:00.000Z'
+ *                 jobsCount: 1
+ *                 jobs:
+ *                   - id: d3738495-0000-4000-8000-000000000007
+ *                     jobRef: JOB-411A
+ *                     title: Boiler Repair
+ *                     status: COMPLETED
+ *                     scheduledDate: '2026-10-02T00:00:00.000Z'
+ *                     createdAt: '2026-09-28T10:00:00.000Z'
+ *                     trader: { id: e48495a6-0000-4000-8000-000000000008, businessName: Wilson Electrics }
+ *       404: { description: Customer or property not found. }
+ */
+router.get(
+  '/customers/:id/properties/:propertyId',
+  validate(customerPropertyIdParamSchema),
+  controller.getProperty
 );
 
 /**

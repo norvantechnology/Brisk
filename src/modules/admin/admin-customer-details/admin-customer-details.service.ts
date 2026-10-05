@@ -10,6 +10,7 @@ import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
+import { formatAddressLine } from '../../property/property.service';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -211,6 +212,178 @@ export const listCustomerAddresses = async (
       isPrimary: a.isDefault,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
+    })),
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Properties (My Property — address + meters + utility subscriptions)
+// ---------------------------------------------------------------------------
+
+type AdminPropertyRow = Prisma.PropertyGetPayload<{
+  include: { address: true; meters: { select: { meterType: true; mprnGprn: true } } };
+}>;
+
+const serializeAdminPropertySummary = (p: AdminPropertyRow) => {
+  const electricity = p.meters.find((m) => m.meterType === 'electricity');
+  const gas = p.meters.find((m) => m.meterType === 'gas');
+  return {
+    id: p.id,
+    propertyName: p.propertyName,
+    label: p.address?.label ?? p.propertyName,
+    addressId: p.addressId,
+    addressType: p.address?.addressType ?? null,
+    houseNumber: p.address?.houseNumber ?? null,
+    addressLine1: p.addressLine1,
+    addressLine2: p.addressLine2,
+    city: p.city,
+    county: p.county,
+    eircode: p.eircode,
+    country: p.country,
+    fullAddress: formatAddressLine({ ...p, houseNumber: p.address?.houseNumber }),
+    latitude: p.address?.latitude ?? null,
+    longitude: p.address?.longitude ?? null,
+    mapImageUrl: p.address?.mapImageUrl ?? null,
+    isPrimary: p.address?.isDefault ?? false,
+    mprnNumber: p.address?.mprnNumber ?? electricity?.mprnGprn ?? null,
+    gprnNumber: p.address?.gprnNumber ?? gas?.mprnGprn ?? null,
+    utnNumber: p.address?.utnNumber ?? null,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  };
+};
+
+export const listCustomerProperties = async (
+  customerId: string,
+  filters: {
+    page?: string;
+    limit?: string;
+    search?: string;
+    sortBy?: 'createdAt' | 'propertyName' | 'city';
+    sortOrder?: 'asc' | 'desc';
+  }
+) => {
+  await assertCustomerExists(customerId);
+
+  const page = parsePage(filters.page);
+  const limit = parseLimit(filters.limit);
+  const skip = (page - 1) * limit;
+  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+
+  const where: Prisma.PropertyWhereInput = { userId: customerId };
+  if (filters.search?.trim()) {
+    const q = filters.search.trim();
+    where.OR = [
+      { propertyName: { contains: q, mode: 'insensitive' } },
+      { addressLine1: { contains: q, mode: 'insensitive' } },
+      { city: { contains: q, mode: 'insensitive' } },
+      { county: { contains: q, mode: 'insensitive' } },
+      { eircode: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.property.count({ where }),
+    prisma.property.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [filters.sortBy ?? 'createdAt']: sortOrder },
+      include: {
+        address: { include: { _count: { select: { jobs: true } } } },
+        meters: { select: { meterType: true, mprnGprn: true } },
+        _count: { select: { meters: true, subscriptions: { where: { status: 'active' } } } },
+      },
+    }),
+  ]);
+
+  return {
+    meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
+    properties: rows.map((p) => ({
+      ...serializeAdminPropertySummary(p),
+      metersCount: p._count.meters,
+      activeSubscriptionsCount: p._count.subscriptions,
+      jobsCount: p.address?._count.jobs ?? 0,
+    })),
+  };
+};
+
+export const getCustomerProperty = async (customerId: string, propertyId: string) => {
+  await assertCustomerExists(customerId);
+
+  const property = await prisma.property.findFirst({
+    where: { id: propertyId, userId: customerId },
+    include: {
+      address: {
+        include: {
+          jobs: {
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              jobRef: true,
+              title: true,
+              status: true,
+              scheduledDate: true,
+              createdAt: true,
+              trader: { select: { id: true, businessName: true } },
+            },
+          },
+        },
+      },
+      meters: {
+        orderBy: { createdAt: 'asc' },
+        include: { readings: { orderBy: { readingDate: 'desc' } } },
+      },
+      subscriptions: {
+        orderBy: { createdAt: 'asc' },
+        include: { utilityProvider: true },
+      },
+    },
+  });
+  if (!property) throw new NotFoundError('Property not found for this customer.');
+
+  return {
+    ...serializeAdminPropertySummary(property),
+    meters: property.meters.map((m) => ({
+      id: m.id,
+      meterType: m.meterType,
+      referenceLabel: m.meterType === 'electricity' ? 'MPRN' : 'GPRN',
+      referenceNumber: m.mprnGprn,
+      serialNumber: m.serialNumber,
+      unitLabel: m.unitLabel ?? (m.meterType === 'electricity' ? 'kWh' : 'm³'),
+      readingsCount: m.readings.length,
+      readings: m.readings.map((r) => ({
+        id: r.id,
+        value: Number(r.readingValue),
+        readingDate: r.readingDate,
+        status: r.status,
+        photoUrl: r.photoUrl,
+        createdAt: r.createdAt,
+      })),
+    })),
+    subscriptions: property.subscriptions.map((s) => ({
+      id: s.id,
+      serviceType: s.serviceType,
+      serviceLabel: s.utilityProvider.serviceLabel ?? s.serviceType,
+      status: s.status,
+      accountNumber: s.accountNumber,
+      provider: {
+        id: s.utilityProvider.id,
+        name: s.utilityProvider.name,
+        logoUrl: s.utilityProvider.logoUrl,
+        iconUrl: s.utilityProvider.iconUrl ?? s.utilityProvider.logoUrl,
+      },
+      createdAt: s.createdAt,
+    })),
+    jobsCount: property.address?.jobs.length ?? 0,
+    jobs: (property.address?.jobs ?? []).map((j) => ({
+      id: j.id,
+      jobRef: j.jobRef,
+      title: j.title,
+      status: j.status,
+      scheduledDate: j.scheduledDate,
+      createdAt: j.createdAt,
+      trader: j.trader,
     })),
   };
 };

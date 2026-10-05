@@ -57,6 +57,23 @@ export const customerAddressesQuerySchema = z.object({
   }),
 });
 
+export const customerPropertiesQuerySchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid customer ID format.'),
+  }),
+  query: z.object({
+    ...paginationQuery,
+    sortBy: z.enum(['createdAt', 'propertyName', 'city']).optional(),
+  }),
+});
+
+export const customerPropertyIdParamSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid customer ID format.'),
+    propertyId: z.string().uuid('Invalid property ID format.'),
+  }),
+});
+
 export const customerPaymentsQuerySchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid customer ID format.'),

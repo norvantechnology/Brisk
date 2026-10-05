@@ -39,6 +39,43 @@ export const getVerification = async (
   }
 };
 
+export const listProperties = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await service.listCustomerProperties(req.params.id, req.query as any);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer properties retrieved successfully.',
+      data: result.properties,
+      meta: result.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getProperty = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.getCustomerProperty(req.params.id, req.params.propertyId);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer property retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const listAddresses = async (
   req: AuthenticatedAdminRequest,
   res: Response,

@@ -39,7 +39,7 @@ const helpTipByMeterType = (meterType: string) => {
   };
 };
 
-const formatAddressLine = (input: {
+export const formatAddressLine = (input: {
   houseNumber?: string | null;
   addressLine1: string;
   addressLine2?: string | null;
