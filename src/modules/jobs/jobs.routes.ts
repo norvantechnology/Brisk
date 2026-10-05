@@ -8,6 +8,7 @@ import {
   jobFormConfigSchema,
   jobIdParamSchema,
   listJobsSchema,
+  myJobsTabQuerySchema,
   publishJobSchema,
   setJobLocationSchema,
   updateJobSchema,
@@ -238,6 +239,142 @@ router.get(
  */
 router.post('/', ...customerOnly, validate(createJobSchema), controller.createJob);
 router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
+
+/**
+ * @swagger
+ * /jobs/mine:
+ *   get:
+ *     summary: My Jobs screen — ACTIVE / COMPLETED / OTHER tabs (card rows)
+ *     tags: ['Customer / Jobs']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Tabs**
+ *       - `ACTIVE` — posted jobs not finished: awaiting/quoted, accepted, scheduled, in progress,
+ *         payment pending (site-visit reschedule stays here). Drafts excluded (use `GET /jobs?status=DRAFT`).
+ *       - `COMPLETED` — status COMPLETED.
+ *       - `OTHER` — cancelled only.
+ *
+ *       **Card fields**
+ *       - `id` (uuid string), `jobRef`, `title`, `status`, `statusLabel`
+ *       - `date` — display text (ACTIVE: scheduled/posted day · COMPLETED: "Finished on …" · OTHER: "Cancelled on …"); `dateAt` ISO
+ *       - `provider` — assigned trader name (null until assigned)
+ *       - `amount` (number or null) + `amountType`:
+ *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
+ *         `Charges` (paid total) · `Refunded` (completed refunds)
+ *       - `currencyCode`, `currencySymbol`
+ *       - `downloadUrl` — invoice PDF path once the trader finished the job, else null
+ *     parameters:
+ *       - in: query
+ *         name: tab
+ *         schema: { type: string, enum: [ACTIVE, COMPLETED, OTHER], default: ACTIVE }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *     responses:
+ *       200:
+ *         description: Card rows for the tab.
+ *         content:
+ *           application/json:
+ *             examples:
+ *               active:
+ *                 summary: tab=ACTIVE
+ *                 value:
+ *                   success: true
+ *                   message: My jobs retrieved successfully.
+ *                   data:
+ *                     tab: ACTIVE
+ *                     items:
+ *                       - id: 3f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f
+ *                         jobRef: JOB-411A
+ *                         title: Boiler Repair
+ *                         status: SCHEDULED
+ *                         statusLabel: Active
+ *                         date: 24 Oct 2026
+ *                         dateAt: '2026-10-24T00:00:00.000Z'
+ *                         provider: "Liam O'Connor Plumbing"
+ *                         amount: 140
+ *                         amountType: Estimated
+ *                         currencyCode: EUR
+ *                         currencySymbol: €
+ *                         downloadUrl: null
+ *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
+ *               completed:
+ *                 summary: tab=COMPLETED
+ *                 value:
+ *                   success: true
+ *                   message: My jobs retrieved successfully.
+ *                   data:
+ *                     tab: COMPLETED
+ *                     items:
+ *                       - id: 7a2d4c6e-2b3c-4d5e-8f90-1a2b3c4d5e6f
+ *                         jobRef: JOB-2B7C
+ *                         title: Leakage & Sink Repair
+ *                         status: COMPLETED
+ *                         statusLabel: Completed
+ *                         date: 'Finished on Oct 2, 2026 • 3:15 PM'
+ *                         dateAt: '2026-10-02T15:15:00.000Z'
+ *                         provider: Mark Wilson
+ *                         amount: 144
+ *                         amountType: Charges
+ *                         currencyCode: EUR
+ *                         currencySymbol: €
+ *                         downloadUrl: /jobs/7a2d4c6e-2b3c-4d5e-8f90-1a2b3c4d5e6f/invoice/download
+ *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
+ *               other:
+ *                 summary: tab=OTHER (cancelled)
+ *                 value:
+ *                   success: true
+ *                   message: My jobs retrieved successfully.
+ *                   data:
+ *                     tab: OTHER
+ *                     items:
+ *                       - id: 9c4e6a8b-3c4d-4e5f-9a01-2b3c4d5e6f70
+ *                         jobRef: JOB-9D1E
+ *                         title: Rewiring
+ *                         status: CANCELLED
+ *                         statusLabel: Cancelled
+ *                         date: 'Cancelled on Sep 28, 2026 • 11:02 AM'
+ *                         dateAt: '2026-09-28T11:02:00.000Z'
+ *                         provider: null
+ *                         amount: 50
+ *                         amountType: Refunded
+ *                         currencyCode: EUR
+ *                         currencySymbol: €
+ *                         downloadUrl: null
+ *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
+ */
+router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.listMyJobsByTab);
+
+/**
+ * @swagger
+ * /jobs/{id}/invoice/download:
+ *   get:
+ *     summary: Download job invoice PDF (My Jobs downloadUrl)
+ *     tags: ['Customer / Jobs']
+ *     security:
+ *       - bearerAuth: []
+ *     description: Returns `application/pdf` once the trader has finished the job. Same invoice as the trader copy.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: PDF file.
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       400:
+ *         description: Job not finished yet.
+ *       404:
+ *         description: Job not found.
+ */
+router.get('/:id/invoice/download', ...customerOnly, validate(jobIdParamSchema), controller.downloadJobInvoice);
 
 /**
  * @swagger

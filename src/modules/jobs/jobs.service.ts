@@ -749,6 +749,160 @@ export const listJobs = async (customerId: string, status?: JobStatus) => {
   return { jobs: jobs.map(serializeJob) };
 };
 
+export type CustomerJobsTab = 'ACTIVE' | 'COMPLETED' | 'OTHER';
+
+const CUSTOMER_CANCELLED_WHERE: Prisma.JobWhereInput = {
+  OR: [{ status: JobStatus.CANCELLED }, { booking: { is: { status: BookingStatus.CANCELLED } } }],
+};
+
+/** ACTIVE = posted and not finished (incl. site-visit reschedule, payment pending); OTHER = cancelled only. */
+const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
+  if (tab === 'COMPLETED') return { status: JobStatus.COMPLETED, NOT: CUSTOMER_CANCELLED_WHERE };
+  if (tab === 'OTHER') return CUSTOMER_CANCELLED_WHERE;
+  return {
+    status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] },
+    NOT: CUSTOMER_CANCELLED_WHERE,
+  };
+};
+
+const formatDisplayDay = (date: Date) =>
+  date.toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/** Customer My Jobs tabs — card rows (title, status, date, provider, amount, invoice link). */
+export const listMyJobsByTab = async (
+  customerId: string,
+  query: { tab: CustomerJobsTab; page: number; limit: number }
+) => {
+  const where: Prisma.JobWhereInput = { customerId, ...customerTabWhere(query.tab) };
+  const [total, jobs] = await Promise.all([
+    prisma.job.count({ where }),
+    prisma.job.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+      select: {
+        id: true,
+        jobRef: true,
+        title: true,
+        status: true,
+        traderId: true,
+        serviceCharge: true,
+        minBudget: true,
+        maxBudget: true,
+        scheduledDate: true,
+        createdAt: true,
+        updatedAt: true,
+        trader: { select: { businessName: true, user: { select: { fullName: true } } } },
+        quotes: {
+          where: { status: QuoteStatus.ACCEPTED },
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+          select: { quotedAmount: true, currencyCode: true },
+        },
+        booking: {
+          select: {
+            status: true,
+            finishedAt: true,
+            invoice: {
+              select: {
+                status: true,
+                totalAmount: true,
+                currencyCode: true,
+                payments: {
+                  select: { refunds: { where: { status: 'COMPLETED' }, select: { refundAmount: true } } },
+                },
+              },
+            },
+          },
+        },
+        paymentRequests: {
+          where: { status: { in: ['PAID', 'SENT'] } },
+          select: { status: true, totalAmount: true, currencyCode: true },
+        },
+      },
+    }),
+  ]);
+
+  const currencyCodes = new Set<string>(['EUR']);
+  const rows = jobs.map((job) => {
+    const invoice = job.booking?.invoice ?? null;
+    const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
+    const finished = job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt);
+
+    const refunded = round2(
+      (invoice?.payments ?? []).reduce(
+        (sum, p) => sum + p.refunds.reduce((s, r) => s + money(r.refundAmount), 0),
+        0
+      )
+    );
+    const paidRequests = job.paymentRequests.filter((p) => p.status === 'PAID');
+    const charged = round2(
+      (invoice && invoice.status !== InvoiceStatus.UNPAID ? money(invoice.totalAmount) : 0) +
+        paidRequests.reduce((s, p) => s + money(p.totalAmount), 0)
+    );
+    const due = round2(
+      job.paymentRequests.filter((p) => p.status === 'SENT').reduce((s, p) => s + money(p.totalAmount), 0)
+    );
+    const estimate =
+      (job.quotes[0] ? money(job.quotes[0].quotedAmount) : null) ??
+      (job.serviceCharge != null ? money(job.serviceCharge) : null) ??
+      (job.maxBudget != null ? money(job.maxBudget) : job.minBudget != null ? money(job.minBudget) : null);
+
+    let amount: number | null = estimate;
+    let amountType: 'Charges' | 'Refunded' | 'Amount Due' | 'Estimated' | null = estimate != null ? 'Estimated' : null;
+    if (refunded > 0) {
+      amount = refunded;
+      amountType = 'Refunded';
+    } else if (due > 0 && !cancelled) {
+      amount = due;
+      amountType = 'Amount Due';
+    } else if (charged > 0) {
+      amount = charged;
+      amountType = 'Charges';
+    }
+
+    const currencyCode =
+      invoice?.currencyCode ?? job.paymentRequests[0]?.currencyCode ?? job.quotes[0]?.currencyCode ?? 'EUR';
+    currencyCodes.add(currencyCode);
+
+    const dateAt = cancelled
+      ? job.updatedAt
+      : finished
+        ? (job.booking?.finishedAt ?? job.updatedAt)
+        : (job.scheduledDate ?? job.createdAt);
+
+    return {
+      id: job.id,
+      jobRef: job.jobRef,
+      title: job.title,
+      status: cancelled ? JobStatus.CANCELLED : job.status,
+      statusLabel: customerStatusBadgeFor(job.status, job.booking?.status ?? null, job.booking?.finishedAt ?? null),
+      date: cancelled
+        ? formatOutcomeDateLabel(dateAt, 'CANCELLED')
+        : finished
+          ? formatOutcomeDateLabel(dateAt, 'COMPLETED')
+          : formatDisplayDay(dateAt),
+      dateAt,
+      provider: job.trader ? job.trader.businessName || job.trader.user.fullName : null,
+      amount,
+      amountType,
+      currencyCode,
+      downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
+    };
+  });
+
+  const symbols = new Map(
+    await Promise.all([...currencyCodes].map(async (c) => [c, (await getCurrencyMeta(c)).symbol] as const))
+  );
+
+  return {
+    tab: query.tab,
+    items: rows.map((r) => ({ ...r, currencySymbol: symbols.get(r.currencyCode) ?? r.currencyCode })),
+    meta: { total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) },
+  };
+};
+
 export const getJob = async (customerId: string, jobId: string) => {
   const job = await getOwnedJob(customerId, jobId);
   return serializeJob(job);

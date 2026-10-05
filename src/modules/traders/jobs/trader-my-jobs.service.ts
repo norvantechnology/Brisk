@@ -3246,8 +3246,21 @@ export const declineIncomingJob = async (userId: string, jobId: string) => {
  */
 export const downloadJobInvoicePdf = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
-  const job = await assertMyJob(trader.id, jobId);
+  return buildJobInvoicePdf(await assertMyJob(trader.id, jobId));
+};
 
+/** Customer copy of the same invoice PDF (My Jobs `downloadUrl`). */
+export const downloadCustomerJobInvoicePdf = async (customerId: string, jobId: string) => {
+  const owned = await prisma.job.findFirst({
+    where: { id: jobId, customerId },
+    select: { traderId: true },
+  });
+  if (!owned) throw new NotFoundError('Job not found.');
+  if (!owned.traderId) throw new BadRequestError('Invoice is available after the job is finished.');
+  return buildJobInvoicePdf(await assertMyJob(owned.traderId, jobId));
+};
+
+const buildJobInvoicePdf = async (job: Awaited<ReturnType<typeof assertMyJob>>) => {
   if (!job.booking?.finishedAt && job.status !== JobStatus.COMPLETED && job.status !== JobStatus.PAYMENT_PENDING) {
     throw new BadRequestError('Invoice is available after the job is finished.');
   }

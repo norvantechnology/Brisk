@@ -3,6 +3,7 @@ import { JobStatus } from '@prisma/client';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import * as jobsService from './jobs.service';
+import { downloadCustomerJobInvoicePdf } from '../traders/jobs/trader-my-jobs.service';
 
 export const createJob = async (
   req: AuthenticatedRequest,
@@ -17,6 +18,45 @@ export const createJob = async (
       message: 'Job draft created successfully.',
       data,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listMyJobsByTab = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await jobsService.listMyJobsByTab(
+      req.user!.id,
+      req.query as unknown as { tab: jobsService.CustomerJobsTab; page: number; limit: number }
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'My jobs retrieved successfully.',
+      data: { tab: result.tab, items: result.items },
+      meta: result.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Streams invoice PDF — Content-Type application/pdf (not JSON). */
+export const downloadJobInvoice = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { buffer, filename } = await downloadCustomerJobInvoicePdf(req.user!.id, req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.status(200).send(buffer);
   } catch (error) {
     next(error);
   }
