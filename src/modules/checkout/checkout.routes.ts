@@ -316,7 +316,7 @@ router.post(
  * /payments/{id}/receipt:
  *   get:
  *     summary: Get payment receipt (Payment Successful screen)
- *     tags: ['Customer / Checkout']
+ *     tags: ['Customer / My Job', 'Customer / Checkout']
  *     security:
  *       - bearerAuth: []
  *     description: |

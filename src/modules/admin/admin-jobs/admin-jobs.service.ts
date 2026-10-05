@@ -8,11 +8,12 @@ import {
   getAdminJobDetail,
 } from '../admin-customer-details/admin-customer-details.service';
 import { pushUserNotification } from '../../../sockets/realtime';
-import type {
-  AdminDisputesListQuery,
-  AdminJobFilters,
-  AdminJobsListQuery,
-  AdminUpdateDisputeInput,
+import {
+  ADMIN_DISPUTE_STATUSES,
+  type AdminDisputesListQuery,
+  type AdminJobFilters,
+  type AdminJobsListQuery,
+  type AdminUpdateDisputeInput,
 } from './admin-jobs.validation';
 
 export const ADMIN_JOB_STATUS_LABELS: Record<JobStatus, string> = {
@@ -341,7 +342,9 @@ export const listAdminDisputes = async (query: AdminDisputesListQuery) => {
 
   return {
     items: rows.map(serializeAdminDispute),
-    stats: Object.fromEntries(byStatus.map((s) => [s.status, s._count._all])),
+    stats: Object.fromEntries(
+      ADMIN_DISPUTE_STATUSES.map((status) => [status, byStatus.find((s) => s.status === status)?._count._all ?? 0])
+    ),
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
   };
 };

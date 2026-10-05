@@ -312,7 +312,10 @@ router.get('/jobs/:id/site-visits', validate(adminJobIdParamSchema), controller.
  * /admin/disputes:
  *   get:
  *     summary: List customer-reported job disputes
- *     description: Disputes created from the customer app (`POST /jobs/{id}/disputes`). `data.stats` holds counts per status.
+ *     description: |
+ *       Disputes created from the customer app (`POST /jobs/{id}/disputes`), newest first.
+ *       `data.items[]` = disputes, `data.stats` = count per status (all four keys always present, ignores filters),
+ *       `meta` = pagination. Status values have no underscores (`IN_REVIEW` in the query is accepted and treated as `IN REVIEW`).
  *     tags: ['Admin / Disputes']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -326,7 +329,17 @@ router.get('/jobs/:id/site-visits', validate(adminJobIdParamSchema), controller.
  *       - { in: query, name: page, schema: { type: integer, default: 1 } }
  *       - { in: query, name: limit, schema: { type: integer, default: 10 } }
  *     responses:
- *       200: { description: "data: { items, stats }, meta: pagination" }
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Disputes retrieved successfully.
+ *               data:
+ *                 items:
+ *                   - { id: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeRef: DSP-E005ED, reason: Poor Quality of Work, description: Drain blocked again next day., evidenceUrls: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/1788858205135-jv3bvmnx.jpg'], status: OPEN, adminNote: null, resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:30:23.884Z', job: { id: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, title: Blocked kitchen drain, status: PAYMENT PENDING, statusLabel: Payment Pending }, customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, fullName: Brisk Customer, email: briskcustomer@gmail.com, mobileNumber: '+353871234567', profilePhotoUrl: null }, trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, traderCode: TRD-0001, businessName: Brisk Trader, fullName: Brisk Trader, profilePhotoUrl: null } }
+ *                 stats: { OPEN: 1, IN REVIEW: 0, RESOLVED: 0, REJECTED: 0 }
+ *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  */
 router.get('/disputes', validate(adminDisputesListQuerySchema), controller.listDisputes);
 
@@ -340,11 +353,20 @@ router.get('/disputes', validate(adminDisputesListQuerySchema), controller.listD
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: Dispute detail with job, customer and trader. }
+ *       200:
+ *         description: Dispute detail with job, customer and trader (same shape as a list item).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Dispute retrieved successfully.
+ *               data: { id: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeRef: DSP-E005ED, reason: Poor Quality of Work, description: Drain blocked again next day., evidenceUrls: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/1788858205135-jv3bvmnx.jpg'], status: OPEN, adminNote: null, resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:30:23.884Z', job: { id: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, title: Blocked kitchen drain, status: PAYMENT PENDING, statusLabel: Payment Pending }, customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, fullName: Brisk Customer, email: briskcustomer@gmail.com, mobileNumber: '+353871234567', profilePhotoUrl: null }, trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, traderCode: TRD-0001, businessName: Brisk Trader, fullName: Brisk Trader, profilePhotoUrl: null } }
  *       404: { description: Dispute not found. }
  *   patch:
  *     summary: Update dispute status / admin note
- *     description: Status change notifies the customer (`DISPUTE_UPDATE`). RESOLVED / REJECTED set `resolvedAt`.
+ *     description: |
+ *       Send `status` and/or `adminNote` (at least one). A status change notifies the customer (`DISPUTE_UPDATE`,
+ *       admin note used as the message). `RESOLVED` / `REJECTED` set `resolvedAt`; moving back to `OPEN` / `IN REVIEW` clears it.
  *     tags: ['Admin / Disputes']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -356,10 +378,18 @@ router.get('/disputes', validate(adminDisputesListQuerySchema), controller.listD
  *           schema:
  *             type: object
  *             properties:
- *               status: { type: string, enum: [OPEN, IN REVIEW, RESOLVED, REJECTED] }
- *               adminNote: { type: string, maxLength: 5000, nullable: true }
+ *               status: { type: string, enum: [OPEN, IN REVIEW, RESOLVED, REJECTED], example: IN REVIEW }
+ *               adminNote: { type: string, maxLength: 5000, nullable: true, example: Checking with the trader. }
  *     responses:
- *       200: { description: Updated dispute. }
+ *       200:
+ *         description: Updated dispute (same shape as detail).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Dispute updated successfully.
+ *               data: { id: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeRef: DSP-E005ED, reason: Poor Quality of Work, description: Drain blocked again next day., evidenceUrls: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/1788858205135-jv3bvmnx.jpg'], status: IN REVIEW, adminNote: Checking with the trader., resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:30:23.884Z', job: { id: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, title: Blocked kitchen drain, status: PAYMENT PENDING, statusLabel: Payment Pending }, customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, fullName: Brisk Customer, email: briskcustomer@gmail.com, mobileNumber: '+353871234567', profilePhotoUrl: null }, trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, traderCode: TRD-0001, businessName: Brisk Trader, fullName: Brisk Trader, profilePhotoUrl: null } }
+ *       400: { description: Invalid status, or neither status nor adminNote sent. }
  *       404: { description: Dispute not found. }
  */
 router.get('/disputes/:id', validate(adminDisputeIdParamSchema), controller.getDispute);

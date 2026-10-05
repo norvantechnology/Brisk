@@ -250,7 +250,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  * /jobs/mine:
  *   get:
  *     summary: My Jobs screen — ACTIVE / COMPLETED / OTHER tabs (card rows)
- *     tags: ['Customer / Jobs']
+ *     tags: ['Customer / My Job', 'Customer / Jobs']
  *     security:
  *       - bearerAuth: []
  *     description: |
@@ -354,7 +354,7 @@ router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.
  * /jobs/{id}/invoice/download:
  *   get:
  *     summary: Download job invoice PDF (My Jobs downloadUrl)
- *     tags: ['Customer / Jobs']
+ *     tags: ['Customer / My Job', 'Customer / Jobs']
  *     security:
  *       - bearerAuth: []
  *     description: Returns `application/pdf` once the trader has finished the job. Same invoice as the trader copy.
@@ -443,12 +443,110 @@ router.get('/:id/invoice/download', ...customerOnly, validate(jobIdParamSchema),
  *         description: Job / category / trader not found.
  */
 router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJob);
+
+/**
+ * @swagger
+ * /jobs/{id}/completed:
+ *   get:
+ *     summary: Completed Job Details — completion, work photos, address, payment breakdown
+ *     tags: ['Customer / My Job', 'Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       For a job the trader has finished (`COMPLETED`, or `PAYMENT PENDING` while the final payment is due).
+ *
+ *       - `completedAt` / `formattedCompletedDate` = when the trader finished; `startedAt` = arrival;
+ *         `durationMinutes` = real time on site; `estimatedDuration` = customer estimate from Post Job.
+ *       - `completionPhotos` = work-proof photos uploaded by the trader.
+ *       - `paymentSummary` comes from the real invoice + trader payment requests:
+ *         `serviceFee`, `processingFee`, `discount`, `vatPercentage`, `vatAmount`, `totalPaid`, `amountDue`,
+ *         `paymentStatus` (`UNPAID` | `PENDING` | `PAID` | `REFUNDED` | `CANCELLED`), `cardBrand`, `cardLast4` (latest card used).
+ *         `baseRate` / `platformFee` / `offerApplied` / `netPayout` are legacy keys kept for older builds.
+ *       - Invoice PDF: `downloadUrl` (= `GET /jobs/{id}/invoice/download`). Receipt JSON: `receiptUrl`
+ *         (= `GET /payments/{paymentId}/receipt`, null until a card payment exists).
+ *       - `canReview` = show the Rate & Review button (`POST /jobs/{id}/review`).
+ *       Status values never contain underscores.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Completed job details fetched successfully.
+ *               data:
+ *                 id: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                 jobRef: '#JOB-1EA2'
+ *                 title: Blocked kitchen drain
+ *                 category: DRAINAGE & SEWER UNBLOCKING
+ *                 status: PAYMENT PENDING
+ *                 statusBadge: Awaiting Payout
+ *                 completedAt: '2026-10-05T13:30:23.583Z'
+ *                 cancelledAt: null
+ *                 cancellationReason: null
+ *                 formattedCompletedDate: 'Finished on Oct 5, 2026 • 1:30 PM'
+ *                 startedAt: '2026-10-05T12:45:10.517Z'
+ *                 durationMinutes: 45
+ *                 estimatedDuration: 1-2 hours
+ *                 address: { fullAddress: "1 O'Connell Street", city: Dublin, eircode: D01 F5P2, latitude: 53.3498, longitude: -6.2603 }
+ *                 trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, name: Brisk Trader, location: 'Dublin, Ireland', avatar: 'https://api.brisk.ie/uploads/files/profile_photo/2380d295-fef3-4365-bb81-1ecfb9b3ec8c/1789385663121-r131zvpo.jpg', conversationId: 89d85512-3ff7-4fc7-a44a-2e594130d71c }
+ *                 review: null
+ *                 completionPhotos: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/1788858205135-jv3bvmnx.jpg']
+ *                 paymentSummary: { serviceFee: 150, processingFee: 10, discount: 0, vatPercentage: 20, vatAmount: 32, totalPaid: 0, amountDue: 192, paymentStatus: PENDING, cardBrand: null, cardLast4: null, baseRate: 150, platformFee: 10, offerApplied: 0, netPayout: 192 }
+ *                 invoiceId: null
+ *                 invoiceNumber: null
+ *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
+ *                 invoiceUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
+ *                 receiptUrl: null
+ *                 canReview: true
+ *       400: { description: Job is not completed. }
+ *       404: { description: Job not found }
+ */
 router.get(
   '/:id/completed',
   ...customerOnly,
   validate(jobIdParamSchema),
   controller.getCompletedJobDetail
 );
+
+/**
+ * @swagger
+ * /jobs/{id}/cancelled:
+ *   get:
+ *     summary: Cancelled job detail (with cancellation reason)
+ *     tags: ['Customer / My Job', 'Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Same shape as `GET /jobs/{id}/completed`. `cancelledAt` and `cancellationReason` come from
+ *       `POST /jobs/{id}/cancel` (`reason`). `paymentSummary` shows anything paid / refunded before cancelling.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Cancelled job details fetched successfully.
+ *               data:
+ *                 id: 3db751e8-7170-45f2-984a-cebbd9204549
+ *                 jobRef: '#JOB-7C21'
+ *                 title: Boiler not heating
+ *                 category: BOILER & HEATING REPAIR
+ *                 status: CANCELLED
+ *                 statusBadge: Cancelled
+ *                 completedAt: null
+ *                 cancelledAt: '2026-10-05T13:30:24.410Z'
+ *                 cancellationReason: Found another trader
+ *                 formattedCompletedDate: 'Cancelled on Oct 5, 2026 • 1:30 PM'
+ *                 trader: null
+ *                 completionPhotos: []
+ *                 paymentSummary: { serviceFee: 0, processingFee: 0, discount: 0, vatPercentage: 0, vatAmount: 0, totalPaid: 0, amountDue: 0, paymentStatus: UNPAID, cardBrand: null, cardLast4: null }
+ *                 downloadUrl: null
+ *                 canReview: false
+ *       400: { description: Job is not cancelled. }
+ *       404: { description: Job not found }
+ */
 router.get(
   '/:id/cancelled',
   ...customerOnly,
@@ -633,7 +731,7 @@ router.post(
  * /jobs/{id}/quotes:
  *   get:
  *     summary: Quotations received for my job (compare traders)
- *     tags: ['Customer / Jobs']
+ *     tags: ['Customer / My Job', 'Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       All trader quotations for the job, newest request first. Accept one with
@@ -656,10 +754,53 @@ router.post(
  *     responses:
  *       200:
  *         description: |
- *           `jobId`, `jobStatus`, `assignedTraderId`, `awaitingTraderConfirmation`, `quotes[]`
- *           (id, amount, currencyCode, currencySymbol, notes, estimatedDays, status, selectionStatus,
- *           canAccept, requestedAt, createdAt, trader{id, displayName, fullName, profilePhotoUrl,
+ *           `jobId`, `jobStatus`, `assignedTraderId`, `awaitingTraderConfirmation`, `job{}`, `quotes[]`
+ *           (id/quoteId, amount, currencyCode, currencySymbol, notes (= trader message), estimatedDays, status,
+ *           selectionStatus, canAccept, requestedAt, createdAt, trader{id, displayName, fullName, profilePhotoUrl,
  *           avgRating, reviewsCount, topRated, isVerified, yearsExperience, city}).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Quotations fetched successfully.
+ *               data:
+ *                 jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                 jobStatus: PUBLISHED
+ *                 assignedTraderId: null
+ *                 awaitingTraderConfirmation: false
+ *                 job:
+ *                   id: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                   jobRef: JOB-1EA2
+ *                   title: Blocked kitchen drain
+ *                   description: Kitchen sink drain is fully blocked.
+ *                   status: PUBLISHED
+ *                   category: { id: 3f0f23dd-dfa2-4606-9eed-acdc22534f0f, name: Plumbing Services }
+ *                   subcategory: { id: ef44f8c8-bed2-43e7-b12b-f3d1357f5926, name: Drainage & Sewer Unblocking }
+ *                 quotes:
+ *                   - id: c631f7cc-c964-4cfa-8617-3f3d5b660055
+ *                     quoteId: c631f7cc-c964-4cfa-8617-3f3d5b660055
+ *                     jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                     amount: 150
+ *                     currencyCode: EUR
+ *                     currencySymbol: €
+ *                     notes: Can unblock the drain tomorrow morning.
+ *                     estimatedDays: null
+ *                     status: PENDING
+ *                     selectionStatus: PENDING
+ *                     canAccept: true
+ *                     requestedAt: null
+ *                     createdAt: '2026-10-05T13:30:23.247Z'
+ *                     trader:
+ *                       id: adabc55c-6d7d-4b12-8597-6d26366c26bf
+ *                       displayName: Brisk Trader
+ *                       fullName: Brisk Trader
+ *                       profilePhotoUrl: 'https://api.brisk.ie/uploads/files/profile_photo/2380d295-fef3-4365-bb81-1ecfb9b3ec8c/1789385663121-r131zvpo.jpg'
+ *                       avgRating: 4.75
+ *                       reviewsCount: 4
+ *                       topRated: false
+ *                       isVerified: true
+ *                       yearsExperience: 1
+ *                       city: Dublin
  *       404:
  *         description: Job not found
  */
@@ -670,7 +811,7 @@ router.get('/:id/quotes', ...customerOnly, validate(jobIdParamSchema), controlle
  * /jobs/{id}/quotes/{quoteId}/accept:
  *   post:
  *     summary: Accept trader quotation (customer) — trader must then confirm
- *     tags: ['Customer / Jobs']
+ *     tags: ['Customer / My Job', 'Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       Marks the quote ACCEPTED and sends `job:accept` to that trader (bottom sheet with
@@ -749,7 +890,7 @@ router.post(
  * /jobs/{id}/cancel:
  *   post:
  *     summary: Cancel a job (customer)
- *     tags: ['Customer / Jobs']
+ *     tags: ['Customer / My Job', 'Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       Sets `status=CANCELLED` (and booking if present), saves the optional `reason`, and cancels
@@ -770,11 +911,20 @@ router.post(
  *               reason: { type: string, maxLength: 1000, example: Found another provider }
  *     responses:
  *       200:
- *         description: Job cancelled — `data.status=CANCELLED`, `data.statusBadge=Cancelled`
+ *         description: Job cancelled — `data` is the job detail (same as `GET /jobs/{id}`). Details screen → `GET /jobs/{id}/cancelled`.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job cancelled successfully.
+ *               data: { id: 3db751e8-7170-45f2-984a-cebbd9204549, jobRef: JOB-7C21, title: Boiler not heating, status: CANCELLED, statusBadge: Cancelled }
  *       400:
- *         description: Completed or paid job
+ *         description: |
+ *           `Finished jobs cannot be cancelled. Use Report an Issue instead.` ·
+ *           `Paid jobs cannot be cancelled here. Contact support for refunds.` ·
+ *           `Jobs with a completed payment cannot be cancelled here. Contact support for refunds.`
  *       409:
- *         description: Already cancelled
+ *         description: Job is already cancelled.
  */
 router.post('/:id/cancel', ...customerOnly, validate(cancelJobSchema), controller.cancelJob);
 
@@ -920,8 +1070,21 @@ router.get('/:id/progress', ...customerOnly, validate(jobIdParamSchema), control
  *               serviceCategoryId: { type: string, format: uuid }
  *               serviceSubcategoryId: { type: string, format: uuid, nullable: true }
  *     responses:
- *       200: { description: Rescheduled — job progress payload }
- *       400: { description: Past date, trader already arrived, cancelled/completed job, or service change after quotes }
+ *       200:
+ *         description: Rescheduled — `data` is the full `GET /jobs/{id}/progress` payload (new `date`, `timeSlot`, `scheduledDate`).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job rescheduled successfully.
+ *               data: { jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, bookingId: 5a6b7c8d-0000-4000-8000-000000000002, status: SCHEDULED, scheduledDate: '2026-10-10T00:00:00.000Z', date: 'October 10, 2026', timeSlot: AFTERNOON, milestones: [], actions: { canCancel: true, canReschedule: true, canReview: false, canReportIssue: true, hasActiveDispute: false } }
+ *       400:
+ *         description: |
+ *           `Please choose today or a future date.` ·
+ *           `The trader has already started this job, so it can no longer be rescheduled.` ·
+ *           `Cancelled jobs cannot be rescheduled.` ·
+ *           `The service cannot be changed after quotations are received. Only the date and time can be rescheduled.`
+ *       404: { description: Job not found }
  */
 router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), controller.rescheduleJob);
 
@@ -1001,7 +1164,16 @@ router.post('/:id/review', ...customerOnly, validate(jobReviewSchema), controlle
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: '`data` is an array of disputes (same shape as POST response)' }
+ *       200:
+ *         description: '`data` is an array of disputes (same shape as POST response)'
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job disputes retrieved successfully.
+ *               data:
+ *                 - { id: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeId: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeRef: DSP-E005ED, jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, jobTitle: Blocked kitchen drain, reason: Poor Quality of Work, description: Drain blocked again next day., evidenceUrls: [], status: IN REVIEW, adminNote: Checking with trader., resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:31:02.120Z' }
+ *       404: { description: Job not found }
  */
 router.post('/:id/disputes', ...customerOnly, validate(createJobDisputeSchema), controller.createJobDispute);
 router.get('/:id/disputes', ...customerOnly, validate(jobIdParamSchema), controller.listJobDisputes);
