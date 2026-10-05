@@ -2232,10 +2232,13 @@ export const confirmQuoteAssignment = async (params: {
     });
   }
 
-  const traderUser = await prisma.trader.findUnique({
-    where: { id: quote.traderId },
-    select: { userId: true },
-  });
+  const alreadySelected = quote.status === QuoteStatus.ACCEPTED;
+  const traderUser = alreadySelected
+    ? null
+    : await prisma.trader.findUnique({
+        where: { id: quote.traderId },
+        select: { userId: true },
+      });
   if (traderUser) {
     const sheet = await getIncomingForQuote(traderUser.userId, quote.id);
     if (sheet) emitJobAccept(traderUser.userId, { ...sheet, at });

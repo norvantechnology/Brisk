@@ -288,7 +288,7 @@ const serializeAdminDispute = (d: Prisma.JobDisputeGetPayload<{ include: typeof 
   resolvedAt: d.resolvedAt,
   createdAt: d.createdAt,
   updatedAt: d.updatedAt,
-  job: { ...d.job, statusLabel: ADMIN_JOB_STATUS_LABELS[d.job.status] },
+  job: { ...d.job, status: d.job.status.replace(/_/g, ' '), statusLabel: ADMIN_JOB_STATUS_LABELS[d.job.status] },
   customer: d.customer,
   trader: d.trader
     ? {
