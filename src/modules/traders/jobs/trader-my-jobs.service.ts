@@ -527,6 +527,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
   if (cancelled) {
     return {
       canArrive: false,
+      canMarkFinished: false,
       canFinish: false,
       canAddMaterials: false,
       canSubmitQuote: false,
@@ -575,6 +576,9 @@ const buildActions = (job: MyJobRow, traderId: string) => {
     (job.status === JobStatus.ACCEPTED ||
       job.status === JobStatus.SCHEDULED ||
       job.status === JobStatus.IN_PROGRESS);
+  /** Arrived, not finished → open Job Progress (proof upload + Submit). `canFinish` also needs proof. */
+  const canMarkFinished =
+    Boolean(booking) && booking?.traderId === traderId && bookingArrived && !bookingFinished;
   const canFinish =
     Boolean(booking) &&
     booking?.traderId === traderId &&
@@ -629,6 +633,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
 
   return {
     canArrive,
+    canMarkFinished,
     canFinish,
     canAddMaterials,
     canSubmitQuote,

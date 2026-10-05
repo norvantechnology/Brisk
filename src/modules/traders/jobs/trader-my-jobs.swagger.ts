@@ -148,9 +148,12 @@
  *         canArrive:
  *           type: boolean
  *           description: true → show I Have Arrived; POST .../arrive
+ *         canMarkFinished:
+ *           type: boolean
+ *           description: true after I Have Arrived until the job is finished → enable Mark as Finished (opens Job Progress / proof upload)
  *         canFinish:
  *           type: boolean
- *           description: true → show Finish Job; POST .../finish
+ *           description: true → arrived + at least one proof photo uploaded; POST .../finish
  *         canAddMaterials:
  *           type: boolean
  *           description: true → allow materials APIs
