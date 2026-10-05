@@ -7,7 +7,13 @@ import {
   getAdminJobChatThread,
   getAdminJobDetail,
 } from '../admin-customer-details/admin-customer-details.service';
-import type { AdminJobFilters, AdminJobsListQuery } from './admin-jobs.validation';
+import { pushUserNotification } from '../../../sockets/realtime';
+import type {
+  AdminDisputesListQuery,
+  AdminJobFilters,
+  AdminJobsListQuery,
+  AdminUpdateDisputeInput,
+} from './admin-jobs.validation';
 
 export const ADMIN_JOB_STATUS_LABELS: Record<JobStatus, string> = {
   DRAFT: 'Draft',
@@ -258,6 +264,122 @@ export const getAdminJob = async (jobId: string) => {
 
 export const getAdminJobChat = (jobId: string, query: { page?: number; limit?: number }) =>
   getAdminJobChatThread({ id: jobId }, query);
+
+// ---------------------------------------------------------------------------
+// Disputes (customer "Report an Issue")
+// ---------------------------------------------------------------------------
+
+const DISPUTE_INCLUDE = {
+  job: { select: { id: true, jobRef: true, title: true, status: true } },
+  customer: { select: { id: true, fullName: true, email: true, mobileNumber: true, profilePhotoUrl: true } },
+  trader: {
+    select: { id: true, businessName: true, traderCode: true, user: { select: { fullName: true, profilePhotoUrl: true } } },
+  },
+} satisfies Prisma.JobDisputeInclude;
+
+const serializeAdminDispute = (d: Prisma.JobDisputeGetPayload<{ include: typeof DISPUTE_INCLUDE }>) => ({
+  id: d.id,
+  disputeRef: d.disputeRef,
+  reason: d.reason,
+  description: d.description,
+  evidenceUrls: d.evidenceUrls,
+  status: d.status,
+  adminNote: d.adminNote,
+  resolvedAt: d.resolvedAt,
+  createdAt: d.createdAt,
+  updatedAt: d.updatedAt,
+  job: { ...d.job, statusLabel: ADMIN_JOB_STATUS_LABELS[d.job.status] },
+  customer: d.customer,
+  trader: d.trader
+    ? {
+        id: d.trader.id,
+        traderCode: d.trader.traderCode,
+        businessName: d.trader.businessName,
+        fullName: d.trader.user.fullName,
+        profilePhotoUrl: d.trader.user.profilePhotoUrl,
+      }
+    : null,
+});
+
+export const listAdminDisputes = async (query: AdminDisputesListQuery) => {
+  const page = query.page ?? 1;
+  const limit = query.limit ?? 10;
+  const and: Prisma.JobDisputeWhereInput[] = [dateRangeFilter(query.from, query.to, 'createdAt')];
+  if (query.status) and.push({ status: query.status });
+  if (query.jobId) and.push({ jobId: query.jobId });
+  if (query.customerId) and.push({ customerId: query.customerId });
+  if (query.traderId) and.push({ traderId: query.traderId });
+  const q = query.search?.trim();
+  if (q) {
+    const contains = { contains: q, mode: 'insensitive' as const };
+    and.push({
+      OR: [
+        { disputeRef: contains },
+        { reason: contains },
+        { job: { jobRef: contains } },
+        { job: { title: contains } },
+        { customer: { fullName: contains } },
+        { customer: { email: contains } },
+        { trader: { businessName: contains } },
+        { trader: { user: { fullName: contains } } },
+      ],
+    });
+  }
+  const where: Prisma.JobDisputeWhereInput = { AND: and };
+
+  const [total, rows, byStatus] = await Promise.all([
+    prisma.jobDispute.count({ where }),
+    prisma.jobDispute.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: DISPUTE_INCLUDE,
+    }),
+    prisma.jobDispute.groupBy({ by: ['status'], _count: { _all: true } }),
+  ]);
+
+  return {
+    items: rows.map(serializeAdminDispute),
+    stats: Object.fromEntries(byStatus.map((s) => [s.status, s._count._all])),
+    meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
+  };
+};
+
+export const getAdminDispute = async (id: string) => {
+  const dispute = await prisma.jobDispute.findUnique({ where: { id }, include: DISPUTE_INCLUDE });
+  if (!dispute) throw new NotFoundError('Dispute not found.');
+  return serializeAdminDispute(dispute);
+};
+
+export const updateAdminDispute = async (id: string, input: AdminUpdateDisputeInput) => {
+  const existing = await prisma.jobDispute.findUnique({ where: { id }, select: { id: true, status: true } });
+  if (!existing) throw new NotFoundError('Dispute not found.');
+
+  const closing = input.status === 'RESOLVED' || input.status === 'REJECTED';
+  const updated = await prisma.jobDispute.update({
+    where: { id },
+    data: {
+      status: input.status,
+      adminNote: input.adminNote,
+      ...(input.status ? { resolvedAt: closing ? new Date() : null } : {}),
+    },
+    include: DISPUTE_INCLUDE,
+  });
+
+  if (input.status && input.status !== existing.status) {
+    await pushUserNotification([updated.customer.id], {
+      type: 'DISPUTE_UPDATE',
+      title: `Issue ${updated.disputeRef} ${input.status.toLowerCase()}`,
+      message: updated.adminNote
+        ? updated.adminNote
+        : `Your reported issue on "${updated.job.title}" is now ${input.status.toLowerCase()}.`,
+      data: { disputeId: updated.id, disputeRef: updated.disputeRef, jobId: updated.job.id, status: input.status },
+    });
+  }
+
+  return serializeAdminDispute(updated);
+};
 
 export const getAdminJobSiteVisits = async (jobId: string) => {
   const job = await prisma.job.findUnique({

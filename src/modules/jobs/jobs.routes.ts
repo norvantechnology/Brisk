@@ -14,6 +14,11 @@ import {
   updateJobSchema,
   acceptJobQuoteSchema,
   siteVisitProposalParamSchema,
+  cancelJobSchema,
+  createJobDisputeSchema,
+  jobQuoteDetailSchema,
+  jobReviewSchema,
+  rescheduleJobSchema,
 } from './jobs.validation';
 
 const router = Router();
@@ -634,8 +639,12 @@ router.post(
  *       All trader quotations for the job, newest request first. Accept one with
  *       `POST /jobs/{id}/quotes/{quoteId}/accept` when `canAccept=true`.
  *
- *       `selectionStatus`: `PENDING` | `AWAITING_TRADER_CONFIRMATION` (you accepted, trader has not
+ *       `selectionStatus`: `PENDING` | `AWAITING TRADER CONFIRMATION` (you accepted, trader has not
  *       confirmed yet) | `CONFIRMED` (trader assigned) | `REJECTED` | `EXPIRED`.
+ *       Status values never contain underscores (`jobStatus` e.g. `IN PROGRESS`).
+ *
+ *       `job` = summary for the screen header: id, jobRef, title, description, status, category, subcategory.
+ *       Open one quote (trader profile + reviews) with `GET /jobs/{id}/quotes/{quoteId}`.
  *
  *       Realtime (customer room): `quote:received` when a trader quotes, `job:declined` when the
  *       selected trader declines, `job:status_changed` when the trader confirms.
@@ -704,7 +713,7 @@ router.get('/:id/quotes', ...customerOnly, validate(jobIdParamSchema), controlle
  *                 traderId: d920daf6-0a24-4afc-a698-7df83602387a
  *                 quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2
  *                 status: PUBLISHED
- *                 assignmentStatus: AWAITING_TRADER_CONFIRMATION
+ *                 assignmentStatus: AWAITING TRADER CONFIRMATION
  *                 amount: 120
  *       400:
  *         description: Job is not open (e.g. cancelled / completed).
@@ -743,14 +752,22 @@ router.post(
  *     tags: ['Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Sets `status=CANCELLED` (and booking if present).
- *       Response includes `statusBadge: "Cancelled"`.
- *       Not allowed for COMPLETED, already CANCELLED, or PAID invoices.
+ *       Sets `status=CANCELLED` (and booking if present), saves the optional `reason`, and cancels
+ *       any unpaid trader payment requests. Response includes `statusBadge: "Cancelled"`.
+ *       Not allowed once the trader finished the work, or after any successful payment (contact support).
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string, maxLength: 1000, example: Found another provider }
  *     responses:
  *       200:
  *         description: Job cancelled — `data.status=CANCELLED`, `data.statusBadge=Cancelled`
@@ -759,7 +776,235 @@ router.post(
  *       409:
  *         description: Already cancelled
  */
-router.post('/:id/cancel', ...customerOnly, validate(jobIdParamSchema), controller.cancelJob);
+router.post('/:id/cancel', ...customerOnly, validate(cancelJobSchema), controller.cancelJob);
+
+/**
+ * @swagger
+ * /jobs/{id}/quotes/{quoteId}:
+ *   get:
+ *     summary: Quotation detail + trader profile & recent reviews (Trader Profile & Quote screen)
+ *     tags: ['Customer / My Job']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Accept with `POST /jobs/{id}/quotes/{quoteId}/accept` when `canAccept=true`.
+ *       Accepting does **not** create the booking yet — the trader confirms first (`selectionStatus`
+ *       becomes `AWAITING TRADER CONFIRMATION`, then `CONFIRMED`). Then use `GET /jobs/{id}/progress`.
+ *       `trader.jobsCompleted` / `avgRating` / `reviewsCount` come from real bookings and reviews.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: quoteId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: reviewsLimit, schema: { type: integer, default: 10, maximum: 50 }, description: Latest reviews to include }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Quotation retrieved successfully.
+ *               data:
+ *                 quoteId: 3142870e-5caa-43fd-86d7-5d617b3eabb4
+ *                 jobId: b8499d07-e1c9-4009-b774-82d6690e015b
+ *                 jobRef: JOB-FC79
+ *                 jobTitle: Kitchen tap leaking
+ *                 jobStatus: PUBLISHED
+ *                 amount: 120
+ *                 currencyCode: EUR
+ *                 currencySymbol: €
+ *                 notes: Can replace the cartridge or fit a new mixer tap.
+ *                 estimatedDays: null
+ *                 status: PENDING
+ *                 selectionStatus: PENDING
+ *                 canAccept: true
+ *                 trader:
+ *                   id: adabc55c-6d7d-4b12-8597-6d26366c26bf
+ *                   displayName: Brisk Trader
+ *                   profilePhotoUrl: null
+ *                   bio: Licensed plumber with 10 years experience.
+ *                   location: Palanpur, Gujarat, India
+ *                   yearsExperience: 10
+ *                   avgRating: 4.5
+ *                   reviewsCount: 2
+ *                   jobsCompleted: 8
+ *                   isTopRated: false
+ *                   isVerified: true
+ *                   badges: [VERIFIED]
+ *                   categories: [{ id: 3f0f23dd-dfa2-4606-9eed-acdc22534f0f, name: Plumbing Services }]
+ *                 reviews:
+ *                   - { id: 0b1c2d3e-0000-4000-8000-000000000001, rating: 5, review: Great work, date: 'October 2, 2026', customerName: Sarah C., customerPhotoUrl: null }
+ *       404: { description: Job or quotation not found }
+ */
+router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchema), controller.getJobQuoteDetail);
+
+/**
+ * @swagger
+ * /jobs/{id}/progress:
+ *   get:
+ *     summary: Booking Confirmed & Details — job progress tracking with milestones
+ *     tags: ['Customer / My Job']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Use the `id` from My Jobs (`GET /jobs/mine`). Works before and after the booking exists
+ *       (`bookingId` null until the trader confirms).
+ *
+ *       `status` = job status without underscores: `PUBLISHED`, `QUOTED`, `ACCEPTED`, `SCHEDULED`,
+ *       `IN PROGRESS` (trader arrived), `PAYMENT PENDING`, `COMPLETED`, `CANCELLED`.
+ *
+ *       `milestones[]` (in order, real timestamps): `QUOTE ACCEPTED` → `BOOKING CONFIRMED` → `TRADER ARRIVED`
+ *       → `WORK COMPLETED` → `PAYMENT COMPLETED`. Each has `title`, `subtitle` (date/time or empty),
+ *       `status` = `COMPLETED` | `CURRENT` | `PENDING` | `CANCELLED`. `PAYMENT COMPLETED` is COMPLETED only when money was actually received.
+ *
+ *       `trader.phone` is shared only once a booking exists. `actions` tell which buttons to show
+ *       (cancel, reschedule, review, report issue).
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job progress retrieved successfully.
+ *               data:
+ *                 jobId: b8499d07-e1c9-4009-b774-82d6690e015b
+ *                 jobRef: JOB-FC79
+ *                 bookingId: 5a6b7c8d-0000-4000-8000-000000000002
+ *                 bookingRef: BKG-1A2B
+ *                 title: Kitchen tap leaking
+ *                 status: SCHEDULED
+ *                 statusLabel: Active
+ *                 scheduledDate: '2026-10-06T00:00:00.000Z'
+ *                 date: October 6, 2026
+ *                 timeSlot: MORNING
+ *                 address: { fullAddress: 'Palanpur, Gujarat', city: Palanpur, eircode: null, latitude: 24.17, longitude: 72.43 }
+ *                 trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, name: Brisk Trader, profilePhotoUrl: null, phone: '+353861234567', avgRating: 4.5, reviewsCount: 2, isTopRated: false }
+ *                 milestones:
+ *                   - { key: QUOTE ACCEPTED, title: Quote Accepted, subtitle: 'October 5, 2026 at 12:20 PM', status: COMPLETED }
+ *                   - { key: BOOKING CONFIRMED, title: Booking Confirmed, subtitle: 'October 5, 2026 at 12:21 PM', status: COMPLETED }
+ *                   - { key: TRADER ARRIVED, title: Trader Arrived, subtitle: '', status: CURRENT }
+ *                   - { key: WORK COMPLETED, title: Work Completed, subtitle: '', status: PENDING }
+ *                   - { key: PAYMENT COMPLETED, title: Payment Completed, subtitle: '', status: PENDING }
+ *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, currencyCode: EUR, currencySymbol: € }
+ *                 review: null
+ *                 cancellationReason: null
+ *                 cancelledAt: null
+ *                 downloadUrl: null
+ *                 actions: { canCancel: true, canReschedule: true, canReview: false, canReportIssue: true, hasActiveDispute: false }
+ *       404: { description: Job not found }
+ */
+router.get('/:id/progress', ...customerOnly, validate(jobIdParamSchema), controller.getJobProgress);
+
+/**
+ * @swagger
+ * /jobs/{id}/reschedule:
+ *   post:
+ *     summary: Reschedule job to a new date / time slot
+ *     tags: ['Customer / My Job']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Allowed while the job is PUBLISHED / QUOTED / ACCEPTED / SCHEDULED and the trader has not arrived.
+ *       Updates the job and booking date and notifies the assigned trader (`JOB_RESCHEDULED`).
+ *       `serviceCategoryId` / `serviceSubcategoryId` can change only before any quotation is received.
+ *       Returns the same payload as `GET /jobs/{id}/progress`.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [date, timeSlot]
+ *             properties:
+ *               date: { type: string, example: '2026-10-08', description: YYYY-MM-DD (today or later) }
+ *               timeSlot: { type: string, example: MORNING, description: 'MORNING | AFTERNOON | EVENING or a time like 14:30' }
+ *               serviceCategoryId: { type: string, format: uuid }
+ *               serviceSubcategoryId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Rescheduled — job progress payload }
+ *       400: { description: Past date, trader already arrived, cancelled/completed job, or service change after quotes }
+ */
+router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), controller.rescheduleJob);
+
+/**
+ * @swagger
+ * /jobs/{id}/review:
+ *   post:
+ *     summary: Rate & review the trader for a finished job
+ *     tags: ['Customer / My Job']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       One review per job, after the trader marked the work finished. Updates the trader's `avgRating`
+ *       and notifies the trader (`NEW_REVIEW`). `traderId` in the body is optional/ignored — the job's booked trader is used.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rating]
+ *             properties:
+ *               rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
+ *               review: { type: string, example: Quick and tidy work, highly recommended. }
+ *     responses:
+ *       201:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Thank you! Your review has been submitted.
+ *               data: { reviewId: 0b1c2d3e-0000-4000-8000-000000000001, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, rating: 5, review: Quick and tidy work, trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, avgRating: 4.67, reviewsCount: 3 } }
+ *       400: { description: Job not finished, cancelled, or no booked trader }
+ *       409: { description: Already reviewed }
+ */
+router.post('/:id/review', ...customerOnly, validate(jobReviewSchema), controller.submitJobReview);
+
+/**
+ * @swagger
+ * /jobs/{id}/disputes:
+ *   post:
+ *     summary: Report an issue / dispute for a job
+ *     tags: ['Customer / My Job']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Allowed once a trader is assigned. One open issue per job (409 while `OPEN` / `IN REVIEW`).
+ *       Upload evidence first with `POST /uploads` and send the URLs. BRISK admins are notified.
+ *       Dispute `status`: `OPEN` → `IN REVIEW` → `RESOLVED` | `REJECTED` (customer gets `DISPUTE_UPDATE`).
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason, description]
+ *             properties:
+ *               reason: { type: string, enum: [Poor Quality of Work, Incomplete Job, Overcharging, No-show / Delay, Other] }
+ *               description: { type: string, example: The tap is still leaking after the repair. }
+ *               evidenceUrls: { type: array, maxItems: 10, items: { type: string, format: uri } }
+ *     responses:
+ *       201:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Dispute submitted successfully.
+ *               data: { id: 6c7d8e9f-0000-4000-8000-000000000003, disputeId: 6c7d8e9f-0000-4000-8000-000000000003, disputeRef: DSP-4F2A1C, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, jobRef: JOB-FC79, reason: Incomplete Job, description: The tap is still leaking after the repair., evidenceUrls: [], status: OPEN, adminNote: null }
+ *       400: { description: No trader assigned yet }
+ *       409: { description: An open issue already exists for this job }
+ *   get:
+ *     summary: Issues reported on this job (latest first)
+ *     tags: ['Customer / My Job']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: '`data` is an array of disputes (same shape as POST response)' }
+ */
+router.post('/:id/disputes', ...customerOnly, validate(createJobDisputeSchema), controller.createJobDispute);
+router.get('/:id/disputes', ...customerOnly, validate(jobIdParamSchema), controller.listJobDisputes);
 
 /**
  * @swagger

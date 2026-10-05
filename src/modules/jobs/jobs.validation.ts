@@ -192,6 +192,61 @@ export const siteVisitProposalParamSchema = z.object({
   }),
 });
 
+export const jobQuoteDetailSchema = z.object({
+  params: z.object({ id: uuid, quoteId: uuid }),
+  query: z.object({
+    reviewsLimit: z.coerce.number().int().min(1).max(50).optional().default(10),
+  }),
+});
+
+export const cancelJobSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z
+    .object({ reason: z.string().trim().max(1000).optional() })
+    .optional()
+    .default({}),
+});
+
+export const rescheduleJobSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD.'),
+    timeSlot: z.string().trim().min(1, 'timeSlot is required.').max(50),
+    serviceCategoryId: uuid.optional(),
+    serviceSubcategoryId: uuid.nullable().optional(),
+  }),
+});
+
+export const jobReviewSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    /** Ignored — the reviewed trader is always the job's booked trader. */
+    traderId: uuid.optional(),
+    rating: z.coerce.number().int('rating must be a whole number from 1 to 5.').min(1).max(5),
+    review: z.string().trim().max(2000).optional(),
+  }),
+});
+
+export const DISPUTE_REASONS = [
+  'Poor Quality of Work',
+  'Incomplete Job',
+  'Overcharging',
+  'No-show / Delay',
+  'Other',
+] as const;
+
+export const createJobDisputeSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    reason: z.enum(DISPUTE_REASONS),
+    description: z.string().trim().min(1, 'Please describe the issue.').max(5000),
+    evidenceUrls: z.array(z.string().url()).max(10).optional(),
+  }),
+});
+
+export type RescheduleJobInput = z.infer<typeof rescheduleJobSchema>['body'];
+export type JobReviewInput = z.infer<typeof jobReviewSchema>['body'];
+export type CreateJobDisputeInput = z.infer<typeof createJobDisputeSchema>['body'];
 export type CreateJobInput = z.infer<typeof createJobSchema>['body'];
 export type UpdateJobInput = z.infer<typeof updateJobSchema>['body'];
 export type SetJobLocationInput = z.infer<typeof setJobLocationSchema>['body'];

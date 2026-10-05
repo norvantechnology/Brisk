@@ -80,5 +80,46 @@ export const adminJobChatQuerySchema = z.object({
   }),
 });
 
+export const ADMIN_DISPUTE_STATUSES = ['OPEN', 'IN REVIEW', 'RESOLVED', 'REJECTED'] as const;
+
+const disputeStatusParam = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .transform((s) => s.replace(/_/g, ' '))
+  .pipe(z.enum(ADMIN_DISPUTE_STATUSES));
+
+export const adminDisputesListQuerySchema = z.object({
+  query: z.object({
+    search: z.string().trim().optional(),
+    status: disputeStatusParam.optional(),
+    jobId: z.string().uuid('Invalid job ID format.').optional(),
+    customerId: z.string().uuid('Invalid customer ID format.').optional(),
+    traderId: z.string().uuid('Invalid trader ID format.').optional(),
+    from: dateParam,
+    to: dateParam,
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  }),
+});
+
+export const adminDisputeIdParamSchema = z.object({
+  params: z.object({ id: z.string().uuid('Invalid dispute ID format.') }),
+});
+
+export const adminUpdateDisputeSchema = z.object({
+  params: z.object({ id: z.string().uuid('Invalid dispute ID format.') }),
+  body: z
+    .object({
+      status: disputeStatusParam.optional(),
+      adminNote: z.string().trim().max(5000).nullable().optional(),
+    })
+    .refine((b) => b.status !== undefined || b.adminNote !== undefined, {
+      message: 'Provide status and/or adminNote.',
+    }),
+});
+
+export type AdminDisputesListQuery = z.infer<typeof adminDisputesListQuerySchema>['query'];
+export type AdminUpdateDisputeInput = z.infer<typeof adminUpdateDisputeSchema>['body'];
 export type AdminJobFilters = z.infer<typeof jobFiltersQuery>;
 export type AdminJobsListQuery = z.infer<typeof adminJobsListQuerySchema>['query'];

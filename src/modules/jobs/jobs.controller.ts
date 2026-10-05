@@ -3,7 +3,47 @@ import { JobStatus } from '@prisma/client';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import * as jobsService from './jobs.service';
+import * as myJobService from './jobs.my-job.service';
 import { downloadCustomerJobInvoicePdf } from '../traders/jobs/trader-my-jobs.service';
+
+type Handler = (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void>;
+const respond =
+  (
+    statusCode: number,
+    message: string,
+    run: (req: AuthenticatedRequest) => Promise<unknown>
+  ): Handler =>
+  async (req, res, next) => {
+    try {
+      sendResponse({ res, statusCode, message, data: await run(req) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+export const getJobQuoteDetail = respond(200, 'Quotation retrieved successfully.', (req) =>
+  myJobService.getJobQuoteDetail(req.user!.id, req.params.id, req.params.quoteId, req.query as unknown as { reviewsLimit: number })
+);
+
+export const getJobProgress = respond(200, 'Job progress retrieved successfully.', (req) =>
+  myJobService.getJobProgress(req.user!.id, req.params.id)
+);
+
+export const rescheduleJob = respond(200, 'Job rescheduled successfully.', (req) =>
+  myJobService.rescheduleJob(req.user!.id, req.params.id, req.body)
+);
+
+export const submitJobReview = respond(201, 'Thank you! Your review has been submitted.', (req) =>
+  myJobService.submitJobReview(req.user!.id, req.params.id, req.body)
+);
+
+export const createJobDispute = respond(201, 'Dispute submitted successfully.', (req) =>
+  myJobService.createJobDispute(req.user!.id, req.params.id, req.body)
+);
+
+export const listJobDisputes = respond(200, 'Job disputes retrieved successfully.', (req) =>
+  myJobService.listJobDisputes(req.user!.id, req.params.id)
+);
 
 export const createJob = async (
   req: AuthenticatedRequest,
@@ -257,7 +297,7 @@ export const cancelJob = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await jobsService.cancelJob(req.user!.id, req.params.id);
+    const data = await jobsService.cancelJob(req.user!.id, req.params.id, req.body?.reason);
     sendResponse({
       res,
       statusCode: 200,

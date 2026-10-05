@@ -285,6 +285,7 @@ model User {
   loyaltyAccount         LoyaltyAccount?
   savedTraders           SavedTrader[]
   ratingsGiven           RatingReview[]             @relation("CustomerReviews")
+  jobDisputes            JobDispute[]
   chatMessages           ChatMessage[]
   notifications          Notification[]
   accountDeletionRequest AccountDeletionRequest?
@@ -399,6 +400,7 @@ model Trader {
   offers          Offer[]              @relation("TraderOffers")
   briskOffers     BriskOffer[]
   ratingsReceived RatingReview[]       @relation("TraderReviews")
+  jobDisputes     JobDispute[]
   savedBy         SavedTrader[]
   jobBookmarks    TraderJobBookmark[]
   siteVisitRequests TraderSiteVisitRequest[]
@@ -641,10 +643,13 @@ model Job {
   scheduledDate DateTime? @map("scheduled_date")
   /// Answers to subcategory.qaFormSchema when the job was posted (fieldId → value)
   qaFormAnswers Json?     @map("qa_form_answers")
+  cancellationReason String? @map("cancellation_reason") @db.Text
+  cancelledAt   DateTime? @map("cancelled_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relationships
+  disputes     JobDispute[]
   customer     User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   category     Category      @relation(fields: [categoryId], references: [id])
   subcategory  Subcategory?  @relation(fields: [subcategoryId], references: [id])
@@ -1203,6 +1208,31 @@ model RatingReview {
   trader   Trader  @relation("TraderReviews", fields: [traderId], references: [id], onDelete: Cascade)
 
   @@map("ratings_reviews")
+}
+
+/// Customer "Report an Issue" on a job. status: OPEN | IN REVIEW | RESOLVED | REJECTED
+model JobDispute {
+  id           String    @id @default(uuid()) @db.Uuid
+  disputeRef   String    @unique @map("dispute_ref")
+  jobId        String    @map("job_id") @db.Uuid
+  customerId   String    @map("customer_id") @db.Uuid
+  traderId     String?   @map("trader_id") @db.Uuid
+  reason       String
+  description  String    @db.Text
+  evidenceUrls String[]  @default([]) @map("evidence_urls")
+  status       String    @default("OPEN")
+  adminNote    String?   @map("admin_note") @db.Text
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  job      Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  customer User    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  trader   Trader? @relation(fields: [traderId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([status, createdAt])
+  @@map("job_disputes")
 }
 
 model ChatMessage {

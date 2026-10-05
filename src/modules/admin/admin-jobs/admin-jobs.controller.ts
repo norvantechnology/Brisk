@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
 import * as service from './admin-jobs.service';
-import type { AdminJobFilters, AdminJobsListQuery } from './admin-jobs.validation';
+import type { AdminDisputesListQuery, AdminJobFilters, AdminJobsListQuery } from './admin-jobs.validation';
 
 export const getStats = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -35,6 +35,39 @@ export const getJobChat = async (req: AuthenticatedAdminRequest, res: Response, 
   try {
     const data = await service.getAdminJobChat(req.params.id, req.query as { page?: number; limit?: number });
     sendResponse({ res, statusCode: 200, message: 'Job chat history retrieved successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listDisputes = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await service.listAdminDisputes(req.query as unknown as AdminDisputesListQuery);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Disputes retrieved successfully.',
+      data: { items: result.items, stats: result.stats },
+      meta: result.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getDispute = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const data = await service.getAdminDispute(req.params.id);
+    sendResponse({ res, statusCode: 200, message: 'Dispute retrieved successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateDispute = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const data = await service.updateAdminDispute(req.params.id, req.body);
+    sendResponse({ res, statusCode: 200, message: 'Dispute updated successfully.', data });
   } catch (error) {
     next(error);
   }

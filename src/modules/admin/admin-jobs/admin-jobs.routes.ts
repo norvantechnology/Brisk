@@ -3,6 +3,9 @@ import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware'
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-jobs.controller';
 import {
+  adminDisputeIdParamSchema,
+  adminDisputesListQuerySchema,
+  adminUpdateDisputeSchema,
   adminJobChatQuerySchema,
   adminJobIdParamSchema,
   adminJobsListQuerySchema,
@@ -303,5 +306,63 @@ router.get('/jobs/:id/chat', validate(adminJobChatQuerySchema), controller.getJo
  *       404: { description: Job not found. }
  */
 router.get('/jobs/:id/site-visits', validate(adminJobIdParamSchema), controller.getJobSiteVisits);
+
+/**
+ * @swagger
+ * /admin/disputes:
+ *   get:
+ *     summary: List customer-reported job disputes
+ *     description: Disputes created from the customer app (`POST /jobs/{id}/disputes`). `data.stats` holds counts per status.
+ *     tags: ['Admin / Disputes']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: search, schema: { type: string }, description: Dispute ref, job ref/title, customer or trader name }
+ *       - { in: query, name: status, schema: { type: string, enum: [OPEN, IN REVIEW, RESOLVED, REJECTED] } }
+ *       - { in: query, name: jobId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: traderId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: from, schema: { type: string, format: date } }
+ *       - { in: query, name: to, schema: { type: string, format: date } }
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 10 } }
+ *     responses:
+ *       200: { description: "data: { items, stats }, meta: pagination" }
+ */
+router.get('/disputes', validate(adminDisputesListQuerySchema), controller.listDisputes);
+
+/**
+ * @swagger
+ * /admin/disputes/{id}:
+ *   get:
+ *     summary: Dispute detail
+ *     tags: ['Admin / Disputes']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Dispute detail with job, customer and trader. }
+ *       404: { description: Dispute not found. }
+ *   patch:
+ *     summary: Update dispute status / admin note
+ *     description: Status change notifies the customer (`DISPUTE_UPDATE`). RESOLVED / REJECTED set `resolvedAt`.
+ *     tags: ['Admin / Disputes']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string, enum: [OPEN, IN REVIEW, RESOLVED, REJECTED] }
+ *               adminNote: { type: string, maxLength: 5000, nullable: true }
+ *     responses:
+ *       200: { description: Updated dispute. }
+ *       404: { description: Dispute not found. }
+ */
+router.get('/disputes/:id', validate(adminDisputeIdParamSchema), controller.getDispute);
+router.patch('/disputes/:id', validate(adminUpdateDisputeSchema), controller.updateDispute);
 
 export default router;

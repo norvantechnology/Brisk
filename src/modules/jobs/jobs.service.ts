@@ -47,13 +47,13 @@ import {
   emitSiteVisitUpdate,
 } from '../../sockets/realtime';
 
-const money = (value: Prisma.Decimal | number | null | undefined): number =>
+export const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+export const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Same badge labels as trader My Jobs — keep customer & trader UIs aligned. */
-const customerStatusBadgeFor = (
+export const customerStatusBadgeFor = (
   status: JobStatus,
   bookingStatus?: string | null,
   finishedAt?: Date | null
@@ -83,7 +83,7 @@ const generateInvoiceNumber = () => {
   return `INV-${year}-${suffix}`;
 };
 
-const formatAddressLine = (address: {
+export const formatAddressLine = (address: {
   houseNumber?: string | null;
   addressLine1: string;
   addressLine2?: string | null;
@@ -776,8 +776,91 @@ const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
   };
 };
 
-const formatDisplayDay = (date: Date) =>
+export const formatDisplayDay = (date: Date) =>
   date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+/** Status text for customer My Job screens — no underscores (e.g. "IN PROGRESS"). */
+export const toDisplayStatus = (status: string) => status.replace(/_/g, ' ');
+
+/** Fields needed by resolveCustomerJobAmount (My Jobs card + Job Progress pricing). */
+export const customerJobAmountSelect = {
+  status: true,
+  traderId: true,
+  serviceCharge: true,
+  minBudget: true,
+  maxBudget: true,
+  quotes: {
+    where: { status: QuoteStatus.ACCEPTED },
+    orderBy: { updatedAt: 'desc' as const },
+    take: 1,
+    select: { quotedAmount: true, currencyCode: true },
+  },
+  booking: {
+    select: {
+      status: true,
+      finishedAt: true,
+      invoice: {
+        select: {
+          status: true,
+          totalAmount: true,
+          currencyCode: true,
+          payments: {
+            select: { refunds: { where: { status: 'COMPLETED' }, select: { refundAmount: true } } },
+          },
+        },
+      },
+    },
+  },
+  paymentRequests: {
+    where: { status: { in: ['PAID', 'SENT'] } },
+    select: { status: true, totalAmount: true, currencyCode: true },
+  },
+} satisfies Prisma.JobSelect;
+
+type CustomerJobAmountSource = Prisma.JobGetPayload<{ select: typeof customerJobAmountSelect }>;
+
+/** Single amount shown to the customer: Refunded › Amount Due › Charges › Estimated. */
+export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
+  const invoice = job.booking?.invoice ?? null;
+  const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
+
+  const refunded = round2(
+    (invoice?.payments ?? []).reduce(
+      (sum, p) => sum + p.refunds.reduce((s, r) => s + money(r.refundAmount), 0),
+      0
+    )
+  );
+  const paidRequests = job.paymentRequests.filter((p) => p.status === 'PAID');
+  const charged = round2(
+    (invoice && invoice.status !== InvoiceStatus.UNPAID ? money(invoice.totalAmount) : 0) +
+      paidRequests.reduce((s, p) => s + money(p.totalAmount), 0)
+  );
+  const due = round2(
+    job.paymentRequests.filter((p) => p.status === 'SENT').reduce((s, p) => s + money(p.totalAmount), 0)
+  );
+  const estimate =
+    (job.quotes[0] ? money(job.quotes[0].quotedAmount) : null) ??
+    (job.serviceCharge != null ? money(job.serviceCharge) : null) ??
+    (job.maxBudget != null ? money(job.maxBudget) : job.minBudget != null ? money(job.minBudget) : null);
+
+  let amount: number | null = estimate;
+  let amountType: 'Charges' | 'Refunded' | 'Amount Due' | 'Estimated' | null = estimate != null ? 'Estimated' : null;
+  if (refunded > 0) {
+    amount = refunded;
+    amountType = 'Refunded';
+  } else if (due > 0 && !cancelled) {
+    amount = due;
+    amountType = 'Amount Due';
+  } else if (charged > 0) {
+    amount = charged;
+    amountType = 'Charges';
+  }
+
+  const currencyCode =
+    invoice?.currencyCode ?? job.paymentRequests[0]?.currencyCode ?? job.quotes[0]?.currencyCode ?? 'EUR';
+
+  return { amount, amountType, currencyCode, amountDue: due, totalPaid: charged, refunded };
+};
 
 /** Customer My Jobs tabs — card rows (title, status, date, provider, amount, invoice link). */
 export const listMyJobsByTab = async (
@@ -793,88 +876,23 @@ export const listMyJobsByTab = async (
       skip: (query.page - 1) * query.limit,
       take: query.limit,
       select: {
+        ...customerJobAmountSelect,
         id: true,
         jobRef: true,
         title: true,
-        status: true,
-        traderId: true,
-        serviceCharge: true,
-        minBudget: true,
-        maxBudget: true,
         scheduledDate: true,
         createdAt: true,
         updatedAt: true,
         trader: { select: { businessName: true, user: { select: { fullName: true } } } },
-        quotes: {
-          where: { status: QuoteStatus.ACCEPTED },
-          orderBy: { updatedAt: 'desc' },
-          take: 1,
-          select: { quotedAmount: true, currencyCode: true },
-        },
-        booking: {
-          select: {
-            status: true,
-            finishedAt: true,
-            invoice: {
-              select: {
-                status: true,
-                totalAmount: true,
-                currencyCode: true,
-                payments: {
-                  select: { refunds: { where: { status: 'COMPLETED' }, select: { refundAmount: true } } },
-                },
-              },
-            },
-          },
-        },
-        paymentRequests: {
-          where: { status: { in: ['PAID', 'SENT'] } },
-          select: { status: true, totalAmount: true, currencyCode: true },
-        },
       },
     }),
   ]);
 
   const currencyCodes = new Set<string>(['EUR']);
   const rows = jobs.map((job) => {
-    const invoice = job.booking?.invoice ?? null;
     const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
     const finished = job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt);
-
-    const refunded = round2(
-      (invoice?.payments ?? []).reduce(
-        (sum, p) => sum + p.refunds.reduce((s, r) => s + money(r.refundAmount), 0),
-        0
-      )
-    );
-    const paidRequests = job.paymentRequests.filter((p) => p.status === 'PAID');
-    const charged = round2(
-      (invoice && invoice.status !== InvoiceStatus.UNPAID ? money(invoice.totalAmount) : 0) +
-        paidRequests.reduce((s, p) => s + money(p.totalAmount), 0)
-    );
-    const due = round2(
-      job.paymentRequests.filter((p) => p.status === 'SENT').reduce((s, p) => s + money(p.totalAmount), 0)
-    );
-    const estimate =
-      (job.quotes[0] ? money(job.quotes[0].quotedAmount) : null) ??
-      (job.serviceCharge != null ? money(job.serviceCharge) : null) ??
-      (job.maxBudget != null ? money(job.maxBudget) : job.minBudget != null ? money(job.minBudget) : null);
-
-    let amount: number | null = estimate;
-    let amountType: 'Charges' | 'Refunded' | 'Amount Due' | 'Estimated' | null = estimate != null ? 'Estimated' : null;
-    if (refunded > 0) {
-      amount = refunded;
-      amountType = 'Refunded';
-    } else if (due > 0 && !cancelled) {
-      amount = due;
-      amountType = 'Amount Due';
-    } else if (charged > 0) {
-      amount = charged;
-      amountType = 'Charges';
-    }
-
-    const currencyCode =
-      invoice?.currencyCode ?? job.paymentRequests[0]?.currencyCode ?? job.quotes[0]?.currencyCode ?? 'EUR';
+    const { amount, amountType, currencyCode } = resolveCustomerJobAmount(job);
     currencyCodes.add(currencyCode);
 
     const dateAt = cancelled
@@ -887,7 +905,7 @@ export const listMyJobsByTab = async (
       id: job.id,
       jobRef: job.jobRef,
       title: job.title,
-      status: (cancelled ? JobStatus.CANCELLED : job.status).replace(/_/g, ' '),
+      status: toDisplayStatus(cancelled ? JobStatus.CANCELLED : job.status),
       statusLabel: customerStatusBadgeFor(job.status, job.booking?.status ?? null, job.booking?.finishedAt ?? null),
       date: formatDisplayDay(dateAt),
       dateAt,
@@ -943,13 +961,22 @@ const formatOutcomeDateLabel = (date: Date, kind: 'COMPLETED' | 'CANCELLED') => 
 
 /**
  * Quotations traders sent for the customer's job (compare + accept).
- * selectionStatus: PENDING → customer can accept; AWAITING_TRADER_CONFIRMATION → customer accepted,
+ * selectionStatus: PENDING → customer can accept; AWAITING TRADER CONFIRMATION → customer accepted,
  * trader has not tapped View & Accept yet; CONFIRMED → trader assigned; REJECTED / EXPIRED.
  */
 export const listJobQuotes = async (customerId: string, jobId: string) => {
   const job = await prisma.job.findFirst({
     where: { id: jobId, customerId },
-    select: { id: true, status: true, traderId: true },
+    select: {
+      id: true,
+      jobRef: true,
+      title: true,
+      description: true,
+      status: true,
+      traderId: true,
+      category: { select: { id: true, name: true } },
+      subcategory: { select: { id: true, name: true } },
+    },
   });
   if (!job) throw new NotFoundError('Job not found.');
 
@@ -986,7 +1013,7 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
       job.traderId === q.traderId && q.status === QuoteStatus.ACCEPTED
         ? 'CONFIRMED'
         : q.status === QuoteStatus.ACCEPTED && isOpen
-          ? 'AWAITING_TRADER_CONFIRMATION'
+          ? 'AWAITING TRADER CONFIRMATION'
           : q.status;
     return {
       id: q.id,
@@ -998,7 +1025,7 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
       notes: q.notes,
       estimatedDays: q.estimatedDays,
       status: q.status,
-      selectionStatus,
+      selectionStatus: toDisplayStatus(selectionStatus),
       canAccept: isOpen && q.status === QuoteStatus.PENDING,
       requestedAt: q.requestedAt,
       createdAt: q.createdAt,
@@ -1019,11 +1046,20 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
 
   return {
     jobId: job.id,
-    jobStatus: job.status,
+    jobStatus: toDisplayStatus(job.status),
     assignedTraderId: job.traderId,
     awaitingTraderConfirmation: items.some(
-      (i) => i.selectionStatus === 'AWAITING_TRADER_CONFIRMATION'
+      (i) => i.selectionStatus === 'AWAITING TRADER CONFIRMATION'
     ),
+    job: {
+      id: job.id,
+      jobRef: job.jobRef,
+      title: job.title,
+      description: job.description,
+      status: toDisplayStatus(job.status),
+      category: job.category,
+      subcategory: job.subcategory,
+    },
     quotes: items,
   };
 };
@@ -1053,7 +1089,7 @@ export const getJobOutcomeDetail = async (
   const eventAt =
     expected === 'COMPLETED'
       ? (job.booking?.finishedAt ?? job.updatedAt)
-      : job.updatedAt;
+      : (job.cancelledAt ?? job.updatedAt);
 
   const invoice = job.booking?.invoice ?? null;
   const review = job.booking?.ratingReview ?? null;
@@ -1062,20 +1098,75 @@ export const getJobOutcomeDetail = async (
     job.trader?.businessName || job.trader?.user?.fullName || 'Trader';
   const traderLocation = [job.trader?.city, job.trader?.country].filter(Boolean).join(', ');
 
-  const baseRate = invoice ? money(invoice.serviceCharge) : money(job.serviceCharge);
-  const platformFee = invoice ? money(invoice.platformFee) : 0;
-  const offerDiscount = invoice
-    ? round2(money(invoice.traderOfferDiscount) + money(invoice.promoDiscount))
+  const [requests, lastCardPayment] = await Promise.all([
+    prisma.traderPaymentRequest.findMany({
+      where: { jobId, status: { in: ['SENT', 'PAID'] } },
+      select: {
+        status: true,
+        serviceCharge: true,
+        materialsTotal: true,
+        siteVisitFee: true,
+        platformFee: true,
+        vatAmount: true,
+        totalAmount: true,
+        cardBrand: true,
+        cardLast4: true,
+        paidAt: true,
+      },
+    }),
+    invoice
+      ? prisma.payment.findFirst({
+          where: { invoiceId: invoice.id, status: 'COMPLETED' },
+          orderBy: { paidAt: 'desc' },
+          select: { id: true, cardBrand: true, cardLast4: true, paidAt: true },
+        })
+      : null,
+  ]);
+  const billedInvoice = invoice && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
+  const sum = (rows: typeof requests, pick: (r: (typeof requests)[number]) => Prisma.Decimal) =>
+    rows.reduce((s, r) => s + money(pick(r)), 0);
+
+  const serviceFee = round2(
+    (billedInvoice ? money(billedInvoice.serviceCharge) : 0) +
+      sum(requests, (r) => r.serviceCharge) +
+      sum(requests, (r) => r.materialsTotal) +
+      sum(requests, (r) => r.siteVisitFee)
+  );
+  const processingFee = round2(
+    (billedInvoice ? money(billedInvoice.platformFee) : 0) + sum(requests, (r) => r.platformFee)
+  );
+  const discount = billedInvoice
+    ? round2(money(billedInvoice.traderOfferDiscount) + money(billedInvoice.promoDiscount))
     : 0;
-  const vatAmount = invoice ? money(invoice.tax) : round2((baseRate + platformFee) * 0.2);
-  const netPayout = invoice ? money(invoice.totalAmount) : round2(baseRate + platformFee + vatAmount - offerDiscount);
+  const vatAmount = round2((billedInvoice ? money(billedInvoice.tax) : 0) + sum(requests, (r) => r.vatAmount));
+  const paidRequests = requests.filter((r) => r.status === 'PAID');
+  const totalPaid = round2(
+    (billedInvoice ? money(billedInvoice.totalAmount) : 0) + sum(paidRequests, (r) => r.totalAmount)
+  );
+  const amountDue = round2(sum(requests.filter((r) => r.status === 'SENT'), (r) => r.totalAmount));
+  const vatBase = serviceFee + processingFee - discount;
+  const vatPercentage = vatBase > 0 ? round2((vatAmount / vatBase) * 100) : 0;
 
   let paymentStatus = 'UNPAID';
-  if (invoice?.status === InvoiceStatus.PAID) paymentStatus = 'PAID';
-  else if (invoice?.status === InvoiceStatus.REFUNDED) paymentStatus = 'REFUNDED';
-  else if (invoice?.payments?.[0]?.status === 'COMPLETED') paymentStatus = 'PAID';
+  if (invoice?.status === InvoiceStatus.REFUNDED) paymentStatus = 'REFUNDED';
+  else if (amountDue > 0) paymentStatus = cancelled ? 'CANCELLED' : 'PENDING';
+  else if (totalPaid > 0) paymentStatus = 'PAID';
   else if (cancelled) paymentStatus = 'CANCELLED';
   else if (job.status === JobStatus.PAYMENT_PENDING) paymentStatus = 'PENDING';
+
+  const card =
+    [
+      lastCardPayment && { brand: lastCardPayment.cardBrand, last4: lastCardPayment.cardLast4, at: lastCardPayment.paidAt },
+      ...paidRequests.map((r) => ({ brand: r.cardBrand, last4: r.cardLast4, at: r.paidAt })),
+    ]
+      .filter((c): c is { brand: string | null; last4: string | null; at: Date | null } => Boolean(c?.last4))
+      .sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0))[0] ?? null;
+
+  const startedAt = job.booking?.arrivedAt ?? null;
+  const finishedAt = job.booking?.finishedAt ?? null;
+  const durationMinutes =
+    startedAt && finishedAt ? Math.max(Math.round((finishedAt.getTime() - startedAt.getTime()) / 60000), 0) : null;
+  const finished = Boolean(finishedAt) || job.status === JobStatus.COMPLETED;
 
   const categoryLabel = (
     job.subcategory?.name ||
@@ -1088,7 +1179,7 @@ export const getJobOutcomeDetail = async (
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
     title: job.title,
     category: categoryLabel,
-    status: cancelled ? JobStatus.CANCELLED : job.status,
+    status: toDisplayStatus(cancelled ? JobStatus.CANCELLED : job.status),
     statusBadge: customerStatusBadgeFor(
       job.status,
       job.booking?.status ?? null,
@@ -1096,7 +1187,19 @@ export const getJobOutcomeDetail = async (
     ),
     completedAt: expected === 'COMPLETED' ? eventAt : null,
     cancelledAt: expected === 'CANCELLED' ? eventAt : null,
+    cancellationReason: expected === 'CANCELLED' ? job.cancellationReason : null,
     formattedCompletedDate: formatOutcomeDateLabel(eventAt, expected),
+    startedAt,
+    durationMinutes,
+    /** Customer-entered estimate from Post Job (e.g. "2-3 hours"). */
+    estimatedDuration: job.durationLabel || null,
+    address: {
+      fullAddress: job.address ? formatAddressLine(job.address) : job.addressLine,
+      city: job.city,
+      eircode: job.postcode,
+      latitude: job.latitude,
+      longitude: job.longitude,
+    },
     trader: job.trader
       ? {
           id: job.trader.id,
@@ -1115,16 +1218,28 @@ export const getJobOutcomeDetail = async (
       : null,
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
     paymentSummary: {
-      baseRate,
-      platformFee,
-      offerApplied: offerDiscount > 0 ? -offerDiscount : 0,
-      vatPercentage: 20,
+      serviceFee,
+      processingFee,
+      discount,
+      vatPercentage,
       vatAmount,
-      netPayout,
+      totalPaid,
+      amountDue,
       paymentStatus,
+      cardBrand: card?.brand ?? null,
+      cardLast4: card?.last4 ?? null,
+      /** Legacy keys — same values as serviceFee / processingFee / -discount / billed total. */
+      baseRate: serviceFee,
+      platformFee: processingFee,
+      offerApplied: discount > 0 ? -discount : 0,
+      netPayout: round2(totalPaid + amountDue),
     },
-    invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
-    invoiceUrl: null as string | null,
+    invoiceId: invoice?.id ?? null,
+    invoiceNumber: invoice?.invoiceNumber ?? null,
+    downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
+    invoiceUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
+    receiptUrl: lastCardPayment ? `/payments/${lastCardPayment.id}/receipt` : null,
+    canReview: expected === 'COMPLETED' && finished && Boolean(job.trader) && !review,
   };
 };
 
@@ -1783,17 +1898,21 @@ export const publishJob = async (
  * Customer cancels a job. Sets job (+ booking if any) to CANCELLED.
  * Blocked once completed or already cancelled, or after successful payment.
  */
-export const cancelJob = async (customerId: string, jobId: string) => {
+export const cancelJob = async (customerId: string, jobId: string, reason?: string) => {
   const existing = await getOwnedJob(customerId, jobId);
 
-  if (existing.status === JobStatus.CANCELLED) {
+  if (existing.status === JobStatus.CANCELLED || existing.booking?.status === BookingStatus.CANCELLED) {
     throw new ConflictError('Job is already cancelled.');
   }
-  if (existing.status === JobStatus.COMPLETED) {
-    throw new BadRequestError('Completed jobs cannot be cancelled.');
+  if (existing.status === JobStatus.COMPLETED || existing.booking?.finishedAt) {
+    throw new BadRequestError('Finished jobs cannot be cancelled. Use Report an Issue instead.');
   }
   if (existing.booking?.invoice?.status === InvoiceStatus.PAID) {
     throw new BadRequestError('Paid jobs cannot be cancelled here. Contact support for refunds.');
+  }
+  const paidRequests = await prisma.traderPaymentRequest.count({ where: { jobId, status: 'PAID' } });
+  if (paidRequests > 0) {
+    throw new BadRequestError('Jobs with a completed payment cannot be cancelled here. Contact support for refunds.');
   }
 
   const traderUserId = existing.traderId
@@ -1815,7 +1934,15 @@ export const cancelJob = async (customerId: string, jobId: string) => {
   await prisma.$transaction(async (tx) => {
     await tx.job.update({
       where: { id: jobId },
-      data: { status: JobStatus.CANCELLED },
+      data: {
+        status: JobStatus.CANCELLED,
+        cancellationReason: reason?.trim() || null,
+        cancelledAt: new Date(),
+      },
+    });
+    await tx.traderPaymentRequest.updateMany({
+      where: { jobId, status: { in: ['PENDING', 'SENT'] } },
+      data: { status: 'CANCELLED' },
     });
     if (existing.booking?.id) {
       await tx.booking.update({

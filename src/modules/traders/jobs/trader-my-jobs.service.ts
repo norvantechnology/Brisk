@@ -2245,8 +2245,8 @@ export const confirmQuoteAssignment = async (params: {
     jobId: job.id,
     traderId: quote.traderId,
     quoteId: quote.id,
-    status: job.status,
-    assignmentStatus: 'AWAITING_TRADER_CONFIRMATION' as const,
+    status: job.status.replace(/_/g, ' '),
+    assignmentStatus: 'AWAITING TRADER CONFIRMATION' as const,
     amount: money(quote.quotedAmount),
   };
 };
