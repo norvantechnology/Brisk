@@ -37,7 +37,7 @@ export const listMyJobsByTab = async (
       res,
       statusCode: 200,
       message: 'My jobs retrieved successfully.',
-      data: { tab: result.tab, items: result.items },
+      data: result.items,
       meta: result.meta,
     });
   } catch (error) {

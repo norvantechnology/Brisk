@@ -286,8 +286,6 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                   success: true
  *                   message: My jobs retrieved successfully.
  *                   data:
- *                     tab: ACTIVE
- *                     items:
  *                       - id: 3f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f
  *                         jobRef: JOB-411A
  *                         title: Boiler Repair
@@ -308,8 +306,6 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                   success: true
  *                   message: My jobs retrieved successfully.
  *                   data:
- *                     tab: COMPLETED
- *                     items:
  *                       - id: 7a2d4c6e-2b3c-4d5e-8f90-1a2b3c4d5e6f
  *                         jobRef: JOB-2B7C
  *                         title: Leakage & Sink Repair
@@ -330,8 +326,6 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                   success: true
  *                   message: My jobs retrieved successfully.
  *                   data:
- *                     tab: OTHER
- *                     items:
  *                       - id: 9c4e6a8b-3c4d-4e5f-9a01-2b3c4d5e6f70
  *                         jobRef: JOB-9D1E
  *                         title: Rewiring
