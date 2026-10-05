@@ -218,7 +218,18 @@
  *           enum: [Draft, Open, Active, Completed, Awaiting Payout, Cancelled]
  *           description: UI badge aligned with trader My Jobs
  *         scheduledDate: { type: string, format: date-time, description: Empty string when unset }
- *         qaFormAnswers: { type: object }
+ *         qaFormAnswers: { type: object, description: Raw answers keyed by qaFormSchema field id }
+ *         qaFormAnswerList:
+ *           type: array
+ *           description: Answered questions in admin form order, option labels resolved (same list on trader + admin job details).
+ *           items:
+ *             type: object
+ *             properties:
+ *               fieldId: { type: string }
+ *               label: { type: string, example: Where is the Boiler located }
+ *               type: { type: string, enum: [text, textarea, number, dropdown, single_choice, multi_choice, date, boolean] }
+ *               value: { description: 'string | number | boolean | string[]' }
+ *               displayValue: { type: string, example: Kitchen }
  *         createdAt: { type: string, format: date-time }
  *         updatedAt: { type: string, format: date-time }
  *         photos:
@@ -337,7 +348,21 @@
  *           type: object
  *           additionalProperties: true
  *           description: |
- *             Answers keyed by fieldId from subcategory `qaFormSchema` when formConfig.showQaForm.
+ *             Answers keyed by field `id` from `formConfig.qaFormSchema` (when `formConfig.showQaForm`).
+ *             Value per field type:
+ *             - `text` / `textarea` → string
+ *             - `number` → number (respects field `min` / `max`)
+ *             - `dropdown` / `single_choice` → one option `value` (string)
+ *             - `multi_choice` → array of option `value`s
+ *             - `date` → date string e.g. `2026-10-24`
+ *             - `boolean` → true / false
+ *             Invalid type or option → 400. Unknown field ids are ignored.
+ *             `required` fields are enforced on `POST /jobs/{id}/publish` (400 lists the missing question labels).
+ *           example:
+ *             boiler_type: combi
+ *             issues: [no_heat, noise]
+ *             smell_gas: false
+ *             preferred_date: '2026-10-24'
  *         offerId:
  *           type: string
  *           format: uuid
@@ -417,7 +442,10 @@
  *         durationLabel: { type: string, nullable: true }
  *         phoneNumber: { type: string, nullable: true }
  *         photoUrls: { type: array, items: { type: string, format: uri } }
- *         qaFormAnswers: { type: object, nullable: true }
+ *         qaFormAnswers:
+ *           type: object
+ *           nullable: true
+ *           description: Same format as CreateJobRequest.qaFormAnswers (replaces all answers). Changing subcategoryId without answers clears them.
  *         serviceCharge: { type: number, minimum: 0, nullable: true }
  *         traderId: { type: string, format: uuid, nullable: true }
  *         quoteType: { type: string, enum: [REMOTE, ONSITE, FIXED, BUDGET_RANGE, OPEN_QUOTE], description: Same as CreateJobRequest.quoteType }

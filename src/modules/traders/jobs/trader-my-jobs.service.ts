@@ -24,6 +24,7 @@ import {
   emitQuoteReceived,
 } from '../../../sockets/realtime';
 import { isAwaitingUpfrontPayment } from '../../jobs/job-payment-state';
+import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 
 const EARTH_RADIUS_KM = 6371;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
@@ -439,7 +440,7 @@ const assertMyJob = async (traderId: string, jobId: string) => {
         },
       },
       category: { select: { id: true, name: true, iconName: true, urlSlug: true } },
-      subcategory: { select: { id: true, name: true, urlSlug: true } },
+      subcategory: { select: { id: true, name: true, urlSlug: true, qaFormSchema: true } },
       photos: { orderBy: { createdAt: 'asc' } },
       materials: {
         where: { traderId },
@@ -1134,6 +1135,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     createdAt: job.createdAt,
     jobRef: job.jobRef,
     description: job.description,
+    qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
     status: job.status,
     statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
     statusLabel,

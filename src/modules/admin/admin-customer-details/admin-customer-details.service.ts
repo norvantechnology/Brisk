@@ -9,6 +9,7 @@ import {
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
+import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -456,6 +457,7 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
     jobRef: job.jobRef,
     title: job.title,
     description: job.description,
+    qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
     customer: job.customer,
     status: job.status,
     quoteType: job.quoteType,

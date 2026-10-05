@@ -32,6 +32,11 @@ import type {
 } from './jobs.validation';
 import type { JobFormEntryPoint } from './jobs.form-config';
 import { isAwaitingUpfrontPayment } from './job-payment-state';
+import {
+  assertRequiredQaFormAnswers,
+  buildQaFormAnswerList,
+  normalizeQaFormAnswers,
+} from './jobs.qa-form';
 import { getCurrencyMeta } from '../../services/currency.service';
 import {
   emitJobAcceptCancelled,
@@ -286,6 +291,7 @@ const serializeJob = (
     ),
     scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : '',
     qaFormAnswers: job.qaFormAnswers ?? {},
+    qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     photos: job.photos.map((p) => ({ id: p.id, photoUrl: p.photoUrl, createdAt: p.createdAt })),
@@ -598,6 +604,11 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
     subcategoryFlags = subcategory;
   }
 
+  const qaFormAnswers =
+    input.qaFormAnswers === undefined
+      ? undefined
+      : normalizeQaFormAnswers(subcategoryFlags?.qaFormSchema, input.qaFormAnswers);
+
   if (traderId) {
     const trader = await prisma.trader.findUnique({ where: { id: traderId } });
     if (!trader) throw new NotFoundError('Trader not found.');
@@ -703,7 +714,7 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
           maxBudget: input.maxBudget ?? undefined,
           siteVisitRequested,
           siteVisitFee: siteVisitFee ?? undefined,
-          qaFormAnswers: input.qaFormAnswers as Prisma.InputJsonValue | undefined,
+          qaFormAnswers: qaFormAnswers as Prisma.InputJsonValue | undefined,
           status: JobStatus.DRAFT,
           photos: input.photoUrls?.length
             ? {
@@ -1127,11 +1138,27 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
   }
 
   const categoryId = input.categoryId ?? existing.categoryId;
+  let nextQaFormSchema: unknown = existing.subcategory?.qaFormSchema;
   if (input.subcategoryId) {
     const subcategory = await prisma.subcategory.findFirst({
       where: { id: input.subcategoryId, categoryId },
     });
     if (!subcategory) throw new BadRequestError('Subcategory does not belong to the category.');
+    nextQaFormSchema = subcategory.qaFormSchema;
+  } else if (input.subcategoryId === null) {
+    nextQaFormSchema = null;
+  }
+
+  // Answers belong to one sub-category form — reset them when the form changes without new answers.
+  const subcategoryChanged =
+    input.subcategoryId !== undefined && input.subcategoryId !== existing.subcategoryId;
+  let nextQaFormAnswers: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+  if (input.qaFormAnswers === null) {
+    nextQaFormAnswers = Prisma.JsonNull;
+  } else if (input.qaFormAnswers !== undefined) {
+    nextQaFormAnswers = normalizeQaFormAnswers(nextQaFormSchema, input.qaFormAnswers);
+  } else if (subcategoryChanged) {
+    nextQaFormAnswers = {};
   }
 
   if (input.traderId) {
@@ -1186,10 +1213,7 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
         maxBudget: input.maxBudget === undefined ? undefined : input.maxBudget,
         siteVisitRequested: nextSiteVisitRequested,
         traderId: input.traderId === undefined ? undefined : input.traderId,
-        qaFormAnswers:
-          input.qaFormAnswers === undefined
-            ? undefined
-            : (input.qaFormAnswers as Prisma.InputJsonValue | typeof Prisma.JsonNull),
+        qaFormAnswers: nextQaFormAnswers,
       },
       include: jobInclude,
     });
@@ -1437,6 +1461,8 @@ export const publishJob = async (
         : 'Only draft jobs can be published.'
     );
   }
+
+  assertRequiredQaFormAnswers(existing.subcategory?.qaFormSchema, existing.qaFormAnswers);
 
   const traderId = existing.traderId;
   const isSiteVisit =

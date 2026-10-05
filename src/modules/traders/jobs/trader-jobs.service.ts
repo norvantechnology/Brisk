@@ -9,6 +9,7 @@ import {
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
+import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import { requestJob } from './trader-my-jobs.service';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import { getPlatformSetting } from '../../settings/platform-settings.service';
@@ -1067,7 +1068,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
         },
       },
       category: { select: { id: true, name: true, iconName: true, urlSlug: true } },
-      subcategory: { select: { id: true, name: true, urlSlug: true } },
+      subcategory: { select: { id: true, name: true, urlSlug: true, qaFormSchema: true } },
       photos: {
         where: { kind: 'CUSTOMER' },
         select: { id: true, photoUrl: true },
@@ -1300,6 +1301,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   return {
     ...list,
     description: job.description,
+    qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
     photos,
     photoCount: photos.length,
     /** Prefer showing fee card only when value > 0; still return 0 if DB has 0. */
