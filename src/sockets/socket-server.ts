@@ -70,7 +70,9 @@ export const initSocketServer = (httpServer: http.Server): SocketServer => {
       next();
     } catch (err) {
       logger.warn('Socket auth failed', { err: (err as Error).message });
-      next(new Error('Unauthorized'));
+      const error = new Error('Unauthorized') as Error & { data?: { code: string } };
+      error.data = { code: err instanceof jwt.TokenExpiredError ? 'TOKEN_EXPIRED' : 'UNAUTHORIZED' };
+      next(error);
     }
   });
 
