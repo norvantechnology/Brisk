@@ -1346,7 +1346,7 @@ export const getAdminJobChatThread = async (
 
   const where: Prisma.ChatMessageWhereInput = { jobId: job.id };
 
-  const [total, rows] = await Promise.all([
+  const [total, rows, traderSenders] = await Promise.all([
     prisma.chatMessage.count({ where }),
     prisma.chatMessage.findMany({
       where,
@@ -1364,7 +1364,41 @@ export const getAdminJobChatThread = async (
         },
       },
     }),
+    prisma.chatMessage.groupBy({
+      by: ['senderId'],
+      where: { jobId: job.id, senderId: { not: job.customerId } },
+      _count: { _all: true },
+      _max: { sentAt: true },
+    }),
   ]);
+
+  const traderUsers = traderSenders.length
+    ? await prisma.user.findMany({
+        where: { id: { in: traderSenders.map((s) => s.senderId) } },
+        select: {
+          id: true,
+          fullName: true,
+          profilePhotoUrl: true,
+          traderProfile: { select: { id: true, businessName: true } },
+        },
+      })
+    : [];
+  const traderUserById = new Map(traderUsers.map((u) => [u.id, u]));
+  const traders = traderSenders
+    .map((s) => {
+      const user = traderUserById.get(s.senderId);
+      return {
+        traderId: user?.traderProfile?.id ?? null,
+        userId: s.senderId,
+        businessName: user?.traderProfile?.businessName ?? null,
+        fullName: user?.fullName ?? null,
+        profilePhotoUrl: user?.profilePhotoUrl ?? null,
+        isAssigned: Boolean(job.trader && user?.traderProfile?.id === job.trader.id),
+        messagesCount: s._count._all,
+        lastMessageAt: s._max.sentAt,
+      };
+    })
+    .sort((a, b) => (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0));
 
   return {
     job: {
@@ -1382,6 +1416,7 @@ export const getAdminJobChatThread = async (
           }
         : null,
     },
+    traders,
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
     messages: rows.map((m) => ({
       id: m.id,

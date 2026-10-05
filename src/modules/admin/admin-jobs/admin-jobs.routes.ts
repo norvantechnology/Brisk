@@ -228,8 +228,10 @@ router.get('/jobs/:id', validate(adminJobIdParamSchema), controller.getJob);
  *   get:
  *     summary: Job chat / conversation history (Job Details page)
  *     description: |
- *       All messages on the job between customer and trader, oldest first (read-only for admin).
+ *       All messages on the job from the customer and every trader who chatted (assigned or not), oldest first (read-only for admin).
  *       Same shape as `GET /admin/customers/{id}/chats/{jobId}`. `isFromCustomer` = message sent by the job's customer.
+ *       `traders` = every trader who sent a message on this job (latest first); match `messages[].sender.id` to `traders[].userId`.
+ *       `job.trader` = currently assigned trader only (null until assigned).
  *     tags: ['Admin / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -258,6 +260,15 @@ router.get('/jobs/:id', validate(adminJobIdParamSchema), controller.getJob);
  *                   title: Boiler Repair
  *                   customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, fullName: Sarah Connor, profilePhotoUrl: null }
  *                   trader: { id: 3033aa30-0000-4000-8000-000000000001, businessName: Wilson Electrics, userId: 4b1c2d3e-0000-4000-8000-000000000005, fullName: Mark Wilson, profilePhotoUrl: null }
+ *                 traders:
+ *                   - traderId: 3033aa30-0000-4000-8000-000000000001
+ *                     userId: 4b1c2d3e-0000-4000-8000-000000000005
+ *                     businessName: Wilson Electrics
+ *                     fullName: Mark Wilson
+ *                     profilePhotoUrl: null
+ *                     isAssigned: true
+ *                     messagesCount: 1
+ *                     lastMessageAt: '2026-10-04T09:12:00.000Z'
  *                 meta: { total: 2, page: 1, limit: 10, totalPages: 1 }
  *                 messages:
  *                   - id: 5d6e7f80-0000-4000-8000-000000000006
