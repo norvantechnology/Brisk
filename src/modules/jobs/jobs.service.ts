@@ -766,7 +766,7 @@ const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
 };
 
 const formatDisplayDay = (date: Date) =>
-  date.toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 /** Customer My Jobs tabs — card rows (title, status, date, provider, amount, invoice link). */
 export const listMyJobsByTab = async (
@@ -878,11 +878,7 @@ export const listMyJobsByTab = async (
       title: job.title,
       status: cancelled ? JobStatus.CANCELLED : job.status,
       statusLabel: customerStatusBadgeFor(job.status, job.booking?.status ?? null, job.booking?.finishedAt ?? null),
-      date: cancelled
-        ? formatOutcomeDateLabel(dateAt, 'CANCELLED')
-        : finished
-          ? formatOutcomeDateLabel(dateAt, 'COMPLETED')
-          : formatDisplayDay(dateAt),
+      date: formatDisplayDay(dateAt),
       dateAt,
       provider: job.trader ? job.trader.businessName || job.trader.user.fullName : null,
       amount,

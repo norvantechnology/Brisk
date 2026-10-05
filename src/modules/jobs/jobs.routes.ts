@@ -257,7 +257,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *
  *       **Card fields**
  *       - `id` (uuid string), `jobRef`, `title`, `status`, `statusLabel`
- *       - `date` — display text (ACTIVE: scheduled/posted day · COMPLETED: "Finished on …" · OTHER: "Cancelled on …"); `dateAt` ISO
+ *       - `date` — "October 24, 2026" (ACTIVE: scheduled/posted day · COMPLETED: finished day · OTHER: cancelled day); `dateAt` ISO
  *       - `provider` — assigned trader name (null until assigned)
  *       - `amount` (number or null) + `amountType`:
  *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
@@ -293,7 +293,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         title: Boiler Repair
  *                         status: SCHEDULED
  *                         statusLabel: Active
- *                         date: 24 Oct 2026
+ *                         date: October 24, 2026
  *                         dateAt: '2026-10-24T00:00:00.000Z'
  *                         provider: "Liam O'Connor Plumbing"
  *                         amount: 140
@@ -315,7 +315,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         title: Leakage & Sink Repair
  *                         status: COMPLETED
  *                         statusLabel: Completed
- *                         date: 'Finished on Oct 2, 2026 • 3:15 PM'
+ *                         date: October 2, 2026
  *                         dateAt: '2026-10-02T15:15:00.000Z'
  *                         provider: Mark Wilson
  *                         amount: 144
@@ -337,7 +337,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         title: Rewiring
  *                         status: CANCELLED
  *                         statusLabel: Cancelled
- *                         date: 'Cancelled on Sep 28, 2026 • 11:02 AM'
+ *                         date: September 28, 2026
  *                         dateAt: '2026-09-28T11:02:00.000Z'
  *                         provider: null
  *                         amount: 50
