@@ -3,6 +3,7 @@ import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware'
 import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './admin-jobs.controller';
 import {
+  adminJobChatQuerySchema,
   adminJobIdParamSchema,
   adminJobsListQuerySchema,
   adminJobsStatsQuerySchema,
@@ -135,7 +136,7 @@ router.get('/jobs/stats', validate(adminJobsStatsQuerySchema), controller.getSta
  *       `estimatedAmount` (agreed service charge, "Est."), `paymentStatus`, `status` / `statusLabel`.
  *
  *       Row actions: details `GET /admin/jobs/{id}` · customer `GET /admin/customers/{customer.id}` ·
- *       trader `GET /admin/traders/{trader.id}` · chat `GET /admin/customers/{customer.id}/chats/{id}`.
+ *       trader `GET /admin/traders/{trader.id}` · chat `GET /admin/jobs/{id}/chat`.
  *     tags: ['Admin / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -220,6 +221,58 @@ router.get('/jobs', validate(adminJobsListQuerySchema), controller.listJobs);
  *       404: { description: Job not found. }
  */
 router.get('/jobs/:id', validate(adminJobIdParamSchema), controller.getJob);
+
+/**
+ * @swagger
+ * /admin/jobs/{id}/chat:
+ *   get:
+ *     summary: Job chat / conversation history (Job Details page)
+ *     description: |
+ *       All messages on the job between customer and trader, oldest first (read-only for admin).
+ *       Same shape as `GET /admin/customers/{id}/chats/{jobId}`. `isFromCustomer` = message sent by the job's customer.
+ *     tags: ['Admin / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10, maximum: 100 }
+ *     responses:
+ *       200:
+ *         description: Chat history.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job chat history retrieved successfully.
+ *               data:
+ *                 job:
+ *                   id: 1f2e3d4c-5b6a-4789-8abc-def012345678
+ *                   jobRef: JOB-411A
+ *                   title: Boiler Repair
+ *                   customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, fullName: Sarah Connor, profilePhotoUrl: null }
+ *                   trader: { id: 3033aa30-0000-4000-8000-000000000001, businessName: Wilson Electrics, userId: 4b1c2d3e-0000-4000-8000-000000000005, fullName: Mark Wilson, profilePhotoUrl: null }
+ *                 meta: { total: 2, page: 1, limit: 10, totalPages: 1 }
+ *                 messages:
+ *                   - id: 5d6e7f80-0000-4000-8000-000000000006
+ *                     message: Hi, I can come tomorrow at 10am.
+ *                     sentAt: '2026-10-04T09:12:00.000Z'
+ *                     sender: { id: 4b1c2d3e-0000-4000-8000-000000000005, fullName: Mark Wilson, role: TRADER, profilePhotoUrl: null }
+ *                     isFromCustomer: false
+ *                   - id: 6e7f8091-0000-4000-8000-000000000007
+ *                     message: Perfect, see you then.
+ *                     sentAt: '2026-10-04T09:15:00.000Z'
+ *                     sender: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, fullName: Sarah Connor, role: CUSTOMER, profilePhotoUrl: null }
+ *                     isFromCustomer: true
+ *       404: { description: Job not found. }
+ */
+router.get('/jobs/:id/chat', validate(adminJobChatQuerySchema), controller.getJobChat);
 
 /**
  * @swagger

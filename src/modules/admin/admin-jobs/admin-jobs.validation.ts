@@ -70,5 +70,15 @@ export const adminJobIdParamSchema = z.object({
   }),
 });
 
+export const adminJobChatQuerySchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid job ID format.'),
+  }),
+  query: z.object({
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  }),
+});
+
 export type AdminJobFilters = z.infer<typeof jobFiltersQuery>;
 export type AdminJobsListQuery = z.infer<typeof adminJobsListQuerySchema>['query'];

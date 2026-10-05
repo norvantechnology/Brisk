@@ -1312,13 +1312,23 @@ export const getCustomerChatThread = async (
   filters: { page?: string; limit?: string }
 ) => {
   await assertCustomerExists(customerId);
+  return getAdminJobChatThread({ id: jobId, customerId }, filters, 'Job not found for this customer.');
+};
 
+/** Job chat history (oldest first) — shared by customer details and the global Jobs screen. */
+export const getAdminJobChatThread = async (
+  jobWhere: Prisma.JobWhereInput,
+  filters: { page?: string | number; limit?: string | number },
+  notFoundMessage = 'Job not found.'
+) => {
   const job = await prisma.job.findFirst({
-    where: { id: jobId, customerId },
+    where: jobWhere,
     select: {
       id: true,
       jobRef: true,
       title: true,
+      customerId: true,
+      customer: { select: { id: true, fullName: true, profilePhotoUrl: true } },
       trader: {
         select: {
           id: true,
@@ -1328,13 +1338,13 @@ export const getCustomerChatThread = async (
       },
     },
   });
-  if (!job) throw new NotFoundError('Job not found for this customer.');
+  if (!job) throw new NotFoundError(notFoundMessage);
 
-  const page = parsePage(filters.page);
-  const limit = parseLimit(filters.limit);
+  const page = parsePage(filters.page?.toString());
+  const limit = parseLimit(filters.limit?.toString());
   const skip = (page - 1) * limit;
 
-  const where: Prisma.ChatMessageWhereInput = { jobId };
+  const where: Prisma.ChatMessageWhereInput = { jobId: job.id };
 
   const [total, rows] = await Promise.all([
     prisma.chatMessage.count({ where }),
@@ -1361,6 +1371,7 @@ export const getCustomerChatThread = async (
       id: job.id,
       jobRef: job.jobRef,
       title: job.title,
+      customer: job.customer,
       trader: job.trader
         ? {
             id: job.trader.id,
@@ -1377,7 +1388,7 @@ export const getCustomerChatThread = async (
       message: m.message,
       sentAt: m.sentAt,
       sender: m.sender,
-      isFromCustomer: m.senderId === customerId,
+      isFromCustomer: m.senderId === job.customerId,
     })),
   };
 };

@@ -31,6 +31,15 @@ export const getJob = async (req: AuthenticatedAdminRequest, res: Response, next
   }
 };
 
+export const getJobChat = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const data = await service.getAdminJobChat(req.params.id, req.query as { page?: number; limit?: number });
+    sendResponse({ res, statusCode: 200, message: 'Job chat history retrieved successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getJobSiteVisits = async (
   req: AuthenticatedAdminRequest,
   res: Response,

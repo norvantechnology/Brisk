@@ -4,6 +4,7 @@ import { NotFoundError } from '../../../utils/errors';
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 import {
   dateRangeFilter,
+  getAdminJobChatThread,
   getAdminJobDetail,
 } from '../admin-customer-details/admin-customer-details.service';
 import type { AdminJobFilters, AdminJobsListQuery } from './admin-jobs.validation';
@@ -254,6 +255,9 @@ export const getAdminJob = async (jobId: string) => {
   const job = await getAdminJobDetail({ id: jobId });
   return { ...job, statusLabel: ADMIN_JOB_STATUS_LABELS[job.status] };
 };
+
+export const getAdminJobChat = (jobId: string, query: { page?: number; limit?: number }) =>
+  getAdminJobChatThread({ id: jobId }, query);
 
 export const getAdminJobSiteVisits = async (jobId: string) => {
   const job = await prisma.job.findUnique({
