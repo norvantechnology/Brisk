@@ -270,6 +270,10 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *         `Charges` (paid total) · `Refunded` (completed refunds)
  *       - `currencyCode`, `currencySymbol`
  *       - `isPartPayment` — true when the trader billed in installments (open Installment Payments screen)
+ *       - **Pay routing** (status `PAYMENT PENDING`):
+ *         `invoiceId` set (statusLabel `Payment Pending`, upfront invoice) → `GET /invoices/{invoiceId}` + `POST /payments/intent`;
+ *         `paymentRequestId` set (statusLabel `Awaiting Payout`, trader finished) → `GET /payment-requests/{paymentRequestId}` +
+ *         `POST /payment-requests/{paymentRequestId}/payment-intent`. Both null = nothing to pay.
  *       - `downloadUrl` — invoice PDF path once the trader finished the job, else null
  *     parameters:
  *       - in: query
@@ -306,6 +310,8 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         currencyCode: EUR
  *                         currencySymbol: €
  *                         isPartPayment: false
+ *                         invoiceId: null
+ *                         paymentRequestId: null
  *                         downloadUrl: null
  *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
  *               completed:
@@ -1146,7 +1152,7 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *                   - { key: COMPLETION CONFIRMED, title: Completion Confirmed, subtitle: '', status: PENDING, at: null }
  *                   - { key: PAYMENT COMPLETED, title: Payment Completed, subtitle: '', status: PENDING, at: null }
  *                 isPartPayment: false
- *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, currencyCode: EUR, currencySymbol: € }
+ *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, invoiceId: null, paymentRequestId: null, currencyCode: EUR, currencySymbol: € }
  *                 review: null
  *                 completionConfirmedAt: null
  *                 cancellationReason: null

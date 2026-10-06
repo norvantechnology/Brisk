@@ -805,6 +805,7 @@ export const customerJobAmountSelect = {
       finishedAt: true,
       invoice: {
         select: {
+          id: true,
           status: true,
           totalAmount: true,
           currencyCode: true,
@@ -817,7 +818,8 @@ export const customerJobAmountSelect = {
   },
   paymentRequests: {
     where: { status: { in: ['PAID', 'SENT'] } },
-    select: { type: true, status: true, totalAmount: true, currencyCode: true },
+    orderBy: { createdAt: 'desc' as const },
+    select: { id: true, type: true, status: true, totalAmount: true, currencyCode: true },
   },
 } satisfies Prisma.JobSelect;
 
@@ -866,7 +868,21 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
   /** Trader billed in installments (sent or paid PARTIAL request) — customer opens the Installment Payments screen. */
   const isPartPayment = job.paymentRequests.some((p) => p.type === 'PARTIAL');
 
-  return { amount, amountType, currencyCode, amountDue: due, totalPaid: charged, refunded, isPartPayment };
+  /** What to pay: unpaid upfront invoice → invoice checkout; trader request waiting → payment-request checkout. */
+  const invoiceId = !cancelled && invoice?.status === InvoiceStatus.UNPAID ? invoice.id : null;
+  const paymentRequestId = cancelled ? null : (job.paymentRequests.find((p) => p.status === 'SENT')?.id ?? null);
+
+  return {
+    amount,
+    amountType,
+    currencyCode,
+    amountDue: due,
+    totalPaid: charged,
+    refunded,
+    isPartPayment,
+    invoiceId,
+    paymentRequestId,
+  };
 };
 
 /** Customer My Jobs tabs — card rows (title, status, date, provider, amount, invoice link). */
@@ -899,7 +915,8 @@ export const listMyJobsByTab = async (
   const rows = jobs.map((job) => {
     const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
     const finished = job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt);
-    const { amount, amountType, currencyCode, isPartPayment } = resolveCustomerJobAmount(job);
+    const { amount, amountType, currencyCode, isPartPayment, invoiceId, paymentRequestId } =
+      resolveCustomerJobAmount(job);
     currencyCodes.add(currencyCode);
 
     const dateAt = cancelled
@@ -921,6 +938,8 @@ export const listMyJobsByTab = async (
       amountType,
       currencyCode,
       isPartPayment,
+      invoiceId,
+      paymentRequestId,
       downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     };
   });
