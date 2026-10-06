@@ -103,6 +103,7 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
   return {
     jobId: job.id,
     jobStatus: job.status,
+    isPartPayment: requests.some((r) => r.type === TraderPaymentRequestType.PARTIAL),
     paymentRequests: requests.map((r) => serialize(r, symbols.get(r.currencyCode) ?? r.currencyCode)),
   };
 };

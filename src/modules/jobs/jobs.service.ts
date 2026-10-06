@@ -815,7 +815,7 @@ export const customerJobAmountSelect = {
   },
   paymentRequests: {
     where: { status: { in: ['PAID', 'SENT'] } },
-    select: { status: true, totalAmount: true, currencyCode: true },
+    select: { type: true, status: true, totalAmount: true, currencyCode: true },
   },
 } satisfies Prisma.JobSelect;
 
@@ -861,7 +861,10 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
   const currencyCode =
     invoice?.currencyCode ?? job.paymentRequests[0]?.currencyCode ?? job.quotes[0]?.currencyCode ?? 'EUR';
 
-  return { amount, amountType, currencyCode, amountDue: due, totalPaid: charged, refunded };
+  /** Trader billed in installments (sent or paid PARTIAL request) — customer opens the Installment Payments screen. */
+  const isPartPayment = job.paymentRequests.some((p) => p.type === 'PARTIAL');
+
+  return { amount, amountType, currencyCode, amountDue: due, totalPaid: charged, refunded, isPartPayment };
 };
 
 /** Customer My Jobs tabs — card rows (title, status, date, provider, amount, invoice link). */
@@ -894,7 +897,7 @@ export const listMyJobsByTab = async (
   const rows = jobs.map((job) => {
     const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
     const finished = job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt);
-    const { amount, amountType, currencyCode } = resolveCustomerJobAmount(job);
+    const { amount, amountType, currencyCode, isPartPayment } = resolveCustomerJobAmount(job);
     currencyCodes.add(currencyCode);
 
     const dateAt = cancelled
@@ -915,6 +918,7 @@ export const listMyJobsByTab = async (
       amount,
       amountType,
       currencyCode,
+      isPartPayment,
       downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     };
   });

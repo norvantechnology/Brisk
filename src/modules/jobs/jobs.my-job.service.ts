@@ -333,6 +333,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
         }
       : null,
     milestones,
+    isPartPayment: pricing.isPartPayment,
     pricing: {
       amount: pricing.amount,
       amountType: pricing.amountType,

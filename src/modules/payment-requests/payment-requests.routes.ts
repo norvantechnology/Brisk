@@ -59,7 +59,8 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *     responses:
  *       200:
  *         description: |
- *           `data.jobId`, `data.jobStatus`, `data.paymentRequests[]` (CustomerPaymentRequest).
+ *           `data.jobId`, `data.jobStatus`, `data.isPartPayment` (true when the trader sent any installment /
+ *           PARTIAL request), `data.paymentRequests[]` (CustomerPaymentRequest).
  *       404:
  *         description: Job not found for this customer.
  */

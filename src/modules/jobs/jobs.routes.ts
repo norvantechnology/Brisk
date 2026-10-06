@@ -269,6 +269,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
  *         `Charges` (paid total) · `Refunded` (completed refunds)
  *       - `currencyCode`, `currencySymbol`
+ *       - `isPartPayment` — true when the trader billed in installments (open Installment Payments screen)
  *       - `downloadUrl` — invoice PDF path once the trader finished the job, else null
  *     parameters:
  *       - in: query
@@ -304,6 +305,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         amountType: Estimated
  *                         currencyCode: EUR
  *                         currencySymbol: €
+ *                         isPartPayment: false
  *                         downloadUrl: null
  *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
  *               completed:
@@ -1025,6 +1027,8 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *       → `WORK COMPLETED` → `COMPLETION CONFIRMED` (customer `POST /jobs/{id}/confirm-completion`) → `PAYMENT COMPLETED`. Each has `title`, `subtitle` (date/time or empty),
  *       `status` = `COMPLETED` | `CURRENT` | `PENDING` | `CANCELLED`. `PAYMENT COMPLETED` is COMPLETED only when money was actually received.
  *
+ *       `isPartPayment` = true when the trader sent any installment (PARTIAL) payment request — route Pay
+ *       to the Installment Payments screen (`GET /jobs/{id}/payment-requests`); false → normal payment flow.
  *       `trader.phone` is shared only once a booking exists. `actions` tell which buttons to show
  *       (cancel, reschedule, review, report issue).
  *
@@ -1062,6 +1066,7 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *                   - { key: WORK COMPLETED, title: Work Completed, subtitle: '', status: PENDING, at: null }
  *                   - { key: COMPLETION CONFIRMED, title: Completion Confirmed, subtitle: '', status: PENDING, at: null }
  *                   - { key: PAYMENT COMPLETED, title: Payment Completed, subtitle: '', status: PENDING, at: null }
+ *                 isPartPayment: false
  *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, currencyCode: EUR, currencySymbol: € }
  *                 review: null
  *                 completionConfirmedAt: null
