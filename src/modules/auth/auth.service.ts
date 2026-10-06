@@ -342,39 +342,65 @@ export const registerUser = async (
   const { fullName, email, mobileNumber, password, role, country, profilePhotoUrl, isAgeConfirmed } =
     input;
 
+  const existingSelect = {
+    id: true,
+    role: true,
+    status: true,
+    mobileVerified: true,
+    traderProfile: { select: { id: true } },
+    _count: { select: { jobs: true } },
+  } as const;
   const [existingEmail, existingMobile] = await Promise.all([
-    prisma.user.findUnique({ where: { email }, select: { id: true } }),
-    prisma.user.findUnique({ where: { mobileNumber }, select: { id: true } }),
+    prisma.user.findUnique({ where: { email }, select: existingSelect }),
+    prisma.user.findUnique({ where: { mobileNumber }, select: existingSelect }),
   ]);
 
-  if (existingEmail) {
+  // Signup left on the OTP screen (never verified) can register again — same record, fresh OTPs.
+  const isPendingSignup = (u: {
+    status: UserStatus;
+    mobileVerified: boolean;
+    traderProfile: { id: string } | null;
+    _count: { jobs: number };
+  }) => u.status === UserStatus.PENDING && !u.mobileVerified && !u.traderProfile && u._count.jobs === 0;
+
+  if (existingEmail && !isPendingSignup(existingEmail)) {
     throw new ConflictError('Email is already registered.');
   }
-  if (existingMobile) {
+  if (existingMobile && (!isPendingSignup(existingMobile) || (existingEmail && existingEmail.id !== existingMobile.id))) {
     throw new ConflictError('Mobile number is already registered.');
+  }
+  const pendingUser = existingEmail ?? existingMobile;
+  if (pendingUser && pendingUser.role !== role) {
+    throw new ConflictError(
+      existingEmail ? 'Email is already registered.' : 'Mobile number is already registered.'
+    );
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
 
   const isTrader = role === UserRole.TRADER;
 
-  const user = await prisma.user.create({
-    data: {
-      fullName,
-      email,
-      mobileNumber,
-      passwordHash,
-      role,
-      country: country?.trim() || null,
-      profilePhotoUrl: profilePhotoUrl ?? null,
-      mobileVerified: false,
-      // Traders must verify email OTP too; customers keep email verified at register.
-      emailVerified: !isTrader,
-      status: UserStatus.PENDING,
-      isAgeConfirmed: isAgeConfirmed === true,
-      ageConfirmedAt: isAgeConfirmed === true ? new Date() : null,
-    },
-  });
+  const signupData = {
+    fullName,
+    email,
+    mobileNumber,
+    passwordHash,
+    role,
+    country: country?.trim() || null,
+    mobileVerified: false,
+    // Traders must verify email OTP too; customers keep email verified at register.
+    emailVerified: !isTrader,
+    status: UserStatus.PENDING,
+    isAgeConfirmed: isAgeConfirmed === true,
+    ageConfirmedAt: isAgeConfirmed === true ? new Date() : null,
+  };
+
+  const user = pendingUser
+    ? await prisma.user.update({
+        where: { id: pendingUser.id },
+        data: { ...signupData, ...(profilePhotoUrl !== undefined ? { profilePhotoUrl } : {}) },
+      })
+    : await prisma.user.create({ data: { ...signupData, profilePhotoUrl: profilePhotoUrl ?? null } });
 
   let savedProfilePhotoUrl = user.profilePhotoUrl;
 
@@ -393,19 +419,30 @@ export const registerUser = async (
     });
   }
 
-  await generateOtp(mobileNumber, 'mobile_verification');
-  if (isTrader) {
-    const emailCode = await generateOtp(email, 'email_verification');
-    await sendEmailOtpMail(email, emailCode, UserRole.TRADER);
+  // Re-register inside the resend cooldown keeps the code already sent (still valid) instead of 429.
+  if (pendingUser) {
+    await trySendOtp(mobileNumber, 'mobile_verification');
+    if (isTrader) {
+      const emailResult = await trySendOtp(email, 'email_verification');
+      if (emailResult.sent) await sendEmailOtpMail(email, emailResult.code, UserRole.TRADER);
+    }
+  } else {
+    await generateOtp(mobileNumber, 'mobile_verification');
+    if (isTrader) {
+      const emailCode = await generateOtp(email, 'email_verification');
+      await sendEmailOtpMail(email, emailCode, UserRole.TRADER);
+    }
   }
 
-  // Register Interest email (customer vs trader) — non-blocking
-  void import('../../services/email.service').then(({ sendRegisterInterestEmailSafe }) =>
-    sendRegisterInterestEmailSafe(role, {
-      fullName: user.fullName,
-      email: user.email,
-    })
-  );
+  // Register Interest email (customer vs trader) — non-blocking, first signup only
+  if (!pendingUser) {
+    void import('../../services/email.service').then(({ sendRegisterInterestEmailSafe }) =>
+      sendRegisterInterestEmailSafe(role, {
+        fullName: user.fullName,
+        email: user.email,
+      })
+    );
+  }
 
   return {
     message: isTrader

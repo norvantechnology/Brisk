@@ -101,7 +101,7 @@ const router = Router();
  *       400:
  *         description: Validation error.
  *       409:
- *         description: Email or mobile number already exists.
+ *         description: "Email or mobile number already belongs to a verified account (or another role). An unverified signup (left on the OTP screen) can register again with the same email/mobile — same account is updated and OTP re-sent."
  *       429:
  *         description: OTP resend cooldown active.
  */
