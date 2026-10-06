@@ -464,6 +464,7 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *       - Invoice PDF: `downloadUrl` (= `GET /jobs/{id}/invoice/download`). Receipt JSON: `receiptUrl`
  *         (= `GET /payments/{paymentId}/receipt`, null until a card payment exists).
  *       - `canReview` = show the Rate & Review button (`POST /jobs/{id}/review`).
+ *       - `review` = `{ rating, comment, createdAt }` once the customer rated the trader, else null.
  *       Status values never contain underscores.
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -539,10 +540,19 @@ router.get(
  *                 cancelledAt: '2026-10-05T13:30:24.410Z'
  *                 cancellationReason: Found another trader
  *                 formattedCompletedDate: 'Cancelled on Oct 5, 2026 • 1:30 PM'
+ *                 startedAt: null
+ *                 durationMinutes: null
+ *                 estimatedDuration: null
+ *                 address: { fullAddress: "1 O'Connell Street", city: Dublin, eircode: D01 F5P2, latitude: 53.3498, longitude: -6.2603 }
  *                 trader: null
+ *                 review: null
  *                 completionPhotos: []
- *                 paymentSummary: { serviceFee: 0, processingFee: 0, discount: 0, vatPercentage: 0, vatAmount: 0, totalPaid: 0, amountDue: 0, paymentStatus: UNPAID, cardBrand: null, cardLast4: null }
+ *                 paymentSummary: { serviceFee: 0, processingFee: 0, discount: 0, vatPercentage: 0, vatAmount: 0, totalPaid: 0, amountDue: 0, paymentStatus: UNPAID, cardBrand: null, cardLast4: null, baseRate: 0, platformFee: 0, offerApplied: 0, netPayout: 0 }
+ *                 invoiceId: null
+ *                 invoiceNumber: null
  *                 downloadUrl: null
+ *                 invoiceUrl: null
+ *                 receiptUrl: null
  *                 canReview: false
  *       400: { description: Job is not cancelled. }
  *       404: { description: Job not found }
@@ -965,10 +975,16 @@ router.post('/:id/cancel', ...customerOnly, validate(cancelJobSchema), controlle
  *                 status: PENDING
  *                 selectionStatus: PENDING
  *                 canAccept: true
+ *                 requestedAt: null
+ *                 createdAt: '2026-10-05T12:20:11.000Z'
  *                 trader:
  *                   id: adabc55c-6d7d-4b12-8597-6d26366c26bf
  *                   displayName: Brisk Trader
+ *                   fullName: Brisk Trader
+ *                   businessName: Brisk Trader
+ *                   traderType: SOLO
  *                   profilePhotoUrl: null
+ *                   coverImageUrl: null
  *                   bio: Licensed plumber with 10 years experience.
  *                   location: Palanpur, Gujarat, India
  *                   yearsExperience: 10
@@ -979,8 +995,9 @@ router.post('/:id/cancel', ...customerOnly, validate(cancelJobSchema), controlle
  *                   isVerified: true
  *                   badges: [VERIFIED]
  *                   categories: [{ id: 3f0f23dd-dfa2-4606-9eed-acdc22534f0f, name: Plumbing Services }]
+ *                   memberSince: '2026-09-12T09:30:00.000Z'
  *                 reviews:
- *                   - { id: 0b1c2d3e-0000-4000-8000-000000000001, rating: 5, review: Great work, date: 'October 2, 2026', customerName: Sarah C., customerPhotoUrl: null }
+ *                   - { id: 0b1c2d3e-0000-4000-8000-000000000001, rating: 5, review: Great work, createdAt: '2026-10-02T10:15:00.000Z', date: 'October 2, 2026', customerName: Sarah C., customerPhotoUrl: null }
  *       404: { description: Job or quotation not found }
  */
 router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchema), controller.getJobQuoteDetail);
@@ -1005,6 +1022,9 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *
  *       `trader.phone` is shared only once a booking exists. `actions` tell which buttons to show
  *       (cancel, reschedule, review, report issue).
+ *
+ *       `review` = `{ rating, review, createdAt }` after the customer rated the trader, else null.
+ *       `downloadUrl` (invoice PDF) is set once the trader finished the work.
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
@@ -1020,19 +1040,22 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *                 bookingId: 5a6b7c8d-0000-4000-8000-000000000002
  *                 bookingRef: BKG-1A2B
  *                 title: Kitchen tap leaking
+ *                 description: Mixer tap in the kitchen keeps dripping.
  *                 status: SCHEDULED
  *                 statusLabel: Active
+ *                 category: { id: 3f0f23dd-dfa2-4606-9eed-acdc22534f0f, name: Plumbing Services }
+ *                 subcategory: { id: ef44f8c8-bed2-43e7-b12b-f3d1357f5926, name: Drainage & Sewer Unblocking }
  *                 scheduledDate: '2026-10-06T00:00:00.000Z'
  *                 date: October 6, 2026
  *                 timeSlot: MORNING
  *                 address: { fullAddress: 'Palanpur, Gujarat', city: Palanpur, eircode: null, latitude: 24.17, longitude: 72.43 }
  *                 trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, name: Brisk Trader, profilePhotoUrl: null, phone: '+353861234567', avgRating: 4.5, reviewsCount: 2, isTopRated: false }
  *                 milestones:
- *                   - { key: QUOTE ACCEPTED, title: Quote Accepted, subtitle: 'October 5, 2026 at 12:20 PM', status: COMPLETED }
- *                   - { key: BOOKING CONFIRMED, title: Booking Confirmed, subtitle: 'October 5, 2026 at 12:21 PM', status: COMPLETED }
- *                   - { key: TRADER ARRIVED, title: Trader Arrived, subtitle: '', status: CURRENT }
- *                   - { key: WORK COMPLETED, title: Work Completed, subtitle: '', status: PENDING }
- *                   - { key: PAYMENT COMPLETED, title: Payment Completed, subtitle: '', status: PENDING }
+ *                   - { key: QUOTE ACCEPTED, title: Quote Accepted, subtitle: 'October 5, 2026 at 12:20 PM', status: COMPLETED, at: '2026-10-05T12:20:00.000Z' }
+ *                   - { key: BOOKING CONFIRMED, title: Booking Confirmed, subtitle: 'October 5, 2026 at 12:21 PM', status: COMPLETED, at: '2026-10-05T12:21:00.000Z' }
+ *                   - { key: TRADER ARRIVED, title: Trader Arrived, subtitle: '', status: CURRENT, at: null }
+ *                   - { key: WORK COMPLETED, title: Work Completed, subtitle: '', status: PENDING, at: null }
+ *                   - { key: PAYMENT COMPLETED, title: Payment Completed, subtitle: '', status: PENDING, at: null }
  *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, currencyCode: EUR, currencySymbol: € }
  *                 review: null
  *                 cancellationReason: null
@@ -1117,7 +1140,7 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  *             example:
  *               success: true
  *               message: Thank you! Your review has been submitted.
- *               data: { reviewId: 0b1c2d3e-0000-4000-8000-000000000001, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, rating: 5, review: Quick and tidy work, trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, avgRating: 4.67, reviewsCount: 3 } }
+ *               data: { reviewId: 0b1c2d3e-0000-4000-8000-000000000001, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, rating: 5, review: Quick and tidy work, createdAt: '2026-10-05T13:30:23.842Z', trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, avgRating: 4.67, reviewsCount: 3 } }
  *       400: { description: Job not finished, cancelled, or no booked trader }
  *       409: { description: Already reviewed }
  */
@@ -1154,13 +1177,16 @@ router.post('/:id/review', ...customerOnly, validate(jobReviewSchema), controlle
  *             example:
  *               success: true
  *               message: Dispute submitted successfully.
- *               data: { id: 6c7d8e9f-0000-4000-8000-000000000003, disputeId: 6c7d8e9f-0000-4000-8000-000000000003, disputeRef: DSP-4F2A1C, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, jobRef: JOB-FC79, reason: Incomplete Job, description: The tap is still leaking after the repair., evidenceUrls: [], status: OPEN, adminNote: null }
+ *               data: { id: 6c7d8e9f-0000-4000-8000-000000000003, disputeId: 6c7d8e9f-0000-4000-8000-000000000003, disputeRef: DSP-4F2A1C, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, jobRef: JOB-FC79, jobTitle: Kitchen tap leaking, reason: Incomplete Job, description: The tap is still leaking after the repair., evidenceUrls: [], status: OPEN, adminNote: null, resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:30:23.884Z' }
  *       400: { description: No trader assigned yet }
  *       409: { description: An open issue already exists for this job }
  *   get:
  *     summary: Issues reported on this job (latest first)
  *     tags: ['Customer / My Job']
  *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       All issues the customer reported on this job, newest first, with the BRISK admin's `status`
+ *       (`OPEN` | `IN REVIEW` | `RESOLVED` | `REJECTED`), `adminNote` and `resolvedAt`. Empty array when none.
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:

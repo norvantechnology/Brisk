@@ -348,6 +348,7 @@ router.get('/disputes', validate(adminDisputesListQuerySchema), controller.listD
  * /admin/disputes/{id}:
  *   get:
  *     summary: Dispute detail
+ *     description: One dispute with reason, description, evidence URLs, admin note, and the job / customer / trader it belongs to.
  *     tags: ['Admin / Disputes']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
