@@ -214,6 +214,7 @@ const jobInclude = {
           promoDiscount: true,
           platformFee: true,
           tax: true,
+          currencyCode: true,
           payments: {
             orderBy: { createdAt: 'desc' as const },
             take: 1,
@@ -1116,6 +1117,7 @@ export const getJobOutcomeDetail = async (
         platformFee: true,
         vatAmount: true,
         totalAmount: true,
+        currencyCode: true,
         cardBrand: true,
         cardLast4: true,
         paidAt: true,
@@ -1170,6 +1172,9 @@ export const getJobOutcomeDetail = async (
       .filter((c): c is { brand: string | null; last4: string | null; at: Date | null } => Boolean(c?.last4))
       .sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0))[0] ?? null;
 
+  const currencyCode = invoice?.currencyCode ?? requests[0]?.currencyCode ?? 'EUR';
+  const currencySymbol = (await getCurrencyMeta(currencyCode)).symbol;
+
   const startedAt = job.booking?.arrivedAt ?? null;
   const finishedAt = job.booking?.finishedAt ?? null;
   const durationMinutes =
@@ -1203,12 +1208,16 @@ export const getJobOutcomeDetail = async (
     durationMinutes,
     /** Customer-entered estimate from Post Job (e.g. "2-3 hours"). */
     estimatedDuration: job.durationLabel || null,
+    /** Appointment the job was booked for (header date/time). */
+    scheduledDate: job.booking?.scheduledDate ?? job.scheduledDate,
+    timeSlot: job.timeSlot,
     address: {
       fullAddress: job.address ? formatAddressLine(job.address) : job.addressLine,
       city: job.city,
       eircode: job.postcode,
       latitude: job.latitude,
       longitude: job.longitude,
+      mapImageUrl: job.address?.mapImageUrl ?? null,
     },
     trader: job.trader
       ? {
@@ -1239,6 +1248,8 @@ export const getJobOutcomeDetail = async (
       totalPaid,
       amountDue,
       paymentStatus,
+      currencyCode,
+      currencySymbol,
       cardBrand: card?.brand ?? null,
       cardLast4: card?.last4 ?? null,
       /** Legacy keys — same values as serviceFee / processingFee / -discount / billed total. */

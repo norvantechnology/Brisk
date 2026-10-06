@@ -461,7 +461,8 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *       - `completionPhotos` = work-proof photos uploaded by the trader.
  *       - `paymentSummary` comes from the real invoice + trader payment requests:
  *         `serviceFee`, `processingFee`, `discount`, `vatPercentage`, `vatAmount`, `totalPaid`, `amountDue`,
- *         `paymentStatus` (`UNPAID` | `PENDING` | `PAID` | `REFUNDED` | `CANCELLED`), `cardBrand`, `cardLast4` (latest card used).
+ *         `paymentStatus` (`UNPAID` | `PENDING` | `PAID` | `REFUNDED` | `CANCELLED`), `currencyCode`, `currencySymbol`,
+ *         `cardBrand`, `cardLast4` (latest card used).
  *         `baseRate` / `platformFee` / `offerApplied` / `netPayout` are legacy keys kept for older builds.
  *       - Invoice PDF: `downloadUrl` (= `GET /jobs/{id}/invoice/download`). Receipt JSON: `receiptUrl`
  *         (= `GET /payments/{paymentId}/receipt`, null until a card payment exists).
@@ -494,11 +495,13 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                 startedAt: '2026-10-05T12:45:10.517Z'
  *                 durationMinutes: 45
  *                 estimatedDuration: 1-2 hours
- *                 address: { fullAddress: "1 O'Connell Street", city: Dublin, eircode: D01 F5P2, latitude: 53.3498, longitude: -6.2603 }
+ *                 scheduledDate: '2026-10-24T00:00:00.000Z'
+ *                 timeSlot: '2:00 PM - 4:00 PM'
+ *                 address: { fullAddress: "1 O'Connell Street", city: Dublin, eircode: D01 F5P2, latitude: 53.3498, longitude: -6.2603, mapImageUrl: null }
  *                 trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, name: Brisk Trader, location: 'Dublin, Ireland', avatar: 'https://api.brisk.ie/uploads/files/profile_photo/2380d295-fef3-4365-bb81-1ecfb9b3ec8c/1789385663121-r131zvpo.jpg', rating: 4.9, reviewsCount: 124, isVerified: true, conversationId: 89d85512-3ff7-4fc7-a44a-2e594130d71c }
  *                 review: null
  *                 completionPhotos: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/1788858205135-jv3bvmnx.jpg']
- *                 paymentSummary: { serviceFee: 150, processingFee: 10, discount: 0, vatPercentage: 20, vatAmount: 32, totalPaid: 0, amountDue: 192, paymentStatus: PENDING, cardBrand: null, cardLast4: null, baseRate: 150, platformFee: 10, offerApplied: 0, netPayout: 192 }
+ *                 paymentSummary: { serviceFee: 150, processingFee: 10, discount: 0, vatPercentage: 20, vatAmount: 32, totalPaid: 0, amountDue: 192, paymentStatus: PENDING, currencyCode: EUR, currencySymbol: €, cardBrand: null, cardLast4: null, baseRate: 150, platformFee: 10, offerApplied: 0, netPayout: 192 }
  *                 invoiceId: null
  *                 invoiceNumber: null
  *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
