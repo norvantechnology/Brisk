@@ -1072,13 +1072,11 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
   };
 };
 
-/**
- * Completed / cancelled history screens for customer app (same shape as trader dummy).
- */
-export const getJobOutcomeDetail = async (
+/** Shared by Completed / Cancelled screens and the compact Job Details API. `expected` enforces the status. */
+const buildCustomerJobView = async (
   customerId: string,
   jobId: string,
-  expected: 'COMPLETED' | 'CANCELLED'
+  expected?: 'COMPLETED' | 'CANCELLED'
 ) => {
   const job = await getOwnedJob(customerId, jobId);
   const cancelled =
@@ -1093,9 +1091,10 @@ export const getJobOutcomeDetail = async (
   if (expected === 'CANCELLED' && !cancelled) {
     throw new BadRequestError('Job is not cancelled.');
   }
+  const kind = expected ?? (cancelled ? 'CANCELLED' : 'COMPLETED');
 
   const eventAt =
-    expected === 'COMPLETED'
+    kind === 'COMPLETED'
       ? (job.booking?.finishedAt ?? job.updatedAt)
       : (job.cancelledAt ?? job.updatedAt);
 
@@ -1187,7 +1186,7 @@ export const getJobOutcomeDetail = async (
     'SERVICE'
   ).toUpperCase();
 
-  return {
+  const view = {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
     title: job.title,
@@ -1200,10 +1199,10 @@ export const getJobOutcomeDetail = async (
       job.booking?.status ?? null,
       job.booking?.finishedAt ?? null
     ),
-    completedAt: expected === 'COMPLETED' ? eventAt : null,
-    cancelledAt: expected === 'CANCELLED' ? eventAt : null,
-    cancellationReason: expected === 'CANCELLED' ? job.cancellationReason : null,
-    formattedCompletedDate: formatOutcomeDateLabel(eventAt, expected),
+    completedAt: kind === 'COMPLETED' ? eventAt : null,
+    cancelledAt: kind === 'CANCELLED' ? eventAt : null,
+    cancellationReason: kind === 'CANCELLED' ? job.cancellationReason : null,
+    formattedCompletedDate: formatOutcomeDateLabel(eventAt, kind),
     startedAt,
     durationMinutes,
     /** Customer-entered estimate from Post Job (e.g. "2-3 hours"). */
@@ -1263,10 +1262,76 @@ export const getJobOutcomeDetail = async (
     downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     invoiceUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     receiptUrl: lastCardPayment ? `/payments/${lastCardPayment.id}/receipt` : null,
-    canReview: expected === 'COMPLETED' && finished && Boolean(job.trader) && !review,
+    canReview: kind === 'COMPLETED' && finished && Boolean(job.trader) && !review,
     completionConfirmedAt: job.booking?.customerConfirmedAt ?? null,
     canConfirmCompletion:
-      expected === 'COMPLETED' && finished && Boolean(job.booking) && !job.booking?.customerConfirmedAt && activeDisputes === 0,
+      kind === 'COMPLETED' && finished && Boolean(job.booking) && !job.booking?.customerConfirmedAt && activeDisputes === 0,
+  };
+  return { job, view };
+};
+
+/** Completed / cancelled history screens for customer app. */
+export const getJobOutcomeDetail = async (
+  customerId: string,
+  jobId: string,
+  expected: 'COMPLETED' | 'CANCELLED'
+) => (await buildCustomerJobView(customerId, jobId, expected)).view;
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Compact Job Details screen (any status) — only the fields the screen renders. */
+export const getJobDetailsSummary = async (customerId: string, jobId: string) => {
+  const { job, view } = await buildCustomerJobView(customerId, jobId);
+  const pay = view.paymentSummary;
+  const dateAt = view.scheduledDate;
+  const brand = pay.cardBrand ? pay.cardBrand.charAt(0).toUpperCase() + pay.cardBrand.slice(1) : 'Card';
+
+  return {
+    jobId: view.id,
+    jobRef: view.jobRef,
+    title: view.title,
+    description: view.description,
+    status: view.status,
+    statusLabel: view.statusBadge,
+    date: dateAt
+      ? `${SHORT_MONTHS[dateAt.getMonth()]} ${dateAt.getDate()}${view.timeSlot ? `, ${view.timeSlot}` : ''}`
+      : null,
+    dateAt,
+    estimatedDuration: view.estimatedDuration,
+    category: [job.category?.name, job.subcategory?.name].filter(Boolean).join(' / ') || null,
+    mediaUrls: view.photos,
+    provider: view.trader
+      ? {
+          id: view.trader.id,
+          name: view.trader.name,
+          role: job.subcategory?.name || job.category?.name || null,
+          profilePhotoUrl: view.trader.avatar,
+          rating: view.trader.rating,
+          reviewsCount: view.trader.reviewsCount,
+          isVerified: view.trader.isVerified,
+        }
+      : null,
+    serviceAddress: {
+      address: view.address.fullAddress,
+      lat: view.address.latitude,
+      lng: view.address.longitude,
+      mapImageUrl: view.address.mapImageUrl,
+    },
+    paymentDetails: {
+      serviceFee: pay.serviceFee,
+      processingFee: pay.processingFee,
+      discount: pay.offerApplied,
+      vatAmount: pay.vatAmount,
+      totalPaid: pay.totalPaid,
+      amountDue: pay.amountDue,
+      currencyCode: pay.currencyCode,
+      currencySymbol: pay.currencySymbol,
+      paymentStatus: pay.paymentStatus,
+      paymentMethod: pay.cardLast4 ? `${brand} ending in •••• ${pay.cardLast4}` : null,
+    },
+    downloadUrl: view.downloadUrl,
+    receiptUrl: view.receiptUrl,
+    canReview: view.canReview,
   };
 };
 

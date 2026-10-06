@@ -448,6 +448,80 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
 
 /**
  * @swagger
+ * /jobs/{id}/details:
+ *   get:
+ *     summary: Job Details screen (compact — any status)
+ *     description: |
+ *       Small payload for the customer **Job Details** screen. Works for any status (active, completed, cancelled).
+ *       `GET /jobs/{id}` stays the full job object (create / edit / publish flows); `/completed` and `/cancelled`
+ *       stay the full history screens.
+ *       - `status` UPPERCASE without `_` (e.g. `COMPLETED`, `IN PROGRESS`), `statusLabel` display badge.
+ *       - `date` / `dateAt` — booked appointment (`dateAt` + `timeSlot` text).
+ *       - `provider` — booked trader (null until a trader is confirmed); `role` = job service (subcategory / category).
+ *       - `paymentDetails.discount` is negative (offer / promo); `paymentMethod` = latest card used (null if none).
+ *       - `downloadUrl` — invoice PDF once the trader finished the job; `receiptUrl` — card receipt.
+ *     tags: ['Customer / My Job']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Job details.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job details fetched successfully.
+ *               data:
+ *                 jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                 jobRef: '#JOB-1EA2'
+ *                 title: Fixing loose kitchen cabinet hinges
+ *                 description: Fixing loose kitchen cabinet hinges and repairing a squeaky bedroom door frame.
+ *                 status: COMPLETED
+ *                 statusLabel: Completed
+ *                 date: 'Oct 24, 2:00 PM - 4:00 PM'
+ *                 dateAt: '2026-10-24T00:00:00.000Z'
+ *                 estimatedDuration: 2-3 hours
+ *                 category: Handyman / Carpentry
+ *                 mediaUrls: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/hinge.jpg']
+ *                 provider:
+ *                   id: adabc55c-6d7d-4b12-8597-6d26366c26bf
+ *                   name: Alex Carpentry
+ *                   role: Carpentry
+ *                   profilePhotoUrl: https://api.brisk.ie/uploads/files/profile_photo/alex.jpg
+ *                   rating: 4.9
+ *                   reviewsCount: 124
+ *                   isVerified: true
+ *                 serviceAddress:
+ *                   address: 14 Oak Street, Dublin
+ *                   lat: 53.3498
+ *                   lng: -6.2603
+ *                   mapImageUrl: null
+ *                 paymentDetails:
+ *                   serviceFee: 120
+ *                   processingFee: 5
+ *                   discount: -5
+ *                   vatAmount: 0
+ *                   totalPaid: 120
+ *                   amountDue: 0
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
+ *                   paymentStatus: PAID
+ *                   paymentMethod: Visa ending in •••• 4242
+ *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
+ *                 receiptUrl: /payments/7c3d4e5f-0000-4000-8000-000000000004/receipt
+ *                 canReview: true
+ *       404:
+ *         description: Job not found.
+ */
+router.get('/:id/details', ...customerOnly, validate(jobIdParamSchema), controller.getJobDetailsSummary);
+
+/**
+ * @swagger
  * /jobs/{id}/completed:
  *   get:
  *     summary: Completed Job Details — completion, work photos, address, payment breakdown

@@ -143,6 +143,19 @@ export const getJob = async (
   }
 };
 
+export const getJobDetailsSummary = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getJobDetailsSummary(req.user!.id, req.params.id);
+    sendResponse({ res, statusCode: 200, message: 'Job details fetched successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getCompletedJobDetail = async (
   req: AuthenticatedRequest,
   res: Response,
