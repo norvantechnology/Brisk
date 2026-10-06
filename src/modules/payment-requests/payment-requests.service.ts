@@ -21,6 +21,7 @@ import {
   toPaymentError,
 } from '../../services/stripe.service';
 import { emitPaymentRequestPaid } from '../../sockets/realtime';
+import { buildJobPaymentBreakdown } from '../jobs/job-payment-state';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
 
 const PAYABLE_STATUSES: TraderPaymentRequestStatus[] = [
@@ -84,26 +85,92 @@ const getOwnedRequest = async (customerId: string, id: string) => {
   return request;
 };
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const resolveInstallmentStatus = (jobAmount: number, paid: number, pending: number) => {
+  if (jobAmount > 0 && paid >= jobAmount) return 'PAID';
+  if (paid > 0) return 'PARTIALLY PAID';
+  if (pending > 0) return 'PENDING';
+  return 'UNPAID';
+};
+
+/**
+ * Installment Payments screen — one call: job breakdown, totals (paid / due), every request
+ * (progress timeline + Pay Now via `canPay`), PAID rows = transaction history.
+ */
 export const listJobPaymentRequests = async (customerId: string, jobId: string) => {
   const job = await prisma.job.findFirst({
     where: { id: jobId, customerId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, traderId: true, serviceCharge: true, siteVisitFee: true },
   });
   if (!job) throw new NotFoundError('Job not found.');
 
-  const requests = await prisma.traderPaymentRequest.findMany({
-    where: { jobId, customerId, status: { not: TraderPaymentRequestStatus.CANCELLED } },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [requests, quote, materials] = await Promise.all([
+    prisma.traderPaymentRequest.findMany({
+      where: { jobId, customerId, status: { not: TraderPaymentRequestStatus.CANCELLED } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    job.traderId
+      ? prisma.quote.findFirst({
+          where: { jobId, traderId: job.traderId },
+          orderBy: { createdAt: 'desc' },
+          select: { quotedAmount: true, currencyCode: true },
+        })
+      : null,
+    job.traderId
+      ? prisma.jobMaterial.findMany({ where: { jobId, traderId: job.traderId }, select: { price: true } })
+      : [],
+  ]);
+
+  const currencyCode = requests[0]?.currencyCode ?? quote?.currencyCode ?? 'EUR';
   const symbols = new Map<string, string>();
-  for (const code of new Set(requests.map((r) => r.currencyCode))) {
+  for (const code of new Set([currencyCode, ...requests.map((r) => r.currencyCode)])) {
     symbols.set(code, (await getCurrencyMeta(code)).symbol);
   }
+  const currencySymbol = symbols.get(currencyCode) ?? currencyCode;
+
+  const quotePrice = quote ? money(quote.quotedAmount) : job.serviceCharge != null ? money(job.serviceCharge) : null;
+  const breakdown =
+    job.traderId && quotePrice != null
+      ? buildJobPaymentBreakdown({
+          quotePrice,
+          materialsTotal: materials.reduce((s, m) => s + money(m.price), 0),
+          siteVisitFee: money(job.siteVisitFee),
+        })
+      : null;
+
+  const amountPaid = round2(
+    requests.filter((r) => r.status === TraderPaymentRequestStatus.PAID).reduce((s, r) => s + money(r.totalAmount), 0)
+  );
+  const pendingAmount = round2(requests.filter(isPayable).reduce((s, r) => s + money(r.totalAmount), 0));
+  const totalJobAmount = breakdown?.totalAmount ?? 0;
 
   return {
     jobId: job.id,
     jobStatus: job.status,
     isPartPayment: requests.some((r) => r.type === TraderPaymentRequestType.PARTIAL),
+    summary: {
+      totalJobAmount,
+      amountPaid,
+      dueBalance: round2(Math.max(0, totalJobAmount - amountPaid)),
+      pendingAmount,
+      paymentStatus: resolveInstallmentStatus(totalJobAmount, amountPaid, pendingAmount),
+      currencyCode,
+      currencySymbol,
+    },
+    breakdown: breakdown
+      ? {
+          quotePrice: breakdown.serviceCharge,
+          materialsTotal: breakdown.materialsTotal,
+          siteVisitFee: breakdown.siteVisitFee,
+          platformFee: breakdown.platformFee,
+          vatRate: breakdown.vatRate,
+          vatAmount: breakdown.vatAmount,
+          totalAmount: breakdown.totalAmount,
+          currencyCode,
+          currencySymbol,
+        }
+      : null,
     paymentRequests: requests.map((r) => serialize(r, symbols.get(r.currencyCode) ?? r.currencyCode)),
   };
 };

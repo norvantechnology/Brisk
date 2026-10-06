@@ -23,13 +23,18 @@ import {
   emitPaymentRequested,
   emitQuoteReceived,
 } from '../../../sockets/realtime';
-import { isAwaitingUpfrontPayment } from '../../jobs/job-payment-state';
+import {
+  JOB_PLATFORM_FEE,
+  JOB_VAT_RATE,
+  buildJobPaymentBreakdown,
+  isAwaitingUpfrontPayment,
+} from '../../jobs/job-payment-state';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 
 const EARTH_RADIUS_KM = 6371;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
-const PLATFORM_FEE = 10;
-const VAT_RATE = 0.2;
+const PLATFORM_FEE = JOB_PLATFORM_FEE;
+const VAT_RATE = JOB_VAT_RATE;
 
 type Origin = { lat: number; lng: number };
 type MyJobsTab = 'ACTIVE' | 'COMPLETED' | 'OTHER';
@@ -718,43 +723,13 @@ const arrivalStatus = (job: MyJobRow): 'ARRIVING_SOON' | 'ARRIVED' | null => {
   return null;
 };
 
-const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean }) => {
-  const materialsTotal = round2(job.materials.reduce((s, m) => s + money(m.price), 0));
-  const siteVisitFee = money(job.siteVisitFee);
-  const quotePrice = resolveQuotePrice(job) ?? 0;
-
-  if (opts?.siteVisitOnly) {
-    const subtotal = siteVisitFee;
-    const platformFee = 0;
-    const vatAmount = round2(subtotal * VAT_RATE);
-    const totalAmount = round2(subtotal + vatAmount);
-    return {
-      serviceCharge: 0,
-      materialsTotal: 0,
-      siteVisitFee,
-      platformFee,
-      vatRate: VAT_RATE,
-      vatAmount,
-      totalAmount,
-    };
-  }
-
-  const serviceCharge = quotePrice;
-  const platformFee = PLATFORM_FEE;
-  const subtotal = round2(serviceCharge + materialsTotal + siteVisitFee + platformFee);
-  const vatAmount = round2(subtotal * VAT_RATE);
-  const totalAmount = round2(subtotal + vatAmount);
-
-  return {
-    serviceCharge,
-    materialsTotal,
-    siteVisitFee,
-    platformFee,
-    vatRate: VAT_RATE,
-    vatAmount,
-    totalAmount,
-  };
-};
+const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean }) =>
+  buildJobPaymentBreakdown({
+    quotePrice: resolveQuotePrice(job) ?? 0,
+    materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
+    siteVisitFee: money(job.siteVisitFee),
+    siteVisitOnly: opts?.siteVisitOnly,
+  });
 
 export const listMyJobs = async (
   userId: string,

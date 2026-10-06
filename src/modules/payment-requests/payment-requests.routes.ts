@@ -49,8 +49,16 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       All non-cancelled requests the trader sent for this job, newest first.
- *       Pay any item with `canPay=true` via `POST /payment-requests/{id}/payment-intent`.
+ *       **Installment Payments screen + Installment Payment History — single API.**
+ *       - `breakdown` — job amount the trader bills: `quotePrice` + `materialsTotal` + `siteVisitFee` +
+ *         `platformFee` + `vatAmount` = `totalAmount` (same calculation as the trader app). null before a trader is booked.
+ *       - `summary` — `totalJobAmount`, `amountPaid` (sum of PAID requests), `dueBalance` (total − paid),
+ *         `pendingAmount` (requests waiting for payment), `paymentStatus` (UNPAID / PENDING / PARTIALLY PAID / PAID).
+ *       - `paymentRequests[]` — all non-cancelled requests, newest first:
+ *         **Payment Progress** = all rows (`status` PAID = done, SENT = pending);
+ *         **Pay Now** = row with `canPay: true` → `POST /payment-requests/{id}/payment-intent`;
+ *         **Transaction History** = rows with `status: PAID` (`paidAt`, `cardBrand`, `cardLast4`).
+ *       - `isPartPayment` — true when the trader sent any installment (PARTIAL) request.
  *     parameters:
  *       - in: path
  *         name: id
@@ -58,9 +66,65 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: |
- *           `data.jobId`, `data.jobStatus`, `data.isPartPayment` (true when the trader sent any installment /
- *           PARTIAL request), `data.paymentRequests[]` (CustomerPaymentRequest).
+ *         description: Installment payments for the job.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Payment requests fetched successfully.
+ *               data:
+ *                 jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                 jobStatus: IN_PROGRESS
+ *                 isPartPayment: true
+ *                 summary:
+ *                   totalJobAmount: 1248
+ *                   amountPaid: 517.2
+ *                   dueBalance: 730.8
+ *                   pendingAmount: 420
+ *                   paymentStatus: PARTIALLY PAID
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
+ *                 breakdown:
+ *                   quotePrice: 1000
+ *                   materialsTotal: 0
+ *                   siteVisitFee: 30
+ *                   platformFee: 10
+ *                   vatRate: 0.2
+ *                   vatAmount: 208
+ *                   totalAmount: 1248
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
+ *                 paymentRequests:
+ *                   - id: 3c4d5e6f-0000-4000-8000-000000000003
+ *                     type: PARTIAL
+ *                     title: Final Installment
+ *                     status: SENT
+ *                     totalAmount: 420
+ *                     formattedAmount: €420.00
+ *                     paidAt: null
+ *                     createdAt: '2026-07-20T10:00:00.000Z'
+ *                     canPay: true
+ *                   - id: 2b3c4d5e-0000-4000-8000-000000000002
+ *                     type: PARTIAL
+ *                     title: Initial Deposit
+ *                     status: PAID
+ *                     totalAmount: 481.2
+ *                     formattedAmount: €481.20
+ *                     paymentMethod: CARD
+ *                     cardBrand: visa
+ *                     cardLast4: '4242'
+ *                     paidAt: '2026-07-14T11:20:00.000Z'
+ *                     createdAt: '2026-07-10T09:00:00.000Z'
+ *                     canPay: false
+ *                   - id: 1a2b3c4d-0000-4000-8000-000000000001
+ *                     type: SITE_VISIT_FEE
+ *                     title: Site Visit Fee
+ *                     status: PAID
+ *                     totalAmount: 36
+ *                     formattedAmount: €36.00
+ *                     paidAt: '2026-07-05T15:00:00.000Z'
+ *                     createdAt: '2026-07-05T12:00:00.000Z'
+ *                     canPay: false
  *       404:
  *         description: Job not found for this customer.
  */
