@@ -6,6 +6,7 @@ import { roleMiddleware } from '../../middlewares/role.middleware';
 import { traderVerifiedMiddleware } from '../../middlewares/trader-verified.middleware';
 import {
   expiringDocumentsQuerySchema,
+  featuredTradersQuerySchema,
   myReviewsQuerySchema,
   updateTraderAccountSchema,
   updateTraderBankDetailsSchema,
@@ -31,6 +32,71 @@ import traderSiteVisitsRoutes from './site-visits/trader-site-visits.routes';
 const router = Router();
 
 router.use('/onboarding', onboardingRoutes);
+
+/**
+ * @swagger
+ * /traders/featured:
+ *   get:
+ *     summary: Featured traders (Customer Home → Featured Trader card)
+ *     tags: ['Customer / Home']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Verified, active traders ranked by real data: `topRated` first, then `avgRating`,
+ *       `reviewsCount`, `jobsDoneCount`, newest. Paginated — app decides how many to show.
+ *
+ *       Card mapping: name → `displayName`, subtitle → `category.name`, stars → `avgRating`,
+ *       "(128)" → `reviewsCount`, "NEW TODAY" badge → `isNew` (joined today).
+ *       No hourly / "starts from" price is stored for traders, so none is returned.
+ *       "Hire Now" → direct-trader job flow with `id` as `traderId`.
+ *     parameters:
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string, format: uuid }
+ *         description: Optional — only traders in this category.
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *     responses:
+ *       200:
+ *         description: Featured traders.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Featured traders retrieved successfully.
+ *               data:
+ *                 items:
+ *                   - id: 1b0c9d2e-1111-4a2b-9c3d-123456789abc
+ *                     displayName: Isaac Evans
+ *                     fullName: Isaac Evans
+ *                     businessName: null
+ *                     profilePhotoUrl: https://api.brisk.ie/uploads/profile/isaac.jpg
+ *                     category:
+ *                       id: 7d3e9f10-2222-4b3c-8d4e-abcdef123456
+ *                       name: Electrical & Wiring
+ *                       iconUrl: https://api.brisk.ie/category-icons/electrical.svg
+ *                     avgRating: 4.9
+ *                     reviewsCount: 128
+ *                     topRated: true
+ *                     isVerified: true
+ *                     yearsExperience: 10
+ *                     jobsDoneCount: 240
+ *                     city: Dublin
+ *                     isNew: false
+ *                     joinedAt: '2026-08-01T10:00:00.000Z'
+ *               meta: { total: 12, page: 1, limit: 20, totalPages: 1 }
+ */
+router.get(
+  '/featured',
+  authMiddleware,
+  roleMiddleware(['CUSTOMER']),
+  validate(featuredTradersQuerySchema),
+  tradersController.getFeaturedTraders
+);
 
 router.use(authMiddleware, roleMiddleware(['TRADER']));
 

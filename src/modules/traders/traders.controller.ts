@@ -223,6 +223,27 @@ export const getMyExpiringDocuments = async (
   }
 };
 
+export const getFeaturedTraders = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { items, meta } = await tradersService.listFeaturedTraders(
+      req.query as { page?: number; limit?: number; categoryId?: string }
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Featured traders retrieved successfully.',
+      data: { items },
+      meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getMyReviews = async (
   req: AuthenticatedRequest,
   res: Response,

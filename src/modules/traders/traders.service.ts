@@ -1,4 +1,10 @@
-import { OfferStatus, OfferType, TraderDocumentStatus, VerificationStatus } from '@prisma/client';
+import {
+  OfferStatus,
+  OfferType,
+  TraderDocumentStatus,
+  UserStatus,
+  VerificationStatus,
+} from '@prisma/client';
 import { prisma } from '../../config/database';
 import { ForbiddenError, NotFoundError, BadRequestError, ConflictError } from '../../utils/errors';
 import { splitE164Mobile } from '../../utils/phone';
@@ -7,6 +13,7 @@ import { assertActiveCurrency } from '../../services/currency.service';
 import { describePersonalId } from './personal-id';
 import { listTraderCategoriesWithState } from './onboarding/onboarding.service';
 import { buildPaginationMeta, parsePageLimit } from '../../utils/pagination';
+import { resolveCategoryIconUrl } from '../categories/categories.serializers';
 import type {
   UpdateTraderAccountInput,
   UpdateTraderBankDetailsInput,
@@ -369,6 +376,93 @@ export const ensureTraderProfile = async (userId: string) => {
   if (!user || user.role !== 'TRADER') {
     throw new ForbiddenError('Trader profile is only available for trader accounts.');
   }
+};
+
+/** Customer Home "Featured Trader" — verified, active traders ranked by real ratings/reviews. */
+export const listFeaturedTraders = async (query: {
+  page?: number;
+  limit?: number;
+  categoryId?: string;
+}) => {
+  const { page, limit, skip } = parsePageLimit(query);
+  const where = {
+    verificationStatus: VerificationStatus.VERIFIED,
+    status: 'active',
+    user: { status: UserStatus.ACTIVE },
+    ...(query.categoryId
+      ? {
+          OR: [
+            { categoryId: query.categoryId },
+            { categories: { some: { categoryId: query.categoryId, isActive: true } } },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.trader.count({ where }),
+    prisma.trader.findMany({
+      where,
+      orderBy: [
+        { topRated: 'desc' },
+        { avgRating: 'desc' },
+        { ratingsReceived: { _count: 'desc' } },
+        { jobsDoneCount: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        businessName: true,
+        profilePhotoUrl: true,
+        avgRating: true,
+        topRated: true,
+        yearsExperience: true,
+        jobsDoneCount: true,
+        city: true,
+        createdAt: true,
+        user: { select: { fullName: true, profilePhotoUrl: true } },
+        category: { select: { id: true, name: true, iconName: true, urlSlug: true } },
+        categories: {
+          where: { isActive: true },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+          select: { category: { select: { id: true, name: true, iconName: true, urlSlug: true } } },
+        },
+        _count: { select: { ratingsReceived: true } },
+      },
+    }),
+  ]);
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  return {
+    items: rows.map((t) => {
+      const category = t.category ?? t.categories[0]?.category ?? null;
+      return {
+        id: t.id,
+        displayName: t.businessName || t.user.fullName,
+        fullName: t.user.fullName,
+        businessName: t.businessName,
+        profilePhotoUrl: t.profilePhotoUrl || t.user.profilePhotoUrl || null,
+        category: category
+          ? { id: category.id, name: category.name, iconUrl: resolveCategoryIconUrl(category) }
+          : null,
+        avgRating: Number(t.avgRating),
+        reviewsCount: t._count.ratingsReceived,
+        topRated: t.topRated,
+        isVerified: true,
+        yearsExperience: t.yearsExperience ?? 0,
+        jobsDoneCount: t.jobsDoneCount,
+        city: t.city,
+        isNew: t.createdAt >= startOfToday,
+        joinedAt: t.createdAt,
+      };
+    }),
+    meta: buildPaginationMeta(total, page, limit),
+  };
 };
 
 /** Trader's own ratings & reviews — summary + paginated list (customer email never exposed). */
