@@ -177,8 +177,59 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
   };
 };
 
-export const getPaymentRequest = async (customerId: string, id: string) =>
-  serializeOne(await getOwnedRequest(customerId, id));
+/** Payment Details screen for a trader request — same `job` / `trader` blocks as GET /invoices/{id}. */
+export const getPaymentRequest = async (customerId: string, id: string) => {
+  const request = await getOwnedRequest(customerId, id);
+  const [base, job, trader] = await Promise.all([
+    serializeOne(request),
+    prisma.job.findUnique({
+      where: { id: request.jobId },
+      select: {
+        id: true,
+        jobRef: true,
+        title: true,
+        status: true,
+        quoteType: true,
+        scheduledDate: true,
+        timeSlot: true,
+        addressLine: true,
+        city: true,
+        postcode: true,
+        category: { select: { id: true, name: true } },
+        subcategory: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.trader.findUnique({
+      where: { id: request.traderId },
+      select: {
+        id: true,
+        businessName: true,
+        avgRating: true,
+        verificationStatus: true,
+        profilePhotoUrl: true,
+        _count: { select: { ratingsReceived: true } },
+        user: { select: { fullName: true, profilePhotoUrl: true } },
+      },
+    }),
+  ]);
+
+  return {
+    ...base,
+    job,
+    trader: trader
+      ? {
+          id: trader.id,
+          businessName: trader.businessName,
+          fullName: trader.user?.fullName ?? null,
+          displayName: trader.businessName || trader.user?.fullName || null,
+          profilePhotoUrl: trader.profilePhotoUrl || trader.user?.profilePhotoUrl || null,
+          avgRating: Number(trader.avgRating ?? 0),
+          reviewsCount: trader._count.ratingsReceived,
+          isVerified: trader.verificationStatus === 'VERIFIED',
+        }
+      : null,
+  };
+};
 
 /** Start (or resume) Stripe payment for a trader payment request — PaymentSheet config. */
 export const createPaymentRequestIntent = async (customerId: string, id: string) => {

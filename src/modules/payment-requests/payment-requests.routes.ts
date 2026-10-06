@@ -143,10 +143,15 @@ router.get(
  * @swagger
  * /payment-requests/{id}:
  *   get:
- *     summary: One trader payment request
+ *     summary: One trader payment request (Payment Details screen for Awaiting Payout)
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Use when the My Jobs card has `paymentRequestId` (status label "Awaiting Payout",
+ *       `invoiceId` is null). Provider card → `trader`, breakdown → `serviceCharge`,
+ *       `materialsTotal`, `siteVisitFee`, `platformFee`, `vatAmount`, `totalAmount`.
+ *       Pay → `POST /payment-requests/{id}/payment-intent` then `/confirm`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -159,7 +164,52 @@ router.get(
  *             schema:
  *               type: object
  *               properties:
- *                 data: { $ref: '#/components/schemas/CustomerPaymentRequest' }
+ *                 data:
+ *                   allOf:
+ *                     - $ref: '#/components/schemas/CustomerPaymentRequest'
+ *                     - type: object
+ *                       properties:
+ *                         job:
+ *                           type: object
+ *                           nullable: true
+ *                           description: id, jobRef, title, status, quoteType, scheduledDate, timeSlot, addressLine, city, postcode, category, subcategory
+ *                         trader:
+ *                           type: object
+ *                           nullable: true
+ *                           description: id, businessName, fullName, displayName, profilePhotoUrl, avgRating, reviewsCount, isVerified
+ *             example:
+ *               success: true
+ *               message: Payment request fetched successfully.
+ *               data:
+ *                 id: 7b93515a-bf5c-451e-b899-62c4776dc412
+ *                 transactionId: TXN-6DC412
+ *                 jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                 type: FULL_JOB
+ *                 title: Job Payment
+ *                 status: SENT
+ *                 serviceCharge: 150
+ *                 materialsTotal: 0
+ *                 siteVisitFee: 0
+ *                 platformFee: 10
+ *                 vatRate: 0.2
+ *                 vatAmount: 32
+ *                 totalAmount: 192
+ *                 currencyCode: EUR
+ *                 currencySymbol: €
+ *                 formattedAmount: €192.00
+ *                 canPay: true
+ *                 job:
+ *                   id: 89d85512-3ff7-4fc7-a44a-2e594130d71c
+ *                   jobRef: JOB-1EA2
+ *                   title: API test - My Job flow
+ *                   status: PAYMENT_PENDING
+ *                 trader:
+ *                   id: 1b0c9d2e-1111-4a2b-9c3d-123456789abc
+ *                   displayName: Brisk Trader
+ *                   profilePhotoUrl: null
+ *                   avgRating: 4.5
+ *                   reviewsCount: 12
+ *                   isVerified: true
  *       404:
  *         description: Not found for this customer.
  */
