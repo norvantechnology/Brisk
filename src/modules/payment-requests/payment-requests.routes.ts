@@ -16,6 +16,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       type: object
  *       properties:
  *         id: { type: string, format: uuid }
+ *         transactionId: { type: string, example: TXN-82736A, description: Display ID (same as trader app) }
  *         jobId: { type: string, format: uuid }
  *         traderId: { type: string, format: uuid }
  *         type: { type: string, enum: [FULL_JOB, SITE_VISIT_FEE, PARTIAL] }
@@ -57,7 +58,9 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       - `paymentRequests[]` — all non-cancelled requests, newest first:
  *         **Payment Progress** = all rows (`status` PAID = done, SENT = pending);
  *         **Pay Now** = row with `canPay: true` → `POST /payment-requests/{id}/payment-intent`;
- *         **Transaction History** = rows with `status: PAID` (`paidAt`, `cardBrand`, `cardLast4`).
+ *         **Installment Payments History** screen = all rows (full list, no limit; PAID + pending `SENT`);
+ *         the Installment Payments screen preview shows the latest 3 on the app side (`paymentRequests.slice(0, 3)`).
+ *         Row fields: `title`, `totalAmount`, `status`, `paidAt`, `transactionId`, `cardBrand`, `cardLast4`.
  *       - `isPartPayment` — true when the trader sent any installment (PARTIAL) request.
  *     parameters:
  *       - in: path
@@ -107,6 +110,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                   - id: 2b3c4d5e-0000-4000-8000-000000000002
  *                     type: PARTIAL
  *                     title: Initial Deposit
+ *                     transactionId: TXN-82736A
  *                     status: PAID
  *                     totalAmount: 481.2
  *                     formattedAmount: €481.20

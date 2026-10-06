@@ -51,6 +51,8 @@ const serialize = (r: TraderPaymentRequest, currencySymbol: string) => {
   const totalAmount = money(r.totalAmount);
   return {
     id: r.id,
+    /** Same display ID as the trader app installment history. */
+    transactionId: `TXN-${r.id.replace(/-/g, '').slice(-6).toUpperCase()}`,
     jobId: r.jobId,
     traderId: r.traderId,
     type: r.type,
