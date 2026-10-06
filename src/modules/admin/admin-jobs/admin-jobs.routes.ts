@@ -10,6 +10,9 @@ import {
   adminJobIdParamSchema,
   adminJobsListQuerySchema,
   adminJobsStatsQuerySchema,
+  adminArchiveJobSchema,
+  adminCancelJobSchema,
+  adminRescheduleJobSchema,
 } from './admin-jobs.validation';
 
 const router = Router();
@@ -79,6 +82,13 @@ router.use(adminAuthMiddleware);
  *       name: to
  *       description: Job created to — `YYYY-MM-DD` (end of day UTC) or ISO datetime.
  *       schema: { type: string, example: '2026-09-30' }
+ *     AdminJobsArchived:
+ *       in: query
+ *       name: archived
+ *       description: |
+ *         List: omit/`false` = hide archived jobs (default) · `true` = archived only · `all` = both.
+ *         Stats: omit = count all jobs (archived included) · `false` / `true` = filter.
+ *       schema: { type: string, enum: ['false', 'true', all] }
  */
 
 /**
@@ -105,6 +115,7 @@ router.use(adminAuthMiddleware);
  *       - $ref: '#/components/parameters/AdminJobsMaxAmount'
  *       - $ref: '#/components/parameters/AdminJobsFrom'
  *       - $ref: '#/components/parameters/AdminJobsTo'
+ *       - $ref: '#/components/parameters/AdminJobsArchived'
  *     responses:
  *       200:
  *         description: Stats.
@@ -160,6 +171,7 @@ router.get('/jobs/stats', validate(adminJobsStatsQuerySchema), controller.getSta
  *       - $ref: '#/components/parameters/AdminJobsMaxAmount'
  *       - $ref: '#/components/parameters/AdminJobsFrom'
  *       - $ref: '#/components/parameters/AdminJobsTo'
+ *       - $ref: '#/components/parameters/AdminJobsArchived'
  *       - in: query
  *         name: sortBy
  *         schema: { type: string, enum: [createdAt, scheduledDate, status, title, amount], default: createdAt }
@@ -212,6 +224,12 @@ router.get('/jobs', validate(adminJobsListQuerySchema), controller.listJobs);
  *     description: |
  *       Same payload as `GET /admin/customers/{id}/jobs/{jobId}` plus `customer` and `statusLabel`:
  *       description, address, photos, offer, assigned trader, all quotes, booking, invoice breakdown, payments, rating.
+ *
+ *       Lifecycle: `cancellationReason`, `cancelledAt`, `archivedAt`; `booking.arrivedAt` (trader on site),
+ *       `booking.finishedAt` (trader submitted work), `booking.customerConfirmedAt` (customer confirmed completion).
+ *       `paymentRequests[]` — trader payment requests (`type` FULL JOB / SITE VISIT FEE / PARTIAL,
+ *       `status` PENDING / SENT / PAID / CANCELLED, amounts, `paidAt`). `disputes[]` — customer reported issues
+ *       (`status` OPEN / IN REVIEW / RESOLVED / REJECTED); manage via `PATCH /admin/disputes/{id}`.
  *     tags: ['Admin / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -224,6 +242,105 @@ router.get('/jobs', validate(adminJobsListQuerySchema), controller.listJobs);
  *       404: { description: Job not found. }
  */
 router.get('/jobs/:id', validate(adminJobIdParamSchema), controller.getJob);
+
+/**
+ * @swagger
+ * /admin/jobs/{id}/cancel:
+ *   post:
+ *     summary: Cancel a job (admin)
+ *     description: |
+ *       Same rules as customer cancel (`POST /jobs/{id}/cancel`): not allowed when already cancelled,
+ *       finished, or paid (refunds are handled separately). Pending payment requests are cancelled.
+ *       Customer **and** trader get a "cancelled by BRISK support" notification. Written to audit log.
+ *       Returns the updated job detail (same shape as `GET /admin/jobs/{id}`).
+ *     tags: ['Admin / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, maxLength: 1000, example: Customer requested cancellation by phone. }
+ *     responses:
+ *       200: { description: 'Job cancelled — updated job detail (status CANCELLED, cancellationReason, cancelledAt).' }
+ *       400: { description: Finished or paid job cannot be cancelled. }
+ *       404: { description: Job not found. }
+ *       409: { description: Job is already cancelled. }
+ */
+router.post('/jobs/:id/cancel', validate(adminCancelJobSchema), controller.cancelJob);
+
+/**
+ * @swagger
+ * /admin/jobs/{id}/reschedule:
+ *   post:
+ *     summary: Reschedule a job (admin)
+ *     description: |
+ *       Same rules as customer reschedule (`POST /jobs/{id}/reschedule`): job must have a booked trader,
+ *       not started/finished/cancelled, date not in the past. Customer **and** trader are notified
+ *       ("BRISK support moved …"). Written to audit log. Returns the updated job detail.
+ *     tags: ['Admin / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [date, timeSlot]
+ *             properties:
+ *               date: { type: string, example: '2026-10-12' }
+ *               timeSlot: { type: string, example: '10:00 AM - 12:00 PM' }
+ *     responses:
+ *       200: { description: Job rescheduled — updated job detail. }
+ *       400: { description: Job cannot be rescheduled (not booked, started, finished, or past date). }
+ *       404: { description: Job not found. }
+ */
+router.post('/jobs/:id/reschedule', validate(adminRescheduleJobSchema), controller.rescheduleJob);
+
+/**
+ * @swagger
+ * /admin/jobs/{id}/archive:
+ *   patch:
+ *     summary: Archive / unarchive a job (admin)
+ *     description: |
+ *       Only COMPLETED or CANCELLED jobs can be archived. Archived jobs are hidden from
+ *       `GET /admin/jobs` and `/admin/jobs/stats` unless `archived=true` or `archived=all`.
+ *       Customer/trader apps are not affected. Written to audit log. Returns the updated job detail (`archivedAt`).
+ *     tags: ['Admin / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [archived]
+ *             properties:
+ *               archived: { type: boolean, example: true }
+ *     responses:
+ *       200: { description: Job archived / unarchived — updated job detail. }
+ *       400: { description: Job is not completed or cancelled. }
+ *       404: { description: Job not found. }
+ */
+router.patch('/jobs/:id/archive', validate(adminArchiveJobSchema), controller.setJobArchived);
 
 /**
  * @swagger

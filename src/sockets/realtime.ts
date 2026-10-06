@@ -392,7 +392,9 @@ const jobStatusCopy = (status: string, jobTitle: string, actor?: string) => {
     case 'CANCELLED':
       return {
         title: 'Job cancelled',
-        message: `"${jobTitle}" was cancelled${actor === 'CUSTOMER' ? ' by the customer' : ''}.`,
+        message: `"${jobTitle}" was cancelled${
+          actor === 'CUSTOMER' ? ' by the customer' : actor === 'ADMIN' ? ' by BRISK support' : ''
+        }.`,
       };
     case 'COMPLETED':
       return { title: 'Job completed', message: `"${jobTitle}" is completed.` };
@@ -406,12 +408,12 @@ const jobStatusCopy = (status: string, jobTitle: string, actor?: string) => {
 
 /**
  * `actor` = who caused the change; the inbox notification goes to the other party
- * (no actor → customer, legacy behaviour).
+ * (no actor → customer, legacy behaviour; ADMIN → both customer and trader).
  */
 export const emitJobStatusChanged = (
   payload: JobRealtimePayload & {
     traderUserId?: string | null;
-    actor?: 'CUSTOMER' | 'TRADER' | 'SYSTEM';
+    actor?: 'CUSTOMER' | 'TRADER' | 'SYSTEM' | 'ADMIN';
   }
 ) => {
   const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
@@ -419,11 +421,14 @@ export const emitJobStatusChanged = (
   if (payload.bookingId) rooms.push(roomBooking(payload.bookingId));
   emit(RealtimeEvents.JOB_STATUS_CHANGED, rooms, { ...payload });
 
-  const recipient = payload.actor === 'CUSTOMER' ? payload.traderUserId : payload.customerId;
-  if (!recipient) return;
+  const recipients =
+    payload.actor === 'ADMIN'
+      ? [payload.customerId, payload.traderUserId]
+      : [payload.actor === 'CUSTOMER' ? payload.traderUserId : payload.customerId];
+  if (!recipients.some(Boolean)) return;
   void (async () => {
     const jobTitle = payload.title ?? (await jobTitleOf(payload.jobId));
-    await pushUserNotification([recipient], {
+    await pushUserNotification(recipients, {
       type: 'JOB_STATUS_CHANGED',
       ...jobStatusCopy(payload.status, jobTitle, payload.actor),
       data: {

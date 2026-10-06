@@ -93,3 +93,11 @@ export const expiringDocumentsQuerySchema = z.object({
     withinDays: z.coerce.number().int().min(0).max(365).optional(),
   }),
 });
+
+export const myReviewsQuerySchema = z.object({
+  query: z.object({
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    stars: z.coerce.number().int().min(1).max(5).optional(),
+  }),
+});

@@ -85,3 +85,40 @@ export const getJobSiteVisits = async (
     next(error);
   }
 };
+
+const adminActor = (req: AuthenticatedAdminRequest) => ({
+  id: req.adminUser!.id,
+  label: req.adminUser!.fullName || req.adminUser!.email,
+});
+
+export const cancelJob = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const data = await service.adminCancelJob(req.params.id, req.body.reason, adminActor(req));
+    sendResponse({ res, statusCode: 200, message: 'Job cancelled successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rescheduleJob = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const data = await service.adminRescheduleJob(req.params.id, req.body, adminActor(req));
+    sendResponse({ res, statusCode: 200, message: 'Job rescheduled successfully.', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const setJobArchived = async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const data = await service.adminSetJobArchived(req.params.id, req.body.archived, adminActor(req));
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: req.body.archived ? 'Job archived successfully.' : 'Job unarchived successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

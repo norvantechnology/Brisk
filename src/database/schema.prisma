@@ -645,6 +645,8 @@ model Job {
   qaFormAnswers Json?     @map("qa_form_answers")
   cancellationReason String? @map("cancellation_reason") @db.Text
   cancelledAt   DateTime? @map("cancelled_at")
+  /// Admin closed / archived the job (hidden from the default admin list).
+  archivedAt    DateTime? @map("archived_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
@@ -727,6 +729,8 @@ model Booking {
   status        BookingStatus @default(SCHEDULED)
   arrivedAt     DateTime?     @map("arrived_at")
   finishedAt    DateTime?     @map("finished_at")
+  /// Customer tapped Confirm Completion — admin can release the payout.
+  customerConfirmedAt DateTime? @map("customer_confirmed_at")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 

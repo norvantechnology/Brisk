@@ -35,6 +35,9 @@ router.get('/purposes', controller.listPurposes);
  *       **Flow:** `POST /uploads` → get `{ url, objectKey }` → pass **`url`** into existing APIs
  *       (`profilePhotoUrl`, `bannerImageUrl`, `fileUrl`, `imageUrl`, etc.).
  *       When S3 is enabled later, only `url` host changes — mobile/admin keep same integration.
+ *
+ *       **Job Photos/Videos:** `purpose=job_photo` accepts `image/*` (max 10 MB) and `video/*` (max 50 MB).
+ *       Pass returned URLs in `photoUrls` on create/update job.
  *     requestBody:
  *       required: true
  *       content:

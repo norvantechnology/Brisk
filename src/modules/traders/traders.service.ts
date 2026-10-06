@@ -6,6 +6,7 @@ import { getSupportWebviewLinks } from '../../utils/public-urls';
 import { assertActiveCurrency } from '../../services/currency.service';
 import { describePersonalId } from './personal-id';
 import { listTraderCategoriesWithState } from './onboarding/onboarding.service';
+import { buildPaginationMeta, parsePageLimit } from '../../utils/pagination';
 import type {
   UpdateTraderAccountInput,
   UpdateTraderBankDetailsInput,
@@ -368,4 +369,80 @@ export const ensureTraderProfile = async (userId: string) => {
   if (!user || user.role !== 'TRADER') {
     throw new ForbiddenError('Trader profile is only available for trader accounts.');
   }
+};
+
+/** Trader's own ratings & reviews — summary + paginated list (customer email never exposed). */
+export const listMyReviews = async (
+  userId: string,
+  query: { page?: number; limit?: number; stars?: number }
+) => {
+  const trader = await prisma.trader.findUnique({ where: { userId }, select: { id: true } });
+  if (!trader) throw new NotFoundError('Trader profile not found.');
+
+  const { page, limit, skip } = parsePageLimit(query);
+  const where = { traderId: trader.id, ...(query.stars ? { stars: query.stars } : {}) };
+
+  const [grouped, total, rows] = await Promise.all([
+    prisma.ratingReview.groupBy({
+      by: ['stars'],
+      where: { traderId: trader.id },
+      _count: { _all: true },
+    }),
+    prisma.ratingReview.count({ where }),
+    prisma.ratingReview.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        stars: true,
+        review: true,
+        createdAt: true,
+        customer: { select: { id: true, fullName: true, profilePhotoUrl: true } },
+        booking: {
+          select: {
+            job: {
+              select: {
+                id: true,
+                jobRef: true,
+                title: true,
+                category: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const distribution: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+  let sum = 0;
+  let count = 0;
+  for (const g of grouped) {
+    distribution[String(g.stars)] = g._count._all;
+    sum += g.stars * g._count._all;
+    count += g._count._all;
+  }
+
+  return {
+    summary: {
+      averageRating: count > 0 ? Math.round((sum / count) * 10) / 10 : 0,
+      totalReviews: count,
+      distribution,
+    },
+    items: rows.map((r) => ({
+      id: r.id,
+      rating: r.stars,
+      comment: r.review,
+      createdAt: r.createdAt,
+      customer: {
+        id: r.customer.id,
+        name: r.customer.fullName,
+        avatar: r.customer.profilePhotoUrl,
+      },
+      job: r.booking.job,
+    })),
+    meta: buildPaginationMeta(total, page, limit),
+  };
 };

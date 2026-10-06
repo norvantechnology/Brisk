@@ -38,6 +38,18 @@ export const ADMIN_NOTIFICATION_TYPE_CATALOG: NotificationTypeMeta[] = [
     description: 'Trader document expires in 30 / 7 / 1 days, today, or has expired.',
   },
   {
+    type: 'NEW_JOB_POSTED',
+    label: 'New job posted',
+    category: 'jobs',
+    description: 'Customer published a new job.',
+  },
+  {
+    type: 'JOB_COMPLETION_CONFIRMED',
+    label: 'Completion confirmed',
+    category: 'jobs',
+    description: 'Customer confirmed the work is complete — trader payout can be released.',
+  },
+  {
     type: 'JOB_DISPUTE',
     label: 'Job dispute',
     category: 'jobs',
@@ -111,7 +123,8 @@ export const USER_NOTIFICATION_TYPE_CATALOG: UserNotificationTypeMeta[] = [
   userType('JOB_PUBLISHED', 'Job live', 'BOOKING_UPDATES', 'CUSTOMER', 'Your job was published.'),
   userType('DIRECT_JOB_RECEIVED', 'New booking', 'BOOKING_UPDATES', 'TRADER', 'A customer booked a job directly with you.'),
   userType('JOB_STATUS_CHANGED', 'Job update', 'BOOKING_UPDATES', 'ALL', 'Job confirmed, cancelled or status changed.'),
-  userType('JOB_RESCHEDULED', 'Job rescheduled', 'BOOKING_UPDATES', 'TRADER', 'Customer moved the job to a new date / time slot.'),
+  userType('JOB_RESCHEDULED', 'Job rescheduled', 'BOOKING_UPDATES', 'ALL', 'Customer (or BRISK support) moved the job to a new date / time slot.'),
+  userType('JOB_COMPLETION_CONFIRMED', 'Completion confirmed', 'BOOKING_UPDATES', 'TRADER', 'Customer confirmed the finished work.'),
   userType('NEW_REVIEW', 'New review', 'BOOKING_UPDATES', 'TRADER', 'Customer rated a completed job.'),
   userType('DISPUTE_UPDATE', 'Issue update', 'BOOKING_UPDATES', 'CUSTOMER', 'BRISK updated the status of an issue you reported.'),
   userType('SITE_VISIT_REQUESTED', 'Site visit requested', 'BOOKING_UPDATES', 'CUSTOMER', 'Trader proposed site visit date/time.'),

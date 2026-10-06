@@ -464,6 +464,7 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *       - Invoice PDF: `downloadUrl` (= `GET /jobs/{id}/invoice/download`). Receipt JSON: `receiptUrl`
  *         (= `GET /payments/{paymentId}/receipt`, null until a card payment exists).
  *       - `canReview` = show the Rate & Review button (`POST /jobs/{id}/review`).
+ *       - `canConfirmCompletion` / `completionConfirmedAt` = Confirm Completion button (`POST /jobs/{id}/confirm-completion`).
  *       - `review` = `{ rating, comment, createdAt }` once the customer rated the trader, else null.
  *       Status values never contain underscores.
  *     parameters:
@@ -500,6 +501,8 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                 invoiceUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
  *                 receiptUrl: null
  *                 canReview: true
+ *                 completionConfirmedAt: null
+ *                 canConfirmCompletion: true
  *       400: { description: Job is not completed. }
  *       404: { description: Job not found }
  */
@@ -554,6 +557,8 @@ router.get(
  *                 invoiceUrl: null
  *                 receiptUrl: null
  *                 canReview: false
+ *                 completionConfirmedAt: null
+ *                 canConfirmCompletion: false
  *       400: { description: Job is not cancelled. }
  *       404: { description: Job not found }
  */
@@ -1017,7 +1022,7 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *       `IN PROGRESS` (trader arrived), `PAYMENT PENDING`, `COMPLETED`, `CANCELLED`.
  *
  *       `milestones[]` (in order, real timestamps): `QUOTE ACCEPTED` → `BOOKING CONFIRMED` → `TRADER ARRIVED`
- *       → `WORK COMPLETED` → `PAYMENT COMPLETED`. Each has `title`, `subtitle` (date/time or empty),
+ *       → `WORK COMPLETED` → `COMPLETION CONFIRMED` (customer `POST /jobs/{id}/confirm-completion`) → `PAYMENT COMPLETED`. Each has `title`, `subtitle` (date/time or empty),
  *       `status` = `COMPLETED` | `CURRENT` | `PENDING` | `CANCELLED`. `PAYMENT COMPLETED` is COMPLETED only when money was actually received.
  *
  *       `trader.phone` is shared only once a booking exists. `actions` tell which buttons to show
@@ -1055,13 +1060,15 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *                   - { key: BOOKING CONFIRMED, title: Booking Confirmed, subtitle: 'October 5, 2026 at 12:21 PM', status: COMPLETED, at: '2026-10-05T12:21:00.000Z' }
  *                   - { key: TRADER ARRIVED, title: Trader Arrived, subtitle: '', status: CURRENT, at: null }
  *                   - { key: WORK COMPLETED, title: Work Completed, subtitle: '', status: PENDING, at: null }
+ *                   - { key: COMPLETION CONFIRMED, title: Completion Confirmed, subtitle: '', status: PENDING, at: null }
  *                   - { key: PAYMENT COMPLETED, title: Payment Completed, subtitle: '', status: PENDING, at: null }
  *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, currencyCode: EUR, currencySymbol: € }
  *                 review: null
+ *                 completionConfirmedAt: null
  *                 cancellationReason: null
  *                 cancelledAt: null
  *                 downloadUrl: null
- *                 actions: { canCancel: true, canReschedule: true, canReview: false, canReportIssue: true, hasActiveDispute: false }
+ *                 actions: { canConfirmCompletion: false, canCancel: true, canReschedule: true, canReview: false, canReportIssue: true, hasActiveDispute: false }
  *       404: { description: Job not found }
  */
 router.get('/:id/progress', ...customerOnly, validate(jobIdParamSchema), controller.getJobProgress);
@@ -1145,6 +1152,35 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  *       409: { description: Already reviewed }
  */
 router.post('/:id/review', ...customerOnly, validate(jobReviewSchema), controller.submitJobReview);
+
+/**
+ * @swagger
+ * /jobs/{id}/confirm-completion:
+ *   post:
+ *     summary: Confirm Completion — customer confirms the trader's finished work
+ *     tags: ['Customer / My Job']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Allowed once the trader marked the work finished (`actions.canConfirmCompletion` on
+ *       `GET /jobs/{id}/progress`, `canConfirmCompletion` on `GET /jobs/{id}/completed`).
+ *       Saves `completionConfirmedAt`, marks the `COMPLETION CONFIRMED` milestone, notifies the trader
+ *       (`JOB_COMPLETION_CONFIRMED`) and BRISK admin (payout can be released from escrow).
+ *       Blocked while an issue (`OPEN` / `IN REVIEW` dispute) is open. Returns the `GET /jobs/{id}/progress` payload.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job completion confirmed. Thank you!
+ *               data: { jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, status: COMPLETED, completionConfirmedAt: '2026-10-06T09:12:00.000Z', milestones: [], actions: { canConfirmCompletion: false, canCancel: false, canReschedule: false, canReview: true, canReportIssue: true, hasActiveDispute: false } }
+ *       400: { description: 'Work not finished yet, cancelled job, or no booked trader.' }
+ *       404: { description: Job not found }
+ *       409: { description: 'Already confirmed, or an issue is still open on this job.' }
+ */
+router.post('/:id/confirm-completion', ...customerOnly, validate(jobIdParamSchema), controller.confirmJobCompletion);
 
 /**
  * @swagger

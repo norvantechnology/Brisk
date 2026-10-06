@@ -30,10 +30,10 @@ export const storeUpload = async (input: {
   if (!config.allowedMime.test(file.mimetype)) {
     throw new BadRequestError(`File type "${file.mimetype}" is not allowed for ${purpose}.`);
   }
-  if (file.size > config.maxBytes) {
-    throw new BadRequestError(
-      `File exceeds maximum size of ${Math.round(config.maxBytes / (1024 * 1024))} MB.`
-    );
+  const maxBytes =
+    config.videoMaxBytes && file.mimetype.startsWith('video/') ? config.videoMaxBytes : config.maxBytes;
+  if (file.size > maxBytes) {
+    throw new BadRequestError(`File exceeds maximum size of ${Math.round(maxBytes / (1024 * 1024))} MB.`);
   }
 
   const ownerId = actor.id;

@@ -215,6 +215,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
           scheduledDate: true,
           arrivedAt: true,
           finishedAt: true,
+          customerConfirmedAt: true,
           createdAt: true,
           ratingReview: { select: { stars: true, review: true, createdAt: true } },
           invoice: {
@@ -275,6 +276,12 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
     { key: 'BOOKING CONFIRMED', title: 'Booking Confirmed', done: Boolean(booking), at: booking?.createdAt ?? null },
     { key: 'TRADER ARRIVED', title: 'Trader Arrived', done: Boolean(booking?.arrivedAt), at: booking?.arrivedAt ?? null },
     { key: 'WORK COMPLETED', title: 'Work Completed', done: finished, at: booking?.finishedAt ?? null },
+    {
+      key: 'COMPLETION CONFIRMED',
+      title: 'Completion Confirmed',
+      done: Boolean(booking?.customerConfirmedAt),
+      at: booking?.customerConfirmedAt ?? null,
+    },
     { key: 'PAYMENT COMPLETED', title: 'Payment Completed', done: paid, at: paid ? paidAt : null },
   ];
   let currentAssigned = false;
@@ -342,10 +349,12 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
           createdAt: booking.ratingReview.createdAt,
         }
       : null,
+    completionConfirmedAt: booking?.customerConfirmedAt ?? null,
     cancellationReason: job.cancellationReason,
     cancelledAt: cancelled ? (job.cancelledAt ?? job.updatedAt) : null,
     downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     actions: {
+      canConfirmCompletion: finished && !cancelled && !booking?.customerConfirmedAt && !hasActiveDispute,
       canCancel: !cancelled && !finished && pricing.totalPaid === 0,
       canReschedule:
         !cancelled && !booking?.arrivedAt && RESCHEDULABLE_STATUSES.includes(job.status),
@@ -360,7 +369,12 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
 // Reschedule
 // ---------------------------------------------------------------------------
 
-export const rescheduleJob = async (customerId: string, jobId: string, input: RescheduleJobInput) => {
+export const rescheduleJob = async (
+  customerId: string,
+  jobId: string,
+  input: RescheduleJobInput,
+  actor: 'CUSTOMER' | 'ADMIN' = 'CUSTOMER'
+) => {
   const job = await prisma.job.findFirst({
     where: { id: jobId, customerId },
     select: {
@@ -426,20 +440,20 @@ export const rescheduleJob = async (customerId: string, jobId: string, input: Re
     });
   }
 
-  if (job.trader?.userId) {
-    await pushUserNotification([job.trader.userId], {
-      type: 'JOB_RESCHEDULED',
-      title: 'Job rescheduled',
-      message: `${job.customer.fullName || 'The customer'} moved "${job.title}" to ${formatDisplayDay(scheduledDate)} (${input.timeSlot}).`,
-      data: {
-        jobId,
-        jobRef: job.jobRef,
-        bookingId: job.booking?.id ?? null,
-        scheduledDate: scheduledDate.toISOString(),
-        timeSlot: input.timeSlot,
-      },
-    });
-  }
+  const byLabel = actor === 'ADMIN' ? 'BRISK support' : job.customer.fullName || 'The customer';
+  const recipients = actor === 'ADMIN' ? [customerId, job.trader?.userId] : [job.trader?.userId];
+  await pushUserNotification(recipients, {
+    type: 'JOB_RESCHEDULED',
+    title: 'Job rescheduled',
+    message: `${byLabel} moved "${job.title}" to ${formatDisplayDay(scheduledDate)} (${input.timeSlot}).`,
+    data: {
+      jobId,
+      jobRef: job.jobRef,
+      bookingId: job.booking?.id ?? null,
+      scheduledDate: scheduledDate.toISOString(),
+      timeSlot: input.timeSlot,
+    },
+  });
 
   return getJobProgress(customerId, jobId);
 };
@@ -506,6 +520,61 @@ export const submitJobReview = async (customerId: string, jobId: string, input: 
     createdAt: created.createdAt,
     trader: { id: traderId, avgRating, reviewsCount },
   };
+};
+
+// ---------------------------------------------------------------------------
+// Confirm completion
+// ---------------------------------------------------------------------------
+
+/** Customer confirms the finished work — signals BRISK admin that the trader payout can be released. */
+export const confirmJobCompletion = async (customerId: string, jobId: string) => {
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, customerId },
+    select: {
+      id: true,
+      jobRef: true,
+      title: true,
+      status: true,
+      customer: { select: { fullName: true } },
+      trader: { select: { id: true, userId: true, businessName: true } },
+      booking: { select: { id: true, status: true, finishedAt: true, customerConfirmedAt: true } },
+      disputes: { where: { status: { in: ACTIVE_DISPUTE_STATUSES } }, select: { id: true } },
+    },
+  });
+  if (!job) throw new NotFoundError('Job not found.');
+  if (!job.trader || !job.booking) throw new BadRequestError('This job has no booked trader.');
+  if (isJobCancelled(job)) throw new BadRequestError('Cancelled jobs cannot be confirmed.');
+  if (!job.booking.finishedAt && job.status !== JobStatus.COMPLETED) {
+    throw new BadRequestError('You can confirm completion once the trader has finished the work.');
+  }
+  if (job.booking.customerConfirmedAt) throw new ConflictError('You have already confirmed this job.');
+  if (job.disputes.length) {
+    throw new ConflictError('You have an open issue on this job. BRISK support will resolve it before completion is confirmed.');
+  }
+
+  const confirmedAt = new Date();
+  const updated = await prisma.booking.updateMany({
+    where: { id: job.booking.id, customerConfirmedAt: null },
+    data: { customerConfirmedAt: confirmedAt },
+  });
+  if (updated.count === 0) throw new ConflictError('You have already confirmed this job.');
+
+  const data = { jobId, jobRef: job.jobRef, bookingId: job.booking.id, confirmedAt: confirmedAt.toISOString() };
+  await pushUserNotification([job.trader.userId], {
+    type: 'JOB_COMPLETION_CONFIRMED',
+    title: 'Completion confirmed',
+    message: `${job.customer.fullName || 'The customer'} confirmed "${job.title}" is complete.`,
+    data,
+  });
+  await createAdminNotifications({
+    type: 'JOB_COMPLETION_CONFIRMED',
+    title: `Completion confirmed ${job.jobRef ?? ''}`.trim(),
+    message: `${job.customer.fullName || 'Customer'} confirmed "${job.title}" (trader ${job.trader.businessName ?? ''}) is complete — review and release the trader payout.`,
+    actionUrl: `/jobs/${jobId}`,
+    payload: { ...data, traderId: job.trader.id },
+  }).catch(() => undefined);
+
+  return getJobProgress(customerId, jobId);
 };
 
 // ---------------------------------------------------------------------------

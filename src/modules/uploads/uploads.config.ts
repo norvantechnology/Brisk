@@ -2,6 +2,8 @@ import { UploadPurpose } from './uploads.types';
 
 type PurposeConfig = {
   maxBytes: number;
+  /** Separate cap for `video/*` files on purposes that accept both images and videos. */
+  videoMaxBytes?: number;
   allowedMime: RegExp;
   visibility: 'public' | 'private';
 };
@@ -53,7 +55,12 @@ export const PURPOSE_CONFIG: Record<UploadPurpose, PurposeConfig> = {
   knowledge_block_image: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
   address_map_snapshot: { maxBytes: 2 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
   meter_reading_photo: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
-  job_photo: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
+  job_photo: {
+    maxBytes: 10 * 1024 * 1024,
+    videoMaxBytes: 50 * 1024 * 1024,
+    allowedMime: /^(image|video)\//,
+    visibility: 'private',
+  },
   job_proof: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
   job_material: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
 };
@@ -83,3 +90,8 @@ export const isPurposeAllowed = (
   }
   return CUSTOMER_PURPOSES.includes(purpose);
 };
+
+/** Largest per-purpose limit — multer must accept at least this; the per-purpose check runs after. */
+export const MAX_PURPOSE_BYTES = Math.max(
+  ...Object.values(PURPOSE_CONFIG).map((c) => Math.max(c.maxBytes, c.videoMaxBytes ?? 0))
+);

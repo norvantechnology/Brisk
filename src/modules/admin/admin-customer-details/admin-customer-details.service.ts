@@ -620,6 +620,8 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
           couponCode: true,
         },
       },
+      paymentRequests: { orderBy: { createdAt: 'asc' } },
+      disputes: { orderBy: { createdAt: 'desc' } },
     },
   });
 
@@ -646,6 +648,9 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
     postcode: job.postcode,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
+    cancellationReason: job.cancellationReason,
+    cancelledAt: job.cancelledAt,
+    archivedAt: job.archivedAt,
     category: job.category,
     subcategory: job.subcategory,
     address: job.address,
@@ -695,6 +700,9 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
           bookingRef: job.booking.bookingRef,
           status: job.booking.status,
           scheduledDate: job.booking.scheduledDate,
+          arrivedAt: job.booking.arrivedAt,
+          finishedAt: job.booking.finishedAt,
+          customerConfirmedAt: job.booking.customerConfirmedAt,
           invoice: job.booking.invoice
             ? {
                 id: job.booking.invoice.id,
@@ -728,6 +736,34 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
             : null,
         }
       : null,
+    paymentRequests: job.paymentRequests.map((r) => ({
+      id: r.id,
+      type: r.type.replace(/_/g, ' '),
+      status: r.status,
+      description: r.description,
+      serviceCharge: money(r.serviceCharge),
+      materialsTotal: money(r.materialsTotal),
+      siteVisitFee: money(r.siteVisitFee),
+      platformFee: money(r.platformFee),
+      vatAmount: money(r.vatAmount),
+      totalAmount: money(r.totalAmount),
+      currencyCode: r.currencyCode,
+      paymentMethod: r.paymentMethod?.replace(/_/g, ' ') ?? null,
+      cardLast4: r.cardLast4,
+      paidAt: r.paidAt,
+      createdAt: r.createdAt,
+    })),
+    disputes: job.disputes.map((d) => ({
+      id: d.id,
+      disputeRef: d.disputeRef,
+      reason: d.reason,
+      description: d.description,
+      evidenceUrls: d.evidenceUrls,
+      status: d.status,
+      adminNote: d.adminNote,
+      resolvedAt: d.resolvedAt,
+      createdAt: d.createdAt,
+    })),
   };
 };
 

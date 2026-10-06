@@ -222,3 +222,25 @@ export const getMyExpiringDocuments = async (
     next(error);
   }
 };
+
+export const getMyReviews = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { summary, items, meta } = await tradersService.listMyReviews(
+      req.user!.id,
+      req.query as { page?: number; limit?: number; stars?: number }
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Reviews retrieved successfully.',
+      data: { summary, items },
+      meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

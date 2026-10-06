@@ -37,6 +37,10 @@ export const submitJobReview = respond(201, 'Thank you! Your review has been sub
   myJobService.submitJobReview(req.user!.id, req.params.id, req.body)
 );
 
+export const confirmJobCompletion = respond(200, 'Job completion confirmed. Thank you!', (req) =>
+  myJobService.confirmJobCompletion(req.user!.id, req.params.id)
+);
+
 export const createJobDispute = respond(201, 'Dispute submitted successfully.', (req) =>
   myJobService.createJobDispute(req.user!.id, req.params.id, req.body)
 );

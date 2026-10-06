@@ -1,6 +1,8 @@
-import { InvoiceStatus, JobStatus, Prisma } from '@prisma/client';
+import { ActorType, InvoiceStatus, JobStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
-import { NotFoundError } from '../../../utils/errors';
+import { BadRequestError, NotFoundError } from '../../../utils/errors';
+import { cancelJob } from '../../jobs/jobs.service';
+import { rescheduleJob } from '../../jobs/jobs.my-job.service';
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 import {
   dateRangeFilter,
@@ -13,6 +15,7 @@ import {
   type AdminDisputesListQuery,
   type AdminJobFilters,
   type AdminJobsListQuery,
+  type AdminRescheduleJobInput,
   type AdminUpdateDisputeInput,
 } from './admin-jobs.validation';
 
@@ -37,7 +40,10 @@ const NO_INVOICE: Prisma.JobWhereInput = {
   OR: [{ booking: { is: null } }, { booking: { is: { invoice: { is: null } } } }],
 };
 
-/** Shared WHERE for list + stats. Stats skip `status` so tab counts stay visible while a tab is selected. */
+/**
+ * Shared WHERE for list + stats. Stats skip `status` so tab counts stay visible while a tab is selected,
+ * and count archived jobs unless `archived` is sent (the list hides them by default).
+ */
 const buildJobWhere = (filters: AdminJobFilters, includeStatus = true): Prisma.JobWhereInput => {
   const and: Prisma.JobWhereInput[] = [dateRangeFilter(filters.from, filters.to, 'createdAt')];
 
@@ -45,6 +51,11 @@ const buildJobWhere = (filters: AdminJobFilters, includeStatus = true): Prisma.J
   if (filters.traderId) and.push({ traderId: filters.traderId });
   if (filters.categoryId) and.push({ categoryId: filters.categoryId });
   if (includeStatus && filters.status?.length) and.push({ status: { in: filters.status } });
+
+  if (filters.archived === 'true') and.push({ archivedAt: { not: null } });
+  else if (filters.archived === 'false' || (includeStatus && filters.archived !== 'all')) {
+    and.push({ archivedAt: null });
+  }
 
   if (filters.offer === 'APPLIED') and.push({ offerId: { not: null } });
   if (filters.offer === 'NONE') and.push({ offerId: null });
@@ -219,6 +230,7 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
         title: job.title,
         status: job.status,
         statusLabel: ADMIN_JOB_STATUS_LABELS[job.status],
+        archivedAt: job.archivedAt,
         category: job.category,
         subcategory: job.subcategory,
         customer: job.customer,
@@ -261,6 +273,76 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
 export const getAdminJob = async (jobId: string) => {
   const job = await getAdminJobDetail({ id: jobId });
   return { ...job, statusLabel: ADMIN_JOB_STATUS_LABELS[job.status] };
+};
+
+type AdminActor = { id: string; label: string };
+
+const findJobForAdminAction = async (jobId: string) => {
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: { id: true, jobRef: true, customerId: true, status: true, archivedAt: true },
+  });
+  if (!job) throw new NotFoundError('Job not found.');
+  return job;
+};
+
+const auditJobAction = (admin: AdminActor, eventType: string, jobId: string, description: string) =>
+  prisma.auditLog.create({
+    data: {
+      eventType,
+      actorType: ActorType.ADMIN,
+      actorId: admin.id,
+      actorLabel: admin.label,
+      subjectType: 'Job',
+      subjectId: jobId,
+      description,
+    },
+  });
+
+/** Same rules as customer cancel; customer + trader are both notified ("cancelled by BRISK support"). */
+export const adminCancelJob = async (jobId: string, reason: string, admin: AdminActor) => {
+  const job = await findJobForAdminAction(jobId);
+  await cancelJob(job.customerId, job.id, reason, 'ADMIN');
+  await auditJobAction(admin, 'JOB_CANCELLED_BY_ADMIN', job.id, `Cancelled job ${job.jobRef}: ${reason}`);
+  return getAdminJob(job.id);
+};
+
+/** Same rules as customer reschedule; customer + trader are both notified. */
+export const adminRescheduleJob = async (
+  jobId: string,
+  input: AdminRescheduleJobInput,
+  admin: AdminActor
+) => {
+  const job = await findJobForAdminAction(jobId);
+  await rescheduleJob(job.customerId, job.id, input, 'ADMIN');
+  await auditJobAction(
+    admin,
+    'JOB_RESCHEDULED_BY_ADMIN',
+    job.id,
+    `Rescheduled job ${job.jobRef} to ${input.date} (${input.timeSlot}).`
+  );
+  return getAdminJob(job.id);
+};
+
+/** Archive hides a finished job from the default admin list (`archived=true|all` to see it). */
+export const adminSetJobArchived = async (jobId: string, archived: boolean, admin: AdminActor) => {
+  const job = await findJobForAdminAction(jobId);
+  if (archived && job.status !== JobStatus.COMPLETED && job.status !== JobStatus.CANCELLED) {
+    throw new BadRequestError('Only completed or cancelled jobs can be archived.');
+  }
+  if (archived !== Boolean(job.archivedAt)) {
+    await prisma.job.update({
+      where: { id: job.id },
+      data: { archivedAt: archived ? new Date() : null },
+    });
+    await auditJobAction(
+      admin,
+      archived ? 'JOB_ARCHIVED' : 'JOB_UNARCHIVED',
+      job.id,
+      `${archived ? 'Archived' : 'Unarchived'} job ${job.jobRef}.`
+    );
+  }
+  return getAdminJob(job.id);
 };
 
 export const getAdminJobChat = (jobId: string, query: { page?: number; limit?: number }) =>

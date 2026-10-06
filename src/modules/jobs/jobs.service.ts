@@ -38,6 +38,7 @@ import {
   normalizeQaFormAnswers,
 } from './jobs.qa-form';
 import { getCurrencyMeta } from '../../services/currency.service';
+import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
 import {
   emitJobAcceptCancelled,
   emitJobCreated,
@@ -200,6 +201,7 @@ const jobInclude = {
       scheduledDate: true,
       arrivedAt: true,
       finishedAt: true,
+      customerConfirmedAt: true,
       invoice: {
         select: {
           id: true,
@@ -1098,7 +1100,7 @@ export const getJobOutcomeDetail = async (
     job.trader?.businessName || job.trader?.user?.fullName || 'Trader';
   const traderLocation = [job.trader?.city, job.trader?.country].filter(Boolean).join(', ');
 
-  const [requests, lastCardPayment] = await Promise.all([
+  const [requests, lastCardPayment, activeDisputes] = await Promise.all([
     prisma.traderPaymentRequest.findMany({
       where: { jobId, status: { in: ['SENT', 'PAID'] } },
       select: {
@@ -1121,6 +1123,7 @@ export const getJobOutcomeDetail = async (
           select: { id: true, cardBrand: true, cardLast4: true, paidAt: true },
         })
       : null,
+    prisma.jobDispute.count({ where: { jobId, status: { in: ['OPEN', 'IN REVIEW'] } } }),
   ]);
   const billedInvoice = invoice && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
   const sum = (rows: typeof requests, pick: (r: (typeof requests)[number]) => Prisma.Decimal) =>
@@ -1240,6 +1243,9 @@ export const getJobOutcomeDetail = async (
     invoiceUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     receiptUrl: lastCardPayment ? `/payments/${lastCardPayment.id}/receipt` : null,
     canReview: expected === 'COMPLETED' && finished && Boolean(job.trader) && !review,
+    completionConfirmedAt: job.booking?.customerConfirmedAt ?? null,
+    canConfirmCompletion:
+      expected === 'COMPLETED' && finished && Boolean(job.booking) && !job.booking?.customerConfirmedAt && activeDisputes === 0,
   };
 };
 
@@ -1507,12 +1513,22 @@ const buildPublishSuccessPayload = async (
   };
 };
 
+const notifyAdminsJobPosted = (job: { id: string; jobRef: string | null; title: string; city: string | null }) =>
+  createAdminNotifications({
+    type: 'NEW_JOB_POSTED',
+    title: `New job posted ${job.jobRef ?? ''}`.trim(),
+    message: `"${job.title}"${job.city ? ` in ${job.city}` : ''} was published.`,
+    actionUrl: `/jobs/${job.id}`,
+    payload: { jobId: job.id, jobRef: job.jobRef },
+  }).catch(() => undefined);
+
 export const publishJob = async (
   customerId: string,
   jobId: string,
   input: PublishJobInput
 ) => {
   const existing = await getOwnedJob(customerId, jobId);
+  const firstPublish = existing.status === JobStatus.DRAFT;
 
   // addressId OR inline address/location (map search) OR address already on job.
   const address = await resolveJobAddressForPublish(customerId, existing.addressId, input);
@@ -1840,6 +1856,7 @@ export const publishJob = async (
       siteVisitRequested: payload.job.siteVisitRequested,
       at: new Date().toISOString(),
     });
+    if (firstPublish) void notifyAdminsJobPosted(payload.job);
     return payload;
   }
 
@@ -1870,6 +1887,7 @@ export const publishJob = async (
     siteVisitRequested: publishedJob.siteVisitRequested,
     at: new Date().toISOString(),
   });
+  if (firstPublish) void notifyAdminsJobPosted(publishedJob);
 
   return {
     job: publishedJob,
@@ -1898,7 +1916,12 @@ export const publishJob = async (
  * Customer cancels a job. Sets job (+ booking if any) to CANCELLED.
  * Blocked once completed or already cancelled, or after successful payment.
  */
-export const cancelJob = async (customerId: string, jobId: string, reason?: string) => {
+export const cancelJob = async (
+  customerId: string,
+  jobId: string,
+  reason?: string,
+  actor: 'CUSTOMER' | 'ADMIN' = 'CUSTOMER'
+) => {
   const existing = await getOwnedJob(customerId, jobId);
 
   if (existing.status === JobStatus.CANCELLED || existing.booking?.status === BookingStatus.CANCELLED) {
@@ -1963,7 +1986,7 @@ export const cancelJob = async (customerId: string, jobId: string, reason?: stri
     bookingId: existing.booking?.id ?? null,
     invoiceId: existing.booking?.invoice?.id ?? null,
     title: job.title,
-    actor: 'CUSTOMER',
+    actor,
     at: new Date().toISOString(),
   });
   for (const q of awaitingTrader) {

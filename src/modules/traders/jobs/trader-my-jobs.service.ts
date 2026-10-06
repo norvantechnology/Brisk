@@ -1141,6 +1141,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     statusLabel,
     flowStatus,
     paymentStatus,
+    customerConfirmedAt: job.booking?.customerConfirmedAt ?? null,
     /** Boolean flag for Active-list FE routing (same meaning as list `siteVisit`). */
     isSiteVisit: Boolean(job.siteVisitRequested || job.siteVisitRequests[0]),
     /**
@@ -1508,6 +1509,7 @@ export const getJobOutcomeDetail = async (
     siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
     completedAt: eventAt,
     cancelledAt: null,
+    customerConfirmedAt: job.booking?.customerConfirmedAt ?? null,
     formattedCompletedDate: formatOutcomeDateLabel(eventAt, 'COMPLETED'),
     customer: {
       id: job.customer.id,

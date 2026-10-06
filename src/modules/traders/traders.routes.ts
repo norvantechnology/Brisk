@@ -6,6 +6,7 @@ import { roleMiddleware } from '../../middlewares/role.middleware';
 import { traderVerifiedMiddleware } from '../../middlewares/trader-verified.middleware';
 import {
   expiringDocumentsQuerySchema,
+  myReviewsQuerySchema,
   updateTraderAccountSchema,
   updateTraderBankDetailsSchema,
   updateTraderProfileSchema,
@@ -409,6 +410,61 @@ router.get(
   validate(expiringDocumentsQuerySchema),
   tradersController.getMyExpiringDocuments
 );
+
+/**
+ * @swagger
+ * /traders/me/reviews:
+ *   get:
+ *     summary: My ratings & reviews (summary + paginated list)
+ *     description: |
+ *       Ratings left by customers after job completion (`POST /jobs/{id}/review`).
+ *       `summary` is always computed over **all** reviews; `stars` filter only affects `items` + `meta`.
+ *     tags: ['Trader / Profile']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *       - in: query
+ *         name: stars
+ *         schema: { type: integer, minimum: 1, maximum: 5 }
+ *         description: Filter list by star rating.
+ *     responses:
+ *       200:
+ *         description: Reviews retrieved.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Reviews retrieved successfully.
+ *               data:
+ *                 summary:
+ *                   averageRating: 4.7
+ *                   totalReviews: 12
+ *                   distribution: { '1': 0, '2': 0, '3': 1, '4': 2, '5': 9 }
+ *                 items:
+ *                   - id: 9b1c2d3e-0000-4000-8000-000000000001
+ *                     rating: 5
+ *                     comment: Quick and tidy work, highly recommend.
+ *                     createdAt: '2026-10-01T14:20:00.000Z'
+ *                     customer:
+ *                       id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d
+ *                       name: John Murphy
+ *                       avatar: https://cdn.brisk.ie/avatars/john.jpg
+ *                     job:
+ *                       id: 5f2a1b3c-0000-4000-8000-000000000002
+ *                       jobRef: BRK-J-000123
+ *                       title: Fix leaking kitchen drain
+ *                       category: { id: 3f0f23dd-0000-4000-8000-000000000003, name: Plumbing }
+ *               meta: { total: 12, page: 1, limit: 20, totalPages: 1 }
+ *       404:
+ *         description: Trader profile not found.
+ */
+router.get('/me/reviews', validate(myReviewsQuerySchema), tradersController.getMyReviews);
 
 /**
  * @swagger

@@ -43,6 +43,8 @@ const jobFiltersQuery = z
     maxAmount: amountParam,
     from: dateParam,
     to: dateParam,
+    /** Default (omitted/false) hides archived jobs; `true` = archived only; `all` = both. */
+    archived: z.string().trim().toLowerCase().pipe(z.enum(['true', 'false', 'all'])).optional(),
   })
   .refine((q) => q.minAmount === undefined || q.maxAmount === undefined || q.minAmount <= q.maxAmount, {
     message: 'minAmount cannot be greater than maxAmount.',
@@ -119,6 +121,27 @@ export const adminUpdateDisputeSchema = z.object({
     }),
 });
 
+export const adminCancelJobSchema = z.object({
+  params: z.object({ id: z.string().uuid('Invalid job ID format.') }),
+  body: z.object({
+    reason: z.string().trim().min(1, 'reason is required.').max(1000),
+  }),
+});
+
+export const adminRescheduleJobSchema = z.object({
+  params: z.object({ id: z.string().uuid('Invalid job ID format.') }),
+  body: z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD.'),
+    timeSlot: z.string().trim().min(1, 'timeSlot is required.').max(50),
+  }),
+});
+
+export const adminArchiveJobSchema = z.object({
+  params: z.object({ id: z.string().uuid('Invalid job ID format.') }),
+  body: z.object({ archived: z.boolean() }),
+});
+
+export type AdminRescheduleJobInput = z.infer<typeof adminRescheduleJobSchema>['body'];
 export type AdminDisputesListQuery = z.infer<typeof adminDisputesListQuerySchema>['query'];
 export type AdminUpdateDisputeInput = z.infer<typeof adminUpdateDisputeSchema>['body'];
 export type AdminJobFilters = z.infer<typeof jobFiltersQuery>;
