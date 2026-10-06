@@ -482,7 +482,9 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                 id: 89d85512-3ff7-4fc7-a44a-2e594130d71c
  *                 jobRef: '#JOB-1EA2'
  *                 title: Blocked kitchen drain
+ *                 description: Kitchen sink drain is fully blocked and water is backing up.
  *                 category: DRAINAGE & SEWER UNBLOCKING
+ *                 photos: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/sink.jpg']
  *                 status: PAYMENT PENDING
  *                 statusBadge: Awaiting Payout
  *                 completedAt: '2026-10-05T13:30:23.583Z'
@@ -493,7 +495,7 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                 durationMinutes: 45
  *                 estimatedDuration: 1-2 hours
  *                 address: { fullAddress: "1 O'Connell Street", city: Dublin, eircode: D01 F5P2, latitude: 53.3498, longitude: -6.2603 }
- *                 trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, name: Brisk Trader, location: 'Dublin, Ireland', avatar: 'https://api.brisk.ie/uploads/files/profile_photo/2380d295-fef3-4365-bb81-1ecfb9b3ec8c/1789385663121-r131zvpo.jpg', conversationId: 89d85512-3ff7-4fc7-a44a-2e594130d71c }
+ *                 trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, name: Brisk Trader, location: 'Dublin, Ireland', avatar: 'https://api.brisk.ie/uploads/files/profile_photo/2380d295-fef3-4365-bb81-1ecfb9b3ec8c/1789385663121-r131zvpo.jpg', rating: 4.9, reviewsCount: 124, isVerified: true, conversationId: 89d85512-3ff7-4fc7-a44a-2e594130d71c }
  *                 review: null
  *                 completionPhotos: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/1788858205135-jv3bvmnx.jpg']
  *                 paymentSummary: { serviceFee: 150, processingFee: 10, discount: 0, vatPercentage: 20, vatAmount: 32, totalPaid: 0, amountDue: 192, paymentStatus: PENDING, cardBrand: null, cardLast4: null, baseRate: 150, platformFee: 10, offerApplied: 0, netPayout: 192 }

@@ -191,6 +191,7 @@ const jobInclude = {
       city: true,
       country: true,
       user: { select: { fullName: true, profilePhotoUrl: true } },
+      _count: { select: { ratingsReceived: true } },
     },
   },
   booking: {
@@ -1185,7 +1186,9 @@ export const getJobOutcomeDetail = async (
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
     title: job.title,
+    description: job.description,
     category: categoryLabel,
+    photos: job.photos.filter((p) => p.kind !== JobPhotoKind.PROOF).map((p) => p.photoUrl),
     status: toDisplayStatus(cancelled ? JobStatus.CANCELLED : job.status),
     statusBadge: customerStatusBadgeFor(
       job.status,
@@ -1213,6 +1216,9 @@ export const getJobOutcomeDetail = async (
           name: traderName,
           location: traderLocation || job.city || '',
           avatar: job.trader.profilePhotoUrl || job.trader.user?.profilePhotoUrl || null,
+          rating: Number(job.trader.avgRating ?? 0),
+          reviewsCount: job.trader._count.ratingsReceived,
+          isVerified: job.trader.verificationStatus === 'VERIFIED',
           conversationId: job.id,
         }
       : null,
