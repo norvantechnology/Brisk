@@ -229,14 +229,14 @@ export const getFeaturedTraders = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { items, meta } = await tradersService.listFeaturedTraders(
-      req.query as { page?: number; limit?: number; categoryId?: string }
+    const { items, trendingJobs, meta } = await tradersService.listFeaturedTraders(
+      req.query as { page?: number; limit?: number; categoryId?: string; trendingLimit?: number }
     );
     sendResponse({
       res,
       statusCode: 200,
       message: 'Featured traders retrieved successfully.',
-      data: { items },
+      data: { items, trendingJobs },
       meta,
     });
   } catch (error) {

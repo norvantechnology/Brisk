@@ -37,23 +37,32 @@ router.use('/onboarding', onboardingRoutes);
  * @swagger
  * /traders/featured:
  *   get:
- *     summary: Featured traders (Customer Home → Featured Trader card)
+ *     summary: Customer Home — Featured Trader card + Trending Now cards
  *     tags: ['Customer / Home']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Verified, active traders ranked by real data: `topRated` first, then `avgRating`,
- *       `reviewsCount`, `jobsDoneCount`, newest. Paginated — app decides how many to show.
- *
+ *       **`data.items` (Featured Trader)** — verified, active traders ranked by real data:
+ *       `topRated` first, then `avgRating`, `reviewsCount`, `jobsDoneCount`, newest.
+ *       Paginated (`page`, `limit`, `meta`) — app decides how many to show.
  *       Card mapping: name → `displayName`, subtitle → `category.name`, stars → `avgRating`,
  *       "(128)" → `reviewsCount`, "NEW TODAY" badge → `isNew` (joined today).
  *       No hourly / "starts from" price is stored for traders, so none is returned.
  *       "Hire Now" → direct-trader job flow with `id` as `traderId`.
+ *
+ *       **`data.trendingJobs` (Trending Now)** — top services (sub-categories) by real jobs posted:
+ *       jobs in the last 30 days, then all-time, then admin-featured. Not paginated; size = `trendingLimit`.
+ *       Card mapping: image → `imageUrl` (category banner, may be null), title → `title`.
+ *       Tap → Post a Job with `category.id` + `subcategoryId`. No customer job data is exposed.
  *     parameters:
  *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
- *         description: Optional — only traders in this category.
+ *         description: Optional — only traders / trending services in this category.
+ *       - in: query
+ *         name: trendingLimit
+ *         schema: { type: integer, default: 5, maximum: 20 }
+ *         description: Number of Trending Now items.
  *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
@@ -88,6 +97,19 @@ router.use('/onboarding', onboardingRoutes);
  *                     city: Dublin
  *                     isNew: false
  *                     joinedAt: '2026-08-01T10:00:00.000Z'
+ *                 trendingJobs:
+ *                   - id: 5c1a2b3d-3333-4c5d-9e6f-abcdef654321
+ *                     subcategoryId: 5c1a2b3d-3333-4c5d-9e6f-abcdef654321
+ *                     title: Spring Garden Refresh
+ *                     urlSlug: spring-garden-refresh
+ *                     imageUrl: https://api.brisk.ie/uploads/categories/gardening.jpg
+ *                     category:
+ *                       id: 8e4f0a21-4444-4d6e-8f70-abcdef987654
+ *                       name: Gardening
+ *                       iconUrl: https://api.brisk.ie/category-icons/gardening.svg
+ *                     recentJobsCount: 14
+ *                     totalJobsCount: 52
+ *                     featured: false
  *               meta: { total: 12, page: 1, limit: 20, totalPages: 1 }
  */
 router.get(

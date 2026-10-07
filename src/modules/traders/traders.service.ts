@@ -1,4 +1,5 @@
 import {
+  JobStatus,
   OfferStatus,
   OfferType,
   TraderDocumentStatus,
@@ -378,11 +379,79 @@ export const ensureTraderProfile = async (userId: string) => {
   }
 };
 
-/** Customer Home "Featured Trader" — verified, active traders ranked by real ratings/reviews. */
+const TRENDING_WINDOW_DAYS = 30;
+const DEFAULT_TRENDING_LIMIT = 5;
+
+/** Customer Home "Trending Now" — active services ranked by real jobs posted (recent window, then all-time). */
+const listTrendingJobs = async (limit: number, categoryId?: string) => {
+  const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const jobWhere = {
+    subcategoryId: { not: null },
+    status: { not: JobStatus.DRAFT },
+    ...(categoryId ? { categoryId } : {}),
+  };
+
+  const [recent, allTime] = await Promise.all([
+    prisma.job.groupBy({
+      by: ['subcategoryId'],
+      where: { ...jobWhere, createdAt: { gte: since } },
+      _count: { _all: true },
+    }),
+    prisma.job.groupBy({ by: ['subcategoryId'], where: jobWhere, _count: { _all: true } }),
+  ]);
+  const recentCounts = new Map(recent.map((r) => [r.subcategoryId as string, r._count._all]));
+  const totalCounts = new Map(allTime.map((r) => [r.subcategoryId as string, r._count._all]));
+
+  const subcategories = await prisma.subcategory.findMany({
+    where: {
+      status: 'active',
+      category: { status: 'active' },
+      ...(categoryId ? { categoryId } : {}),
+      OR: [{ id: { in: [...totalCounts.keys()] } }, { featured: true }],
+    },
+    select: {
+      id: true,
+      name: true,
+      urlSlug: true,
+      featured: true,
+      category: {
+        select: { id: true, name: true, iconName: true, urlSlug: true, bannerImageUrl: true },
+      },
+    },
+  });
+
+  return subcategories
+    .map((s) => ({
+      id: s.id,
+      subcategoryId: s.id,
+      title: s.name,
+      urlSlug: s.urlSlug,
+      imageUrl: s.category.bannerImageUrl ?? null,
+      category: {
+        id: s.category.id,
+        name: s.category.name,
+        iconUrl: resolveCategoryIconUrl(s.category),
+      },
+      recentJobsCount: recentCounts.get(s.id) ?? 0,
+      totalJobsCount: totalCounts.get(s.id) ?? 0,
+      featured: s.featured,
+    }))
+    .sort(
+      (a, b) =>
+        b.recentJobsCount - a.recentJobsCount ||
+        b.totalJobsCount - a.totalJobsCount ||
+        Number(b.featured) - Number(a.featured) ||
+        a.title.localeCompare(b.title)
+    )
+    .slice(0, limit);
+};
+
+/** Customer Home — "Featured Trader" (verified, active, ranked by real ratings/reviews) + "Trending Now". */
 export const listFeaturedTraders = async (query: {
   page?: number;
   limit?: number;
   categoryId?: string;
+  trendingLimit?: number;
 }) => {
   const { page, limit, skip } = parsePageLimit(query);
   const where = {
@@ -399,7 +468,7 @@ export const listFeaturedTraders = async (query: {
       : {}),
   };
 
-  const [total, rows] = await Promise.all([
+  const [total, rows, trendingJobs] = await Promise.all([
     prisma.trader.count({ where }),
     prisma.trader.findMany({
       where,
@@ -433,6 +502,7 @@ export const listFeaturedTraders = async (query: {
         _count: { select: { ratingsReceived: true } },
       },
     }),
+    listTrendingJobs(query.trendingLimit ?? DEFAULT_TRENDING_LIMIT, query.categoryId),
   ]);
 
   const startOfToday = new Date();
@@ -461,6 +531,7 @@ export const listFeaturedTraders = async (query: {
         joinedAt: t.createdAt,
       };
     }),
+    trendingJobs,
     meta: buildPaginationMeta(total, page, limit),
   };
 };
