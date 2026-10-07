@@ -1119,6 +1119,10 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *
  *       `review` = `{ rating, review, createdAt }` after the customer rated the trader, else null.
  *       `downloadUrl` (invoice PDF) is set once the trader finished the work.
+ *
+ *       **One API for every state** (active, completed, cancelled) — same shape; drive the banner from
+ *       `status` / `statusLabel`. When cancelled, `milestones` gets one `JOB CANCELLED` step (status
+ *       `CANCELLED`, `at` = cancelledAt) right after the last completed step; remaining steps are `PENDING`.
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:

@@ -286,16 +286,33 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
     { key: 'PAYMENT COMPLETED', title: 'Payment Completed', done: paid, at: paid ? paidAt : null },
   ];
   let currentAssigned = false;
-  const milestones = steps.map((s) => {
+  const milestones = steps.map((s): {
+    key: string;
+    title: string;
+    subtitle: string;
+    status: MilestoneStatus;
+    at: Date | null;
+  } => {
     let status: MilestoneStatus;
     if (s.done) status = 'COMPLETED';
-    else if (cancelled) status = 'CANCELLED';
-    else if (!currentAssigned) {
+    else if (!cancelled && !currentAssigned) {
       status = 'CURRENT';
       currentAssigned = true;
     } else status = 'PENDING';
     return { key: s.key, title: s.title, subtitle: s.at ? formatDateTime(s.at) : '', status, at: s.at };
   });
+  // Cancelled: one red "Job Cancelled" step right after the last completed step; the rest stay grey.
+  if (cancelled) {
+    const cancelledAt = job.cancelledAt ?? job.updatedAt;
+    const lastDoneIndex = milestones.reduce((last, m, i) => (m.status === 'COMPLETED' ? i : last), -1);
+    milestones.splice(lastDoneIndex + 1, 0, {
+      key: 'JOB CANCELLED',
+      title: 'Job Cancelled',
+      subtitle: formatDateTime(cancelledAt),
+      status: 'CANCELLED',
+      at: cancelledAt,
+    });
+  }
 
   const currencyMeta = await getCurrencyMeta(pricing.currencyCode);
   const scheduledDate = booking?.scheduledDate ?? job.scheduledDate;
