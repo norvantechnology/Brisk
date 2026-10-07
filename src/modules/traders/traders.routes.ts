@@ -42,16 +42,17 @@ router.use('/onboarding', onboardingRoutes);
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **`data.items` (Featured Trader)** — verified, active traders ranked by real data:
- *       `topRated` first, then `avgRating`, `reviewsCount`, `jobsDoneCount`, newest.
- *       Paginated (`page`, `limit`, `meta`) — app decides how many to show.
+ *       Two separate arrays, no pagination.
+ *
+ *       **`data.featuredTraders` (Featured Trader)** — top verified, active traders ranked by real data:
+ *       `topRated` first, then `avgRating`, `reviewsCount`, `jobsDoneCount`, newest. Size = `traderLimit`.
  *       Card mapping: name → `displayName`, subtitle → `category.name`, stars → `avgRating`,
  *       "(128)" → `reviewsCount`, "NEW TODAY" badge → `isNew` (joined today).
  *       No hourly / "starts from" price is stored for traders, so none is returned.
  *       "Hire Now" → direct-trader job flow with `id` as `traderId`.
  *
  *       **`data.trendingJobs` (Trending Now)** — top services (sub-categories) by real jobs posted:
- *       jobs in the last 30 days, then all-time, then admin-featured. Not paginated; size = `trendingLimit`.
+ *       jobs in the last 30 days, then all-time, then admin-featured. Size = `trendingLimit`.
  *       Card mapping: image → `imageUrl` (category banner, may be null), title → `title`.
  *       Tap → Post a Job with `category.id` + `subcategoryId`. No customer job data is exposed.
  *     parameters:
@@ -60,25 +61,23 @@ router.use('/onboarding', onboardingRoutes);
  *         schema: { type: string, format: uuid }
  *         description: Optional — only traders / trending services in this category.
  *       - in: query
+ *         name: traderLimit
+ *         schema: { type: integer, default: 5, maximum: 20 }
+ *         description: Number of Featured Trader items.
+ *       - in: query
  *         name: trendingLimit
  *         schema: { type: integer, default: 5, maximum: 20 }
  *         description: Number of Trending Now items.
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 20, maximum: 100 }
  *     responses:
  *       200:
- *         description: Featured traders.
+ *         description: Featured traders + trending services.
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Featured traders retrieved successfully.
  *               data:
- *                 items:
+ *                 featuredTraders:
  *                   - id: 1b0c9d2e-1111-4a2b-9c3d-123456789abc
  *                     displayName: Isaac Evans
  *                     fullName: Isaac Evans
@@ -110,7 +109,6 @@ router.use('/onboarding', onboardingRoutes);
  *                     recentJobsCount: 14
  *                     totalJobsCount: 52
  *                     featured: false
- *               meta: { total: 12, page: 1, limit: 20, totalPages: 1 }
  */
 router.get(
   '/featured',

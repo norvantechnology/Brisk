@@ -96,8 +96,7 @@ export const expiringDocumentsQuerySchema = z.object({
 
 export const featuredTradersQuerySchema = z.object({
   query: z.object({
-    page: z.coerce.number().int().min(1).optional(),
-    limit: z.coerce.number().int().min(1).max(100).optional(),
+    traderLimit: z.coerce.number().int().min(1).max(20).optional(),
     categoryId: z.string().uuid().optional(),
     trendingLimit: z.coerce.number().int().min(1).max(20).optional(),
   }),

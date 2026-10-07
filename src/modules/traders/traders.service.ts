@@ -381,6 +381,7 @@ export const ensureTraderProfile = async (userId: string) => {
 
 const TRENDING_WINDOW_DAYS = 30;
 const DEFAULT_TRENDING_LIMIT = 5;
+const DEFAULT_FEATURED_TRADER_LIMIT = 5;
 
 /** Customer Home "Trending Now" — active services ranked by real jobs posted (recent window, then all-time). */
 const listTrendingJobs = async (limit: number, categoryId?: string) => {
@@ -448,12 +449,10 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
 
 /** Customer Home — "Featured Trader" (verified, active, ranked by real ratings/reviews) + "Trending Now". */
 export const listFeaturedTraders = async (query: {
-  page?: number;
-  limit?: number;
+  traderLimit?: number;
   categoryId?: string;
   trendingLimit?: number;
 }) => {
-  const { page, limit, skip } = parsePageLimit(query);
   const where = {
     verificationStatus: VerificationStatus.VERIFIED,
     status: 'active',
@@ -468,8 +467,7 @@ export const listFeaturedTraders = async (query: {
       : {}),
   };
 
-  const [total, rows, trendingJobs] = await Promise.all([
-    prisma.trader.count({ where }),
+  const [rows, trendingJobs] = await Promise.all([
     prisma.trader.findMany({
       where,
       orderBy: [
@@ -479,8 +477,7 @@ export const listFeaturedTraders = async (query: {
         { jobsDoneCount: 'desc' },
         { createdAt: 'desc' },
       ],
-      skip,
-      take: limit,
+      take: query.traderLimit ?? DEFAULT_FEATURED_TRADER_LIMIT,
       select: {
         id: true,
         businessName: true,
@@ -509,7 +506,7 @@ export const listFeaturedTraders = async (query: {
   startOfToday.setHours(0, 0, 0, 0);
 
   return {
-    items: rows.map((t) => {
+    featuredTraders: rows.map((t) => {
       const category = t.category ?? t.categories[0]?.category ?? null;
       return {
         id: t.id,
@@ -532,7 +529,6 @@ export const listFeaturedTraders = async (query: {
       };
     }),
     trendingJobs,
-    meta: buildPaginationMeta(total, page, limit),
   };
 };
 
