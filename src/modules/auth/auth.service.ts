@@ -355,13 +355,19 @@ export const registerUser = async (
     prisma.user.findUnique({ where: { mobileNumber }, select: existingSelect }),
   ]);
 
-  // Signup left on the OTP screen (never verified) can register again — same record, fresh OTPs.
+  // Signup left on the OTP screen (mobile never verified, no data yet) can register again —
+  // same record, fresh OTPs. Includes older ACTIVE-but-unverified signups; admin-restricted accounts excluded.
+  const RESTARTABLE_STATUSES: UserStatus[] = [UserStatus.PENDING, UserStatus.ACTIVE];
   const isPendingSignup = (u: {
     status: UserStatus;
     mobileVerified: boolean;
     traderProfile: { id: string } | null;
     _count: { jobs: number };
-  }) => u.status === UserStatus.PENDING && !u.mobileVerified && !u.traderProfile && u._count.jobs === 0;
+  }) =>
+    RESTARTABLE_STATUSES.includes(u.status) &&
+    !u.mobileVerified &&
+    !u.traderProfile &&
+    u._count.jobs === 0;
 
   if (existingEmail && !isPendingSignup(existingEmail)) {
     throw new ConflictError('Email is already registered.');
