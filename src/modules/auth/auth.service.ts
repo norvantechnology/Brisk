@@ -633,6 +633,15 @@ export const loginUser = async (input: LoginInput) => {
 
   assertAccountCanAuthenticate(user);
 
+  if (input.role && user.role !== input.role) {
+    throw new ForbiddenError(
+      user.role === UserRole.TRADER
+        ? 'This email is registered as a Trader account. Please log in with the BRISK Trader app.'
+        : 'This email is registered as a Customer account. Please log in with the BRISK Customer app.',
+      { code: 'WRONG_APP_ROLE', data: { accountRole: user.role } }
+    );
+  }
+
   // Valid credentials, but OTP still pending → soft success for mobile apps.
   if (!user.mobileVerified || (user.role === UserRole.TRADER && !user.emailVerified)) {
     const otpPayload = await buildOtpRequiredPayload(user);

@@ -134,6 +134,8 @@ export const resendOtpSchema = z.object({
 const loginBodySchema = z.object({
   email: z.string().trim().email('Invalid email format').toLowerCase(),
   password: z.string().min(1, 'Password is required'),
+  /** App calling login — customer app sends CUSTOMER, trader app sends TRADER. Optional for backward compatibility. */
+  role: z.enum(['CUSTOMER', 'TRADER']).optional(),
 });
 
 export const loginSchema = z.object({

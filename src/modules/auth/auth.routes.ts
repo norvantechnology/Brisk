@@ -194,6 +194,12 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *               password:
  *                 type: string
  *                 example: Password1!
+ *               role:
+ *                 type: string
+ *                 enum: [CUSTOMER, TRADER]
+ *                 description: |
+ *                   Which app is logging in (customer app → `CUSTOMER`, trader app → `TRADER`).
+ *                   Recommended: blocks logging into the wrong app (otherwise customer APIs return 403 for a trader token).
  *     responses:
  *       200:
  *         description: |
@@ -202,6 +208,8 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *           2) Mobile not verified — **data.requiresOtpVerification=true** with mobileNumber for OTP screen (HTTP 200, not an error).
  *       401:
  *         description: Invalid email or password.
+ *       403:
+ *         description: "`WRONG_APP_ROLE` — `role` sent does not match the account (e.g. trader email in the customer app). Also restricted/inactive accounts."
  */
 router.post('/login', validate(loginSchema), authController.login);
 
