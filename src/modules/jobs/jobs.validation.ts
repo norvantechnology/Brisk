@@ -235,12 +235,18 @@ export const DISPUTE_REASONS = [
   'Other',
 ] as const;
 
+/** "Upload up to 5 photos" on the Report an Issue screen. */
+export const DISPUTE_MAX_EVIDENCE_PHOTOS = 5;
+
 export const createJobDisputeSchema = z.object({
   params: z.object({ id: uuid }),
   body: z.object({
     reason: z.enum(DISPUTE_REASONS),
     description: z.string().trim().min(1, 'Please describe the issue.').max(5000),
-    evidenceUrls: z.array(z.string().url()).max(10).optional(),
+    evidenceUrls: z
+      .array(z.string().url())
+      .max(DISPUTE_MAX_EVIDENCE_PHOTOS, `Upload up to ${DISPUTE_MAX_EVIDENCE_PHOTOS} photos.`)
+      .optional(),
   }),
 });
 

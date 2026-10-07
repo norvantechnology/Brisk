@@ -21,6 +21,7 @@ import type {
   JobReviewInput,
   RescheduleJobInput,
 } from './jobs.validation';
+import { DISPUTE_MAX_EVIDENCE_PHOTOS, DISPUTE_REASONS } from './jobs.validation';
 
 export const DISPUTE_STATUSES = ['OPEN', 'IN REVIEW', 'RESOLVED', 'REJECTED'] as const;
 const ACTIVE_DISPUTE_STATUSES = ['OPEN', 'IN REVIEW'];
@@ -669,13 +670,31 @@ export const createJobDispute = async (customerId: string, jobId: string, input:
   return serializeDispute(dispute);
 };
 
+/** Report an Issue screen: reasons dropdown + latest submitted issue; app shows read-only once submitted. */
 export const listJobDisputes = async (customerId: string, jobId: string) => {
-  const job = await prisma.job.findFirst({ where: { id: jobId, customerId }, select: { id: true } });
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, customerId },
+    select: { id: true, traderId: true },
+  });
   if (!job) throw new NotFoundError('Job not found.');
   const rows = await prisma.jobDispute.findMany({
     where: { jobId },
     orderBy: { createdAt: 'desc' },
     include: { job: { select: { id: true, jobRef: true, title: true } } },
   });
-  return rows.map(serializeDispute);
+
+  const disputes = rows.map(serializeDispute);
+  const dispute = disputes[0] ?? null;
+  const hasActiveDispute = disputes.some((d) => ACTIVE_DISPUTE_STATUSES.includes(d.status));
+  const canSubmit = Boolean(job.traderId) && !hasActiveDispute;
+
+  return {
+    reasons: DISPUTE_REASONS.map((r) => ({ value: r, label: r })),
+    maxEvidencePhotos: DISPUTE_MAX_EVIDENCE_PHOTOS,
+    isSubmitted: Boolean(dispute),
+    isEditable: !dispute && canSubmit,
+    canSubmit,
+    dispute,
+    disputes,
+  };
 };

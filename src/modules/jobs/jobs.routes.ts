@@ -1285,7 +1285,8 @@ router.post('/:id/confirm-completion', ...customerOnly, validate(jobIdParamSchem
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       Allowed once a trader is assigned. One open issue per job (409 while `OPEN` / `IN REVIEW`).
- *       Upload evidence first with `POST /uploads` and send the URLs. BRISK admins are notified.
+ *       `reason` must be one of `reasons[].value` from `GET /jobs/{id}/disputes`.
+ *       Upload evidence first with `POST /uploads` (purpose `job_photo`) and send up to 5 URLs. BRISK admins are notified.
  *       Dispute `status`: `OPEN` → `IN REVIEW` → `RESOLVED` | `REJECTED` (customer gets `DISPUTE_UPDATE`).
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -1299,7 +1300,7 @@ router.post('/:id/confirm-completion', ...customerOnly, validate(jobIdParamSchem
  *             properties:
  *               reason: { type: string, enum: [Poor Quality of Work, Incomplete Job, Overcharging, No-show / Delay, Other] }
  *               description: { type: string, example: The tap is still leaking after the repair. }
- *               evidenceUrls: { type: array, maxItems: 10, items: { type: string, format: uri } }
+ *               evidenceUrls: { type: array, maxItems: 5, items: { type: string, format: uri } }
  *     responses:
  *       201:
  *         content:
@@ -1311,24 +1312,42 @@ router.post('/:id/confirm-completion', ...customerOnly, validate(jobIdParamSchem
  *       400: { description: No trader assigned yet }
  *       409: { description: An open issue already exists for this job }
  *   get:
- *     summary: Issues reported on this job (latest first)
+ *     summary: Report an Issue screen — reasons dropdown + submitted issue (read-only state)
  *     tags: ['Customer / My Job']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       All issues the customer reported on this job, newest first, with the BRISK admin's `status`
- *       (`OPEN` | `IN REVIEW` | `RESOLVED` | `REJECTED`), `adminNote` and `resolvedAt`. Empty array when none.
+ *       Call when opening the Report an Issue / Dispute screen.
+ *
+ *       - `reasons[]` — dropdown options (send `value` as `reason` in POST).
+ *       - `maxEvidencePhotos` — photo limit for Evidence Upload.
+ *       - `isEditable: true` → nothing submitted yet: show the empty form (edits stay in the app until Submit).
+ *       - `isSubmitted: true` → show `dispute` read-only with admin `status`
+ *         (`OPEN` | `IN REVIEW` | `RESOLVED` | `REJECTED`), `adminNote`, `resolvedAt`.
+ *       - `canSubmit` — POST allowed now (trader assigned and no `OPEN` / `IN REVIEW` issue).
+ *       - `dispute` = latest issue (null when none); `disputes` = full history, newest first.
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
  *       200:
- *         description: '`data` is an array of disputes (same shape as POST response)'
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Job disputes retrieved successfully.
  *               data:
- *                 - { id: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeId: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeRef: DSP-E005ED, jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, jobTitle: Blocked kitchen drain, reason: Poor Quality of Work, description: Drain blocked again next day., evidenceUrls: [], status: IN REVIEW, adminNote: Checking with trader., resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:31:02.120Z' }
+ *                 reasons:
+ *                   - { value: Poor Quality of Work, label: Poor Quality of Work }
+ *                   - { value: Incomplete Job, label: Incomplete Job }
+ *                   - { value: Overcharging, label: Overcharging }
+ *                   - { value: No-show / Delay, label: No-show / Delay }
+ *                   - { value: Other, label: Other }
+ *                 maxEvidencePhotos: 5
+ *                 isSubmitted: true
+ *                 isEditable: false
+ *                 canSubmit: false
+ *                 dispute: { id: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeId: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeRef: DSP-E005ED, jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, jobTitle: Blocked kitchen drain, reason: Poor Quality of Work, description: Drain blocked again next day., evidenceUrls: [], status: IN REVIEW, adminNote: Checking with trader., resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:31:02.120Z' }
+ *                 disputes:
+ *                   - { id: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeId: 5019a717-e351-41aa-ae7a-1bc539d05f69, disputeRef: DSP-E005ED, jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c, jobRef: JOB-1EA2, jobTitle: Blocked kitchen drain, reason: Poor Quality of Work, description: Drain blocked again next day., evidenceUrls: [], status: IN REVIEW, adminNote: Checking with trader., resolvedAt: null, createdAt: '2026-10-05T13:30:23.884Z', updatedAt: '2026-10-05T13:31:02.120Z' }
  *       404: { description: Job not found }
  */
 router.post('/:id/disputes', ...customerOnly, validate(createJobDisputeSchema), controller.createJobDispute);
