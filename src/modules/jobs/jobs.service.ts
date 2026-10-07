@@ -261,10 +261,10 @@ const serializeJob = (
     job.trader?.businessName || job.trader?.user?.fullName || null;
 
   return {
-    id: job.id,
+  id: job.id,
     jobRef: str(job.jobRef),
-    customerId: job.customerId,
-    categoryId: job.categoryId,
+  customerId: job.customerId,
+  categoryId: job.categoryId,
     subcategoryId: str(job.subcategoryId),
     offerId: str(job.offerId),
     appliedTraderOfferId: str(job.offerId),
@@ -287,7 +287,7 @@ const serializeJob = (
     maxBudget: job.maxBudget != null ? money(job.maxBudget) : 0,
     siteVisitRequested: job.siteVisitRequested,
     siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
-    status: job.status,
+  status: job.status,
     statusBadge: customerStatusBadgeFor(
       job.status,
       job.booking?.status ?? null,
@@ -296,9 +296,9 @@ const serializeJob = (
     scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : '',
     qaFormAnswers: job.qaFormAnswers ?? {},
     qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt,
-    photos: job.photos.map((p) => ({ id: p.id, photoUrl: p.photoUrl, createdAt: p.createdAt })),
+  createdAt: job.createdAt,
+  updatedAt: job.updatedAt,
+  photos: job.photos.map((p) => ({ id: p.id, photoUrl: p.photoUrl, createdAt: p.createdAt })),
     coverPhotoUrl: str(job.photos[0]?.photoUrl),
     category: job.category ?? { id: '', name: '' },
     subcategory: job.subcategory
@@ -326,7 +326,7 @@ const serializeJob = (
     offerApplied,
     formConfig: buildJobFormConfig({
       offerApplied,
-      subcategory: job.subcategory,
+  subcategory: job.subcategory,
       entryPoint: offerApplied ? 'OFFER' : 'DIRECT',
       currencyCode: job.offer?.currencyCode,
       offerBanner: job.offer
@@ -338,13 +338,13 @@ const serializeJob = (
           })
         : null,
     }),
-    offer: job.offer
+  offer: job.offer
       ? (() => {
           const banner = buildOfferAppliedBanner({
-            discountType: job.offer.discountType,
-            discountValue: money(job.offer.discountValue),
-            discountLabel: job.offer.discountLabel,
-            currencyCode: job.offer.currencyCode,
+        discountType: job.offer.discountType,
+        discountValue: money(job.offer.discountValue),
+        discountLabel: job.offer.discountLabel,
+        currencyCode: job.offer.currencyCode,
           });
           return {
             id: job.offer.id,
@@ -354,7 +354,7 @@ const serializeJob = (
             discountValue: money(job.offer.discountValue),
             discountLabel: str(job.offer.discountLabel),
             currencyCode: str(job.offer.currencyCode) || 'EUR',
-            offerType: job.offer.offerType,
+        offerType: job.offer.offerType,
             traderId: str(job.offer.traderId),
             bannerImageUrl: str(job.offer.bannerImageUrl),
             bannerTitle: banner.title,
@@ -379,9 +379,9 @@ const serializeJob = (
           bannerMessage: '',
           offerBanner: { title: '', message: '', discountLabel: '' },
         },
-    address: job.address
-      ? {
-          id: job.address.id,
+  address: job.address
+    ? {
+        id: job.address.id,
           label: str(job.address.label ?? job.address.addressType),
           addressType: str(job.address.addressType),
           houseNumber: str(job.address.houseNumber),
@@ -393,8 +393,8 @@ const serializeJob = (
           country: str(job.address.country),
           latitude: job.address.latitude ?? 0,
           longitude: job.address.longitude ?? 0,
-          isDefault: job.address.isDefault,
-        }
+        isDefault: job.address.isDefault,
+      }
       : {
           id: '',
           label: '',
@@ -410,9 +410,9 @@ const serializeJob = (
           longitude: 0,
           isDefault: false,
         },
-    trader: job.trader
-      ? {
-          id: job.trader.id,
+  trader: job.trader
+    ? {
+        id: job.trader.id,
           businessName: str(job.trader.businessName),
           fullName: str(job.trader.user?.fullName),
           displayName: str(traderDisplayName),
@@ -466,7 +466,7 @@ const serializeJob = (
       status: v.status,
       visitDate: v.visitDate
         ? v.visitDate.toISOString().slice(0, 10)
-        : null,
+    : null,
       timeSlot: v.timeSlot,
       updatedAt: v.updatedAt.toISOString(),
       canConfirm: v.status === TraderSiteVisitStatus.PENDING,
@@ -474,21 +474,21 @@ const serializeJob = (
     })),
     bookingId: str(job.booking?.id),
     invoiceId: str(job.booking?.invoice?.id),
-    booking: job.booking
-      ? {
-          id: job.booking.id,
+  booking: job.booking
+    ? {
+        id: job.booking.id,
           bookingRef: str(job.booking.bookingRef),
-          status: job.booking.status,
+        status: job.booking.status,
           scheduledDate: job.booking.scheduledDate
             ? job.booking.scheduledDate.toISOString()
             : '',
-          invoice: job.booking.invoice
-            ? {
-                id: job.booking.invoice.id,
+        invoice: job.booking.invoice
+          ? {
+              id: job.booking.invoice.id,
                 invoiceNumber: str(job.booking.invoice.invoiceNumber),
-                status: job.booking.invoice.status,
-                totalAmount: money(job.booking.invoice.totalAmount),
-              }
+              status: job.booking.invoice.status,
+              totalAmount: money(job.booking.invoice.totalAmount),
+            }
             : { id: '', invoiceNumber: '', status: '', totalAmount: 0 },
         }
       : {
@@ -577,11 +577,11 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
     // Soft-link offerId only. Claim is created as USED on Payment Successful — not here.
     // Ignore client claimId for trader flow (no separate claim API).
     const existingClaim = await prisma.offerClaim.findUnique({
-      where: { offerId_userId: { offerId, userId: customerId } },
-    });
+        where: { offerId_userId: { offerId, userId: customerId } },
+      });
     if (existingClaim?.status === OfferClaimStatus.USED) {
       throw new ConflictError('You have already used this offer.');
-    }
+      }
     claimId = null;
   }
 
@@ -698,39 +698,39 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
   const created = await prisma.$transaction(
     async (tx) => {
       const job = await tx.job.create({
-        data: {
-          jobRef,
-          customerId,
-          categoryId: input.categoryId,
+      data: {
+        jobRef,
+        customerId,
+        categoryId: input.categoryId,
           subcategoryId: input.subcategoryId ?? undefined,
-          offerId: offerId ?? undefined,
-          claimId: claimId ?? undefined,
-          traderId: traderId ?? undefined,
-          title,
-          description: input.description,
-          scheduledDate: input.scheduledDate,
-          timeSlot: input.timeSlot,
-          durationLabel: input.durationLabel,
-          phoneNumber: input.phoneNumber,
-          serviceCharge: input.serviceCharge,
+        offerId: offerId ?? undefined,
+        claimId: claimId ?? undefined,
+        traderId: traderId ?? undefined,
+        title,
+        description: input.description,
+        scheduledDate: input.scheduledDate,
+        timeSlot: input.timeSlot,
+        durationLabel: input.durationLabel,
+        phoneNumber: input.phoneNumber,
+        serviceCharge: input.serviceCharge,
           quoteType,
           minBudget: input.minBudget ?? undefined,
           maxBudget: input.maxBudget ?? undefined,
           siteVisitRequested,
           siteVisitFee: siteVisitFee ?? undefined,
           qaFormAnswers: qaFormAnswers as Prisma.InputJsonValue | undefined,
-          status: JobStatus.DRAFT,
-          photos: input.photoUrls?.length
-            ? {
-                create: input.photoUrls.map((photoUrl) => ({ photoUrl })),
-              }
-            : undefined,
-        },
-      });
+        status: JobStatus.DRAFT,
+        photos: input.photoUrls?.length
+          ? {
+              create: input.photoUrls.map((photoUrl) => ({ photoUrl })),
+            }
+          : undefined,
+      },
+    });
 
-      if (claimId) {
-        await tx.offerClaim.update({
-          where: { id: claimId },
+    if (claimId) {
+      await tx.offerClaim.update({
+        where: { id: claimId },
           data: { jobId: job.id },
         });
       }
@@ -1800,10 +1800,10 @@ export const publishJob = async (
           ? serviceChargeRaw
           : 0
         : computeTraderOfferDiscount(
-            serviceChargeRaw,
-            offer?.discountType,
-            offer ? money(offer.discountValue) : 0
-          );
+        serviceChargeRaw,
+        offer?.discountType,
+        offer ? money(offer.discountValue) : 0
+      );
 
       const breakdown = computeInvoiceBreakdown({
         serviceCharge: serviceChargeRaw,
