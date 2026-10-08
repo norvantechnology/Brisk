@@ -252,7 +252,7 @@ const consumePasswordResetOtps = (email: string, mobileNumber: string) => {
 const buildOtpRequiredPayload = async (user: AuthUser) => {
   const otpMeta = getOtpMeta();
   const needsMobile = !user.mobileVerified;
-  const needsEmail = user.role === UserRole.TRADER && !user.emailVerified;
+  const needsEmail = !user.emailVerified;
   const nextStep =
     user.role === UserRole.TRADER ? APP_NEXT_STEP.VERIFY_OTP : APP_NEXT_STEP.VERIFY_PHONE;
 
@@ -293,6 +293,7 @@ const buildOtpRequiredPayload = async (user: AuthUser) => {
     role: user.role,
     mobileVerified: user.mobileVerified,
     emailVerified: user.emailVerified,
+    requiresEmailVerification: needsEmail,
     otpSent: mobileSent || emailSent,
     mobileOtpSent: mobileSent,
     emailOtpSent: emailSent,
@@ -403,8 +404,8 @@ export const registerUser = async (
     role,
     country: country?.trim() || null,
     mobileVerified: false,
-    // Traders must verify email OTP too; customers keep email verified at register.
-    emailVerified: !isTrader,
+    // Customers and traders both verify email (random code) + mobile OTP on the verify screen.
+    emailVerified: false,
     status: UserStatus.PENDING,
     isAgeConfirmed: isAgeConfirmed === true,
     ageConfirmedAt: isAgeConfirmed === true ? new Date() : null,
@@ -437,16 +438,12 @@ export const registerUser = async (
   // Re-register inside the resend cooldown keeps the code already sent (still valid) instead of 429.
   if (pendingUser) {
     await trySendOtp(mobileNumber, 'mobile_verification');
-    if (isTrader) {
-      const emailResult = await trySendOtp(email, 'email_verification');
-      if (emailResult.sent) await sendEmailOtpMail(email, emailResult.code, UserRole.TRADER);
-    }
+    const emailResult = await trySendOtp(email, 'email_verification');
+    if (emailResult.sent) await sendEmailOtpMail(email, emailResult.code, user.role);
   } else {
     await generateOtp(mobileNumber, 'mobile_verification');
-    if (isTrader) {
-      const emailCode = await generateOtp(email, 'email_verification');
-      await sendEmailOtpMail(email, emailCode, UserRole.TRADER);
-    }
+    const emailCode = await generateOtp(email, 'email_verification');
+    await sendEmailOtpMail(email, emailCode, user.role);
   }
 
   // Register Interest email (customer vs trader) — non-blocking, first signup only
@@ -460,9 +457,7 @@ export const registerUser = async (
   }
 
   return {
-    message: isTrader
-      ? 'Registration successful. Verification codes have been sent to your mobile number and email.'
-      : 'Registration successful. Verification code has been sent to your mobile number.',
+    message: 'Registration successful. Verification codes have been sent to your mobile number and email.',
     data: {
       userId: user.id,
       mobileNumber: user.mobileNumber,
@@ -472,7 +467,7 @@ export const registerUser = async (
       mobileVerified: false,
       emailVerified: user.emailVerified,
       requiresOtpVerification: true,
-      requiresEmailVerification: isTrader,
+      requiresEmailVerification: true,
       nextStep: isTrader ? APP_NEXT_STEP.VERIFY_OTP : APP_NEXT_STEP.VERIFY_PHONE,
       profilePhotoUrl: savedProfilePhotoUrl,
       ...getOtpMeta(),
@@ -490,7 +485,7 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
 
   const isTrader = user.role === UserRole.TRADER;
   const needsMobile = !user.mobileVerified;
-  const needsEmail = isTrader && !user.emailVerified;
+  const needsEmail = !user.emailVerified;
 
   if (!needsMobile && !needsEmail) {
     throw new BadRequestError('Account is already verified.');
@@ -527,7 +522,7 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
       where: { id: user.id },
       data: {
         mobileVerified: true,
-        emailVerified: isTrader ? true : user.emailVerified,
+        emailVerified: true,
         status: UserStatus.ACTIVE,
       },
       select: PUBLIC_USER_SELECT,
@@ -552,13 +547,15 @@ export const verifyUserOtp = async (input: VerifyOtpInput) => {
   const session = await buildSessionPayload({
     ...verifiedUser,
     mobileVerified: true,
-    emailVerified: isTrader ? true : verifiedUser.emailVerified,
+    emailVerified: true,
   });
 
   return {
-    message: isTrader
+    message: needsMobile && needsEmail
       ? 'Email and mobile verified successfully. Your account is now active.'
-      : 'Mobile number verified successfully. Your account is now active.',
+      : needsEmail
+        ? 'Email verified successfully. Your account is now active.'
+        : 'Mobile number verified successfully. Your account is now active.',
     data: session,
   };
 };
@@ -588,7 +585,6 @@ export const resendUserOtp = async (input: ResendOtpInput) => {
     Boolean(input.mobileNumber || user.mobileNumber) &&
     !user.mobileVerified;
   const sendEmail =
-    isTrader &&
     (channel === 'email' || channel === 'both') &&
     Boolean(input.email || user.email) &&
     !user.emailVerified;
@@ -617,7 +613,7 @@ export const resendUserOtp = async (input: ResendOtpInput) => {
       email: user.email,
       role: user.role,
       requiresOtpVerification: true,
-      requiresEmailVerification: isTrader && !user.emailVerified,
+      requiresEmailVerification: !user.emailVerified,
       nextStep: isTrader ? APP_NEXT_STEP.VERIFY_OTP : APP_NEXT_STEP.VERIFY_PHONE,
       otpSent: true,
       mobileOtpSent,
@@ -651,8 +647,8 @@ export const loginUser = async (input: LoginInput) => {
     );
   }
 
-  // Valid credentials, but OTP still pending → soft success for mobile apps.
-  if (!user.mobileVerified || (user.role === UserRole.TRADER && !user.emailVerified)) {
+  // Valid credentials, but mobile and/or email OTP still pending → soft success for mobile apps.
+  if (!user.mobileVerified || !user.emailVerified) {
     const otpPayload = await buildOtpRequiredPayload(user);
     return {
       message: otpPayload.message,

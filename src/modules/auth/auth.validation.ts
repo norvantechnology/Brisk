@@ -78,7 +78,7 @@ const verifyOtpBodySchema = z
     /** Mobile OTP code. Alias: `code` kept for backward compatibility. */
     mobileCode: otpCodeSchema.optional(),
     code: otpCodeSchema.optional(),
-    /** Required for traders when email is still unverified — same screen as mobile. */
+    /** Required while email is still unverified (customers and traders) — same screen as mobile. */
     email: z.string().trim().email('Invalid email format').toLowerCase().optional(),
     emailCode: otpCodeSchema.optional(),
   })

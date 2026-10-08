@@ -22,12 +22,12 @@ const router = Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Register Customer or Trader and send OTP (traders get mobile + email OTP)
+ *     summary: Register Customer or Trader and send mobile + email OTP
  *     tags: ['Mobile / Auth']
  *     description: |
- *       **Customer:** mobile OTP only. `nextStep` = `VERIFY_PHONE`.
- *       **Trader:** mobile + email OTP. `nextStep` = `VERIFY_OTP`, `requiresEmailVerification` = true.
- *       Mock mobile OTP: `123456`. Email OTP: dynamic 6-digit code sent to the trader's inbox (not a fixed code).
+ *       Both roles get a mobile OTP and an email OTP (`requiresEmailVerification` = true).
+ *       **Customer:** `nextStep` = `VERIFY_PHONE`. **Trader:** `nextStep` = `VERIFY_OTP`.
+ *       Mock mobile OTP: `123456`. Email OTP: random 6-digit code sent to the user's inbox (not a fixed code).
  *     requestBody:
  *       required: true
  *       content:
@@ -116,11 +116,11 @@ router.post(
  * @swagger
  * /auth/verify-otp:
  *   post:
- *     summary: Verify signup OTP (mobile + email for traders on the same screen)
+ *     summary: Verify signup OTP (mobile + email on the same screen, customers and traders)
  *     tags: ['Mobile / Auth']
  *     description: |
- *       **Customers:** send `mobileNumber` + `mobileCode` (or legacy `code`).
- *       **Traders:** send `mobileNumber` + `mobileCode` + `email` + `emailCode` on the same screen.
+ *       Send `mobileNumber` + `mobileCode` (or legacy `code`) + `emailCode` (+ optional `email`) on the same screen.
+ *       Only unverified channels are required (e.g. older accounts with mobile already verified send `emailCode` only).
  *       Mock mobile OTP: `123456`. Email OTP: use the dynamic code from the verification email (static `654321` is rejected).
  *       For forgot-password use **POST /auth/forgot-password** then **POST /auth/reset-password**
  *       (not this endpoint).
