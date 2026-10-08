@@ -23,6 +23,7 @@ import {
 } from './otp.service';
 import { APP_NEXT_STEP, resolveSessionExtras } from '../navigation/app-next-step';
 import { buildTokenExpiry } from '../../utils/token-expiry';
+import { logger } from '../../utils/logger';
 import type {
   RegisterInput,
   VerifyOtpInput,
@@ -165,7 +166,11 @@ const sendEmailOtpMail = async (
       ],
     });
   } catch (err) {
-    // Logged in sendMail / otp mock - do not block register.
+    // Do not block register / login — OTP is stored; resend is available.
+    logger.warn('[EMAIL] Failed to send email verification OTP', {
+      to: email,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 };
 
@@ -191,6 +196,10 @@ const sendPasswordResetOtpMail = async (
     });
   } catch (err) {
     // SMTP may be unavailable - OTP is still stored for mobile / mock verify.
+    logger.warn('[EMAIL] Failed to send password reset OTP', {
+      to: email,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 };
 
