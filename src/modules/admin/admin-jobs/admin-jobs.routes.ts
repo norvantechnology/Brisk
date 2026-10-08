@@ -238,7 +238,16 @@ router.get('/jobs', validate(adminJobsListQuerySchema), controller.listJobs);
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: Job detail. }
+ *       200:
+ *         description: Job detail.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Job detail retrieved successfully. }
+ *                 data: { $ref: '#/components/schemas/AdminJobDetail' }
  *       404: { description: Job not found. }
  */
 router.get('/jobs/:id', validate(adminJobIdParamSchema), controller.getJob);

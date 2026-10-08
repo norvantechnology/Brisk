@@ -119,102 +119,145 @@
  *             totalPages: { type: integer, description: Total pages }
  *     TraderMyJobDetail:
  *       type: object
- *       description: My Jobs detail — only after customer confirmed / trader assigned
+ *       description: My Jobs detail (GET /traders/jobs/mine/{id}) — only after customer confirmed / trader assigned. Button text is owned by the app; use primaryAction + can* flags.
  *       properties:
- *         id: { type: string, format: uuid, description: Job id }
- *         title: { type: string, description: Job title }
- *         createdAt: { type: string, format: date-time, description: Job created at }
- *         jobRef: { type: string, nullable: true, description: Job reference code }
- *         description: { type: string, description: Full description }
+ *         id: { type: string, format: uuid, example: 8a8fb0e5-a330-4c62-8e76-a358bd792b84 }
+ *         title: { type: string, example: Kitchen sink leaking }
+ *         createdAt: { type: string, format: date-time, example: '2026-07-20T10:00:00.000Z' }
+ *         jobRef: { type: string, nullable: true, example: JOB-1119 }
+ *         description: { type: string, example: Water leaking under the kitchen sink since yesterday. }
+ *         qaFormAnswerList:
+ *           type: array
+ *           items: { $ref: '#/components/schemas/QaFormAnswerItem' }
  *         status:
  *           type: string
- *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS | COMPLETED | PAYMENT_PENDING
+ *           enum: [DRAFT, PUBLISHED, QUOTED, ACCEPTED, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, PAYMENT_PENDING]
+ *           example: PAYMENT_PENDING
+ *         statusBadge: { type: string, example: Completed, description: Short UI badge derived from flowStatus }
+ *         statusLabel: { type: string, example: Completed, description: Human-readable progress label }
+ *         flowStatus:
+ *           type: string
+ *           enum: [OPEN, READY_TO_ARRIVE, ARRIVED, WORK_PROOF_PENDING, READY_TO_FINISH, SITE_VISIT_IN_PROGRESS, SITE_VISIT_PAYMENT_PENDING, PARTIAL_PAYMENT_PENDING, PARTIALLY_PAID, AWAITING_PAYMENT, COMPLETED, CANCELLED]
+ *           example: COMPLETED
+ *         paymentStatus: { type: string, enum: [UNPAID, PENDING, PARTIALLY_PAID, PAID], example: UNPAID }
+ *         customerConfirmedAt: { type: string, format: date-time, nullable: true, example: null }
+ *         isSiteVisit: { type: boolean, example: true, description: This job is a site-visit job (visit may still be pending) }
+ *         isSiteVisitDone: { type: boolean, example: true, description: true only when visit.status = COMPLETED }
+ *         siteVisit:
+ *           type: object
+ *           properties:
+ *             status: { type: string, enum: [NONE, PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED, CANCELLED], example: COMPLETED }
+ *             fee: { type: number, nullable: true, example: 30 }
+ *             isSiteVisitDone: { type: boolean, example: true }
+ *             completedAt: { type: string, format: date-time, nullable: true, example: '2026-07-24T11:00:00.000Z' }
+ *             requested: { type: boolean, example: true, description: Job marked as site-visit requested }
+ *             isSiteVisit: { type: boolean, example: true, description: Same as top-level isSiteVisit }
  *         photos:
  *           type: array
- *           items: { type: string, format: uri }
- *           description: Customer photos
+ *           description: Customer photo URLs
+ *           items: { type: string }
+ *           example: ['https://api.brisk.ie/uploads/jobs/photo-1.jpg']
  *         proofPhotos:
  *           type: array
  *           description: Trader proof photos after work
  *           items:
  *             type: object
  *             properties:
- *               id: { type: string, format: uuid }
- *               photoUrl: { type: string, format: uri }
- *         quotePrice:
- *           type: number
- *           nullable: true
- *           description: Agreed / quoted price EUR
- *         canArrive:
- *           type: boolean
- *           description: true → show I Have Arrived; POST .../arrive
- *         canMarkFinished:
- *           type: boolean
- *           description: true after I Have Arrived until the job is finished → enable Mark as Finished (opens Job Progress / proof upload)
- *         canFinish:
- *           type: boolean
- *           description: true → arrived + at least one proof photo uploaded; POST .../finish
- *         canAddMaterials:
- *           type: boolean
- *           description: true → allow materials APIs
- *         canSubmitQuote:
- *           type: boolean
- *           description: true → quote can still be submitted/updated (rare on assigned jobs)
- *         canAcceptJob:
- *           type: boolean
- *           description: true → Request/Accept still available (marketplace waiting path if unassigned)
- *         canRequestPayment:
- *           type: boolean
- *           description: true → POST .../request-payment
- *         canCompleteSiteVisit:
- *           type: boolean
- *           description: true → POST .../site-visit/complete
- *         canRequestSiteVisitPayment:
- *           type: boolean
- *           description: true → POST .../site-visit/request-payment
- *         primaryAction:
- *           type: string
- *           description: |
- *             Main CTA code (app owns button text).
- *             ARRIVE | FINISH | COMPLETE_SITE_VISIT | REQUEST_SITE_VISIT_PAYMENT |
- *             REQUEST_PAYMENT | ACCEPT_JOB | SUBMIT_QUOTE | ADD_MATERIALS | AWAITING_PAYOUT | VIEW_DETAILS
- *         estimatedEarnings:
- *           type: number
- *           nullable: true
- *           description: Estimated earnings EUR
- *         durationLabel:
- *           type: string
- *           nullable: true
- *           description: Optional duration from job
- *         arrivalStatus:
- *           type: string
- *           nullable: true
- *           enum: [ARRIVING_SOON, ARRIVED]
- *           description: ARRIVING_SOON before arrive; ARRIVED after POST arrive; null if not in arrival phase
+ *               id: { type: string, format: uuid, example: 7c3d4e5f-0000-4000-8000-000000000031 }
+ *               photoUrl: { type: string, example: 'https://api.brisk.ie/uploads/jobs/proof-1.jpg' }
+ *         completionPhotos:
+ *           type: array
+ *           description: Same proof photos as plain URLs
+ *           items: { type: string }
+ *           example: ['https://api.brisk.ie/uploads/jobs/proof-1.jpg']
+ *         tags:
+ *           type: array
+ *           description: Category + subcategory chips
+ *           items:
+ *             type: object
+ *             properties:
+ *               label: { type: string, example: Interior Design }
+ *               icon: { type: string, nullable: true, example: 'https://api.brisk.ie/static/category-icons/interior-design.png' }
+ *               iconUrl: { type: string, nullable: true, example: 'https://api.brisk.ie/static/category-icons/interior-design.png' }
+ *               iconName: { type: string, nullable: true, example: interior }
+ *         location:
+ *           type: object
+ *           properties:
+ *             fullAddress: { type: string, example: '14 Rathmines Road, Dublin, D06 XY12' }
+ *             areaName: { type: string, example: Dublin }
+ *             distanceKm: { type: number, example: 4.2 }
+ *             latitude: { type: number, example: 53.3347 }
+ *             longitude: { type: number, example: -6.2783 }
+ *         distanceKm: { type: number, example: 4.2, description: Same as location.distanceKm }
+ *         quotePrice: { type: number, nullable: true, example: 1500, description: Agreed / quoted price }
+ *         customer:
+ *           type: object
+ *           properties:
+ *             id: { type: string, format: uuid, example: 1f2e3d4c-0000-4000-8000-000000000001 }
+ *             fullName: { type: string, example: John Murphy }
+ *             name: { type: string, example: John Murphy, description: Same as fullName }
+ *             profilePhotoUrl: { type: string, nullable: true, example: 'https://api.brisk.ie/uploads/profile/john.jpg' }
+ *             avatar: { type: string, nullable: true, example: 'https://api.brisk.ie/uploads/profile/john.jpg', description: Same as profilePhotoUrl }
+ *             location: { type: string, example: Dublin }
+ *             isVerified: { type: boolean, example: true }
+ *             phoneNumber: { type: string, nullable: true, example: '+353871234567' }
+ *             rating: { type: number, nullable: true, example: null, description: Not rated yet — always null for now }
+ *             jobsPosted: { type: integer, example: 12 }
+ *             conversationId: { type: string, format: uuid, example: 8a8fb0e5-a330-4c62-8e76-a358bd792b84, description: 'Use with GET /traders/jobs/mine/{id}/messages' }
  *         materials:
  *           type: object
- *           description: Materials summary
  *           properties:
- *             count: { type: integer, description: Number of material lines }
- *             total: { type: number, description: Materials total EUR }
- *         siteVisit:
- *           type: object
- *           description: Site visit summary on My Jobs detail
- *           properties:
- *             status:
- *               type: string
- *               description: NONE | PENDING | CONFIRMED | COMPLETED | CANCELLED | …
- *             fee: { type: number, nullable: true, description: Site visit fee EUR }
- *             requested: { type: boolean, description: Job marked as site-visit requested }
- *             isSiteVisit: { type: boolean, description: Same as top-level isSiteVisit }
- *             isSiteVisitDone:
- *               type: boolean
- *               description: true only when visit.status = COMPLETED
- *             completedAt:
- *               type: string
- *               format: date-time
- *               nullable: true
- *               description: When trader completed the site visit (null if not done)
+ *             count: { type: integer, example: 1 }
+ *             total: { type: number, example: 45 }
+ *             items:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string, format: uuid, example: f5b5c6d7-0000-4000-8000-0000000000b0 }
+ *                   name: { type: string, example: Copper pipe }
+ *                   detail: { type: string, nullable: true, example: '2m, 15mm' }
+ *                   price: { type: number, example: 45 }
+ *                   priceLabel: { type: string, example: '€45.00' }
+ *                   currencyCode: { type: string, example: EUR }
+ *                   currencySymbol: { type: string, example: '€' }
+ *                   photoUrl: { type: string, nullable: true, example: null }
+ *             totalLabel: { type: string, example: '€45.00' }
+ *             currencyCode: { type: string, example: EUR }
+ *             currencySymbol: { type: string, example: '€' }
+ *         negotiationMessages:
+ *           type: array
+ *           description: Last 5 chat messages (oldest first)
+ *           items:
+ *             type: object
+ *             properties:
+ *               id: { type: string, format: uuid, example: a6c6d7e8-0000-4000-8000-0000000000c0 }
+ *               senderRole: { type: string, enum: [CUSTOMER, TRADER], example: TRADER }
+ *               senderName: { type: string, example: Sean Kelly }
+ *               message: { type: string, example: I can come on Tuesday morning. }
+ *               sentAt: { type: string, format: date-time, example: '2026-07-21T12:00:00.000Z' }
+ *               isMine: { type: boolean, example: true }
+ *         canArrive: { type: boolean, example: false, description: true → show I Have Arrived; POST .../arrive }
+ *         canMarkFinished: { type: boolean, example: false, description: true after arrive until finished → Mark as Finished }
+ *         canFinish: { type: boolean, example: false, description: true → arrived + at least one proof photo; POST .../finish }
+ *         canAddMaterials: { type: boolean, example: false }
+ *         canSubmitQuote: { type: boolean, example: false }
+ *         canAcceptJob: { type: boolean, example: false }
+ *         canRequestPayment: { type: boolean, example: false, description: true → POST .../request-payment }
+ *         canRequestPartialPayment: { type: boolean, example: false }
+ *         canCompleteSiteVisit: { type: boolean, example: false, description: true → POST .../site-visit/complete }
+ *         canRequestSiteVisitPayment: { type: boolean, example: false, description: true → POST .../site-visit/request-payment }
+ *         isPartialJob: { type: boolean, example: false }
+ *         primaryAction:
+ *           type: string
+ *           enum: [ARRIVE, UPLOAD_PROOF, FINISH, REQUEST_PARTIAL_PAYMENT, AWAITING_PARTIAL_PAYMENT, COMPLETE_SITE_VISIT, REQUEST_SITE_VISIT_PAYMENT, REQUEST_PAYMENT, ACCEPT_JOB, SUBMIT_QUOTE, ADD_MATERIALS, AWAITING_PAYOUT, VIEW_DETAILS]
+ *           example: AWAITING_PAYOUT
+ *           description: Main CTA code (app owns button text)
+ *         isPartPayment: { type: boolean, example: false, description: Same as isPartialJob }
+ *         estimatedEarnings: { type: number, nullable: true, example: 1500 }
+ *         durationLabel: { type: string, nullable: true, example: 2-3 hours }
+ *         arrivalStatus: { type: string, nullable: true, enum: [ARRIVING_SOON, ARRIVED], example: ARRIVED }
+ *         scheduledDate: { type: string, format: date-time, nullable: true, example: '2026-07-29T00:00:00.000Z' }
  *     TraderMaterialsList:
  *       type: object
  *       description: GET/POST materials response

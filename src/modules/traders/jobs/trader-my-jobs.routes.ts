@@ -244,6 +244,14 @@ router.post(
  *     responses:
  *       200:
  *         description: Full my-job detail payload (includes isSiteVisitDone)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Job details retrieved successfully. }
+ *                 data: { $ref: '#/components/schemas/TraderMyJobDetail' }
  *       404:
  *         description: Job not found
  */
