@@ -33,6 +33,8 @@ const envSchema = z.object({
   /** Default return/refresh URLs for trader Stripe Connect onboarding (app deep link or web page). */
   STRIPE_CONNECT_RETURN_URL: z.string().url().optional().or(z.literal('').transform(() => undefined)),
   STRIPE_CONNECT_REFRESH_URL: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+  /** Absolute path to the Firebase Admin service account JSON (kept outside the repo). Push is disabled until set. */
+  FIREBASE_SERVICE_ACCOUNT_PATH: optionalEnvString,
 });
 
 const parseEnv = () => {

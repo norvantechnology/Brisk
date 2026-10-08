@@ -55,6 +55,25 @@ export const getMe = async (
   }
 };
 
+export const updateMe = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const profile = await adminAuthService.updateAdminProfile(req.adminUser!.id, req.body);
+
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Admin profile updated successfully.',
+      data: { admin: profile },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const changePassword = async (
   req: AuthenticatedAdminRequest,
   res: Response,

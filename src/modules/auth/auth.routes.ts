@@ -497,6 +497,14 @@ router.get('/me', authMiddleware, authController.getMe);
  *     tags: ['Mobile / Auth']
  *     security:
  *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               deviceToken: { type: string, description: 'Optional FCM token of this device — stops push notifications on it.' }
  *     responses:
  *       200:
  *         description: Logged out successfully.

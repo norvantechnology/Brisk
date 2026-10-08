@@ -9,6 +9,7 @@ import { getPlatformSetting } from '../modules/settings/platform-settings.servic
 import { createUserNotifications } from '../modules/notifications/notifications.service';
 import { userNotificationMeta } from '../modules/notifications/notification-types';
 import { getCurrencyMeta } from '../services/currency.service';
+import { sendPushToUsers } from '../services/push.service';
 import {
   RealtimeEvents,
   type InvoiceRealtimePayload,
@@ -100,10 +101,25 @@ export const pushUserNotification = async (
 
   const byUser = new Map((persisted ?? []).map((p) => [p.userId, p.notification]));
   const meta = userNotificationMeta(input.type);
+  const pushItems: Parameters<typeof sendPushToUsers>[0] = [];
   for (const userId of ids) {
     const notification = byUser.get(userId);
     // Deduped (already notified) — skip the duplicate toast too.
     if (persisted && !notification) continue;
+    pushItems.push({
+      userId,
+      payload: {
+        title: input.title,
+        body: input.message,
+        data: {
+          ...(input.data ?? {}),
+          type: input.type,
+          tab: meta.tab,
+          section: meta.section,
+          ...(notification ? { notificationId: notification.id } : {}),
+        },
+      },
+    });
     emit(RealtimeEvents.NOTIFICATION_NEW, [roomUser(userId)], {
       type: input.legacyEvent ?? input.type,
       notificationType: input.type,
@@ -115,6 +131,8 @@ export const pushUserNotification = async (
       ...(notification ? { id: notification.id, notification } : {}),
     });
   }
+  // Fire-and-forget: a slow FCM call must not delay the REST response.
+  void sendPushToUsers(pushItems);
 };
 
 const jobTitleOf = async (jobId?: string | null): Promise<string> => {

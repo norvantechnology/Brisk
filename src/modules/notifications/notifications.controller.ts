@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import * as service from './notifications.service';
+import { registerDeviceToken, removeDeviceToken } from '../../services/push.service';
 
 export const listNotifications = async (
   req: AuthenticatedRequest,
@@ -27,6 +28,32 @@ export const listNotifications = async (
         totalPages: result.meta.totalPages,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const registerDevice = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const device = await registerDeviceToken(req.user!.id, req.body.token, req.body.platform);
+    sendResponse({ res, statusCode: 200, message: 'Device registered for push notifications.', data: { device } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const unregisterDevice = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await removeDeviceToken(req.user!.id, req.body.token);
+    sendResponse({ res, statusCode: 200, message: 'Device unregistered from push notifications.', data });
   } catch (error) {
     next(error);
   }

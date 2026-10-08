@@ -6,6 +6,8 @@ import {
   notificationIdParamSchema,
   notificationListQuerySchema,
   notificationReadAllQuerySchema,
+  registerDeviceSchema,
+  unregisterDeviceSchema,
 } from './notifications.validation';
 
 const router = Router();
@@ -180,6 +182,72 @@ router.get('/types', controller.listTypes);
  *                 byTab: { REGULAR: 2, BRISK: 1 }
  */
 router.get('/unread-count', controller.getUnreadCount);
+
+/**
+ * @swagger
+ * /notifications/devices:
+ *   post:
+ *     summary: Register this device for push notifications (Customer + Trader apps)
+ *     description: |
+ *       Call after login / app start and whenever Firebase gives a new FCM token (`onTokenRefresh`).
+ *       Safe to call repeatedly — same token is updated, not duplicated. If another user logs in on the
+ *       same device, the token moves to the new user.
+ *
+ *       Every in-app notification (same list as `GET /notifications`) is also sent as a push.
+ *       Push `data` contains: `type`, `tab`, `section`, `notificationId` + the notification's own ids
+ *       (e.g. `jobId`, `quoteId`) — all values are strings.
+ *     tags: [Notifications]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, platform]
+ *             properties:
+ *               token: { type: string, example: 'fcm-registration-token-from-firebase-messaging', description: FirebaseMessaging getToken() }
+ *               platform: { type: string, enum: [IOS, ANDROID], example: ANDROID }
+ *     responses:
+ *       200:
+ *         description: Device registered.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Device registered for push notifications.
+ *               data: { device: { token: 'fcm-registration-token-from-firebase-messaging', platform: ANDROID, updatedAt: '2026-10-08T11:00:00.000Z' } }
+ *       400: { description: Invalid token or platform. }
+ *       401: { description: Unauthorized. }
+ */
+router.post('/devices', validate(registerDeviceSchema), controller.registerDevice);
+
+/**
+ * @swagger
+ * /notifications/devices/unregister:
+ *   post:
+ *     summary: Stop push notifications on this device
+ *     description: Call on logout **before** clearing the access token (or send `deviceToken` in `POST /auth/logout`).
+ *     tags: [Notifications]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token: { type: string, example: 'fcm-registration-token-from-firebase-messaging' }
+ *     responses:
+ *       200:
+ *         description: Device unregistered (removed=false if it was not registered).
+ *         content:
+ *           application/json:
+ *             example: { success: true, message: Device unregistered from push notifications., data: { removed: true } }
+ *       401: { description: Unauthorized. }
+ */
+router.post('/devices/unregister', validate(unregisterDeviceSchema), controller.unregisterDevice);
 
 /**
  * @swagger

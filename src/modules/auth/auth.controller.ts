@@ -3,6 +3,7 @@ import * as authService from './auth.service';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { pickRegisterProfilePhoto } from './register-upload.middleware';
+import { removeDeviceToken } from '../../services/push.service';
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -103,11 +104,13 @@ export const getMe = async (
 };
 
 export const logout = async (
-  _req: AuthenticatedRequest,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    const deviceToken = typeof req.body?.deviceToken === 'string' ? req.body.deviceToken.trim() : '';
+    if (deviceToken) await removeDeviceToken(req.user!.id, deviceToken);
     const result = await authService.logoutUser();
     sendResponse({
       res,

@@ -9,6 +9,13 @@ node_modules/
 .env.local
 .env.*.local
 
+# Firebase / Apple push credentials (keep on the server only)
+*firebase-adminsdk*.json
+*.p8
+secrets/
+brisk_push_notification/
+__MACOSX/
+
 # Build output
 dist/
 build/

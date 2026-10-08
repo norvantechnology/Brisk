@@ -40,6 +40,23 @@ export const companyUpdateBodySchema = z.object({
   }),
 });
 
+const deviceTokenSchema = z.string().trim().min(20, 'Invalid device token.').max(4096);
+
+export const registerDeviceSchema = z.object({
+  body: z.object({
+    token: deviceTokenSchema,
+    platform: z
+      .string()
+      .trim()
+      .transform((v) => v.toUpperCase())
+      .pipe(z.enum(['IOS', 'ANDROID'])),
+  }),
+});
+
+export const unregisterDeviceSchema = z.object({
+  body: z.object({ token: deviceTokenSchema }),
+});
+
 export const notificationIdParamSchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid notification ID format.'),

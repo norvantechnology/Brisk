@@ -2,9 +2,10 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../../config/database';
 import { env } from '../../../config/env';
-import { UnauthorizedError, BadRequestError, NotFoundError } from '../../../utils/errors';
+import { UnauthorizedError, BadRequestError, NotFoundError, ConflictError } from '../../../utils/errors';
 import { AdminLoginResponse, AdminUserProfile, AdminAuthTokens } from './admin-auth.types';
-import { ActorType, AdminStatus } from '@prisma/client';
+import type { UpdateAdminProfileInput } from './admin-auth.validation';
+import { ActorType, AdminStatus, Prisma } from '@prisma/client';
 import { buildTokenExpiry } from '../../../utils/token-expiry';
 
 /**
@@ -117,21 +118,23 @@ export const refreshAdminToken = async (refreshToken: string): Promise<AdminAuth
 /**
  * Get Profile of Authenticated Admin
  */
+const ADMIN_PROFILE_SELECT = {
+  id: true,
+  fullName: true,
+  email: true,
+  mobileNumber: true,
+  address: true,
+  role: true,
+  status: true,
+  profilePhotoUrl: true,
+  joinedAt: true,
+  lastLoginAt: true,
+} as const;
+
 export const getAdminProfile = async (adminId: string): Promise<AdminUserProfile> => {
   const admin = await prisma.adminUser.findUnique({
     where: { id: adminId },
-    select: {
-      id: true,
-      fullName: true,
-      email: true,
-      mobileNumber: true,
-      address: true,
-      role: true,
-      status: true,
-      profilePhotoUrl: true,
-      joinedAt: true,
-      lastLoginAt: true,
-    },
+    select: ADMIN_PROFILE_SELECT,
   });
 
   if (!admin) {
@@ -139,6 +142,59 @@ export const getAdminProfile = async (adminId: string): Promise<AdminUserProfile
   }
 
   return admin;
+};
+
+/**
+ * Update own profile (name, email, mobile, address, photo). `null` clears an optional field.
+ */
+export const updateAdminProfile = async (
+  adminId: string,
+  input: UpdateAdminProfileInput
+): Promise<AdminUserProfile> => {
+  const admin = await prisma.adminUser.findUnique({
+    where: { id: adminId },
+    select: ADMIN_PROFILE_SELECT,
+  });
+  if (!admin) {
+    throw new NotFoundError('Admin user profile not found.');
+  }
+
+  if (input.email && input.email !== admin.email) {
+    const taken = await prisma.adminUser.findUnique({ where: { email: input.email }, select: { id: true } });
+    if (taken) {
+      throw new ConflictError('This email is already used by another admin account.');
+    }
+  }
+
+  const data: Prisma.AdminUserUpdateInput = {};
+  if (input.fullName !== undefined) data.fullName = input.fullName;
+  if (input.email !== undefined) data.email = input.email;
+  if (input.mobileNumber !== undefined) data.mobileNumber = input.mobileNumber;
+  if (input.address !== undefined) data.address = input.address;
+  if (input.profilePhotoUrl !== undefined) data.profilePhotoUrl = input.profilePhotoUrl;
+
+  const changed = (Object.keys(data) as Array<keyof typeof admin>).filter(
+    (key) => (data as Record<string, unknown>)[key] !== admin[key]
+  );
+  if (!changed.length) return admin;
+
+  const updated = await prisma.adminUser.update({
+    where: { id: adminId },
+    data,
+    select: ADMIN_PROFILE_SELECT,
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: 'ADMIN_PROFILE_UPDATED',
+      actorType: ActorType.ADMIN,
+      actorId: admin.id,
+      actorLabel: `${updated.fullName} (${updated.role})`,
+      description: `Admin updated their profile (${changed.join(', ')}).`,
+    },
+  });
+
+  return updated;
 };
 
 /**
