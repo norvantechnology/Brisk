@@ -1,4 +1,18 @@
 import { z } from 'zod';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
+
+export const DISCOVER_JOB_SORT_FIELDS = [
+  'distanceKm',
+  'createdAt',
+  'updatedAt',
+  'scheduledDate',
+  'title',
+  'areaName',
+  'minBudget',
+  'maxBudget',
+  'serviceCharge',
+  'siteVisitFee',
+] as const;
 
 const dateOrDay = z
   .string()
@@ -27,8 +41,11 @@ export const discoverJobsQuerySchema = z.object({
       .optional()
       .transform((v) => v === 'true' || v === '1'),
     search: z.string().optional(),
+    /** Job posted date range (createdAt). */
     from: dateOrDay,
     to: dateOrDay,
+    sortBy: sortByParam(DISCOVER_JOB_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }),
 });
 

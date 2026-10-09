@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { TraderType } from '@prisma/client';
+import { isoDateParam } from '../../utils/list-filters';
+import { sortByParam, sortOrderParam } from '../../utils/list-sort';
 
 const mobileNumberSchema = z
   .string()
@@ -102,10 +104,27 @@ export const featuredTradersQuerySchema = z.object({
   }),
 });
 
+export const MY_REVIEW_SORT_FIELDS = [
+  'createdAt',
+  'rating',
+  'comment',
+  'customerName',
+  'jobRef',
+  'jobTitle',
+  'categoryName',
+] as const;
+
 export const myReviewsQuerySchema = z.object({
   query: z.object({
     page: z.coerce.number().int().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
     stars: z.coerce.number().int().min(1).max(5).optional(),
+    search: z.string().trim().max(100).optional(),
+    from: isoDateParam,
+    to: isoDateParam,
+    sortBy: sortByParam(MY_REVIEW_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }),
 });
+
+export type MyReviewsQuery = z.infer<typeof myReviewsQuerySchema>['query'];

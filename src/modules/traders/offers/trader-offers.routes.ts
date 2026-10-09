@@ -20,36 +20,137 @@ const router = Router();
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Returns offers this trader authored (`offerType=TRADER`).
- *       Use the same filters as admin list (status, category, search, dates).
+ *       Returns offers this trader authored (`offerType=TRADER`). Default order: `createdAt` desc.
+ *
+ *       Example: `GET /traders/offers?page=1&limit=10&search=PEST&status=ACTIVE&categoryId=e076d231-b0da-46cb-b60d-8aa9fbb8ce26&discountType=PERCENTAGE&dateRange=custom&from=2026-09-01&to=2026-09-30&sortBy=validUntil&sortOrder=asc`
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *         description: Page number.
+ *       - $ref: '#/components/parameters/TraderPage'
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 10 }
+ *         schema: { type: integer, minimum: 1, default: 10, maximum: 100 }
  *         description: Rows per page (max 100).
  *       - in: query
  *         name: search
- *         schema: { type: string }
+ *         schema: { type: string, example: PEST }
  *         description: Search offer ID (`OFF-####`), title, or coupon code.
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, EXPIRED, DISABLED] }
- *         description: Filter by effective status. Omit for all.
+ *         description: Filter by effective status (`EXPIRED` includes ACTIVE offers past `validUntil`). Omit for all.
  *       - in: query
  *         name: categoryId
  *         schema: { type: string }
  *         description: Category UUID or comma-separated UUIDs.
  *       - in: query
+ *         name: subcategoryId
+ *         schema: { type: string }
+ *         description: Sub-category UUID or comma-separated UUIDs.
+ *       - in: query
  *         name: discountType
  *         schema: { type: string, enum: [FLAT, PERCENTAGE, FREE_SERVICE] }
  *         description: Discount type filter.
+ *       - in: query
+ *         name: dateRange
+ *         schema: { type: string, enum: [today, yesterday, last_7_days, last_30_days, custom] }
+ *         description: Offers whose validity window (`validFrom`–`validUntil`) overlaps this range. For `custom`, also pass `from` and `to`.
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date, example: '2026-09-01' }
+ *         description: Custom range start (`dateRange=custom`).
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date, example: '2026-09-30' }
+ *         description: Custom range end (`dateRange=custom`).
+ *       - in: query
+ *         name: sortBy
+ *         description: |
+ *           `status` = effective status (ACTIVE past validUntil sorts as EXPIRED) · `categoryName` = first linked category ·
+ *           `claimsCount` = claim rows. Empty values are always last.
+ *         schema:
+ *           type: string
+ *           enum: [offerCode, title, couponCode, discountType, discountValue, categoryName, validFrom, validUntil, status, claimsCount, revenueGenerated, viewsCount, createdAt, updatedAt]
+ *           default: createdAt
+ *       - $ref: '#/components/parameters/TraderSortOrder'
  *     responses:
  *       200:
- *         description: Paginated list in `data.offers`.
+ *         description: Paginated list in `data.offers` + `data.meta`.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Your offers retrieved successfully.
+ *               data:
+ *                 meta: { total: 3, page: 1, limit: 10, totalPages: 1 }
+ *                 offers:
+ *                   - id: 0d6b1f6e-0000-4000-8000-000000000060
+ *                     offerId: 0d6b1f6e-0000-4000-8000-000000000060
+ *                     offerCode: OFF-1004
+ *                     offerType: TRADER
+ *                     title: 10% off Pest Control
+ *                     badgeTag: special_local_promo
+ *                     couponCode: PEST10BRISK
+ *                     shortDescription: Save on pest control this month
+ *                     fullDescription: Valid for residential properties only.
+ *                     description: Valid for residential properties only.
+ *                     bannerImageUrl: 'https://api.brisk.ie/uploads/offers/pest.jpg'
+ *                     discountType: PERCENTAGE
+ *                     discountValue: 10
+ *                     currencyCode: EUR
+ *                     discountLabel: 10% off
+ *                     validFrom: '2026-08-01T00:00:00.000Z'
+ *                     validUntil: '2026-12-31T23:59:59.000Z'
+ *                     status: ACTIVE
+ *                     storedStatus: ACTIVE
+ *                     claimsCount: 8
+ *                     revenueGenerated: 960
+ *                     viewsCount: 240
+ *                     ctaLabel: Claim Offer
+ *                     ctaAction: CLAIM
+ *                     createdAt: '2026-07-28T09:00:00.000Z'
+ *                     updatedAt: '2026-08-02T12:00:00.000Z'
+ *                     createdBy: null
+ *                     traderId: 4d5e6f70-0000-4000-8000-000000000030
+ *                     trader:
+ *                       id: 4d5e6f70-0000-4000-8000-000000000030
+ *                       businessName: Byrne Pest Control
+ *                       traderType: COMPANY
+ *                       fullName: John Byrne
+ *                       displayName: Byrne Pest Control
+ *                       avgRating: 4.7
+ *                       reviewsCount: 23
+ *                       topRated: true
+ *                       isVerified: true
+ *                       yearsExperience: 10
+ *                       experienceLabel: 10+ Yrs
+ *                       jobsDoneCount: 54
+ *                       city: Dublin
+ *                       country: Ireland
+ *                       location: 'Dublin, Ireland'
+ *                       profilePhotoUrl: null
+ *                       imageUrl: null
+ *                     termsAndConditions: Valid for residential properties only.
+ *                     expiresOn: '2026-12-31T23:59:59.000Z'
+ *                     categoryLabel: Pest Control
+ *                     primaryCategory: { id: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, name: Pest Control, categoryCode: CAT-0007, iconName: pest, iconUrl: 'https://api.brisk.ie/uploads/categories/pest.svg' }
+ *                     categories:
+ *                       - { id: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, name: Pest Control, categoryCode: CAT-0007, iconName: pest, iconUrl: 'https://api.brisk.ie/uploads/categories/pest.svg' }
+ *                     subcategories:
+ *                       - { id: 8a44f8fb-1598-40c9-a658-7f3db5748f14, name: Rodent Control, categoryId: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, siteVisitEnabled: false, siteVisitFee: 0, priceEnabled: true, priceEnteredBy: TRADER }
+ *                     siteVisitEnabled: false
+ *                     priceEnabled: true
+ *                     siteVisitFee: 0
+ *                     priceEnteredBy: TRADER
+ *       400:
+ *         $ref: '#/components/responses/TraderListValidationError'
+ *       401:
+ *         $ref: '#/components/responses/TraderUnauthorized'
+ *       403:
+ *         $ref: '#/components/responses/TraderForbidden'
+ *       404:
+ *         description: Trader profile not found.
+ *         content:
+ *           application/json:
+ *             example: { success: false, message: 'Trader profile not found.' }
  *   post:
  *     summary: Create Offers — Publish Offer (trader)
  *     tags: ['Trader / Offers']

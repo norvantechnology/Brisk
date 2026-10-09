@@ -105,10 +105,26 @@ router.get('/dashboard', validate(earningsDashboardQuerySchema), controller.getE
  *       (`custom` requires `startDate` + `endDate`, YYYY-MM-DD). Date applies to paid date for paid items,
  *       request date otherwise.
  *       **Search** (`search`): job title, job ref, or customer name.
- *       Cancelled payment requests are excluded. Sorted newest first.
+ *       **Status** (`status`): `PAID` | `PENDING` (same as `payoutStatus`). **Type** (`type`): `FULL_JOB` | `PARTIAL` | `SITE_VISIT_FEE`.
+ *       **Amount** (`minAmount` / `maxAmount`) on `amount`.
+ *       Cancelled payment requests are excluded. Default order: last updated first; `sortBy=date` sorts on the date shown (`formattedDate`).
+ *
+ *       Example: `GET /traders/earnings/payment-transactions?page=1&limit=10&search=pipe&filter=last_30_days&status=PENDING&type=PARTIAL&minAmount=50&sortBy=amount&sortOrder=desc&timezone=Europe/Dublin`
  *     tags: ['Trader / Earnings']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [PAID, PENDING] }
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [FULL_JOB, SITE_VISIT_FEE, PARTIAL] }
+ *       - $ref: '#/components/parameters/TraderMinAmount'
+ *       - $ref: '#/components/parameters/TraderMaxAmount'
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [date, createdAt, updatedAt, amount, paymentStatus, paymentType, title, jobStatus], default: updatedAt }
+ *       - $ref: '#/components/parameters/TraderSortOrder'
  *       - in: query
  *         name: filter
  *         schema: { type: string, enum: [all, last_30_days, last_6_months, last_1_year, custom], default: all }
@@ -157,7 +173,24 @@ router.get('/dashboard', validate(earningsDashboardQuerySchema), controller.getE
  *                   paymentType: FULL_JOB
  *               meta: { page: 1, limit: 10, total: 25, totalPages: 3 }
  *       400:
- *         description: Invalid filter / missing custom dates
+ *         description: Invalid query (bad enum / sortBy, bad date or timezone, custom range without dates, minAmount > maxAmount).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: minAmount cannot be greater than maxAmount.
+ *               error:
+ *                 - field: query.minAmount
+ *                   message: minAmount cannot be greater than maxAmount.
+ *       401:
+ *         $ref: '#/components/responses/TraderUnauthorized'
+ *       403:
+ *         $ref: '#/components/responses/TraderForbidden'
+ *       404:
+ *         description: Trader profile not found.
+ *         content:
+ *           application/json:
+ *             example: { success: false, message: 'Trader profile not found.' }
  */
 router.get(
   '/payment-transactions',

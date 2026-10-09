@@ -345,7 +345,7 @@ router.get(
  *       - { in: query, name: categoryId, schema: { type: string, format: uuid } }
  *       - { in: query, name: from, schema: { type: string, example: '2026-10-01' }, description: Visit date from (YYYY-MM-DD) }
  *       - { in: query, name: to, schema: { type: string, example: '2026-10-31' }, description: Visit date to (YYYY-MM-DD) }
- *       - { in: query, name: sortBy, schema: { type: string, enum: [updatedAt, requestedAt, visitDate], default: updatedAt } }
+ *       - { in: query, name: sortBy, schema: { type: string, enum: [updatedAt, requestedAt, visitDate, jobRef, jobTitle, customerName, categoryName], default: updatedAt }, description: "visitDate = displayed visit date (selected slot, else requested date); requestedAt = request created date" }
  *       - { in: query, name: sortOrder, schema: { type: string, enum: [asc, desc], default: desc } }
  *       - { in: query, name: page, schema: { type: integer, default: 1 } }
  *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }

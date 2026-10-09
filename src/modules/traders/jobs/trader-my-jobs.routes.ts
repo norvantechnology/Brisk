@@ -22,6 +22,12 @@ const router = Router();
  * /traders/jobs/mine:
  *   get:
  *     summary: My Jobs list (Active / Completed / Other)
+ *     description: |
+ *       Filters combine with `tab`. Default order: `updatedAt` desc (unchanged for mobile).
+ *       Computed sorts (`quotePrice`, `scheduledDate`, `distanceKm`, `areaName`, `statusLabel`, `flowStatus`, `paymentStatus`)
+ *       use the same values shown on the card. Empty values are always listed last.
+ *
+ *       Example: `GET /traders/jobs/mine?tab=ACTIVE&page=1&limit=10&search=sink&categoryId=3f0f23dd-1c2b-4a5e-9f10-6a7b8c9d0e1f&siteVisit=false&from=2026-09-01&to=2026-09-30&sortBy=scheduledDate&sortOrder=asc`
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -32,17 +38,83 @@ const router = Router();
  *           ACTIVE = in-progress / site-visit / awaiting payout.
  *           COMPLETED = finished jobs only.
  *           OTHER = cancelled jobs only.
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
+ *       - $ref: '#/components/parameters/TraderPage'
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20, maximum: 50 }
+ *         schema: { type: integer, minimum: 1, default: 20, maximum: 50 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100, example: sink }
+ *         description: Matches job ref, title, city, postcode, customer name or category name.
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [DRAFT, PUBLISHED, QUOTED, ACCEPTED, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, PAYMENT_PENDING] }
+ *         description: Job status (combined with `tab`).
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: siteVisit
+ *         schema: { type: boolean }
+ *         description: true = site-visit jobs only, false = jobs without a site visit (same rule as card `siteVisit`).
+ *       - $ref: '#/components/parameters/TraderDateFrom'
+ *       - $ref: '#/components/parameters/TraderDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [updatedAt, createdAt, jobRef, title, status, customerName, categoryName, quotePrice, scheduledDate, distanceKm, areaName, statusLabel, flowStatus, paymentStatus]
+ *           default: updatedAt
+ *         description: '`from`/`to` filter on `createdAt` (job posted date).'
+ *       - $ref: '#/components/parameters/TraderSortOrder'
  *     responses:
  *       200:
  *         description: Paginated my-jobs cards
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderMyJobsList' }
+ *             example:
+ *               success: true
+ *               message: My jobs retrieved successfully.
+ *               data:
+ *                 tab: ACTIVE
+ *                 items:
+ *                   - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     jobRef: JOB-1119
+ *                     title: Kitchen sink leaking
+ *                     status: SCHEDULED
+ *                     statusBadge: Ready to Arrive
+ *                     statusLabel: Ready to Arrive
+ *                     flowStatus: READY_TO_ARRIVE
+ *                     paymentStatus: UNPAID
+ *                     isPartPayment: false
+ *                     isPartialJob: false
+ *                     siteVisit: false
+ *                     siteVisitRequested: false
+ *                     isSiteVisitDone: false
+ *                     siteVisitLabel: null
+ *                     arrivalStatus: ARRIVING_SOON
+ *                     siteVisitedBadge: false
+ *                     customerName: John Murphy
+ *                     customerProfilePhotoUrl: https://cdn.brisk.ie/avatars/john.jpg
+ *                     areaName: Dublin
+ *                     distanceKm: 4.2
+ *                     quotePrice: 120
+ *                     scheduledDate: '2026-09-18T09:00:00.000Z'
+ *                     createdAt: '2026-09-10T11:30:00.000Z'
+ *                     primaryAction: ARRIVE
+ *                 meta: { total: 14, page: 1, limit: 10, totalPages: 2 }
+ *       400:
+ *         $ref: '#/components/responses/TraderListValidationError'
  *       401:
- *         description: Unauthorized
+ *         $ref: '#/components/responses/TraderUnauthorized'
+ *       403:
+ *         $ref: '#/components/responses/TraderForbidden'
  */
 router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
 

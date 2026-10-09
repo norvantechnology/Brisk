@@ -4,6 +4,7 @@ import { ForbiddenError, NotFoundError } from '../../../utils/errors';
 import { offerInclude, serializeOffer } from '../../offers/offers.serializers';
 import { buildOfferWhere, normalizeOfferListFilters } from '../../offers/offers.query';
 import { createOfferRecord, loadOffer, updateOfferRecord, type OfferWriteInput } from '../../offers/offers.mutations';
+import { findOfferPage } from '../../admin/admin-offers/admin-offers.service';
 
 const requireTrader = async (userId: string) => {
   const trader = await prisma.trader.findUnique({
@@ -30,13 +31,13 @@ export const listMyOffers = async (userId: string, query: Record<string, unknown
 
   const [total, offers] = await Promise.all([
     prisma.offer.count({ where }),
-    prisma.offer.findMany({
+    findOfferPage(
       where,
+      typeof query.sortBy === 'string' ? query.sortBy : undefined,
+      typeof query.sortOrder === 'string' ? query.sortOrder : undefined,
       skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: offerInclude,
-    }),
+      limit
+    ),
   ]);
 
   return {

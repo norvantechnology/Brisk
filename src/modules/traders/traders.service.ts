@@ -2,10 +2,13 @@ import {
   JobStatus,
   OfferStatus,
   OfferType,
+  Prisma,
   TraderDocumentStatus,
   UserStatus,
   VerificationStatus,
 } from '@prisma/client';
+import { dateRangeWhere } from '../../utils/list-filters';
+import { buildListOrderBy, type SortDir } from '../../utils/list-sort';
 import { prisma } from '../../config/database';
 import { ForbiddenError, NotFoundError, BadRequestError, ConflictError } from '../../utils/errors';
 import { splitE164Mobile } from '../../utils/phone';
@@ -16,6 +19,7 @@ import { listTraderCategoriesWithState } from './onboarding/onboarding.service';
 import { buildPaginationMeta, parsePageLimit } from '../../utils/pagination';
 import { resolveCategoryIconUrl } from '../categories/categories.serializers';
 import type {
+  MyReviewsQuery,
   UpdateTraderAccountInput,
   UpdateTraderBankDetailsInput,
   UpdateTraderProfileInput,
@@ -533,15 +537,50 @@ export const listFeaturedTraders = async (query: {
 };
 
 /** Trader's own ratings & reviews — summary + paginated list (customer email never exposed). */
-export const listMyReviews = async (
-  userId: string,
-  query: { page?: number; limit?: number; stars?: number }
-) => {
+const MY_REVIEW_SORT_MAP: Record<
+  string,
+  (dir: SortDir) => Prisma.RatingReviewOrderByWithRelationInput
+> = {
+  createdAt: (dir) => ({ createdAt: dir }),
+  rating: (dir) => ({ stars: dir }),
+  comment: (dir) => ({ review: { sort: dir, nulls: 'last' } }),
+  customerName: (dir) => ({ customer: { fullName: dir } }),
+  jobRef: (dir) => ({ booking: { job: { jobRef: { sort: dir, nulls: 'last' } } } }),
+  jobTitle: (dir) => ({ booking: { job: { title: dir } } }),
+  categoryName: (dir) => ({ booking: { job: { category: { name: dir } } } }),
+};
+
+/** Summary (average / distribution) always covers all reviews; filters only narrow `items`. */
+export const listMyReviews = async (userId: string, query: MyReviewsQuery) => {
   const trader = await prisma.trader.findUnique({ where: { userId }, select: { id: true } });
   if (!trader) throw new NotFoundError('Trader profile not found.');
 
   const { page, limit, skip } = parsePageLimit(query);
-  const where = { traderId: trader.id, ...(query.stars ? { stars: query.stars } : {}) };
+  const search = query.search?.trim();
+  const createdAt = dateRangeWhere(query.from, query.to);
+  const where: Prisma.RatingReviewWhereInput = {
+    traderId: trader.id,
+    ...(query.stars ? { stars: query.stars } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(search
+      ? {
+          OR: [
+            { review: { contains: search, mode: 'insensitive' } },
+            { customer: { fullName: { contains: search, mode: 'insensitive' } } },
+            { booking: { job: { jobRef: { contains: search, mode: 'insensitive' } } } },
+            { booking: { job: { title: { contains: search, mode: 'insensitive' } } } },
+            { booking: { job: { category: { name: { contains: search, mode: 'insensitive' } } } } },
+          ],
+        }
+      : {}),
+  };
+  const orderBy = buildListOrderBy<Prisma.RatingReviewOrderByWithRelationInput>(
+    query.sortBy,
+    query.sortOrder,
+    MY_REVIEW_SORT_MAP,
+    { sortBy: 'createdAt', sortOrder: 'desc' },
+    { id: 'asc' }
+  );
 
   const [grouped, total, rows] = await Promise.all([
     prisma.ratingReview.groupBy({
@@ -552,7 +591,7 @@ export const listMyReviews = async (
     prisma.ratingReview.count({ where }),
     prisma.ratingReview.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       skip,
       take: limit,
       select: {

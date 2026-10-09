@@ -2,6 +2,7 @@ import { JobStatus, Prisma, TraderSiteVisitStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { buildPaginationMeta, parsePageLimit } from '../../utils/pagination';
 import { SITE_VISIT_SLOT_DEFS } from '../traders/jobs/trader-jobs.service';
+import type { SiteVisitSortField } from './site-visits.validation';
 
 /**
  * Shared site-visit list logic for Admin (customer + trader details) and the Trader Portal,
@@ -253,10 +254,22 @@ export type TraderSiteVisitListQuery = {
   categoryId?: string;
   from?: string;
   to?: string;
-  sortBy?: 'requestedAt' | 'visitDate' | 'updatedAt';
+  sortBy?: SiteVisitSortField;
   sortOrder?: 'asc' | 'desc';
   page?: number | string;
   limit?: number | string;
+};
+
+const SITE_VISIT_SORT_MAP: Record<
+  Exclude<SiteVisitSortField, 'visitDate'>,
+  (dir: 'asc' | 'desc') => Prisma.TraderSiteVisitRequestOrderByWithRelationInput
+> = {
+  updatedAt: (dir) => ({ updatedAt: dir }),
+  requestedAt: (dir) => ({ createdAt: dir }),
+  jobRef: (dir) => ({ job: { jobRef: { sort: dir, nulls: 'last' } } }),
+  jobTitle: (dir) => ({ job: { title: dir } }),
+  customerName: (dir) => ({ job: { customer: { fullName: dir } } }),
+  categoryName: (dir) => ({ job: { category: { name: dir } } }),
 };
 
 /** Displayed visit date = selected slot date, else the request's visitDate (same as serializer). */
@@ -354,10 +367,12 @@ export const listTraderSiteVisits = async (
     }
     return prisma.traderSiteVisitRequest.findMany({
       where: listWhere,
-      orderBy:
-        query.sortBy === 'requestedAt'
-          ? [{ createdAt: sortOrder }, { id: 'asc' }]
-          : [{ updatedAt: sortOrder }, { id: 'asc' }],
+      orderBy: [
+        SITE_VISIT_SORT_MAP[(query.sortBy ?? 'updatedAt') as Exclude<SiteVisitSortField, 'visitDate'>](
+          sortOrder
+        ),
+        { id: 'asc' },
+      ],
       skip,
       take: limit,
       select: siteVisitSelect,

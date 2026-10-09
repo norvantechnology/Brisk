@@ -8,7 +8,10 @@ import {
 } from '../../../services/currency.service';
 import { buildPaginationMeta, parsePageLimit } from '../../../utils/pagination';
 import { countActiveJobs } from '../jobs/trader-my-jobs.service';
-import { buildTraderPaymentRequestWhere } from '../payments/trader-payments.service';
+import {
+  buildTraderPaymentRequestWhere,
+  findTraderPaymentRequestPage,
+} from '../payments/trader-payments.service';
 import type {
   EarningsDashboardQuery,
   PaymentTransactionsQuery,
@@ -313,13 +316,7 @@ export const listPaymentTransactions = async (
 
   const [total, rows] = await Promise.all([
     prisma.traderPaymentRequest.count({ where }),
-    prisma.traderPaymentRequest.findMany({
-      where,
-      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-      skip,
-      take: limit,
-      select: transactionSelect,
-    }),
+    findTraderPaymentRequestPage(where, query, skip, limit, transactionSelect),
   ]);
 
   const symbolByCode = await loadCurrencySymbols(rows.map((r) => r.currencyCode || 'EUR'));

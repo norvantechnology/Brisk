@@ -2,6 +2,13 @@ import { Prisma, TraderPaymentRequestStatus } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
 import { buildPaginationMeta, parsePageLimit } from '../../../utils/pagination';
+import { numberRangeWhere } from '../../../utils/list-filters';
+import {
+  buildListOrderBy,
+  pageIdsByComputedKey,
+  resolveSortDir,
+  type SortDir,
+} from '../../../utils/list-sort';
 import { getCurrencyMeta } from '../../../services/currency.service';
 import type { PaymentHistoryQuery, PaymentListFilters } from './trader-payments.validation';
 
@@ -63,16 +70,30 @@ const resolveDateRange = (
 
 /**
  * Non-cancelled payment requests of a trader, filtered by date range (paid date for PAID,
- * request date otherwise) and search (job ref / title / customer name).
+ * request date otherwise), search (job ref / title / customer name), status, type and amount.
  */
 export const buildTraderPaymentRequestWhere = (
   traderId: string,
-  query: Pick<PaymentListFilters, 'filter' | 'startDate' | 'endDate' | 'search'>
+  query: Pick<
+    PaymentListFilters,
+    'filter' | 'startDate' | 'endDate' | 'search' | 'status' | 'type' | 'minAmount' | 'maxAmount'
+  >
 ): Prisma.TraderPaymentRequestWhereInput => {
   const search = query.search?.trim() || '';
   const dateRange = resolveDateRange(query.filter, query.startDate, query.endDate);
+  const amount = numberRangeWhere(query.minAmount, query.maxAmount);
 
   const andFilters: Prisma.TraderPaymentRequestWhereInput[] = [];
+
+  if (query.status === 'PAID') {
+    andFilters.push({ status: TraderPaymentRequestStatus.PAID });
+  } else if (query.status === 'PENDING') {
+    andFilters.push({
+      status: { in: [TraderPaymentRequestStatus.PENDING, TraderPaymentRequestStatus.SENT] },
+    });
+  }
+  if (query.type) andFilters.push({ type: query.type });
+  if (amount) andFilters.push({ totalAmount: amount });
 
   if (dateRange) {
     andFilters.push({
@@ -107,6 +128,74 @@ export const buildTraderPaymentRequestWhere = (
   };
 };
 
+/** Keys from Payment History and Earnings → Payment Transactions (each endpoint validates its own subset). */
+const PAYMENT_REQUEST_SORT_MAP: Record<
+  string,
+  (dir: SortDir) => Prisma.TraderPaymentRequestOrderByWithRelationInput[]
+> = {
+  updatedAt: (dir) => [{ updatedAt: dir }, { createdAt: dir }],
+  createdAt: (dir) => [{ createdAt: dir }],
+  totalAmount: (dir) => [{ totalAmount: dir }],
+  amount: (dir) => [{ totalAmount: dir }],
+  status: (dir) => [{ status: dir }],
+  paymentStatus: (dir) => [{ status: dir }],
+  type: (dir) => [{ type: dir }],
+  paymentType: (dir) => [{ type: dir }],
+  jobCode: (dir) => [{ job: { jobRef: { sort: dir, nulls: 'last' } } }],
+  jobTitle: (dir) => [{ job: { title: dir } }],
+  title: (dir) => [{ job: { title: dir } }],
+  customerName: (dir) => [{ job: { customer: { fullName: dir } } }],
+  jobStatus: (dir) => [{ job: { status: dir } }],
+};
+
+/** Date shown on the row: paid date for PAID, request date otherwise. */
+const DISPLAY_DATE_SORTS = new Set(['paymentDate', 'date']);
+
+/** One page of payment requests; default order = last updated first (unchanged). */
+export const findTraderPaymentRequestPage = async <
+  S extends Prisma.TraderPaymentRequestSelect & { id: true },
+>(
+  where: Prisma.TraderPaymentRequestWhereInput,
+  query: { sortBy?: string; sortOrder?: string },
+  skip: number,
+  take: number,
+  select: S
+): Promise<Prisma.TraderPaymentRequestGetPayload<{ select: S }>[]> => {
+  type Row = Prisma.TraderPaymentRequestGetPayload<{ select: S }>;
+  if (query.sortBy && DISPLAY_DATE_SORTS.has(query.sortBy)) {
+    const candidates = await prisma.traderPaymentRequest.findMany({
+      where,
+      select: { id: true, status: true, createdAt: true, updatedAt: true },
+    });
+    const ids = pageIdsByComputedKey(
+      candidates,
+      (r) => (r.status === TraderPaymentRequestStatus.PAID ? r.updatedAt : r.createdAt).getTime(),
+      resolveSortDir(query.sortOrder),
+      skip,
+      take
+    );
+    const rows = (await prisma.traderPaymentRequest.findMany({
+      where: { id: { in: ids } },
+      select,
+    })) as unknown as Row[];
+    const byId = new Map(rows.map((row) => [(row as unknown as { id: string }).id, row]));
+    return ids.map((id) => byId.get(id)).filter((row): row is Row => Boolean(row));
+  }
+  return (await prisma.traderPaymentRequest.findMany({
+    where,
+    select,
+    orderBy: buildListOrderBy<Prisma.TraderPaymentRequestOrderByWithRelationInput>(
+      query.sortBy,
+      query.sortOrder,
+      PAYMENT_REQUEST_SORT_MAP,
+      { sortBy: 'updatedAt', sortOrder: 'desc' },
+      { id: 'asc' }
+    ),
+    skip,
+    take,
+  })) as unknown as Row[];
+};
+
 /**
  * Trader Payment History — paginated list for Profile / Payments screen.
  * GET /traders/payments/history
@@ -125,12 +214,7 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
 
   const [total, rows] = await Promise.all([
     prisma.traderPaymentRequest.count({ where }),
-    prisma.traderPaymentRequest.findMany({
-      where,
-      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-      skip,
-      take: limit,
-      select: {
+    findTraderPaymentRequestPage(where, query, skip, limit, {
         id: true,
         jobId: true,
         status: true,
@@ -148,7 +232,6 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
             },
           },
         },
-      },
     }),
   ]);
 

@@ -8,6 +8,9 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
+import { buildPaginationMeta } from '../../../utils/pagination';
+import { dateRangeWhere } from '../../../utils/list-filters';
+import { compareValues, resolveSortDir } from '../../../utils/list-sort';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import { requestJob } from './trader-my-jobs.service';
@@ -820,6 +823,34 @@ const currencyForDiscoverJob = async (
  * Discover / Nearby Opportunities — open marketplace jobs for traders.
  * Only PUBLISHED jobs with no assigned trader (waiting for quotes).
  */
+type DiscoverRow = { job: ListCardJob; item: ReturnType<typeof toListItem> };
+
+const DISCOVER_SORTS: Record<string, (row: DiscoverRow) => unknown> = {
+  distanceKm: (r) => r.item.distanceKm,
+  createdAt: (r) => r.job.createdAt.getTime(),
+  updatedAt: (r) => r.job.updatedAt.getTime(),
+  scheduledDate: (r) => r.job.scheduledDate?.getTime() ?? null,
+  title: (r) => r.item.title,
+  areaName: (r) => r.item.areaName,
+  minBudget: (r) => r.item.minBudget,
+  maxBudget: (r) => r.item.maxBudget,
+  serviceCharge: (r) => r.item.serviceCharge,
+  siteVisitFee: (r) => r.item.siteVisitFee,
+};
+
+/** Nearest first (then newest) unless `sortBy` is given; ties fall back to newest, then id. */
+const compareDiscoverRows =
+  (sortBy: string | undefined, sortOrder: string | undefined) =>
+  (a: DiscoverRow, b: DiscoverRow): number => {
+    const keyOf = DISCOVER_SORTS[sortBy ?? 'distanceKm'] ?? DISCOVER_SORTS.distanceKm;
+    const dir = sortBy ? resolveSortDir(sortOrder, 'asc') : 'asc';
+    return (
+      compareValues(keyOf(a), keyOf(b), dir) ||
+      b.job.createdAt.getTime() - a.job.createdAt.getTime() ||
+      a.job.id.localeCompare(b.job.id)
+    );
+  };
+
 export const listDiscoverJobs = async (
   userId: string,
   query: {
@@ -832,6 +863,10 @@ export const listDiscoverJobs = async (
     siteVisit?: boolean;
     urgent?: boolean;
     search?: string;
+    from?: string;
+    to?: string;
+    sortBy?: string;
+    sortOrder?: string;
   }
 ) => {
   const trader = await getTraderContext(userId);
@@ -878,10 +913,12 @@ export const listDiscoverJobs = async (
       ? { in: traderCategoryIds }
       : undefined;
 
+  const createdAt = dateRangeWhere(query.from, query.to);
   const where: Prisma.JobWhereInput = {
     status: JobStatus.PUBLISHED,
     traderId: null,
     ...(categoryFilter ? { categoryId: categoryFilter } : {}),
+    ...(createdAt ? { createdAt } : {}),
   };
 
   if (query.siteVisit) {
@@ -927,10 +964,7 @@ export const listDiscoverJobs = async (
     )
   )
     .filter((row) => row.distanceKm <= radiusKm)
-    .sort((a, b) => {
-      if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
-      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
-    });
+    .sort(compareDiscoverRows(query.sortBy, query.sortOrder));
 
   const slice = withDistance.slice((page - 1) * limit, page * limit);
   const jobIds = slice.map((r) => r.job.id);
@@ -983,7 +1017,7 @@ export const listDiscoverJobs = async (
     if (!quoteByJob.has(q.jobId)) quoteByJob.set(q.jobId, q);
   }
 
-  return slice.map(({ job, currency }) => {
+  const items = slice.map(({ job, currency }) => {
     const q = quoteByJob.get(job.id) ?? null;
     const visitStatus = visitByJob.get(job.id) ?? null;
     const isSiteVisit = isSiteVisitJob(job);
@@ -1014,6 +1048,8 @@ export const listDiscoverJobs = async (
       currency
     );
   });
+
+  return { items, meta: buildPaginationMeta(withDistance.length, page, limit) };
 };
 
 /**

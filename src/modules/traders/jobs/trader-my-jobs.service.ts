@@ -12,6 +12,13 @@ import {
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { buildPaginationMeta } from '../../../utils/pagination';
+import { dateRangeWhere } from '../../../utils/list-filters';
+import {
+  buildListOrderBy,
+  pageIdsByComputedKey,
+  resolveSortDir,
+  type SortDir,
+} from '../../../utils/list-sort';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import {
@@ -30,6 +37,7 @@ import {
   isAwaitingUpfrontPayment,
 } from '../../jobs/job-payment-state';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
+import type { MyJobsListQuery } from './trader-my-jobs.validation';
 
 const EARTH_RADIUS_KM = 6371;
 const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
@@ -731,24 +739,8 @@ const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean
     siteVisitOnly: opts?.siteVisitOnly,
   });
 
-export const listMyJobs = async (
-  userId: string,
-  query: { tab?: string; page?: string; limit?: string }
-) => {
-  const trader = await getTraderContext(userId);
-  const tab = (query.tab || 'ACTIVE') as MyJobsTab;
-  const page = parsePage(query.page);
-  const limit = parseLimit(query.limit);
-
-  const where: Prisma.JobWhereInput = {
-    AND: [traderJobAccessWhere(trader.id), tabStatusWhere(tab, trader.id)],
-  };
-
-  const [total, jobs] = await Promise.all([
-    prisma.job.count({ where }),
-    prisma.job.findMany({
-      where,
-      select: {
+const myJobCardSelect = (traderId: string) =>
+  ({
         id: true,
         jobRef: true,
         title: true,
@@ -765,14 +757,14 @@ export const listMyJobs = async (
         customer: { select: { fullName: true, profilePhotoUrl: true } },
         address: { select: { city: true, county: true, latitude: true, longitude: true } },
         quotes: {
-          where: { traderId: trader.id },
+          where: { traderId },
           orderBy: { createdAt: 'desc' },
           take: 1,
           select: { quotedAmount: true, status: true },
         },
         siteVisitRequests: {
           // Keep cancelled visits so cancelled site-visit jobs still get siteVisit=true.
-          where: { traderId: trader.id },
+          where: { traderId },
           select: { status: true, visitDate: true },
           orderBy: { createdAt: 'desc' },
           take: 5,
@@ -793,7 +785,7 @@ export const listMyJobs = async (
         },
         paymentRequests: {
           where: {
-            traderId: trader.id,
+            traderId,
             status: { not: TraderPaymentRequestStatus.CANCELLED },
           },
           select: { id: true, type: true, status: true, totalAmount: true },
@@ -801,16 +793,119 @@ export const listMyJobs = async (
         },
         siteVisitRequested: true,
         siteVisitFee: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-      skip: (page - 1) * limit,
+  }) satisfies Prisma.JobSelect;
+
+type MyJobCardRow = Prisma.JobGetPayload<{ select: ReturnType<typeof myJobCardSelect> }>;
+
+/** Same site-visit rule as the card's `siteVisit` flag. */
+const siteVisitJobWhere = (traderId: string): Prisma.JobWhereInput => ({
+  OR: [
+    { siteVisitRequested: true },
+    { siteVisitRequests: { some: { traderId } } },
+    { siteVisitFee: { gt: 0 } },
+  ],
+});
+
+const MY_JOB_SORT_MAP: Record<string, (dir: SortDir) => Prisma.JobOrderByWithRelationInput> = {
+  updatedAt: (dir) => ({ updatedAt: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  jobRef: (dir) => ({ jobRef: { sort: dir, nulls: 'last' } }),
+  title: (dir) => ({ title: dir }),
+  status: (dir) => ({ status: dir }),
+  customerName: (dir) => ({ customer: { fullName: dir } }),
+  categoryName: (dir) => ({ category: { name: dir } }),
+};
+
+type MyJobCard = ReturnType<ReturnType<typeof myJobCardMapper>>;
+
+/** Card values the UI shows but the DB cannot ORDER BY (derived from quotes, bookings, visits). */
+const COMPUTED_MY_JOB_SORTS: Record<string, (card: MyJobCard) => unknown> = {
+  quotePrice: (c) => c.quotePrice,
+  scheduledDate: (c) => (c.scheduledDate ? new Date(c.scheduledDate).getTime() : null),
+  distanceKm: (c) => c.distanceKm,
+  areaName: (c) => c.areaName,
+  statusLabel: (c) => c.statusLabel,
+  flowStatus: (c) => c.flowStatus,
+  paymentStatus: (c) => c.paymentStatus,
+};
+
+export const listMyJobs = async (userId: string, query: MyJobsListQuery) => {
+  const trader = await getTraderContext(userId);
+  const tab = (query.tab || 'ACTIVE') as MyJobsTab;
+  const page = parsePage(query.page);
+  const limit = parseLimit(query.limit);
+  const skip = (page - 1) * limit;
+  const search = query.search?.trim();
+  const createdAt = dateRangeWhere(query.from, query.to);
+
+  const where: Prisma.JobWhereInput = {
+    AND: [
+      traderJobAccessWhere(trader.id),
+      tabStatusWhere(tab, trader.id),
+      query.status ? { status: query.status } : {},
+      query.categoryId ? { categoryId: query.categoryId } : {},
+      query.siteVisit === undefined
+        ? {}
+        : query.siteVisit
+          ? siteVisitJobWhere(trader.id)
+          : { NOT: siteVisitJobWhere(trader.id) },
+      createdAt ? { createdAt } : {},
+      search
+        ? {
+            OR: [
+              { jobRef: { contains: search, mode: 'insensitive' } },
+              { title: { contains: search, mode: 'insensitive' } },
+              { city: { contains: search, mode: 'insensitive' } },
+              { postcode: { contains: search, mode: 'insensitive' } },
+              { customer: { fullName: { contains: search, mode: 'insensitive' } } },
+              { category: { name: { contains: search, mode: 'insensitive' } } },
+            ],
+          }
+        : {},
+    ],
+  };
+
+  const select = myJobCardSelect(trader.id);
+  const toCard = myJobCardMapper(resolveOrigin(trader));
+  const computedKey = query.sortBy ? COMPUTED_MY_JOB_SORTS[query.sortBy] : undefined;
+
+  const loadPage = async (): Promise<MyJobCard[]> => {
+    if (computedKey) {
+      const dir = resolveSortDir(query.sortOrder);
+      const all = await prisma.job.findMany({ where, select });
+      const cards = all.map(toCard);
+      const byId = new Map(cards.map((card) => [card.id, card]));
+      const rows = all.map((job) => ({ id: job.id, createdAt: job.createdAt }));
+      return pageIdsByComputedKey(rows, (row) => computedKey(byId.get(row.id)!), dir, skip, limit).map(
+        (id) => byId.get(id)!
+      );
+    }
+    const jobs = await prisma.job.findMany({
+      where,
+      select,
+      orderBy: buildListOrderBy<Prisma.JobOrderByWithRelationInput>(
+        query.sortBy,
+        query.sortOrder,
+        MY_JOB_SORT_MAP,
+        { sortBy: 'updatedAt', sortOrder: 'desc' },
+        { id: 'asc' }
+      ),
+      skip,
       take: limit,
-    }),
-  ]);
+    });
+    return jobs.map(toCard);
+  };
 
-  const origin = resolveOrigin(trader);
+  const [total, items] = await Promise.all([prisma.job.count({ where }), loadPage()]);
 
-  const items = jobs.map((job) => {
+  return {
+    tab,
+    items,
+    meta: buildPaginationMeta(total, page, limit),
+  };
+};
+
+const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
     const visits = job.siteVisitRequests;
     const activeVisit =
       visits.find(
@@ -955,13 +1050,6 @@ export const listMyJobs = async (
       createdAt: job.createdAt,
       primaryAction,
     };
-  });
-
-  return {
-    tab,
-    items,
-    meta: buildPaginationMeta(total, page, limit),
-  };
 };
 
 export const getMyJobDetail = async (userId: string, jobId: string) => {

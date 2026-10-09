@@ -38,7 +38,7 @@ const router = Router();
  *       - { in: query, name: categoryId, schema: { type: string, format: uuid } }
  *       - { in: query, name: from, schema: { type: string, example: '2026-10-01' }, description: Visit date from (YYYY-MM-DD) }
  *       - { in: query, name: to, schema: { type: string, example: '2026-10-31' }, description: Visit date to (YYYY-MM-DD) }
- *       - { in: query, name: sortBy, schema: { type: string, enum: [updatedAt, requestedAt, visitDate], default: updatedAt } }
+ *       - { in: query, name: sortBy, schema: { type: string, enum: [updatedAt, requestedAt, visitDate, jobRef, jobTitle, customerName, categoryName], default: updatedAt }, description: "visitDate = displayed visit date (selected slot, else requested date); requestedAt = request created date" }
  *       - { in: query, name: sortOrder, schema: { type: string, enum: [asc, desc], default: desc } }
  *       - { in: query, name: page, schema: { type: integer, default: 1 } }
  *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
@@ -85,6 +85,17 @@ const router = Router();
  *                     customer: { fullName: Sarah Jenkins, profilePhotoUrl: null }
  *                 summary: { total: 5, requestedCount: 3, visitedCount: 2, closedCount: 0 }
  *                 meta: { total: 3, page: 1, limit: 20, totalPages: 1 }
+ *       400:
+ *         $ref: '#/components/responses/TraderListValidationError'
+ *       401:
+ *         $ref: '#/components/responses/TraderUnauthorized'
+ *       403:
+ *         $ref: '#/components/responses/TraderForbidden'
+ *       404:
+ *         description: Trader profile not found.
+ *         content:
+ *           application/json:
+ *             example: { success: false, message: 'Trader profile not found.' }
  */
 router.get(
   '/',

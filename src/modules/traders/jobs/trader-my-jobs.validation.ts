@@ -1,16 +1,46 @@
 import { z } from 'zod';
+import { JobStatus } from '@prisma/client';
+import { boolParam, isoDateParam } from '../../../utils/list-filters';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
 
 const jobIdParam = z.object({
   id: z.string().uuid('Invalid job ID.'),
 });
+
+export const MY_JOB_SORT_FIELDS = [
+  'updatedAt',
+  'createdAt',
+  'jobRef',
+  'title',
+  'status',
+  'customerName',
+  'categoryName',
+  'quotePrice',
+  'scheduledDate',
+  'distanceKm',
+  'areaName',
+  'statusLabel',
+  'flowStatus',
+  'paymentStatus',
+] as const;
 
 export const myJobsListQuerySchema = z.object({
   query: z.object({
     tab: z.enum(['ACTIVE', 'COMPLETED', 'OTHER']).optional().default('ACTIVE'),
     page: z.string().optional(),
     limit: z.string().optional(),
+    search: z.string().trim().max(100).optional(),
+    status: z.nativeEnum(JobStatus).optional(),
+    categoryId: z.string().uuid('Invalid category ID format.').optional(),
+    siteVisit: boolParam,
+    from: isoDateParam,
+    to: isoDateParam,
+    sortBy: sortByParam(MY_JOB_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }),
 });
+
+export type MyJobsListQuery = z.infer<typeof myJobsListQuerySchema>['query'];
 
 export const myJobIdParamSchema = z.object({
   params: jobIdParam,

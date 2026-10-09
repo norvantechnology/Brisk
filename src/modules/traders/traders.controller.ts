@@ -4,6 +4,7 @@ import * as onboardingService from './onboarding/onboarding.service';
 import { listExpiringDocuments } from './trader-document-expiry.service';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
+import type { MyReviewsQuery } from './traders.validation';
 
 export const getMyTraderProfile = async (
   req: AuthenticatedRequest,
@@ -251,7 +252,7 @@ export const getMyReviews = async (
   try {
     const { summary, items, meta } = await tradersService.listMyReviews(
       req.user!.id,
-      req.query as { page?: number; limit?: number; stars?: number }
+      req.query as MyReviewsQuery
     );
     sendResponse({
       res,

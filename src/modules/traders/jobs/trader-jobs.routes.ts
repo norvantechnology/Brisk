@@ -20,18 +20,31 @@ const router = Router();
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Discover feed cards. data is a job array — use data.length for "X jobs found".
+ *       Discover feed cards. `data` is the job array for this page (unchanged for mobile);
+ *       top-level `meta` has pagination — use `meta.total` for "X jobs found".
  *       badge Site Visit | Reschedule | null. Format Posted ago from createdAt on app.
+ *       Default order: nearest first (`distanceKm` asc), then newest. Empty values are always listed last.
+ *
+ *       Example: `GET /traders/jobs/discover?page=1&limit=10&search=solar&categoryId=3f0f23dd-1c2b-4a5e-9f10-6a7b8c9d0e1f&siteVisit=true&from=2026-09-01&to=2026-09-30&sortBy=createdAt&sortOrder=desc`
  *     parameters:
  *       - in: query
  *         name: search
  *         schema: { type: string, example: Solar }
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
+ *         description: Matches job title, city or description.
+ *       - $ref: '#/components/parameters/TraderPage'
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20, maximum: 50 }
+ *         schema: { type: integer, minimum: 1, default: 20, maximum: 50 }
+ *       - $ref: '#/components/parameters/TraderDateFrom'
+ *       - $ref: '#/components/parameters/TraderDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [distanceKm, createdAt, updatedAt, scheduledDate, title, areaName, minBudget, maxBudget, serviceCharge, siteVisitFee], default: distanceKm }
+ *         description: '`from`/`to` filter on `createdAt` (job posted date).'
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc], default: asc }
+ *         description: Sort direction for `sortBy` (default asc).
  *       - in: query
  *         name: radiusKm
  *         schema: { type: number, example: 10 }
@@ -53,7 +66,7 @@ const router = Router();
  *         schema: { type: boolean }
  *     responses:
  *       200:
- *         description: Job card array
+ *         description: Job card array + pagination meta
  *         content:
  *           application/json:
  *             schema:
@@ -64,6 +77,7 @@ const router = Router();
  *                 data:
  *                   type: array
  *                   items: { $ref: '#/components/schemas/TraderDiscoverJobCard' }
+ *                 meta: { $ref: '#/components/schemas/TraderListMeta' }
  *             example:
  *               success: true
  *               message: Nearby opportunities retrieved successfully.
@@ -80,8 +94,11 @@ const router = Router();
  *                   currencyCode: EUR
  *                   currencySymbol: €
  *                   createdAt: '2026-09-15T10:00:00.000Z'
+ *                   updatedAt: '2026-09-15T10:00:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: true
+ *                   jobStatus: PUBLISHED
+ *                   assignmentStatus: NONE
  *                   hasSubmittedQuote: false
  *                   canUpdateQuote: false
  *                   canSubmitQuote: false
@@ -100,18 +117,24 @@ const router = Router();
  *                   currencyCode: EUR
  *                   currencySymbol: €
  *                   createdAt: '2026-09-15T09:00:00.000Z'
+ *                   updatedAt: '2026-09-15T09:30:00.000Z'
  *                   isBookmarked: false
  *                   isSiteVisit: false
+ *                   jobStatus: PUBLISHED
+ *                   assignmentStatus: QUOTED
  *                   hasSubmittedQuote: true
  *                   canUpdateQuote: true
  *                   canSubmitQuote: false
  *                   isJobRequested: false
  *                   isWaitingForCustomerConfirmation: false
  *                   quoteAmount: 420
+ *               meta: { total: 2, page: 1, limit: 20, totalPages: 1 }
+ *       400:
+ *         $ref: '#/components/responses/TraderListValidationError'
  *       401:
- *         description: Unauthorized
+ *         $ref: '#/components/responses/TraderUnauthorized'
  *       403:
- *         description: Not a trader
+ *         $ref: '#/components/responses/TraderForbidden'
  */
 router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscoverJobs);
 

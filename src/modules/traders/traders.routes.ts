@@ -504,21 +504,33 @@ router.get(
  *     summary: My ratings & reviews (summary + paginated list)
  *     description: |
  *       Ratings left by customers after job completion (`POST /jobs/{id}/review`).
- *       `summary` is always computed over **all** reviews; `stars` filter only affects `items` + `meta`.
+ *       `summary` is always computed over **all** reviews; `stars`, `search`, `from`/`to` only affect `items` + `meta`.
+ *       Default order: `createdAt` desc.
+ *
+ *       Example: `GET /traders/me/reviews?page=1&limit=10&stars=5&search=drain&from=2026-09-01&to=2026-09-30&sortBy=rating&sortOrder=desc`
  *     tags: ['Trader / Profile']
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
+ *       - $ref: '#/components/parameters/TraderPage'
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20, maximum: 100 }
+ *         schema: { type: integer, minimum: 1, default: 20, maximum: 100 }
  *       - in: query
  *         name: stars
  *         schema: { type: integer, minimum: 1, maximum: 5 }
  *         description: Filter list by star rating.
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100, example: drain }
+ *         description: Matches review comment, customer name, job ref, job title or category name.
+ *       - $ref: '#/components/parameters/TraderDateFrom'
+ *       - $ref: '#/components/parameters/TraderDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [createdAt, rating, comment, customerName, jobRef, jobTitle, categoryName], default: createdAt }
+ *         description: '`from`/`to` and `createdAt` = date the review was posted.'
+ *       - $ref: '#/components/parameters/TraderSortOrder'
  *     responses:
  *       200:
  *         description: Reviews retrieved.
@@ -547,8 +559,17 @@ router.get(
  *                       title: Fix leaking kitchen drain
  *                       category: { id: 3f0f23dd-0000-4000-8000-000000000003, name: Plumbing }
  *               meta: { total: 12, page: 1, limit: 20, totalPages: 1 }
+ *       400:
+ *         $ref: '#/components/responses/TraderListValidationError'
+ *       401:
+ *         $ref: '#/components/responses/TraderUnauthorized'
+ *       403:
+ *         $ref: '#/components/responses/TraderForbidden'
  *       404:
  *         description: Trader profile not found.
+ *         content:
+ *           application/json:
+ *             example: { success: false, message: 'Trader profile not found.' }
  */
 router.get('/me/reviews', validate(myReviewsQuerySchema), tradersController.getMyReviews);
 
