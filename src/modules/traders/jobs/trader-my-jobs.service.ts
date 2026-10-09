@@ -3357,6 +3357,16 @@ export const getIncomingForQuote = async (traderUserId: string, quoteId: string)
   return quote ? buildIncomingSheet(trader, quote) : null;
 };
 
+/** QUOTE_ACCEPTED notification tap — same sheet for that job (`id` = jobId or quoteId). */
+export const getIncomingForJob = async (userId: string, id: string) => {
+  const trader = await getTraderContext(userId);
+  const quote = await prisma.quote.findFirst({
+    where: { ...awaitingTraderConfirmationWhere(trader.id), OR: [{ jobId: id }, { id }] },
+    include: incomingQuoteInclude,
+  });
+  return quote ? buildIncomingSheet(trader, quote) : null;
+};
+
 /** Latest customer-accepted quotation awaiting this trader (re-open the sheet on app launch). */
 export const getIncomingLatest = async (userId: string) => {
   const trader = await getTraderContext(userId);

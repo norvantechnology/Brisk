@@ -127,6 +127,7 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *       Bottom sheet (Kitchen Sink Leak style) is opened by socket event **`job:accept`**
  *       (same payload) when a customer accepts this trader's quotation. Call this on app
  *       launch / reconnect to re-open a sheet that was missed. `null` when nothing is waiting.
+ *       Notification tap (`QUOTE_ACCEPTED`) → `GET /traders/jobs/incoming/{jobId}` for that exact job.
  *       New marketplace jobs (`job:created` / `job:published`) must NOT open this sheet —
  *       they only refresh Discover.
  *
@@ -178,6 +179,51 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *                 acceptedAt: '2026-10-02T10:15:00.000Z'
  */
 router.get('/incoming/latest', controller.getIncomingLatest);
+
+/**
+ * @swagger
+ * /traders/jobs/incoming/{id}:
+ *   get:
+ *     summary: Re-open the accepted-quotation bottom sheet for one job (notification tap)
+ *     description: |
+ *       Second way to open the same sheet as socket **`job:accept`** — e.g. several events arrived
+ *       at once and the live popup was missed. Call it when the trader taps a **`QUOTE_ACCEPTED`**
+ *       notification (FCM push `data.type` or inbox row `type`), using `data.jobId` (`data.quoteId` also works).
+ *
+ *       Same payload as `GET /traders/jobs/incoming/latest`. `data: null` when the job is no longer
+ *       waiting for this trader (already accepted / declined, customer picked another trader or
+ *       cancelled) — then open `GET /traders/jobs/mine/{jobId}` or show the message instead.
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Job id from the notification (`data.jobId`); the quote id is accepted too.
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Incoming job payload, or null when no longer waiting
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data:
+ *                   $ref: '#/components/schemas/TraderIncomingJob'
+ *             examples:
+ *               waiting:
+ *                 value: { success: true, message: Incoming job retrieved successfully., data: { jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc, quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2, title: Kitchen Sink Leak, charges: 120, currencySymbol: €, actions: { canAccept: true, canDecline: true } } }
+ *               notWaiting:
+ *                 value: { success: true, message: This job is no longer waiting for your confirmation., data: null }
+ *       400:
+ *         description: Invalid id
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/incoming/:id', validate(incomingJobIdParamSchema), controller.getIncomingJob);
 
 /**
  * @swagger

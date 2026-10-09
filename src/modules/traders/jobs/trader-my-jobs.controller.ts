@@ -460,6 +460,27 @@ export const requestSiteVisitPayment = async (
   }
 };
 
+export const getIncomingJob = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.getIncomingForJob(req.user!.id, String(req.params.id));
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: data
+        ? 'Incoming job retrieved successfully.'
+        : 'This job is no longer waiting for your confirmation.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getIncomingLatest = async (
   req: AuthenticatedRequest,
   res: Response,
