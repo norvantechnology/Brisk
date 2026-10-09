@@ -806,6 +806,13 @@ const siteVisitJobWhere = (traderId: string): Prisma.JobWhereInput => ({
   ],
 });
 
+/** Exact complement of siteVisitJobWhere; spelled out because NOT(...) drops rows with a NULL fee. */
+const nonSiteVisitJobWhere = (traderId: string): Prisma.JobWhereInput => ({
+  siteVisitRequested: false,
+  siteVisitRequests: { none: { traderId } },
+  OR: [{ siteVisitFee: null }, { siteVisitFee: { lte: 0 } }],
+});
+
 const MY_JOB_SORT_MAP: Record<string, (dir: SortDir) => Prisma.JobOrderByWithRelationInput> = {
   updatedAt: (dir) => ({ updatedAt: dir }),
   createdAt: (dir) => ({ createdAt: dir }),
@@ -848,7 +855,7 @@ export const listMyJobs = async (userId: string, query: MyJobsListQuery) => {
         ? {}
         : query.siteVisit
           ? siteVisitJobWhere(trader.id)
-          : { NOT: siteVisitJobWhere(trader.id) },
+          : nonSiteVisitJobWhere(trader.id),
       createdAt ? { createdAt } : {},
       search
         ? {
