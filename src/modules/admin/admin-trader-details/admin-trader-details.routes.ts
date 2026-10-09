@@ -546,6 +546,11 @@ router.get(
  *     description: |
  *       Paginated payout rows for the trader.
  *
+ *       A row exists only after an admin sends money with `POST /admin/traders/{id}/payouts`
+ *       (requires the trader's connected Stripe account). Customer job payments are not payouts —
+ *       they are totalled in `GET /admin/traders/{id}/earnings/summary` (`grossEarnings`). Empty `data` + `meta.total: 0`
+ *       means no payout has been sent to this trader yet.
+ *
  *       **Filters:** `status`, `search`, `sortBy`, `sortOrder`, `from`, `to`, `page`, `limit`
  *
  *       **Payout statuses:** `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
