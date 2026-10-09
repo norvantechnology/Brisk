@@ -429,17 +429,20 @@ const jobStatusCopy = (status: string, jobTitle: string, actor?: string) => {
 /**
  * `actor` = who caused the change; the inbox notification goes to the other party
  * (no actor → customer, legacy behaviour; ADMIN → both customer and trader).
+ * `notify: false` = socket only, when the caller sends its own inbox notification.
  */
 export const emitJobStatusChanged = (
-  payload: JobRealtimePayload & {
+  { notify = true, ...payload }: JobRealtimePayload & {
     traderUserId?: string | null;
     actor?: 'CUSTOMER' | 'TRADER' | 'SYSTEM' | 'ADMIN';
+    notify?: boolean;
   }
 ) => {
   const rooms = [roomUser(payload.customerId), roomJob(payload.jobId)];
   if (payload.traderUserId) rooms.push(roomUser(payload.traderUserId));
   if (payload.bookingId) rooms.push(roomBooking(payload.bookingId));
   emit(RealtimeEvents.JOB_STATUS_CHANGED, rooms, { ...payload });
+  if (!notify) return;
 
   const recipients =
     payload.actor === 'ADMIN'

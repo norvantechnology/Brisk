@@ -450,8 +450,8 @@ router.post('/mine/:id/arrive', validate(myJobIdParamSchema), controller.arriveA
  *   post:
  *     summary: Finish job
  *     description: |
- *       Marks the work finished. Job `status` becomes `PAYMENT_PENDING` while a balance is unpaid
- *       (then call `POST .../request-payment`), or `COMPLETED` if already fully paid.
+ *       Marks the work finished. If a balance is unpaid, the FULL_JOB payment request is sent to the
+ *       customer automatically and job `status` becomes `PAYMENT_PENDING`; `COMPLETED` if already fully paid.
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -490,9 +490,9 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *       Body accepts either `photoUrl` (single) or `photoUrls` (array). At least one is required.
  *
  *       **`isPartPayment`:**
- *       - `false` → Mark as Finished: save proof + finish job → `flowStatus=COMPLETED`, `canRequestPayment=true`.
- *         Job `status` becomes `PAYMENT_PENDING` while a balance is unpaid (customer sees Payment Pending,
- *         Active tab) and `COMPLETED` only once fully paid. Then call `POST .../request-payment`.
+ *       - `false` → Mark as Finished: save proof + finish job. If a balance is unpaid, the FULL_JOB payment
+ *         request is sent to the customer automatically (job `PAYMENT_PENDING`, customer gets `paymentRequestId`);
+ *         `COMPLETED` only once fully paid. Calling `POST .../request-payment` afterwards is optional (idempotent).
  *       - `true` → Partial path: save proof only; job stays ACTIVE → then call
  *         `POST .../request-partial-payment` with `amount` + `description`
  *         (images already on Submit screen; Partial Payment screen needs no upload)
@@ -880,9 +880,11 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Payment Request Sent payload (creates a FULL_JOB request; job stays/becomes PAYMENT_PENDING)
+ *         description: |
+ *           Payment Request Sent payload. Finish already sends the FULL_JOB request, so this returns that
+ *           request (same `paymentRequestId`); it only creates one for older finished jobs without a request.
  *       409:
- *         description: A full-job payment request was already sent for this job
+ *         description: The full-job payment was already received
  */
 router.post(
   '/mine/:id/request-payment',

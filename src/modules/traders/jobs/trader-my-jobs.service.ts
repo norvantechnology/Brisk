@@ -623,6 +623,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
   const canRequestPayment =
     assignedToThis &&
     !hasFinalPaymentRequest(job) &&
+    !isPaidUpfrontInFull(job) &&
     (job.status === JobStatus.COMPLETED || Boolean(bookingFinished));
   const canRequestPartialPayment =
     assignedToThis &&
@@ -749,16 +750,55 @@ const hasFinalPaymentRequest = (job: {
       p.status !== TraderPaymentRequestStatus.CANCELLED
   );
 
+/** Direct Trader job: the paid upfront invoice was the full service (a site-visit invoice only covers the visit). */
+const isPaidUpfrontInFull = (job: MyJobRow) =>
+  job.booking?.invoice?.status === 'PAID' && !job.siteVisitRequested;
+
 /** Job status on finish — stays PAYMENT_PENDING until the customer has paid the full amount. */
 const jobStatusAfterFinish = async (job: MyJobRow, traderId: string) => {
+  if (isPaidUpfrontInFull(job)) return JobStatus.COMPLETED;
   const alreadyPaid = sumPaidAmount(await loadJobPaymentRequests(job.id, traderId));
   return computePaymentBreakdown(job).totalAmount - alreadyPaid > 0
     ? JobStatus.PAYMENT_PENDING
     : JobStatus.COMPLETED;
 };
 
-const emitTraderJobProgress = (job: MyJobRow, traderUserId: string, status: JobStatus) =>
+type TraderContext = Awaited<ReturnType<typeof getTraderContext>>;
+
+const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderContext) => {
+  const breakdown = computePaymentBreakdown(job);
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+  const data: Prisma.TraderPaymentRequestUncheckedCreateInput = {
+    jobId: job.id,
+    traderId: trader.id,
+    customerId: job.customerId,
+    type: TraderPaymentRequestType.FULL_JOB,
+    status: TraderPaymentRequestStatus.SENT,
+    serviceCharge: breakdown.serviceCharge,
+    materialsTotal: breakdown.materialsTotal,
+    siteVisitFee: breakdown.siteVisitFee,
+    platformFee: breakdown.platformFee,
+    vatRate: breakdown.vatRate,
+    vatAmount: breakdown.vatAmount,
+    totalAmount: breakdown.totalAmount,
+    currencyCode: currency.currencyCode,
+  };
+  return { breakdown, data };
+};
+
+const emitTraderJobProgress = (
+  job: MyJobRow,
+  traderUserId: string,
+  status: JobStatus,
+  notify = true
+) =>
   emitJobStatusChanged({
+    notify,
     jobId: job.id,
     jobRef: job.jobRef ?? undefined,
     status,
@@ -1425,7 +1465,12 @@ const resolvePaymentStatusLabel = (job: MyJobRow): string => {
   const latestPayment = invoice?.payments?.[0];
   if (latestPayment?.status === 'COMPLETED') return 'PAID';
   if (latestPayment?.status === 'FAILED') return 'FAILED';
-  if (job.status === JobStatus.PAYMENT_PENDING) return 'PENDING';
+  if (
+    job.status === JobStatus.PAYMENT_PENDING &&
+    (isAwaitingUpfrontPayment(job) || hasFinalPaymentRequest(job))
+  ) {
+    return 'PENDING';
+  }
   if (job.status === JobStatus.CANCELLED) return 'CANCELLED';
   // Ready for full / part payment request after job finish
   if (job.status === JobStatus.COMPLETED || job.booking?.finishedAt) return 'UNPAID';
@@ -1725,17 +1770,21 @@ export const finishJob = async (userId: string, jobId: string) => {
 
   const now = new Date();
   const nextStatus = await jobStatusAfterFinish(job, trader.id);
-  await prisma.$transaction([
-    prisma.booking.update({
-      where: { id: job.booking.id },
+  const request =
+    nextStatus === JobStatus.PAYMENT_PENDING ? await buildFullJobPaymentRequestData(job, trader) : null;
+  const paymentRequest = await prisma.$transaction(async (tx) => {
+    await tx.booking.update({
+      where: { id: job.booking!.id },
       data: { finishedAt: now, status: BookingStatus.COMPLETED },
-    }),
-    prisma.job.update({
+    });
+    await tx.job.update({
       where: { id: job.id },
       data: { status: nextStatus },
-    }),
-  ]);
-  emitTraderJobProgress(job, userId, nextStatus);
+    });
+    return request ? tx.traderPaymentRequest.create({ data: request.data }) : null;
+  });
+  emitTraderJobProgress(job, userId, nextStatus, !paymentRequest);
+  if (paymentRequest) await notifyPaymentRequested(trader.id, paymentRequest);
 
   return getMyJobDetail(userId, jobId);
 };
@@ -1743,7 +1792,7 @@ export const finishJob = async (userId: string, jobId: string) => {
 /**
  * Job Progress screen — Submit & Next.
  *
- * isPartPayment: false → save proof + finish job (PAYMENT_PENDING until fully paid, else COMPLETED).
+ * isPartPayment: false → save proof + finish job; a balance due sends the FULL_JOB request (PAYMENT_PENDING).
  * isPartPayment: true  → save proof only; job stays ACTIVE/IN_PROGRESS.
  *   Then app calls POST .../request-partial-payment with amount + description
  *   (Partial Payment screen has no image upload — images already saved here).
@@ -1858,7 +1907,9 @@ export const submitJobCompletion = async (
 
   const now = new Date();
   const nextStatus = await jobStatusAfterFinish(job, trader.id);
-  await prisma.$transaction(async (tx) => {
+  const request =
+    nextStatus === JobStatus.PAYMENT_PENDING ? await buildFullJobPaymentRequestData(job, trader) : null;
+  const paymentRequest = await prisma.$transaction(async (tx) => {
     await tx.jobPhoto.createMany({
       data: photoUrls.map((photoUrl) => ({
         jobId,
@@ -1875,8 +1926,10 @@ export const submitJobCompletion = async (
       where: { id: job.id },
       data: { status: nextStatus },
     });
+    return request ? tx.traderPaymentRequest.create({ data: request.data }) : null;
   });
-  emitTraderJobProgress(job, userId, nextStatus);
+  emitTraderJobProgress(job, userId, nextStatus, !paymentRequest);
+  if (paymentRequest) await notifyPaymentRequested(trader.id, paymentRequest);
 
   const fresh = await assertMyJob(trader.id, jobId);
   const payload = buildPaymentRequestScreenPayload(fresh);
@@ -1914,7 +1967,9 @@ const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
     paymentStatus,
     isPartPayment: paymentStatus === 'PARTIALLY_PAID' || paymentStatus === 'PENDING',
     canRequestPayment:
-      !finalRequested && (job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt)),
+      !finalRequested &&
+      !isPaidUpfrontInFull(job) &&
+      (job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt)),
     invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };
@@ -3050,39 +3105,32 @@ export const requestPayment = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
 
-  if (hasFinalPaymentRequest(job)) {
-    throw new ConflictError('Payment already requested for this job.');
+  // Finish already sends the request — return it so a repeat tap stays idempotent.
+  const existing = job.paymentRequests.find(
+    (p) =>
+      p.type === TraderPaymentRequestType.FULL_JOB &&
+      p.status !== TraderPaymentRequestStatus.CANCELLED
+  );
+  if (existing?.status === TraderPaymentRequestStatus.PAID || isPaidUpfrontInFull(job)) {
+    throw new ConflictError('Payment already received for this job.');
+  }
+  if (existing) {
+    return {
+      paymentRequestId: existing.id,
+      jobRef: job.jobRef,
+      ...computePaymentBreakdown(job),
+      totalAmount: money(existing.totalAmount),
+      status: existing.status,
+    };
   }
   if (job.status !== JobStatus.COMPLETED && !job.booking?.finishedAt) {
     throw new BadRequestError('Finish the job before requesting payment.');
   }
 
-  const breakdown = computePaymentBreakdown(job);
-  const currency = await resolveDiscoverCurrency({
-    customerPreferredCurrency: job.customer.preferredCurrency,
-    traderPreferredCurrency: trader.user.preferredCurrency,
-    jobCountry: job.address?.country ?? job.customer.country,
-    traderCountry: trader.user.country ?? trader.country,
-  });
+  const { breakdown, data } = await buildFullJobPaymentRequestData(job, trader);
 
   const paymentRequest = await prisma.$transaction(async (tx) => {
-    const pr = await tx.traderPaymentRequest.create({
-      data: {
-        jobId,
-        traderId: trader.id,
-        customerId: job.customerId,
-        type: TraderPaymentRequestType.FULL_JOB,
-        status: TraderPaymentRequestStatus.SENT,
-        serviceCharge: breakdown.serviceCharge,
-        materialsTotal: breakdown.materialsTotal,
-        siteVisitFee: breakdown.siteVisitFee,
-        platformFee: breakdown.platformFee,
-        vatRate: breakdown.vatRate,
-        vatAmount: breakdown.vatAmount,
-        totalAmount: breakdown.totalAmount,
-        currencyCode: currency.currencyCode,
-      },
-    });
+    const pr = await tx.traderPaymentRequest.create({ data });
     await tx.job.update({
       where: { id: jobId },
       data: { status: JobStatus.PAYMENT_PENDING },

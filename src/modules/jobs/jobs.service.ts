@@ -518,7 +518,7 @@ const serializeJob = (
           : 'PAYMENT_DETAILS',
       nextScreen: !job.addressId
         ? 'CHOOSE_LOCATION'
-        : isAwaitingUpfrontPayment(job) || job.booking?.invoice?.id
+        : isAwaitingUpfrontPayment(job) || job.booking?.invoice?.status === InvoiceStatus.UNPAID
           ? job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
             ? 'SITE_VISIT_PAY_FEE'
             : 'PAYMENT_DETAILS'
