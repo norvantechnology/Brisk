@@ -106,6 +106,46 @@ export const sendPushToUsers = async (items: Array<{ userId: string; payload: Pu
   }
 };
 
+/**
+ * Send a test push to the caller's own registered devices and report FCM's answer per device
+ * (not stored in the inbox). Lets the app verify its push setup end to end.
+ */
+export const sendTestPush = async (userId: string) => {
+  const devices = await prisma.deviceToken.findMany({
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
+    select: { token: true, platform: true, updatedAt: true },
+  });
+  const app = getFirebaseApp();
+  if (!app || !devices.length) {
+    return { pushEnabled: Boolean(app), devicesCount: devices.length, sentCount: 0, results: [] };
+  }
+
+  const sentAt = new Date().toISOString();
+  const result = await getMessaging(app).sendEach(
+    devices.map(({ token }) => ({
+      token,
+      notification: { title: 'BRISK test notification', body: 'Push notifications are working on this device.' },
+      data: { type: 'TEST', sentAt },
+      android: { priority: 'high' as const, notification: { sound: 'default' } },
+      apns: { payload: { aps: { sound: 'default' } } },
+    }))
+  );
+
+  const results = devices.map((d, i) => {
+    const r = result.responses[i];
+    return {
+      platform: d.platform,
+      tokenPreview: `${d.token.slice(0, 12)}…${d.token.slice(-6)}`,
+      registeredAt: d.updatedAt,
+      success: r.success,
+      messageId: r.messageId ?? null,
+      error: r.success ? null : { code: r.error?.code ?? null, message: r.error?.message ?? null },
+    };
+  });
+  return { pushEnabled: true, devicesCount: devices.length, sentCount: result.successCount, results };
+};
+
 export const registerDeviceToken = async (userId: string, token: string, platform: string) =>
   prisma.deviceToken.upsert({
     where: { token },

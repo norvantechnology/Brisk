@@ -224,6 +224,41 @@ router.post('/devices', validate(registerDeviceSchema), controller.registerDevic
 
 /**
  * @swagger
+ * /notifications/devices/test:
+ *   post:
+ *     summary: Send a test push to my registered devices
+ *     description: |
+ *       Sends "BRISK test notification" to every device registered by the logged-in user
+ *       (`data.type = TEST`, not saved in the inbox). Use it to check the app's push setup.
+ *       `results[].success = true` means Firebase accepted it — if the phone still shows nothing,
+ *       the issue is in the app (permission, foreground handling, notification channel).
+ *     tags: [Notifications]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Test sent (see per-device results).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Test notification sent to 1 of 1 device(s).
+ *               data:
+ *                 pushEnabled: true
+ *                 devicesCount: 1
+ *                 sentCount: 1
+ *                 results:
+ *                   - platform: ANDROID
+ *                     tokenPreview: 'e5hXoYSgTAG0…aXM'
+ *                     registeredAt: '2026-10-09T04:45:13.391Z'
+ *                     success: true
+ *                     messageId: 'projects/brisk-trader/messages/0:1791528093113195'
+ *                     error: null
+ *       401: { description: Unauthorized. }
+ */
+router.post('/devices/test', controller.testPush);
+
+/**
+ * @swagger
  * /notifications/devices/unregister:
  *   post:
  *     summary: Stop push notifications on this device

@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { sendResponse } from '../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import * as service from './notifications.service';
-import { registerDeviceToken, removeDeviceToken } from '../../services/push.service';
+import { registerDeviceToken, removeDeviceToken, sendTestPush } from '../../services/push.service';
 
 export const listNotifications = async (
   req: AuthenticatedRequest,
@@ -41,6 +41,24 @@ export const registerDevice = async (
   try {
     const device = await registerDeviceToken(req.user!.id, req.body.token, req.body.platform);
     sendResponse({ res, statusCode: 200, message: 'Device registered for push notifications.', data: { device } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const testPush = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await sendTestPush(req.user!.id);
+    const message = !data.pushEnabled
+      ? 'Push notifications are not configured on the server.'
+      : !data.devicesCount
+        ? 'No device registered for this account. Call POST /notifications/devices first.'
+        : `Test notification sent to ${data.sentCount} of ${data.devicesCount} device(s).`;
+    sendResponse({ res, statusCode: 200, message, data });
   } catch (error) {
     next(error);
   }
