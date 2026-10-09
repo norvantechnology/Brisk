@@ -1140,7 +1140,7 @@ const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
       paymentStatus: resolvePartialPaymentStatus(
         jobAmountEstimate,
         alreadyPaidAmount,
-        hasOpenPartial
+        job.paymentRequests.some((p) => p.status === TraderPaymentRequestStatus.SENT)
       ),
       isPartPayment: isPartialJob,
       isPartialJob,
@@ -1290,7 +1290,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
   const paymentStatus = resolvePartialPaymentStatus(
     jobAmountEstimate,
     alreadyPaidAmount,
-    hasOpenPartialPayment
+    job.paymentRequests.some((p) => p.status === TraderPaymentRequestStatus.SENT)
   );
   const isPartialJob =
     !job.booking?.finishedAt && (hasAnyPartial || alreadyPaidAmount > 0);
