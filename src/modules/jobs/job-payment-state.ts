@@ -3,7 +3,7 @@ import { JobStatus } from '@prisma/client';
 /**
  * JobStatus.PAYMENT_PENDING has two meanings:
  * - before work: Direct Trader / trader-offer job published with an unpaid upfront invoice (not live yet);
- * - after work: trader finished (booking.finishedAt set) and sent the final payment request.
+ * - after work: trader finished (booking.finishedAt set); final payment is due via a payment request.
  */
 export const isAwaitingUpfrontPayment = (job: {
   status: JobStatus;

@@ -503,8 +503,7 @@ const serializeJob = (
       canPublish: Boolean(job.addressId) && job.status === JobStatus.DRAFT,
       canPay:
         Boolean(job.booking?.invoice?.id) &&
-        (job.status === JobStatus.PAYMENT_PENDING ||
-          job.booking?.invoice?.status === InvoiceStatus.UNPAID),
+        (isAwaitingUpfrontPayment(job) || job.booking?.invoice?.status === InvoiceStatus.UNPAID),
       invoiceId: str(job.booking?.invoice?.id),
       bookingId: str(job.booking?.id),
       nextAfterLocation:
@@ -519,7 +518,7 @@ const serializeJob = (
           : 'PAYMENT_DETAILS',
       nextScreen: !job.addressId
         ? 'CHOOSE_LOCATION'
-        : job.status === JobStatus.PAYMENT_PENDING || job.booking?.invoice?.id
+        : isAwaitingUpfrontPayment(job) || job.booking?.invoice?.id
           ? job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
             ? 'SITE_VISIT_PAY_FEE'
             : 'PAYMENT_DETAILS'
