@@ -134,7 +134,10 @@ router.use(adminAuthMiddleware);
  *             joinedFrom: { type: string, format: date-time }
  *             joinedTo: { type: string, format: date-time }
  *         totalRevenue: { type: number, example: 1234266.3 }
- *         avgRating: { type: number, example: 4.61 }
+ *         avgRating:
+ *           type: number
+ *           example: 4.61
+ *           description: Average stars of all customer reviews (2 decimals). Traders without reviews are not counted. 0 when no reviews exist.
  *     ApiSuccessEnvelope:
  *       type: object
  *       properties:

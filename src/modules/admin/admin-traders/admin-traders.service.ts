@@ -199,8 +199,9 @@ export const getTraderDirectoryStats = async (filters: TraderStatsFilters = {}) 
       // Same rule as GET /admin/traders?verificationStatus=PENDING
       prisma.trader.count({ where: pendingVerificationWhere() }),
       prisma.trader.count({ where: { createdAt: newTradersCreatedAt } }),
-      prisma.trader.aggregate({
-        _avg: { avgRating: true },
+      // Unrated traders store avgRating 0, so average the review stars instead.
+      prisma.ratingReview.aggregate({
+        _avg: { stars: true },
       }),
     ]);
 
@@ -228,7 +229,7 @@ export const getTraderDirectoryStats = async (filters: TraderStatsFilters = {}) 
       joinedTo: toIso(windowTo),
     },
     totalRevenue: totalRevenueAgg._sum.amount ? Number(totalRevenueAgg._sum.amount) : 0,
-    avgRating: ratingAgg._avg.avgRating ? Number(ratingAgg._avg.avgRating) : 0,
+    avgRating: ratingAgg._avg.stars ? Math.round(ratingAgg._avg.stars * 100) / 100 : 0,
   };
 };
 
