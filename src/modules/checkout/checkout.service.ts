@@ -7,6 +7,7 @@ import {
   PaymentStatus,
   Prisma,
   TraderPaymentRequestStatus,
+  TraderPaymentRequestType,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
@@ -72,40 +73,48 @@ const computePromoDiscount = (
   return round2(Math.min(Math.max(discount, 0), baseAmount));
 };
 
+const invoiceJobInclude = {
+  category: { select: { id: true, name: true } },
+  subcategory: { select: { id: true, name: true } },
+  offer: {
+    select: {
+      id: true,
+      title: true,
+      discountType: true,
+      discountValue: true,
+      discountLabel: true,
+      currencyCode: true,
+    },
+  },
+  claim: { select: { id: true, status: true } },
+  photos: { take: 1, orderBy: { createdAt: 'asc' as const } },
+} satisfies Prisma.JobInclude;
+
+const invoiceTraderSelect = {
+  id: true,
+  userId: true,
+  businessName: true,
+  avgRating: true,
+  topRated: true,
+  verificationStatus: true,
+  yearsExperience: true,
+  profilePhotoUrl: true,
+  _count: { select: { ratingsReceived: true } },
+  user: { select: { fullName: true, profilePhotoUrl: true } },
+} satisfies Prisma.TraderSelect;
+
+const invoiceBookingSelect = {
+  id: true,
+  bookingRef: true,
+  status: true,
+  scheduledDate: true,
+} satisfies Prisma.BookingSelect;
+
 const invoiceOwnershipInclude = {
   booking: {
     include: {
-      job: {
-        include: {
-          category: { select: { id: true, name: true } },
-          subcategory: { select: { id: true, name: true } },
-          offer: {
-            select: {
-              id: true,
-              title: true,
-              discountType: true,
-              discountValue: true,
-              discountLabel: true,
-              currencyCode: true,
-            },
-          },
-          claim: { select: { id: true, status: true } },
-          photos: { take: 1, orderBy: { createdAt: 'asc' as const } },
-        },
-      },
-      trader: {
-        select: {
-          id: true,
-          businessName: true,
-          avgRating: true,
-          topRated: true,
-          verificationStatus: true,
-          yearsExperience: true,
-          profilePhotoUrl: true,
-          _count: { select: { ratingsReceived: true } },
-          user: { select: { fullName: true, profilePhotoUrl: true } },
-        },
-      },
+      job: { include: invoiceJobInclude },
+      trader: { select: invoiceTraderSelect },
       customer: {
         select: { id: true, fullName: true, email: true },
       },
@@ -115,18 +124,38 @@ const invoiceOwnershipInclude = {
   paymentRequest: {
     select: {
       id: true,
+      type: true,
       status: true,
+      customerId: true,
       materialsTotal: true,
       siteVisitFee: true,
       vatRate: true,
+      job: { include: { ...invoiceJobInclude, booking: { select: invoiceBookingSelect } } },
+      trader: { select: invoiceTraderSelect },
     },
   },
 } satisfies Prisma.InvoiceInclude;
 
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{ include: typeof invoiceOwnershipInclude }>;
 
+/** Upfront invoice → its booking; payment-request invoice → the request's job / trader / customer. */
+const invoiceContext = (invoice: InvoiceWithRelations) => {
+  if (invoice.booking) {
+    const { job, trader, customerId } = invoice.booking;
+    return { job, trader, customerId, booking: invoice.booking };
+  }
+  const request = invoice.paymentRequest;
+  if (!request) throw new NotFoundError('Invoice not found.');
+  return {
+    job: request.job,
+    trader: request.trader,
+    customerId: request.customerId,
+    booking: request.job.booking,
+  };
+};
+
 const assertInvoiceOwner = (invoice: InvoiceWithRelations, userId: string) => {
-  if (invoice.booking.customerId !== userId) {
+  if (invoiceContext(invoice).customerId !== userId) {
     throw new ForbiddenError('You do not have access to this invoice.');
   }
 };
@@ -202,20 +231,24 @@ const resolveInvoicePurpose = (job: {
     ? 'SITE_VISIT_FEE'
     : 'SERVICE';
 
-/** Invoice billing a trader's FULL_JOB payment request (final payment after the job is finished). */
+/** Payment-request invoices: a trader site-visit fee request bills the visit, every other request the service. */
 const invoicePurposeOf = (invoice: InvoiceWithRelations): 'SERVICE' | 'SITE_VISIT_FEE' =>
-  invoice.paymentRequestId ? 'SERVICE' : resolveInvoicePurpose(invoice.booking.job);
+  invoice.paymentRequest
+    ? invoice.paymentRequest.type === TraderPaymentRequestType.SITE_VISIT_FEE
+      ? 'SITE_VISIT_FEE'
+      : 'SERVICE'
+    : resolveInvoicePurpose(invoiceContext(invoice).job);
 
 const invoiceLineItems = (invoice: InvoiceWithRelations, purpose: 'SERVICE' | 'SITE_VISIT_FEE') => {
-  const items = buildLineItems(invoice, purpose);
   const request = invoice.paymentRequest;
-  if (!request) return items;
-  const extras = [
+  if (!request) return buildLineItems(invoice, purpose);
+  const [, ...feesAndDiscounts] = buildLineItems(invoice);
+  const charges = [
+    { key: 'serviceCharge', amount: money(invoice.serviceCharge), type: 'charge' as const },
     { key: 'materialsTotal', amount: money(request.materialsTotal), type: 'charge' as const },
     { key: 'siteVisitFee', amount: money(request.siteVisitFee), type: 'charge' as const },
   ].filter((item) => item.amount > 0);
-  items.splice(1, 0, ...extras);
-  return items;
+  return [...charges, ...feesAndDiscounts];
 };
 
 const formatTimeSlotRange = (timeSlot?: string | null) => {
@@ -332,15 +365,24 @@ const loadBriskOffersSheet = async (jobCategoryId?: string | null) => {
   };
 };
 
+const serializeBooking = (booking: ReturnType<typeof invoiceContext>['booking']) =>
+  booking
+    ? {
+        id: booking.id,
+        bookingRef: booking.bookingRef,
+        status: booking.status,
+        scheduledDate: booking.scheduledDate,
+      }
+    : null;
+
 const serializeInvoice = (invoice: InvoiceWithRelations) => {
-  const job = invoice.booking.job;
-  const trader = invoice.booking.trader;
+  const { job, trader, booking } = invoiceContext(invoice);
   const breakdown = serializeInvoiceBreakdown(invoice);
   const purpose = invoicePurposeOf(invoice);
   const request = invoice.paymentRequest;
   const serviceProvider =
     trader?.businessName || trader?.user?.fullName || null;
-  const orderId = invoice.invoiceNumber || invoice.booking.bookingRef || invoice.id;
+  const orderId = invoice.invoiceNumber || booking?.bookingRef || invoice.id;
   const slotRange = formatTimeSlotRange(job.timeSlot);
 
   return {
@@ -348,11 +390,10 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     invoiceNumber: invoice.invoiceNumber,
     orderId,
     status: invoice.status,
-    bookingId: invoice.bookingId,
+    bookingId: booking?.id ?? null,
     createdAt: invoice.createdAt,
     updatedAt: invoice.updatedAt,
     purpose,
-    paymentRequestId: invoice.paymentRequestId ?? null,
     ...breakdown,
     materialsTotal: request ? money(request.materialsTotal) : 0,
     siteVisitFee: request
@@ -374,12 +415,7 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
       timeSlot: job.timeSlot ?? '',
       timeSlotRange: slotRange ?? '',
     },
-    booking: {
-      id: invoice.booking.id,
-      bookingRef: invoice.booking.bookingRef,
-      status: invoice.booking.status,
-      scheduledDate: invoice.booking.scheduledDate,
-    },
+    booking: serializeBooking(booking),
     job: {
       id: job.id,
       jobRef: job.jobRef,
@@ -460,8 +496,7 @@ const buildReceipt = async (paymentId: string, userId: string) => {
   if (!payment) throw new NotFoundError('Payment not found.');
 
   const invoice = payment.invoice;
-  const job = invoice.booking.job;
-  const trader = invoice.booking.trader;
+  const { job, trader, booking } = invoiceContext(invoice);
   const amountPaid = money(payment.amount);
   const isPaid = payment.status === PaymentStatus.COMPLETED;
   const purpose = invoicePurposeOf(invoice);
@@ -507,19 +542,13 @@ const buildReceipt = async (paymentId: string, userId: string) => {
     invoice: {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
+      orderId: invoice.invoiceNumber || booking?.bookingRef || invoice.id,
       status: invoice.status,
       purpose,
-      paymentRequestId: invoice.paymentRequestId ?? null,
       ...serializeInvoiceBreakdown(invoice),
       lineItems: invoiceLineItems(invoice, purpose),
     },
-    booking: {
-      id: invoice.booking.id,
-      bookingRef: invoice.booking.bookingRef,
-      status: invoice.booking.status,
-      scheduledDate: invoice.booking.scheduledDate,
-    },
+    booking: serializeBooking(booking),
     job: {
       id: job.id,
       jobRef: job.jobRef,
@@ -555,7 +584,7 @@ const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
   // Payment-request invoices keep the trader's billed totals (materials, site visit, VAT).
   if (invoice.status !== InvoiceStatus.UNPAID || invoice.paymentRequestId) return invoice;
 
-  const purpose = resolveInvoicePurpose(invoice.booking.job);
+  const purpose = resolveInvoicePurpose(invoiceContext(invoice).job);
   const breakdown = computeInvoiceBreakdown({
     serviceCharge: money(invoice.serviceCharge),
     traderOfferDiscount: money(invoice.traderOfferDiscount),
@@ -593,7 +622,7 @@ export const getInvoice = async (userId: string, invoiceId: string) => {
   assertInvoiceOwner(invoice, userId);
   const consistent = await ensureInvoiceTotalsConsistent(invoice);
   const base = serializeInvoice(consistent);
-  const briskOffers = await loadBriskOffersSheet(consistent.booking.job.categoryId);
+  const briskOffers = await loadBriskOffersSheet(invoiceContext(consistent).job.categoryId);
   return {
     ...base,
     briskOffers,
@@ -613,7 +642,7 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
       },
     },
   });
-  if (!invoice || invoice.status !== InvoiceStatus.UNPAID) return;
+  if (!invoice?.booking || invoice.status !== InvoiceStatus.UNPAID) return;
   if (money(invoice.promoDiscount) <= 0 && !invoice.appliedPromoCode) return;
 
   const purpose = resolveInvoicePurpose(invoice.booking.job);
@@ -670,8 +699,8 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
   }
 
   if (promo.categoryScope) {
-    const jobCategoryId = invoice.booking.job.categoryId;
-    const jobCategoryName = invoice.booking.job.category.name;
+    const jobCategoryId = invoiceContext(invoice).job.categoryId;
+    const jobCategoryName = invoiceContext(invoice).job.category.name;
     const scope = promo.categoryScope.trim();
     const matchesId = scope.toLowerCase() === jobCategoryId.toLowerCase();
     const matchesName = scope.toLowerCase() === jobCategoryName.toLowerCase();
@@ -691,7 +720,7 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
 
   // Must preserve SITE_VISIT_FEE (platformFee = 0). Omitting purpose defaulted to SERVICE
   // and added 10% fee, cancelling the promo (e.g. €30 − €3 + €3 = €30).
-  const purpose = resolveInvoicePurpose(invoice.booking.job);
+  const purpose = resolveInvoicePurpose(invoiceContext(invoice).job);
   const breakdown = computeInvoiceBreakdown({
     serviceCharge,
     traderOfferDiscount,
@@ -742,7 +771,7 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
 
   emitInvoiceUpdated({
     invoiceId: updated.id,
-    jobId: invoice.booking.job.id,
+    jobId: invoiceContext(invoice).job.id,
     status: updated.status,
     totalAmount: money(updated.totalAmount),
     promoDiscount: money(updated.promoDiscount),
@@ -766,6 +795,7 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
   });
   if (!invoice) throw new NotFoundError('Invoice not found.');
   assertInvoiceOwner(invoice, userId);
+  const context = invoiceContext(invoice);
 
   if (invoice.status === InvoiceStatus.PAID) {
     throw new BadRequestError('This invoice is already paid.');
@@ -837,7 +867,7 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     status: payment.status,
     billingAddress: input.billingAddress ?? null,
     invoiceId: invoice.id,
-    orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
+    orderId: invoice.invoiceNumber || context.booking?.bookingRef || invoice.id,
   };
 
   // Fully discounted invoice (e.g. free site visit): nothing to charge — confirm completes it.
@@ -862,12 +892,12 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
         currency: payment.currencyCode.toLowerCase(),
         customer: customerId,
         automatic_payment_methods: { enabled: true },
-        description: `Brisk ${invoice.invoiceNumber || invoice.booking.bookingRef} — ${invoice.booking.job.title}`,
+        description: `Brisk ${base.orderId} — ${context.job.title}`,
         metadata: {
           kind: STRIPE_KIND_INVOICE,
           paymentId: payment.id,
           invoiceId: invoice.id,
-          jobId: invoice.booking.job.id,
+          jobId: context.job.id,
           userId,
         },
       },
@@ -962,7 +992,7 @@ export const finalizeInvoicePayment = async (
 ): Promise<boolean> => {
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
-    include: { invoice: true },
+    include: { invoice: { include: { paymentRequest: { select: { jobId: true } } } } },
   });
   if (!payment || payment.status === PaymentStatus.COMPLETED) return false;
 
@@ -1006,6 +1036,7 @@ export const finalizeInvoicePayment = async (
       });
       return { paidRequest };
     }
+    if (!payment.invoice.bookingId) return { paidRequest: null };
 
     // Claim / apply offer only on Payment Successful — create or update → USED.
     // Job goes live (SCHEDULED) only after payment succeeds.
@@ -1085,20 +1116,28 @@ export const finalizeInvoicePayment = async (
   });
   if (!finalized) return false;
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: payment.invoice.bookingId },
-    select: {
-      id: true,
-      jobId: true,
-      traderId: true,
-      trader: { select: { userId: true } },
-      job: { select: { customerId: true, status: true } },
-    },
-  });
+  const requestJobId = payment.invoice.paymentRequest?.jobId;
+  const bookingWhere: Prisma.BookingWhereInput | null = payment.invoice.bookingId
+    ? { id: payment.invoice.bookingId }
+    : requestJobId
+      ? { jobId: requestJobId }
+      : null;
+  const booking = bookingWhere
+    ? await prisma.booking.findFirst({
+        where: bookingWhere,
+        select: {
+          id: true,
+          jobId: true,
+          traderId: true,
+          trader: { select: { userId: true } },
+          job: { select: { customerId: true, status: true } },
+        },
+      })
+    : null;
   emitPaymentCompleted({
     paymentId: payment.id,
     invoiceId: payment.invoiceId,
-    jobId: booking?.jobId ?? null,
+    jobId: booking?.jobId ?? requestJobId ?? null,
     bookingId: booking?.id ?? null,
     status: PaymentStatus.COMPLETED,
     amount: money(payment.amount),
@@ -1151,17 +1190,18 @@ export const failPayment = async (
   }
 
   const invoice = payment.invoice;
+  const context = invoiceContext(invoice);
   const amount = money(payment.amount);
 
   emitPaymentFailed({
     paymentId: payment.id,
     invoiceId: payment.invoiceId,
-    jobId: invoice.booking.job.id,
-    bookingId: invoice.bookingId,
+    jobId: context.job.id,
+    bookingId: context.booking?.id ?? null,
     status: PaymentStatus.FAILED,
     amount,
     customerId: userId,
-    traderId: invoice.booking.trader?.id ?? null,
+    traderId: context.trader?.id ?? null,
     at: new Date().toISOString(),
   });
 
@@ -1194,7 +1234,7 @@ export const failPayment = async (
     invoice: {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
+      orderId: invoice.invoiceNumber || context.booking?.bookingRef || invoice.id,
       status: invoice.status,
       totalAmount: money(invoice.totalAmount),
     },

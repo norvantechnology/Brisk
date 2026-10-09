@@ -203,7 +203,6 @@ const jobInclude = {
           id: true,
           invoiceNumber: true,
           status: true,
-          paymentRequestId: true,
           totalAmount: true,
           serviceCharge: true,
           traderOfferDiscount: true,
@@ -256,8 +255,7 @@ const serializeJob = (
   const traderDisplayName =
     job.trader?.businessName || job.trader?.user?.fullName || null;
   const payScreen =
-    !job.booking?.invoice?.paymentRequestId &&
-    (job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested)
+    job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
       ? 'SITE_VISIT_PAY_FEE'
       : 'PAYMENT_DETAILS';
 
@@ -802,7 +800,6 @@ export const customerJobAmountSelect = {
         select: {
           id: true,
           status: true,
-          paymentRequestId: true,
           totalAmount: true,
           currencyCode: true,
           payments: {
@@ -815,7 +812,13 @@ export const customerJobAmountSelect = {
   paymentRequests: {
     where: { status: { in: ['PAID', 'SENT'] } },
     orderBy: { createdAt: 'desc' as const },
-    select: { id: true, type: true, status: true, totalAmount: true, currencyCode: true },
+    select: {
+      type: true,
+      status: true,
+      totalAmount: true,
+      currencyCode: true,
+      invoice: { select: { id: true, status: true } },
+    },
   },
 } satisfies Prisma.JobSelect;
 
@@ -833,11 +836,8 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
     )
   );
   const paidRequests = job.paymentRequests.filter((p) => p.status === 'PAID');
-  // A payment-request invoice is already counted through its PAID request.
   const charged = round2(
-    (invoice && !invoice.paymentRequestId && invoice.status !== InvoiceStatus.UNPAID
-      ? money(invoice.totalAmount)
-      : 0) +
+    (invoice && invoice.status !== InvoiceStatus.UNPAID ? money(invoice.totalAmount) : 0) +
       paidRequests.reduce((s, p) => s + money(p.totalAmount), 0)
   );
   const due = round2(
@@ -867,13 +867,14 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
   /** Trader billed in installments (sent or paid PARTIAL request) — customer opens the Installment Payments screen. */
   const isPartPayment = job.paymentRequests.some((p) => p.type === 'PARTIAL');
 
-  /**
-   * What to pay (only one is set): unpaid invoice (upfront, or the trader's final request) → invoice checkout;
-   * otherwise a waiting request without an invoice (installment / booking with upfront invoice) → payment-request checkout.
-   */
-  const invoiceId = !cancelled && invoice?.status === InvoiceStatus.UNPAID ? invoice.id : null;
-  const paymentRequestId =
-    cancelled || invoiceId ? null : (job.paymentRequests.find((p) => p.status === 'SENT')?.id ?? null);
+  /** Invoice to pay: the unpaid upfront invoice, else the latest sent trader request's (auto-accepted) invoice. */
+  const invoiceId = cancelled
+    ? null
+    : invoice?.status === InvoiceStatus.UNPAID
+      ? invoice.id
+      : (job.paymentRequests.find(
+          (p) => p.status === 'SENT' && p.invoice?.status === InvoiceStatus.UNPAID
+        )?.invoice?.id ?? null);
 
   return {
     amount,
@@ -884,7 +885,6 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
     refunded,
     isPartPayment,
     invoiceId,
-    paymentRequestId,
   };
 };
 
@@ -918,8 +918,7 @@ export const listMyJobsByTab = async (
   const rows = jobs.map((job) => {
     const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
     const finished = job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt);
-    const { amount, amountType, currencyCode, isPartPayment, invoiceId, paymentRequestId } =
-      resolveCustomerJobAmount(job);
+    const { amount, amountType, currencyCode, isPartPayment, invoiceId } = resolveCustomerJobAmount(job);
     currencyCodes.add(currencyCode);
 
     const dateAt = cancelled
@@ -942,7 +941,6 @@ export const listMyJobsByTab = async (
       currencyCode,
       isPartPayment,
       invoiceId,
-      paymentRequestId,
       downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     };
   });
@@ -1153,9 +1151,7 @@ const buildCustomerJobView = async (
       : null,
     prisma.jobDispute.count({ where: { jobId, status: { in: ['OPEN', 'IN REVIEW'] } } }),
   ]);
-  // A payment-request invoice is already counted through its request row.
-  const billedInvoice =
-    invoice && !invoice.paymentRequestId && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
+  const billedInvoice = invoice && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
   const sum = (rows: typeof requests, pick: (r: (typeof requests)[number]) => Prisma.Decimal) =>
     rows.reduce((s, r) => s + money(pick(r)), 0);
 

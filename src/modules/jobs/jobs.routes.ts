@@ -270,12 +270,10 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *         `Charges` (paid total) · `Refunded` (completed refunds)
  *       - `currencyCode`, `currencySymbol`
  *       - `isPartPayment` — true when the trader billed in installments (open Installment Payments screen)
- *       - **Pay routing** (status `PAYMENT PENDING`, only one of `invoiceId` / `paymentRequestId` is set):
- *         `invoiceId` set → `GET /invoices/{invoiceId}` + `POST /payments/intent` + `POST /payments/{paymentId}/confirm`.
- *         Upfront invoice, or the trader's final payment request (sent automatically when the trader finishes) —
- *         that invoice carries the request's totals and `paymentRequestId`; paying it marks the request PAID and the job COMPLETED.
- *         Only `paymentRequestId` set (installment, or booking already has an upfront invoice) →
- *         `GET /payment-requests/{paymentRequestId}` + `POST /payment-requests/{paymentRequestId}/payment-intent`. Both null = nothing to pay.
+ *       - **Pay routing** — `invoiceId` set → `GET /invoices/{invoiceId}` + `POST /payments/intent` + `POST /payments/{paymentId}/confirm`.
+ *         It is the unpaid upfront invoice, or the invoice auto-created when the trader sends a payment request
+ *         (final payment, installment or site visit fee — no customer accept step). Paying a request invoice marks the
+ *         request PAID (final payment also moves the job to COMPLETED). null = nothing to pay.
  *       - `downloadUrl` — invoice PDF path once the trader finished the job, else null
  *     parameters:
  *       - in: query
@@ -313,7 +311,6 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         currencySymbol: €
  *                         isPartPayment: false
  *                         invoiceId: null
- *                         paymentRequestId: null
  *                         downloadUrl: null
  *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
  *               completed:
@@ -1158,7 +1155,7 @@ router.get('/:id/quotes/:quoteId', ...customerOnly, validate(jobQuoteDetailSchem
  *                   - { key: COMPLETION CONFIRMED, title: Completion Confirmed, subtitle: '', status: PENDING, at: null }
  *                   - { key: PAYMENT COMPLETED, title: Payment Completed, subtitle: '', status: PENDING, at: null }
  *                 isPartPayment: false
- *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, invoiceId: null, paymentRequestId: null, currencyCode: EUR, currencySymbol: € }
+ *                 pricing: { amount: 120, amountType: Estimated, amountDue: 0, totalPaid: 0, refunded: 0, invoiceId: null, currencyCode: EUR, currencySymbol: € }
  *                 review: null
  *                 completionConfirmedAt: null
  *                 cancellationReason: null

@@ -5,7 +5,3 @@ const uuid = z.string().uuid();
 export const jobIdParamSchema = z.object({
   params: z.object({ id: uuid }),
 });
-
-export const paymentRequestIdParamSchema = z.object({
-  params: z.object({ id: uuid }),
-});

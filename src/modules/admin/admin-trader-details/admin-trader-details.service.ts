@@ -385,10 +385,10 @@ export const getTraderJobsStats = async (traderId: string) => {
     prisma.payment.aggregate({
       _sum: { amount: true },
       where: {
-        status: PaymentStatus.COMPLETED,
-        invoice: { booking: { traderId } },
-      },
-    }),
+      status: PaymentStatus.COMPLETED,
+      invoice: { OR: [{ booking: { traderId } }, { paymentRequest: { traderId } }] },
+    },
+  }),
     prisma.job.aggregate({
       _sum: { siteVisitFee: true },
       where: {
@@ -687,7 +687,7 @@ export const getTraderEarningsSummary = async (traderId: string) => {
       },
       where: {
         status: 'PAID',
-        booking: { traderId },
+        OR: [{ booking: { traderId } }, { paymentRequest: { traderId } }],
       },
     }),
     prisma.payout.aggregate({

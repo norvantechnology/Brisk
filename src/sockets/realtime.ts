@@ -816,7 +816,7 @@ const PAYMENT_REQUEST_LABEL: Record<string, string> = {
 export const emitPaymentRequested = (input: {
   customerId: string;
   jobId: string;
-  paymentRequestId: string;
+  invoiceId: string;
   type: string;
   amount: number;
   currencyCode: string;
@@ -834,7 +834,7 @@ export const emitPaymentRequested = (input: {
       data: {
         jobId: input.jobId,
         jobTitle,
-        paymentRequestId: input.paymentRequestId,
+        invoiceId: input.invoiceId,
         paymentRequestType: input.type,
         amount: input.amount,
         currencyCode: input.currencyCode,

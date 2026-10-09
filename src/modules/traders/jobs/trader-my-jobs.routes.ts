@@ -537,7 +537,7 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *
  *       **`isPartPayment`:**
  *       - `false` → Mark as Finished: save proof + finish job. If a balance is unpaid, the FULL_JOB payment
- *         request is sent to the customer automatically (job `PAYMENT_PENDING`, customer gets `paymentRequestId`);
+ *         request is sent to the customer automatically with its invoice (job `PAYMENT_PENDING`, customer pays by `invoiceId`);
  *         `COMPLETED` only once fully paid. Calling `POST .../request-payment` afterwards is optional (idempotent).
  *       - `true` → Partial path: save proof only; job stays ACTIVE → then call
  *         `POST .../request-partial-payment` with `amount` + `description`
@@ -928,7 +928,7 @@ router.get(
  *       200:
  *         description: |
  *           Payment Request Sent payload. Finish already sends the FULL_JOB request, so this returns that
- *           request (same `paymentRequestId`); it only creates one for older finished jobs without a request.
+ *           request (same `paymentRequestId` / `invoiceId`); it only creates one for older finished jobs without a request.
  *       409:
  *         description: The full-job payment was already received
  */
@@ -1044,6 +1044,7 @@ router.get(
  *               message: Partial payment request sent successfully.
  *               data:
  *                 paymentRequestId: uuid
+ *                 invoiceId: uuid
  *                 paymentStatus: PENDING
  *                 installment:
  *                   amount: 420

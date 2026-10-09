@@ -941,9 +941,15 @@ export const listCustomerPayments = async (
       { transactionRef: { contains: q, mode: 'insensitive' } },
       { invoice: { invoiceNumber: { contains: q, mode: 'insensitive' } } },
       { invoice: { booking: { job: { jobRef: { contains: q, mode: 'insensitive' } } } } },
+      { invoice: { paymentRequest: { job: { jobRef: { contains: q, mode: 'insensitive' } } } } },
       {
         invoice: {
           booking: { trader: { businessName: { contains: q, mode: 'insensitive' } } },
+        },
+      },
+      {
+        invoice: {
+          paymentRequest: { trader: { businessName: { contains: q, mode: 'insensitive' } } },
         },
       },
     ];
@@ -980,6 +986,25 @@ export const listCustomerPayments = async (
                 job: { select: { id: true, jobRef: true, title: true } },
               },
             },
+            paymentRequest: {
+              select: {
+                trader: {
+                  select: {
+                    id: true,
+                    businessName: true,
+                    user: { select: { fullName: true } },
+                  },
+                },
+                job: {
+                  select: {
+                    id: true,
+                    jobRef: true,
+                    title: true,
+                    booking: { select: { bookingRef: true } },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -1006,16 +1031,35 @@ export const listCustomerPayments = async (
             status: p.invoice.status,
           }
         : null,
-      job: p.invoice?.booking?.job ?? null,
-      trader: p.invoice?.booking?.trader
-        ? {
-            id: p.invoice.booking.trader.id,
-            businessName: p.invoice.booking.trader.businessName,
-            fullName: p.invoice.booking.trader.user?.fullName ?? null,
-          }
-        : null,
-      bookingRef: p.invoice?.booking?.bookingRef ?? null,
+      ...paymentJobAndTrader(p.invoice),
     })),
+  };
+};
+
+/** Trader payment-request invoices have no booking — job / trader come through the request. */
+const paymentJobAndTrader = (
+  invoice: {
+    booking: {
+      bookingRef: string | null;
+      job: { id: string; jobRef: string | null; title: string };
+      trader: { id: string; businessName: string | null; user: { fullName: string } | null };
+    } | null;
+    paymentRequest: {
+      job: { id: string; jobRef: string | null; title: string; booking: { bookingRef: string | null } | null };
+      trader: { id: string; businessName: string | null; user: { fullName: string } | null };
+    } | null;
+  } | null
+) => {
+  const booking = invoice?.booking ?? null;
+  const request = invoice?.paymentRequest ?? null;
+  const job = booking?.job ?? request?.job ?? null;
+  const trader = booking?.trader ?? request?.trader ?? null;
+  return {
+    job: job ? { id: job.id, jobRef: job.jobRef, title: job.title } : null,
+    trader: trader
+      ? { id: trader.id, businessName: trader.businessName, fullName: trader.user?.fullName ?? null }
+      : null,
+    bookingRef: booking?.bookingRef ?? request?.job.booking?.bookingRef ?? null,
   };
 };
 

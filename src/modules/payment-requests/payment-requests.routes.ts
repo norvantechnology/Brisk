@@ -3,7 +3,7 @@ import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import * as controller from './payment-requests.controller';
-import { jobIdParamSchema, paymentRequestIdParamSchema } from './payment-requests.validation';
+import { jobIdParamSchema } from './payment-requests.validation';
 
 const router = Router();
 const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
@@ -17,6 +17,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       properties:
  *         id: { type: string, format: uuid }
  *         transactionId: { type: string, example: TXN-82736A, description: Display ID (same as trader app) }
+ *         invoiceId: { type: string, format: uuid, nullable: true, description: "Auto-created invoice for this request — pay via POST /payments/intent { invoiceId }" }
  *         jobId: { type: string, format: uuid }
  *         traderId: { type: string, format: uuid }
  *         type: { type: string, enum: [FULL_JOB, SITE_VISIT_FEE, PARTIAL] }
@@ -38,7 +39,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *         cardLast4: { type: string, nullable: true, example: "4242" }
  *         paidAt: { type: string, format: date-time, nullable: true }
  *         createdAt: { type: string, format: date-time }
- *         canPay: { type: boolean, description: True while SENT/PENDING and amount > 0 }
+ *         canPay: { type: boolean, description: True while SENT/PENDING, amount > 0 and the invoice exists }
  */
 
 /**
@@ -57,7 +58,8 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *         `pendingAmount` (requests waiting for payment), `paymentStatus` (UNPAID / PENDING / PARTIALLY PAID / PAID).
  *       - `paymentRequests[]` — all non-cancelled requests, newest first:
  *         **Payment Progress** = all rows (`status` PAID = done, SENT = pending);
- *         **Pay Now** = row with `canPay: true` → `POST /payment-requests/{id}/payment-intent`;
+ *         **Pay Now** = row with `canPay: true` → `GET /invoices/{invoiceId}` + `POST /payments/intent { invoiceId }`
+ *         (requests are auto-accepted: every sent request already has its invoice);
  *         **Installment Payments History** screen = all rows (full list, no limit; PAID + pending `SENT`);
  *         the Installment Payments screen preview shows the latest 3 on the app side (`paymentRequests.slice(0, 3)`).
  *         Row fields: `title`, `totalAmount`, `status`, `paidAt`, `transactionId`, `cardBrand`, `cardLast4`.
@@ -99,6 +101,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                   currencySymbol: €
  *                 paymentRequests:
  *                   - id: 3c4d5e6f-0000-4000-8000-000000000003
+ *                     invoiceId: 9f1e2d3c-0000-4000-8000-000000000003
  *                     type: PARTIAL
  *                     title: Final Installment
  *                     status: SENT
@@ -108,6 +111,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                     createdAt: '2026-07-20T10:00:00.000Z'
  *                     canPay: true
  *                   - id: 2b3c4d5e-0000-4000-8000-000000000002
+ *                     invoiceId: 8e0d1c2b-0000-4000-8000-000000000002
  *                     type: PARTIAL
  *                     title: Initial Deposit
  *                     transactionId: TXN-82736A
@@ -121,6 +125,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                     createdAt: '2026-07-10T09:00:00.000Z'
  *                     canPay: false
  *                   - id: 1a2b3c4d-0000-4000-8000-000000000001
+ *                     invoiceId: 7d9c0b1a-0000-4000-8000-000000000001
  *                     type: SITE_VISIT_FEE
  *                     title: Site Visit Fee
  *                     status: PAID
@@ -137,161 +142,6 @@ router.get(
   ...customerOnly,
   validate(jobIdParamSchema),
   controller.listJobPaymentRequests
-);
-
-/**
- * @swagger
- * /payment-requests/{id}:
- *   get:
- *     summary: One trader payment request (Payment Details screen for Payment Pending)
- *     tags: ['Customer / Checkout']
- *     security:
- *       - bearerAuth: []
- *     description: |
- *       Use when the My Jobs card has `paymentRequestId` (status label "Payment Pending",
- *       `invoiceId` is null). Provider card → `trader`, breakdown → `serviceCharge`,
- *       `materialsTotal`, `siteVisitFee`, `platformFee`, `vatAmount`, `totalAmount`.
- *       Pay → `POST /payment-requests/{id}/payment-intent` then `/confirm`.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200:
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 data:
- *                   allOf:
- *                     - $ref: '#/components/schemas/CustomerPaymentRequest'
- *                     - type: object
- *                       properties:
- *                         job:
- *                           type: object
- *                           nullable: true
- *                           description: id, jobRef, title, status, quoteType, scheduledDate, timeSlot, addressLine, city, postcode, category, subcategory
- *                         trader:
- *                           type: object
- *                           nullable: true
- *                           description: id, businessName, fullName, displayName, profilePhotoUrl, avgRating, reviewsCount, isVerified
- *             example:
- *               success: true
- *               message: Payment request fetched successfully.
- *               data:
- *                 id: 7b93515a-bf5c-451e-b899-62c4776dc412
- *                 transactionId: TXN-6DC412
- *                 jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
- *                 type: FULL_JOB
- *                 title: Job Payment
- *                 status: SENT
- *                 serviceCharge: 150
- *                 materialsTotal: 0
- *                 siteVisitFee: 0
- *                 platformFee: 10
- *                 vatRate: 0.2
- *                 vatAmount: 32
- *                 totalAmount: 192
- *                 currencyCode: EUR
- *                 currencySymbol: €
- *                 formattedAmount: €192.00
- *                 canPay: true
- *                 job:
- *                   id: 89d85512-3ff7-4fc7-a44a-2e594130d71c
- *                   jobRef: JOB-1EA2
- *                   title: API test - My Job flow
- *                   status: PAYMENT_PENDING
- *                 trader:
- *                   id: 1b0c9d2e-1111-4a2b-9c3d-123456789abc
- *                   displayName: Brisk Trader
- *                   profilePhotoUrl: null
- *                   avgRating: 4.5
- *                   reviewsCount: 12
- *                   isVerified: true
- *       404:
- *         description: Not found for this customer.
- */
-router.get(
-  '/payment-requests/:id',
-  ...customerOnly,
-  validate(paymentRequestIdParamSchema),
-  controller.getPaymentRequest
-);
-
-/**
- * @swagger
- * /payment-requests/{id}/payment-intent:
- *   post:
- *     summary: Start Stripe payment for a trader payment request
- *     tags: ['Customer / Checkout']
- *     security:
- *       - bearerAuth: []
- *     description: |
- *       Returns PaymentSheet config. Calling again resumes the same unpaid intent
- *       (no duplicate charges). After PaymentSheet success call
- *       `POST /payment-requests/{id}/confirm`.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       201:
- *         description: |
- *           `paymentRequestId`, `type`, `amount`, `currencyCode`, `currencySymbol`, `requiresPayment`,
- *           `paymentIntentId`, `clientSecret`, `customerId`, `ephemeralKey`, `publishableKey`,
- *           `stripeMerchantIdentifier`.
- *       400:
- *         description: Request cancelled / not payable.
- *       409:
- *         description: "`ALREADY_PAID` or `PAYMENT_PROCESSING`."
- *       503:
- *         description: "`PAYMENTS_NOT_CONFIGURED` — Stripe keys missing on server."
- */
-router.post(
-  '/payment-requests/:id/payment-intent',
-  ...customerOnly,
-  validate(paymentRequestIdParamSchema),
-  controller.createPaymentRequestIntent
-);
-
-/**
- * @swagger
- * /payment-requests/{id}/confirm:
- *   post:
- *     summary: Confirm trader payment request after PaymentSheet success
- *     tags: ['Customer / Checkout']
- *     security:
- *       - bearerAuth: []
- *     description: |
- *       Verifies the PaymentIntent with Stripe, marks the request PAID (card brand/last4 from
- *       Stripe). `FULL_JOB` also moves the job PAYMENT_PENDING → COMPLETED. Idempotent; the
- *       Stripe webhook does the same if the app closes early.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200:
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 data: { $ref: '#/components/schemas/CustomerPaymentRequest' }
- *       400:
- *         description: "`PAYMENT_NOT_COMPLETED`, `PAYMENT_AMOUNT_MISMATCH`, `PAYMENT_INTENT_MISSING`."
- *       409:
- *         description: "`PAYMENT_PROCESSING` — retry shortly."
- */
-router.post(
-  '/payment-requests/:id/confirm',
-  ...customerOnly,
-  validate(paymentRequestIdParamSchema),
-  controller.confirmPaymentRequest
 );
 
 export default router;

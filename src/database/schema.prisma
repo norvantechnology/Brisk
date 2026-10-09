@@ -749,7 +749,8 @@ model Booking {
 model Invoice {
   id                  String        @id @default(uuid()) @db.Uuid
   invoiceNumber       String?       @unique @map("invoice_number")
-  bookingId           String        @unique @map("booking_id") @db.Uuid
+  /// Upfront (publish) invoice of the booking. Null for trader payment-request invoices — those link via paymentRequestId.
+  bookingId           String?       @unique @map("booking_id") @db.Uuid
   serviceCharge       Decimal       @map("service_charge") @db.Decimal(10, 2)
   traderOfferDiscount Decimal       @default(0.0) @map("trader_offer_discount") @db.Decimal(10, 2)
   promoDiscount       Decimal       @default(0.0) @map("promo_discount") @db.Decimal(10, 2)
@@ -760,15 +761,15 @@ model Invoice {
   totalAmount         Decimal       @map("total_amount") @db.Decimal(10, 2)
   currencyCode        String        @default("EUR") @map("currency_code")
   status              InvoiceStatus @default(UNPAID)
-  /// Set when this invoice bills the trader's FULL_JOB payment request (final payment after finish).
+  /// Set when this invoice bills a trader payment request (final payment, installment or site visit fee).
   paymentRequestId    String?       @unique @map("payment_request_id") @db.Uuid
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
   // Relationships
-  booking        Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking        Booking?              @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   payments       Payment[]
-  paymentRequest TraderPaymentRequest? @relation(fields: [paymentRequestId], references: [id], onDelete: SetNull)
+  paymentRequest TraderPaymentRequest? @relation(fields: [paymentRequestId], references: [id], onDelete: Cascade)
 
   @@map("invoices")
 }

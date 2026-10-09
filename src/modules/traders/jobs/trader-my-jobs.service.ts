@@ -755,9 +755,7 @@ const hasFinalPaymentRequest = (job: {
 
 /** Direct Trader job: the paid upfront invoice was the full service (a site-visit invoice only covers the visit). */
 const isPaidUpfrontInFull = (job: MyJobRow) =>
-  job.booking?.invoice?.status === 'PAID' &&
-  !job.booking.invoice.paymentRequestId &&
-  !job.siteVisitRequested;
+  job.booking?.invoice?.status === 'PAID' && !job.siteVisitRequested;
 
 /** Job status on finish — stays PAYMENT_PENDING until the customer has paid the full amount. */
 const jobStatusAfterFinish = async (job: MyJobRow, traderId: string) => {
@@ -797,38 +795,30 @@ const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderConte
 };
 
 /**
- * Invoice for the FULL_JOB request so the customer pays it through the standard invoice checkout
- * (invoiceId). One invoice per booking — a booking with an upfront invoice keeps paying by paymentRequestId.
+ * Sent requests are auto-accepted: each one gets its own UNPAID invoice, so the customer pays every
+ * request (final payment, installment, site visit fee) through the standard invoice checkout (invoiceId).
  */
-const createPaymentRequestInvoice = (
-  tx: Prisma.TransactionClient,
-  job: MyJobRow,
-  request: TraderPaymentRequest
-) =>
-  job.booking && !job.booking.invoice
-    ? tx.invoice.create({
-        data: {
-          bookingId: job.booking.id,
-          invoiceNumber: generateInvoiceNumber(),
-          serviceCharge: request.serviceCharge,
-          platformFee: request.platformFee,
-          tax: request.vatAmount,
-          totalAmount: request.totalAmount,
-          currencyCode: request.currencyCode,
-          status: InvoiceStatus.UNPAID,
-          paymentRequestId: request.id,
-        },
-      })
-    : null;
+const createPaymentRequestInvoice = (tx: Prisma.TransactionClient, request: TraderPaymentRequest) =>
+  tx.invoice.create({
+    data: {
+      invoiceNumber: generateInvoiceNumber(),
+      serviceCharge: request.serviceCharge,
+      platformFee: request.platformFee,
+      tax: request.vatAmount,
+      totalAmount: request.totalAmount,
+      currencyCode: request.currencyCode,
+      status: InvoiceStatus.UNPAID,
+      paymentRequestId: request.id,
+    },
+  });
 
-const createFullJobPaymentRequest = async (
+const createPaymentRequest = async (
   tx: Prisma.TransactionClient,
-  job: MyJobRow,
   data: Prisma.TraderPaymentRequestUncheckedCreateInput
 ) => {
   const request = await tx.traderPaymentRequest.create({ data });
-  await createPaymentRequestInvoice(tx, job, request);
-  return request;
+  const invoice = await createPaymentRequestInvoice(tx, request);
+  return { ...request, invoiceId: invoice.id };
 };
 
 const emitTraderJobProgress = (
@@ -1500,8 +1490,14 @@ const buildCancelledTimeline = (job: MyJobRow, cancelledAt: Date) => {
 
 const resolvePaymentStatusLabel = (job: MyJobRow): string => {
   const invoice = job.booking?.invoice;
-  if (invoice?.status === 'PAID') return 'PAID';
   if (invoice?.status === 'REFUNDED') return 'REFUNDED';
+  const finalRequest = job.paymentRequests.find(
+    (p) =>
+      p.type === TraderPaymentRequestType.FULL_JOB &&
+      p.status !== TraderPaymentRequestStatus.CANCELLED
+  );
+  if (finalRequest) return finalRequest.status === TraderPaymentRequestStatus.PAID ? 'PAID' : 'PENDING';
+  if (invoice?.status === 'PAID') return 'PAID';
   const latestPayment = invoice?.payments?.[0];
   if (latestPayment?.status === 'COMPLETED') return 'PAID';
   if (latestPayment?.status === 'FAILED') return 'FAILED';
@@ -1821,7 +1817,7 @@ export const finishJob = async (userId: string, jobId: string) => {
       where: { id: job.id },
       data: { status: nextStatus },
     });
-    return request ? createFullJobPaymentRequest(tx, job, request.data) : null;
+    return request ? createPaymentRequest(tx, request.data) : null;
   });
   emitTraderJobProgress(job, userId, nextStatus, !paymentRequest);
   if (paymentRequest) await notifyPaymentRequested(trader.id, paymentRequest);
@@ -1966,7 +1962,7 @@ export const submitJobCompletion = async (
       where: { id: job.id },
       data: { status: nextStatus },
     });
-    return request ? createFullJobPaymentRequest(tx, job, request.data) : null;
+    return request ? createPaymentRequest(tx, request.data) : null;
   });
   emitTraderJobProgress(job, userId, nextStatus, !paymentRequest);
   if (paymentRequest) await notifyPaymentRequested(trader.id, paymentRequest);
@@ -2068,6 +2064,7 @@ const notifyPaymentRequested = async (
   traderId: string,
   pr: {
     id: string;
+    invoiceId: string;
     jobId: string;
     customerId: string;
     type: TraderPaymentRequestType;
@@ -2082,7 +2079,7 @@ const notifyPaymentRequested = async (
   emitPaymentRequested({
     customerId: pr.customerId,
     jobId: pr.jobId,
-    paymentRequestId: pr.id,
+    invoiceId: pr.invoiceId,
     type: pr.type,
     amount: money(pr.totalAmount) ?? 0,
     currencyCode: pr.currencyCode,
@@ -3063,23 +3060,21 @@ export const requestPartialPayment = async (
       });
     }
 
-    return tx.traderPaymentRequest.create({
-      data: {
-        jobId,
-        traderId: trader.id,
-        customerId: job.customerId,
-        type: TraderPaymentRequestType.PARTIAL,
-        status: TraderPaymentRequestStatus.SENT,
-        description,
-        serviceCharge: amount,
-        materialsTotal: 0,
-        siteVisitFee: 0,
-        platformFee: 0,
-        vatRate: 0,
-        vatAmount: 0,
-        totalAmount: amount,
-        currencyCode: currency.currencyCode,
-      },
+    return createPaymentRequest(tx, {
+      jobId,
+      traderId: trader.id,
+      customerId: job.customerId,
+      type: TraderPaymentRequestType.PARTIAL,
+      status: TraderPaymentRequestStatus.SENT,
+      description,
+      serviceCharge: amount,
+      materialsTotal: 0,
+      siteVisitFee: 0,
+      platformFee: 0,
+      vatRate: 0,
+      vatAmount: 0,
+      totalAmount: amount,
+      currencyCode: currency.currencyCode,
     });
   });
 
@@ -3101,6 +3096,7 @@ export const requestPartialPayment = async (
 
   return {
     paymentRequestId: paymentRequest.id,
+    invoiceId: paymentRequest.invoiceId,
     id: job.id,
     jobRef: job.jobRef,
     title: job.title,
@@ -3155,13 +3151,13 @@ export const requestPayment = async (userId: string, jobId: string) => {
     throw new ConflictError('Payment already received for this job.');
   }
   if (existing) {
-    // Requests sent before invoices were linked — attach one so the customer can pay by invoiceId.
-    await createPaymentRequestInvoice(prisma, job, existing)?.catch((error) => {
-      const raced = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
-      if (!raced) throw error;
+    const invoice = await prisma.invoice.findUnique({
+      where: { paymentRequestId: existing.id },
+      select: { id: true },
     });
     return {
       paymentRequestId: existing.id,
+      invoiceId: invoice?.id ?? null,
       jobRef: job.jobRef,
       ...computePaymentBreakdown(job),
       totalAmount: money(existing.totalAmount),
@@ -3175,7 +3171,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
   const { breakdown, data } = await buildFullJobPaymentRequestData(job, trader);
 
   const paymentRequest = await prisma.$transaction(async (tx) => {
-    const pr = await createFullJobPaymentRequest(tx, job, data);
+    const pr = await createPaymentRequest(tx, data);
     await tx.job.update({
       where: { id: jobId },
       data: { status: JobStatus.PAYMENT_PENDING },
@@ -3187,6 +3183,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
 
   return {
     paymentRequestId: paymentRequest.id,
+    invoiceId: paymentRequest.invoiceId,
     jobRef: job.jobRef,
     ...breakdown,
     status: 'SENT',
@@ -3264,8 +3261,8 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
     traderCountry: trader.user.country ?? trader.country,
   });
 
-  const paymentRequest = await prisma.traderPaymentRequest.create({
-    data: {
+  const paymentRequest = await prisma.$transaction((tx) =>
+    createPaymentRequest(tx, {
       jobId,
       traderId: trader.id,
       customerId: job.customerId,
@@ -3279,13 +3276,14 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
       vatAmount: breakdown.vatAmount,
       totalAmount: breakdown.totalAmount,
       currencyCode: currency.currencyCode,
-    },
-  });
+    })
+  );
 
   await notifyPaymentRequested(trader.id, paymentRequest);
 
   return {
     paymentRequestId: paymentRequest.id,
+    invoiceId: paymentRequest.invoiceId,
     type: TraderPaymentRequestType.SITE_VISIT_FEE,
     jobRef: job.jobRef,
     siteVisitFee: breakdown.siteVisitFee,

@@ -667,6 +667,69 @@ export const getCustomerPaymentHeaderStats = async () => {
   };
 };
 
+const invoiceBookingInclude = {
+  job: { include: { category: true } },
+  customer: { include: { addresses: true } },
+  trader: { include: { user: true } },
+} satisfies Prisma.BookingInclude;
+
+/** Trader payment-request invoices have no booking — job / trader / customer come through the request. */
+const invoiceRelationsInclude = {
+  booking: { include: invoiceBookingInclude },
+  paymentRequest: {
+    include: {
+      job: {
+        include: {
+          category: true,
+          customer: { include: { addresses: true } },
+          booking: { select: { bookingRef: true, scheduledDate: true, status: true } },
+        },
+      },
+      trader: { include: { user: true } },
+    },
+  },
+} satisfies Prisma.InvoiceInclude;
+
+type InvoiceWithRelations = Prisma.InvoiceGetPayload<{ include: typeof invoiceRelationsInclude }>;
+
+const resolveInvoiceRelations = (invoice: InvoiceWithRelations | null | undefined) => {
+  const booking = invoice?.booking ?? null;
+  const request = invoice?.paymentRequest ?? null;
+  const requestBooking = request?.job.booking ?? null;
+  return {
+    job: booking?.job ?? request?.job ?? null,
+    customer: booking?.customer ?? request?.job.customer ?? null,
+    trader: booking?.trader ?? request?.trader ?? null,
+    bookingRef: booking?.bookingRef ?? requestBooking?.bookingRef ?? null,
+    bookingDate: booking?.scheduledDate ?? requestBooking?.scheduledDate ?? null,
+    bookingStatus: booking?.status ?? requestBooking?.status ?? null,
+  };
+};
+
+/** Invoice filter by trader / customer / category across booking and payment-request invoices. */
+const invoiceOwnerWhere = (filter: {
+  traderId?: string;
+  customerId?: string;
+  categoryId?: string;
+}): Prisma.InvoiceWhereInput => ({
+  OR: [
+    {
+      booking: {
+        ...(filter.traderId ? { traderId: filter.traderId } : {}),
+        ...(filter.customerId ? { customerId: filter.customerId } : {}),
+        ...(filter.categoryId ? { job: { categoryId: filter.categoryId } } : {}),
+      },
+    },
+    {
+      paymentRequest: {
+        ...(filter.traderId ? { traderId: filter.traderId } : {}),
+        ...(filter.customerId ? { customerId: filter.customerId } : {}),
+        ...(filter.categoryId ? { job: { categoryId: filter.categoryId } } : {}),
+      },
+    },
+  ],
+});
+
 const TRANSACTION_SORT_MAP: Record<string, (dir: SortDir) => Prisma.PaymentOrderByWithRelationInput | Prisma.PaymentOrderByWithRelationInput[]> = {
   createdAt: (dir) => ({ createdAt: dir }),
   transactionRef: (dir) => ({ transactionRef: nullsLast(dir) }),
@@ -710,12 +773,7 @@ export const listPaymentTransactions = async (filters: PaymentTransactionQueryFi
 
   if (filters.customerId) where.userId = filters.customerId;
   if (filters.traderId || filters.categoryId) {
-    where.invoice = {
-      booking: {
-        ...(filters.traderId ? { traderId: filters.traderId } : {}),
-        ...(filters.categoryId ? { job: { categoryId: filters.categoryId } } : {}),
-      },
-    };
+    where.invoice = invoiceOwnerWhere({ traderId: filters.traderId, categoryId: filters.categoryId });
   }
   const createdAt = dateRangeWhere(filters.from, filters.to);
   if (createdAt) where.createdAt = createdAt;
@@ -745,29 +803,15 @@ export const listPaymentTransactions = async (filters: PaymentTransactionQueryFi
             fullName: true,
           },
         },
-        invoice: {
-          include: {
-            booking: {
-              include: {
-                job: {
-                  include: { category: true },
-                },
-                trader: {
-                  include: { user: true },
-                },
-              },
-            },
-          },
-        },
+        invoice: { include: invoiceRelationsInclude },
       },
     }),
   ]);
 
   const formattedTransactions = await Promise.all(
     payments.map(async (p) => {
-      const booking = p.invoice?.booking;
-      const job = booking?.job;
-      const traderUser = booking?.trader?.user;
+      const { job, trader, bookingRef } = resolveInvoiceRelations(p.invoice);
+      const traderUser = trader?.user;
       const currencyCode = p.currencyCode;
 
       return {
@@ -782,14 +826,14 @@ export const listPaymentTransactions = async (filters: PaymentTransactionQueryFi
         },
         jobBooking: {
           title: job?.title ?? null,
-          bookingRef: booking?.bookingRef ?? null,
+          bookingRef,
           categoryName: job?.category?.name ?? null,
         },
-        trader: booking?.traderId
+        trader: trader
           ? {
-              id: booking.traderId,
+              id: trader.id,
               fullName: traderUser?.fullName ?? null,
-              traderCode: booking.trader?.traderCode ?? null,
+              traderCode: trader.traderCode ?? null,
             }
           : null,
         serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 0,
@@ -828,16 +872,7 @@ export const getTransactionById = async (id: string) => {
       user: {
         include: { addresses: true },
       },
-      invoice: {
-        include: {
-          booking: {
-            include: {
-              job: { include: { category: true } },
-              trader: { include: { user: true } },
-            },
-          },
-        },
-      },
+      invoice: { include: invoiceRelationsInclude },
     },
   });
 
@@ -845,9 +880,8 @@ export const getTransactionById = async (id: string) => {
     throw new NotFoundError('Payment transaction not found.');
   }
 
-  const booking = p.invoice?.booking;
-  const job = booking?.job;
-  const traderUser = booking?.trader?.user;
+  const { job, trader, bookingRef, bookingDate, bookingStatus } = resolveInvoiceRelations(p.invoice);
+  const traderUser = trader?.user;
   const primaryAddress = p.user.addresses.find((a) => a.isDefault) || p.user.addresses[0];
 
   const currencyCode = p.currencyCode;
@@ -863,12 +897,12 @@ export const getTransactionById = async (id: string) => {
     transactionDate: p.paidAt || p.createdAt,
     jobBookingInfo: {
       title: job?.title ?? null,
-      jobRef: booking?.bookingRef ?? null,
+      jobRef: bookingRef,
       categoryName: job?.category?.name ?? null,
       customerName: p.user.fullName,
       traderName: traderUser?.fullName ?? null,
-      bookingDate: booking?.scheduledDate ? booking.scheduledDate.toISOString().split('T')[0] : null,
-      jobStatus: booking?.status ?? null,
+      bookingDate: bookingDate ? bookingDate.toISOString().split('T')[0] : null,
+      jobStatus: bookingStatus,
     },
     paymentAmountBreakdown: {
       serviceCharge: p.serviceCharge ? Number(p.serviceCharge) : 0,
@@ -910,6 +944,7 @@ export const listBillingInvoices = async (filters: InvoiceQueryFilters) => {
     where.OR = [
       { invoiceNumber: { contains: search, mode: 'insensitive' } },
       { booking: { customer: { fullName: { contains: search, mode: 'insensitive' } } } },
+      { paymentRequest: { job: { customer: { fullName: { contains: search, mode: 'insensitive' } } } } },
     ];
   }
 
@@ -918,10 +953,7 @@ export const listBillingInvoices = async (filters: InvoiceQueryFilters) => {
   }
 
   if (filters.customerId || filters.traderId) {
-    where.booking = {
-      ...(filters.customerId ? { customerId: filters.customerId } : {}),
-      ...(filters.traderId ? { traderId: filters.traderId } : {}),
-    };
+    where.AND = [invoiceOwnerWhere({ customerId: filters.customerId, traderId: filters.traderId })];
   }
   const invoiceDate = dateRangeWhere(filters.from, filters.to);
   if (invoiceDate) where.createdAt = invoiceDate;
@@ -941,31 +973,26 @@ export const listBillingInvoices = async (filters: InvoiceQueryFilters) => {
         { sortBy: 'invoiceDate', sortOrder: 'desc' },
         { id: 'asc' }
       ),
-      include: {
-        booking: {
-          include: {
-            job: true,
-            customer: true,
-            trader: { include: { user: true } },
-          },
-        },
-      },
+      include: invoiceRelationsInclude,
     }),
   ]);
 
   const formattedInvoices = await Promise.all(
-    invoices.map(async (inv) => ({
-      id: inv.id,
-      invoiceNumber: inv.invoiceNumber ?? null,
-      customerName: inv.booking?.customer?.fullName ?? null,
-      jobBookingTitle: inv.booking?.job?.title ?? null,
-      traderName: inv.booking?.trader?.user?.fullName ?? null,
-      invoiceDate: inv.createdAt,
-      currencyCode: inv.currencyCode,
-      amount: Number(inv.totalAmount),
-      amountMoney: await toHistoricalMoney(inv.totalAmount, inv.currencyCode),
-      status: inv.status,
-    }))
+    invoices.map(async (inv) => {
+      const { job, customer, trader } = resolveInvoiceRelations(inv);
+      return {
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber ?? null,
+        customerName: customer?.fullName ?? null,
+        jobBookingTitle: job?.title ?? null,
+        traderName: trader?.user?.fullName ?? null,
+        invoiceDate: inv.createdAt,
+        currencyCode: inv.currencyCode,
+        amount: Number(inv.totalAmount),
+        amountMoney: await toHistoricalMoney(inv.totalAmount, inv.currencyCode),
+        status: inv.status,
+      };
+    })
   );
 
   return {
@@ -982,28 +1009,14 @@ export const listBillingInvoices = async (filters: InvoiceQueryFilters) => {
 export const getInvoiceById = async (id: string) => {
   const inv = await prisma.invoice.findUnique({
     where: { id },
-    include: {
-      payments: true,
-      booking: {
-        include: {
-          job: true,
-          customer: {
-            include: { addresses: true },
-          },
-          trader: {
-            include: { user: true },
-          },
-        },
-      },
-    },
+    include: { ...invoiceRelationsInclude, payments: true },
   });
 
   if (!inv) {
     throw new NotFoundError('Invoice record not found.');
   }
 
-  const customer = inv.booking?.customer;
-  const trader = inv.booking?.trader;
+  const { job, customer, trader, bookingRef } = resolveInvoiceRelations(inv);
   const traderUser = trader?.user;
   const payment = inv.payments[0];
   const primaryAddress = customer?.addresses.find((a) => a.isDefault) || customer?.addresses[0];
@@ -1015,7 +1028,7 @@ export const getInvoiceById = async (id: string) => {
     invoiceNumber: inv.invoiceNumber ?? null,
     invoiceDate: inv.createdAt,
     currencyCode,
-    bookingRef: inv.booking?.bookingRef ?? null,
+    bookingRef,
     companyHeader: {
       title: 'BRISK MARKETPLACE',
       companyAddress: 'BRISK Services Ltd · 100 City Road, London EC1V 2NX',
@@ -1039,7 +1052,7 @@ export const getInvoiceById = async (id: string) => {
         }
       : null,
     serviceItem: {
-      title: inv.booking?.job?.title ?? null,
+      title: job?.title ?? null,
       description: 'On-site certified labor & inspection charges',
       subtotal: Number(inv.serviceCharge),
       subtotalMoney: await toHistoricalMoney(inv.serviceCharge, currencyCode),
@@ -1118,11 +1131,7 @@ export const listRefundsQueue = async (filters: RefundQueryFilters) => {
         user: true,
         payment: {
           include: {
-            invoice: {
-              include: {
-                booking: { include: { job: true } },
-              },
-            },
+            invoice: { include: invoiceRelationsInclude },
           },
         },
       },
@@ -1135,7 +1144,7 @@ export const listRefundsQueue = async (filters: RefundQueryFilters) => {
       refundRef: r.refundRef,
       transactionRef: r.transactionRef ?? null,
       customerName: r.user.fullName,
-      jobBookingTitle: r.payment?.invoice?.booking?.job?.title ?? null,
+      jobBookingTitle: resolveInvoiceRelations(r.payment?.invoice).job?.title ?? null,
       currencyCode: r.currencyCode,
       originalAmount: Number(r.originalAmount),
       originalAmountMoney: await toHistoricalMoney(r.originalAmount, r.currencyCode),

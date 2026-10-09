@@ -103,9 +103,7 @@ const getTraderRevenue = async (traderId: string): Promise<number> => {
     _sum: { amount: true },
     where: {
       status: 'COMPLETED',
-      invoice: {
-        booking: { traderId },
-      },
+      invoice: { OR: [{ booking: { traderId } }, { paymentRequest: { traderId } }] },
     },
   });
   return result._sum.amount ? Number(result._sum.amount) : 0;
@@ -209,7 +207,7 @@ export const getTraderDirectoryStats = async (filters: TraderStatsFilters = {}) 
     _sum: { amount: true },
     where: {
       status: 'COMPLETED',
-      invoice: { is: { booking: { is: {} } } },
+      invoice: { is: { OR: [{ booking: { is: {} } }, { paymentRequest: { is: {} } }] } },
     },
   });
 
