@@ -272,7 +272,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - `isPartPayment` — true when the trader billed in installments (open Installment Payments screen)
  *       - **Pay routing** (status `PAYMENT PENDING`):
  *         `invoiceId` set (statusLabel `Payment Pending`, upfront invoice) → `GET /invoices/{invoiceId}` + `POST /payments/intent`;
- *         `paymentRequestId` set (statusLabel `Awaiting Payout`, trader finished) → `GET /payment-requests/{paymentRequestId}` +
+ *         `paymentRequestId` set (statusLabel `Payment Pending`, trader finished) → `GET /payment-requests/{paymentRequestId}` +
  *         `POST /payment-requests/{paymentRequestId}/payment-intent`. Both null = nothing to pay.
  *       - `downloadUrl` — invoice PDF path once the trader finished the job, else null
  *     parameters:
@@ -567,7 +567,7 @@ router.get('/:id/details', ...customerOnly, validate(jobIdParamSchema), controll
  *                 category: DRAINAGE & SEWER UNBLOCKING
  *                 photos: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/sink.jpg']
  *                 status: PAYMENT PENDING
- *                 statusBadge: Awaiting Payout
+ *                 statusBadge: Payment Pending
  *                 completedAt: '2026-10-05T13:30:23.583Z'
  *                 cancelledAt: null
  *                 cancellationReason: null

@@ -215,7 +215,7 @@
  *         status: { $ref: '#/components/schemas/JobStatus' }
  *         statusBadge:
  *           type: string
- *           enum: [Draft, Open, Active, Completed, Awaiting Payout, Cancelled]
+ *           enum: [Draft, Open, Active, Completed, Payment Pending, Cancelled]
  *           description: UI badge aligned with trader My Jobs
  *         scheduledDate: { type: string, format: date-time, description: Empty string when unset }
  *         qaFormAnswers: { type: object, description: Raw answers keyed by qaFormSchema field id }

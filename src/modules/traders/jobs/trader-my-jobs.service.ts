@@ -298,7 +298,7 @@ const statusBadgeFor = (
         break;
     }
   }
-  if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
+  if (status === JobStatus.PAYMENT_PENDING) return 'Payment Pending';
   if (status === JobStatus.COMPLETED) return 'Completed';
   if (ACTIVE_JOB_STATUSES.includes(status)) return 'Active';
   return 'Open';

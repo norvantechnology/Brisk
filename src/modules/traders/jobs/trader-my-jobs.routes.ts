@@ -491,7 +491,7 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *
  *       **`isPartPayment`:**
  *       - `false` → Mark as Finished: save proof + finish job → `flowStatus=COMPLETED`, `canRequestPayment=true`.
- *         Job `status` becomes `PAYMENT_PENDING` while a balance is unpaid (customer sees Awaiting Payout,
+ *         Job `status` becomes `PAYMENT_PENDING` while a balance is unpaid (customer sees Payment Pending,
  *         Active tab) and `COMPLETED` only once fully paid. Then call `POST .../request-payment`.
  *       - `true` → Partial path: save proof only; job stays ACTIVE → then call
  *         `POST .../request-partial-payment` with `amount` + `description`

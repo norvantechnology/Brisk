@@ -63,7 +63,7 @@ export const customerStatusBadgeFor = (
     return 'Cancelled';
   }
   if (isAwaitingUpfrontPayment({ status, booking: { finishedAt } })) return 'Payment Pending';
-  if (status === JobStatus.PAYMENT_PENDING) return 'Awaiting Payout';
+  if (status === JobStatus.PAYMENT_PENDING) return 'Payment Pending';
   if (status === JobStatus.COMPLETED) return 'Completed';
   if (
     status === JobStatus.ACCEPTED ||

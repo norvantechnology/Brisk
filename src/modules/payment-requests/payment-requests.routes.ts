@@ -143,12 +143,12 @@ router.get(
  * @swagger
  * /payment-requests/{id}:
  *   get:
- *     summary: One trader payment request (Payment Details screen for Awaiting Payout)
+ *     summary: One trader payment request (Payment Details screen for Payment Pending)
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Use when the My Jobs card has `paymentRequestId` (status label "Awaiting Payout",
+ *       Use when the My Jobs card has `paymentRequestId` (status label "Payment Pending",
  *       `invoiceId` is null). Provider card → `trader`, breakdown → `serviceCharge`,
  *       `materialsTotal`, `siteVisitFee`, `platformFee`, `vatAmount`, `totalAmount`.
  *       Pay → `POST /payment-requests/{id}/payment-intent` then `/confirm`.
