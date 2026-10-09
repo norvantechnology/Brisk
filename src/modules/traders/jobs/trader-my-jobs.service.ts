@@ -622,7 +622,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
       (Boolean(visit) && !assignedToThis));
   const canRequestPayment =
     assignedToThis &&
-    job.status !== JobStatus.PAYMENT_PENDING &&
+    !hasFinalPaymentRequest(job) &&
     (job.status === JobStatus.COMPLETED || Boolean(bookingFinished));
   const canRequestPartialPayment =
     assignedToThis &&
@@ -737,6 +737,38 @@ const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean
     materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
     siteVisitFee: money(job.siteVisitFee),
     siteVisitOnly: opts?.siteVisitOnly,
+  });
+
+/** Finished job: PAYMENT_PENDING may exist before the trader sends the FULL_JOB request. */
+const hasFinalPaymentRequest = (job: {
+  paymentRequests: { type: TraderPaymentRequestType; status: TraderPaymentRequestStatus }[];
+}) =>
+  job.paymentRequests.some(
+    (p) =>
+      p.type === TraderPaymentRequestType.FULL_JOB &&
+      p.status !== TraderPaymentRequestStatus.CANCELLED
+  );
+
+/** Job status on finish — stays PAYMENT_PENDING until the customer has paid the full amount. */
+const jobStatusAfterFinish = async (job: MyJobRow, traderId: string) => {
+  const alreadyPaid = sumPaidAmount(await loadJobPaymentRequests(job.id, traderId));
+  return computePaymentBreakdown(job).totalAmount - alreadyPaid > 0
+    ? JobStatus.PAYMENT_PENDING
+    : JobStatus.COMPLETED;
+};
+
+const emitTraderJobProgress = (job: MyJobRow, traderUserId: string, status: JobStatus) =>
+  emitJobStatusChanged({
+    jobId: job.id,
+    jobRef: job.jobRef ?? undefined,
+    status,
+    customerId: job.customerId,
+    traderId: job.traderId,
+    traderUserId,
+    bookingId: job.booking?.id ?? null,
+    title: job.title,
+    actor: 'TRADER',
+    at: new Date().toISOString(),
   });
 
 const myJobCardSelect = (traderId: string) =>
@@ -1011,6 +1043,12 @@ const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
       primaryAction = 'UPLOAD_PROOF';
     } else if (job.booking?.arrivedAt && !job.booking.finishedAt) {
       primaryAction = 'FINISH';
+    } else if (
+      job.status === JobStatus.PAYMENT_PENDING &&
+      job.booking?.finishedAt &&
+      !hasFinalPaymentRequest(job)
+    ) {
+      primaryAction = 'REQUEST_PAYMENT';
     } else if (job.status === JobStatus.PAYMENT_PENDING || flowStatus === 'AWAITING_PAYMENT') {
       primaryAction = 'AWAITING_PAYOUT';
     } else if (job.status === JobStatus.COMPLETED || flowStatus === 'COMPLETED') {
@@ -1659,6 +1697,7 @@ export const arriveAtJob = async (userId: string, jobId: string) => {
       data: { status: JobStatus.IN_PROGRESS },
     }),
   ]);
+  emitTraderJobProgress(job, userId, JobStatus.IN_PROGRESS);
 
   return getMyJobDetail(userId, jobId);
 };
@@ -1685,6 +1724,7 @@ export const finishJob = async (userId: string, jobId: string) => {
   }
 
   const now = new Date();
+  const nextStatus = await jobStatusAfterFinish(job, trader.id);
   await prisma.$transaction([
     prisma.booking.update({
       where: { id: job.booking.id },
@@ -1692,9 +1732,10 @@ export const finishJob = async (userId: string, jobId: string) => {
     }),
     prisma.job.update({
       where: { id: job.id },
-      data: { status: JobStatus.COMPLETED },
+      data: { status: nextStatus },
     }),
   ]);
+  emitTraderJobProgress(job, userId, nextStatus);
 
   return getMyJobDetail(userId, jobId);
 };
@@ -1702,7 +1743,7 @@ export const finishJob = async (userId: string, jobId: string) => {
 /**
  * Job Progress screen — Submit & Next.
  *
- * isPartPayment: false → save proof + finish job (COMPLETED).
+ * isPartPayment: false → save proof + finish job (PAYMENT_PENDING until fully paid, else COMPLETED).
  * isPartPayment: true  → save proof only; job stays ACTIVE/IN_PROGRESS.
  *   Then app calls POST .../request-partial-payment with amount + description
  *   (Partial Payment screen has no image upload — images already saved here).
@@ -1816,6 +1857,7 @@ export const submitJobCompletion = async (
   }
 
   const now = new Date();
+  const nextStatus = await jobStatusAfterFinish(job, trader.id);
   await prisma.$transaction(async (tx) => {
     await tx.jobPhoto.createMany({
       data: photoUrls.map((photoUrl) => ({
@@ -1831,9 +1873,10 @@ export const submitJobCompletion = async (
     });
     await tx.job.update({
       where: { id: job.id },
-      data: { status: JobStatus.COMPLETED },
+      data: { status: nextStatus },
     });
   });
+  emitTraderJobProgress(job, userId, nextStatus);
 
   const fresh = await assertMyJob(trader.id, jobId);
   const payload = buildPaymentRequestScreenPayload(fresh);
@@ -1853,6 +1896,7 @@ const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
   const paymentStatus = resolvePaymentStatusLabel(job);
   const completedAt = job.booking?.finishedAt ?? job.updatedAt;
   const invoice = job.booking?.invoice;
+  const finalRequested = hasFinalPaymentRequest(job);
 
   return {
     id: job.id,
@@ -1860,10 +1904,8 @@ const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
     title: job.title,
     status: job.status,
     statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, 'COMPLETED'),
-    flowStatus: (job.status === JobStatus.PAYMENT_PENDING
-      ? 'AWAITING_PAYMENT'
-      : 'COMPLETED') as FlowStatus,
-    statusLabel: job.status === JobStatus.PAYMENT_PENDING ? 'Awaiting Payment' : 'Completed',
+    flowStatus: (finalRequested ? 'AWAITING_PAYMENT' : 'COMPLETED') as FlowStatus,
+    statusLabel: finalRequested ? 'Awaiting Payment' : 'Completed',
     completedAt,
     location: {
       fullAddress: formatFullAddress(job),
@@ -1872,8 +1914,7 @@ const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
     paymentStatus,
     isPartPayment: paymentStatus === 'PARTIALLY_PAID' || paymentStatus === 'PENDING',
     canRequestPayment:
-      job.status === JobStatus.COMPLETED ||
-      (Boolean(job.booking?.finishedAt) && job.status !== JobStatus.PAYMENT_PENDING),
+      !finalRequested && (job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt)),
     invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };
@@ -3009,7 +3050,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
 
-  if (job.status === JobStatus.PAYMENT_PENDING) {
+  if (hasFinalPaymentRequest(job)) {
     throw new ConflictError('Payment already requested for this job.');
   }
   if (job.status !== JobStatus.COMPLETED && !job.booking?.finishedAt) {

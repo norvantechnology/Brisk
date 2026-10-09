@@ -449,6 +449,9 @@ router.post('/mine/:id/arrive', validate(myJobIdParamSchema), controller.arriveA
  * /traders/jobs/mine/{id}/finish:
  *   post:
  *     summary: Finish job
+ *     description: |
+ *       Marks the work finished. Job `status` becomes `PAYMENT_PENDING` while a balance is unpaid
+ *       (then call `POST .../request-payment`), or `COMPLETED` if already fully paid.
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -487,7 +490,9 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *       Body accepts either `photoUrl` (single) or `photoUrls` (array). At least one is required.
  *
  *       **`isPartPayment`:**
- *       - `false` → Mark as Finished: save proof + complete job → `flowStatus=COMPLETED`
+ *       - `false` → Mark as Finished: save proof + finish job → `flowStatus=COMPLETED`, `canRequestPayment=true`.
+ *         Job `status` becomes `PAYMENT_PENDING` while a balance is unpaid (customer sees Awaiting Payout,
+ *         Active tab) and `COMPLETED` only once fully paid. Then call `POST .../request-payment`.
  *       - `true` → Partial path: save proof only; job stays ACTIVE → then call
  *         `POST .../request-partial-payment` with `amount` + `description`
  *         (images already on Submit screen; Partial Payment screen needs no upload)
@@ -875,9 +880,9 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Payment Request Sent payload
+ *         description: Payment Request Sent payload (creates a FULL_JOB request; job stays/becomes PAYMENT_PENDING)
  *       409:
- *         description: Already requested
+ *         description: A full-job payment request was already sent for this job
  */
 router.post(
   '/mine/:id/request-payment',

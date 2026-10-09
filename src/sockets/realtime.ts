@@ -416,6 +416,8 @@ const jobStatusCopy = (status: string, jobTitle: string, actor?: string) => {
       };
     case 'COMPLETED':
       return { title: 'Job completed', message: `"${jobTitle}" is completed.` };
+    case 'PAYMENT_PENDING':
+      return { title: 'Work finished', message: `"${jobTitle}" is finished and awaiting payment.` };
     default:
       return {
         title: 'Job status updated',
