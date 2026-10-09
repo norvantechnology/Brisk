@@ -124,9 +124,88 @@ router.get('/offers/analytics', controller.getAnalytics);
  *         name: to
  *         schema: { type: string, format: date }
  *         description: Custom range end (`dateRange=custom`).
+ *       - in: query
+ *         name: sortBy
+ *         description: |
+ *           Any table column. `status` = effective status (ACTIVE past validUntil sorts as EXPIRED) ·
+ *           `traderName` = business name, else trader full name · `categoryName` = first linked category ·
+ *           `claimsCount` = claim rows. Empty values are always last.
+ *         schema:
+ *           type: string
+ *           enum: [offerCode, title, offerType, couponCode, discountType, discountValue, traderName, categoryName, validFrom, validUntil, status, claimsCount, revenueGenerated, viewsCount, createdAt, updatedAt]
+ *           default: createdAt
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
  *         description: Paginated offer list (`data.offers` + `data.meta`).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Offers retrieved successfully.
+ *               data:
+ *                 meta: { total: 12, page: 1, limit: 10, totalPages: 2 }
+ *                 offers:
+ *                   - id: 0d6b1f6e-0000-4000-8000-000000000060
+ *                     offerId: 0d6b1f6e-0000-4000-8000-000000000060
+ *                     offerCode: OFF-1004
+ *                     offerType: TRADER
+ *                     title: 10% off Pest Control
+ *                     badgeTag: special_local_promo
+ *                     couponCode: PEST10BRISK
+ *                     shortDescription: Save on pest control this month
+ *                     fullDescription: Valid for residential properties only.
+ *                     description: Valid for residential properties only.
+ *                     bannerImageUrl: 'https://api.brisk.ie/uploads/offers/pest.jpg'
+ *                     discountType: PERCENTAGE
+ *                     discountValue: 10
+ *                     currencyCode: EUR
+ *                     discountLabel: 10% off
+ *                     validFrom: '2026-08-01T00:00:00.000Z'
+ *                     validUntil: '2026-12-31T23:59:59.000Z'
+ *                     status: ACTIVE
+ *                     storedStatus: ACTIVE
+ *                     claimsCount: 8
+ *                     revenueGenerated: 960
+ *                     viewsCount: 240
+ *                     ctaLabel: Claim Offer
+ *                     ctaAction: CLAIM
+ *                     createdAt: '2026-07-28T09:00:00.000Z'
+ *                     updatedAt: '2026-08-02T12:00:00.000Z'
+ *                     createdBy: null
+ *                     traderId: 4d5e6f70-0000-4000-8000-000000000030
+ *                     trader:
+ *                       id: 4d5e6f70-0000-4000-8000-000000000030
+ *                       businessName: Byrne Pest Control
+ *                       traderType: COMPANY
+ *                       fullName: John Byrne
+ *                       displayName: Byrne Pest Control
+ *                       avgRating: 4.7
+ *                       reviewsCount: 23
+ *                       topRated: true
+ *                       isVerified: true
+ *                       yearsExperience: 10
+ *                       experienceLabel: 10+ Yrs
+ *                       jobsDoneCount: 54
+ *                       city: Dublin
+ *                       country: Ireland
+ *                       location: 'Dublin, Ireland'
+ *                       profilePhotoUrl: null
+ *                       imageUrl: null
+ *                     termsAndConditions: Valid for residential properties only.
+ *                     expiresOn: '2026-12-31T23:59:59.000Z'
+ *                     categoryLabel: Pest Control
+ *                     primaryCategory: { id: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, name: Pest Control, categoryCode: CAT-0007, iconName: pest, iconUrl: 'https://api.brisk.ie/uploads/categories/pest.svg' }
+ *                     categories:
+ *                       - { id: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, name: Pest Control, categoryCode: CAT-0007, iconName: pest, iconUrl: 'https://api.brisk.ie/uploads/categories/pest.svg' }
+ *                     subcategories:
+ *                       - { id: 8a44f8fb-1598-40c9-a658-7f3db5748f14, name: Rodent Control, categoryId: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, siteVisitEnabled: false, siteVisitFee: 0, priceEnabled: true, priceEnteredBy: TRADER }
+ *                     siteVisitEnabled: false
+ *                     priceEnabled: true
+ *                     siteVisitFee: 0
+ *                     priceEnteredBy: TRADER
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *   post:
  *     summary: Create platform offer
  *     tags: ['Admin / Offers']

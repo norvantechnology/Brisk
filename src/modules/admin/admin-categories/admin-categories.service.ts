@@ -10,27 +10,41 @@ import {
 } from './admin-categories.types';
 import { ActorType, Prisma } from '@prisma/client';
 import { serializeCategory, serializeSubcategory } from '../../categories/categories.serializers';
+import { buildListOrderBy, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 
 // ==========================================
 // CATEGORY MASTER SERVICES
 // ==========================================
 
-const CATEGORY_SORT_FIELDS: Record<string, string> = {
-  name: 'name',
-  categoryCode: 'categoryCode',
-  displayOrder: 'displayOrder',
-  status: 'status',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt',
+const CATEGORY_SORT_MAP: Record<string, (dir: SortDir) => Prisma.CategoryOrderByWithRelationInput> = {
+  name: (dir) => ({ name: dir }),
+  categoryCode: (dir) => ({ categoryCode: dir }),
+  urlSlug: (dir) => ({ urlSlug: dir }),
+  displayOrder: (dir) => ({ displayOrder: dir }),
+  status: (dir) => ({ status: dir }),
+  featured: (dir) => ({ featured: dir }),
+  subCategoriesCount: (dir) => ({ subcategories: { _count: dir } }),
+  tradersCount: (dir) => ({ traders: { _count: dir } }),
+  jobsCount: (dir) => ({ jobs: { _count: dir } }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
 };
 
-const SUBCATEGORY_SORT_FIELDS: Record<string, string> = {
-  name: 'name',
-  code: 'code',
-  urlSlug: 'urlSlug',
-  status: 'status',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt',
+const SUBCATEGORY_SORT_MAP: Record<string, (dir: SortDir) => Prisma.SubcategoryOrderByWithRelationInput> = {
+  name: (dir) => ({ name: dir }),
+  code: (dir) => ({ code: { sort: dir, nulls: 'last' } }),
+  urlSlug: (dir) => ({ urlSlug: dir }),
+  categoryName: (dir) => ({ category: { name: dir } }),
+  serviceType: (dir) => ({ serviceType: { sort: dir, nulls: 'last' } }),
+  featured: (dir) => ({ featured: dir }),
+  status: (dir) => ({ status: dir }),
+  siteVisitEnabled: (dir) => ({ siteVisitEnabled: dir }),
+  siteVisitFee: (dir) => ({ siteVisitFee: { sort: dir, nulls: 'last' } }),
+  priceEnabled: (dir) => ({ priceEnabled: dir }),
+  priceEnteredBy: (dir) => ({ priceEnteredBy: dir }),
+  jobsCount: (dir) => ({ jobs: { _count: dir } }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
 };
 
 export const listCategories = async (filters: CategoryQueryFilters) => {
@@ -57,9 +71,13 @@ export const listCategories = async (filters: CategoryQueryFilters) => {
     where.featured = String(filters.featured) === 'true';
   }
 
-  const sortField = CATEGORY_SORT_FIELDS[filters.sortBy ?? ''] ?? 'createdAt';
-  const sortDir: 'asc' | 'desc' = filters.sortOrder === 'asc' ? 'asc' : 'desc';
-  const orderBy = { [sortField]: sortDir } as Prisma.CategoryOrderByWithRelationInput;
+  const orderBy = buildListOrderBy<Prisma.CategoryOrderByWithRelationInput>(
+    filters.sortBy,
+    filters.sortOrder,
+    CATEGORY_SORT_MAP,
+    { sortBy: 'createdAt', sortOrder: resolveSortDir(filters.sortOrder) },
+    { id: 'asc' }
+  );
 
   const [total, categories] = await Promise.all([
     prisma.category.count({ where }),
@@ -283,9 +301,13 @@ export const listSubcategories = async (filters: SubcategoryQueryFilters) => {
     where.featured = String(filters.featured) === 'true';
   }
 
-  const subSortField = SUBCATEGORY_SORT_FIELDS[filters.sortBy ?? ''] ?? 'createdAt';
-  const subSortDir: 'asc' | 'desc' = filters.sortOrder === 'asc' ? 'asc' : 'desc';
-  const subOrderBy = { [subSortField]: subSortDir } as Prisma.SubcategoryOrderByWithRelationInput;
+  const subOrderBy = buildListOrderBy<Prisma.SubcategoryOrderByWithRelationInput>(
+    filters.sortBy,
+    filters.sortOrder,
+    SUBCATEGORY_SORT_MAP,
+    { sortBy: 'createdAt', sortOrder: resolveSortDir(filters.sortOrder) },
+    { id: 'asc' }
+  );
 
   const [total, subcategories] = await Promise.all([
     prisma.subcategory.count({ where }),

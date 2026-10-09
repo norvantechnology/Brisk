@@ -1,6 +1,7 @@
 import { Prisma, TraderDocumentStatus } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { buildPaginationMeta, parsePageLimit } from '../../../utils/pagination';
+import { buildListOrderBy, pageIdsByComputedKey, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import { formatDocumentExpiryDate } from '../../document-rules/document-expiry';
 import {
   DAY_MS,
@@ -19,6 +20,25 @@ export type AdminExpiringDocumentsQuery = {
   traderId?: string;
   page?: number | string;
   limit?: number | string;
+  sortBy?: string;
+  sortOrder?: string;
+};
+
+type ExpiringSortMap = Record<string, (dir: SortDir) => Prisma.TraderDocumentOrderByWithRelationInput | Prisma.TraderDocumentOrderByWithRelationInput[]>;
+
+const EXPIRING_DOCUMENT_SORT_MAP: ExpiringSortMap = {
+  expiryDate: (dir) => ({ expiryDate: { sort: dir, nulls: 'last' } }),
+  daysLeft: (dir) => ({ expiryDate: { sort: dir, nulls: 'last' } }),
+  documentName: (dir) => [{ documentRule: { name: dir } }, { expiryDate: 'asc' }],
+  documentKey: (dir) => [{ documentRule: { documentKey: dir } }, { expiryDate: 'asc' }],
+  scope: (dir) => [{ documentRule: { scope: dir } }, { expiryDate: 'asc' }],
+  required: (dir) => [{ documentRule: { required: dir } }, { expiryDate: 'asc' }],
+  fileName: (dir) => [{ fileName: { sort: dir, nulls: 'last' } }, { expiryDate: 'asc' }],
+  status: (dir) => [{ status: dir }, { expiryDate: 'asc' }],
+  lastReminderStage: (dir) => [{ expiryReminderStage: { sort: dir, nulls: 'last' } }, { expiryDate: 'asc' }],
+  uploadedAt: (dir) => [{ uploadedAt: dir }, { expiryDate: 'asc' }],
+  email: (dir) => [{ trader: { user: { email: dir } } }, { expiryDate: 'asc' }],
+  mobileNumber: (dir) => [{ trader: { user: { mobileNumber: dir } } }, { expiryDate: 'asc' }],
 };
 
 /**
@@ -64,46 +84,85 @@ export const listAllExpiringDocuments = async (query: AdminExpiringDocumentsQuer
   const countIn = (range: Prisma.DateTimeNullableFilter) =>
     prisma.traderDocument.count({ where: { AND: [baseWhere, { expiryDate: range }] } });
 
+  const select = {
+    id: true,
+    documentRuleId: true,
+    fileUrl: true,
+    fileName: true,
+    status: true,
+    expiryDate: true,
+    expiryReminderStage: true,
+    uploadedAt: true,
+    documentRule: {
+      select: {
+        documentKey: true,
+        name: true,
+        scope: true,
+        categoryId: true,
+        required: true,
+        category: { select: { name: true } },
+      },
+    },
+    trader: {
+      select: {
+        id: true,
+        businessName: true,
+        traderType: true,
+        profilePhotoUrl: true,
+        user: {
+          select: { fullName: true, email: true, mobileNumber: true, profilePhotoUrl: true },
+        },
+      },
+    },
+  } satisfies Prisma.TraderDocumentSelect;
+
+  /** Trader name (business name, else full name) and category come from optional values — ranked in memory. */
+  const findPage = async () => {
+    if (query.sortBy === 'traderName' || query.sortBy === 'categoryName') {
+      const candidates = await prisma.traderDocument.findMany({
+        where: listWhere,
+        select: {
+          id: true,
+          uploadedAt: true,
+          documentRule: { select: { category: { select: { name: true } } } },
+          trader: { select: { businessName: true, user: { select: { fullName: true } } } },
+        },
+      });
+      const ids = pageIdsByComputedKey(
+        candidates.map((d) => ({
+          id: d.id,
+          createdAt: d.uploadedAt,
+          traderName: d.trader.businessName || d.trader.user.fullName,
+          categoryName: d.documentRule.category?.name ?? null,
+        })),
+        (r) => (query.sortBy === 'traderName' ? r.traderName : r.categoryName),
+        resolveSortDir(query.sortOrder, 'asc'),
+        skip,
+        limit
+      );
+      const rows = await prisma.traderDocument.findMany({ where: { id: { in: ids } }, select });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      return ids.map((id) => byId.get(id)).filter((r): r is (typeof rows)[number] => Boolean(r));
+    }
+    return prisma.traderDocument.findMany({
+      where: listWhere,
+      orderBy: buildListOrderBy<Prisma.TraderDocumentOrderByWithRelationInput>(
+        query.sortBy,
+        query.sortOrder,
+        EXPIRING_DOCUMENT_SORT_MAP,
+        { sortBy: 'expiryDate', sortOrder: resolveSortDir(query.sortOrder, 'asc') },
+        { id: 'asc' }
+      ),
+      skip,
+      take: limit,
+      select,
+    });
+  };
+
   const [total, docs, expiredCount, expiresTodayCount, expiringSoonCount, traderGroups] =
     await Promise.all([
       prisma.traderDocument.count({ where: listWhere }),
-      prisma.traderDocument.findMany({
-        where: listWhere,
-        orderBy: [{ expiryDate: 'asc' }, { id: 'asc' }],
-        skip,
-        take: limit,
-        select: {
-          id: true,
-          documentRuleId: true,
-          fileUrl: true,
-          fileName: true,
-          status: true,
-          expiryDate: true,
-          expiryReminderStage: true,
-          uploadedAt: true,
-          documentRule: {
-            select: {
-              documentKey: true,
-              name: true,
-              scope: true,
-              categoryId: true,
-              required: true,
-              category: { select: { name: true } },
-            },
-          },
-          trader: {
-            select: {
-              id: true,
-              businessName: true,
-              traderType: true,
-              profilePhotoUrl: true,
-              user: {
-                select: { fullName: true, email: true, mobileNumber: true, profilePhotoUrl: true },
-              },
-            },
-          },
-        },
-      }),
+      findPage(),
       countIn(statusRange.EXPIRED),
       countIn(statusRange.EXPIRES_TODAY),
       countIn(statusRange.EXPIRING_SOON),

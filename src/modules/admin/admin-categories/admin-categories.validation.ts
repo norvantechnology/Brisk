@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
 
 export const createCategorySchema = z.object({
   body: z.object({
@@ -122,6 +123,37 @@ export const updateSubcategorySchema = z.object({
   }),
 });
 
+export const ADMIN_CATEGORY_SORT_FIELDS = [
+  'name',
+  'categoryCode',
+  'urlSlug',
+  'displayOrder',
+  'status',
+  'featured',
+  'subCategoriesCount',
+  'tradersCount',
+  'jobsCount',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+export const ADMIN_SUBCATEGORY_SORT_FIELDS = [
+  'name',
+  'code',
+  'urlSlug',
+  'categoryName',
+  'serviceType',
+  'featured',
+  'status',
+  'siteVisitEnabled',
+  'siteVisitFee',
+  'priceEnabled',
+  'priceEnteredBy',
+  'jobsCount',
+  'createdAt',
+  'updatedAt',
+] as const;
+
 export const categoryFilterSchema = z.object({
   query: z.object({
     page: z.string().optional(),
@@ -129,8 +161,8 @@ export const categoryFilterSchema = z.object({
     search: z.string().optional(),
     status: z.string().optional(),
     featured: z.string().optional(),
-    sortBy: z.enum(['name', 'categoryCode', 'displayOrder', 'status', 'createdAt', 'updatedAt']).optional(),
-    sortOrder: z.enum(['asc', 'desc']).optional(),
+    sortBy: sortByParam(ADMIN_CATEGORY_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }),
 });
 
@@ -143,8 +175,8 @@ export const subcategoryFilterSchema = z.object({
     category_id: z.string().optional(),
     status: z.string().optional(),
     featured: z.string().optional(),
-    sortBy: z.enum(['name', 'code', 'urlSlug', 'status', 'createdAt', 'updatedAt']).optional(),
-    sortOrder: z.enum(['asc', 'desc']).optional(),
+    sortBy: sortByParam(ADMIN_SUBCATEGORY_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }).transform((query) => ({
     ...query,
     categoryId: query.categoryId ?? query.category_id,

@@ -1,22 +1,23 @@
 import { TraderType } from '@prisma/client';
 
+/** Same order as the app screens: Business → Personal/Company info + bank → Documents (+ trade skills) → Service radius. */
 export const ONBOARDING_STEPS = {
   BUSINESS_TYPE: 1,
-  ENTITY_DOCUMENTS: 2,
-  CATEGORIES: 3,
-  CATEGORY_DOCUMENTS: 4,
-  PROFILE_INFO: 5,
-  BANK_DETAILS: 6,
+  PROFILE_INFO: 2,
+  BANK_DETAILS: 3,
+  ENTITY_DOCUMENTS: 4,
+  CATEGORIES: 5,
+  CATEGORY_DOCUMENTS: 6,
   SERVICE_RADIUS: 7,
 } as const;
 
 export const ONBOARDING_STEP_KEYS = {
   1: 'business_type',
-  2: 'entity_documents',
-  3: 'categories',
-  4: 'category_documents',
-  5: 'profile_info',
-  6: 'bank_details',
+  2: 'profile_info',
+  3: 'bank_details',
+  4: 'entity_documents',
+  5: 'categories',
+  6: 'category_documents',
   7: 'service_radius',
 } as const;
 

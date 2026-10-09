@@ -11,6 +11,9 @@ import { emitRefundUpdated } from '../../../sockets/realtime';
 import {
   CustomerQueryFilters,
   DeletionRequestQueryFilters,
+  PaymentTransactionQueryFilters,
+  InvoiceQueryFilters,
+  RefundQueryFilters,
   CreateCustomerInput,
   UpdateCustomerInput,
   UpdateDeletionRequestInput,
@@ -18,6 +21,8 @@ import {
 import { ActorType, UserRole, UserStatus, DeletionRequestStatus, Prisma, User, PaymentMethod, RefundStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { serializeHistoricalMoney } from '../../../services/currency.service';
+import { buildListOrderBy, compareValues, resolveSortDir, type SortDir } from '../../../utils/list-sort';
+import { dateRangeWhere, numberRangeWhere } from '../../../utils/list-filters';
 
 const toHistoricalMoney = async (amount: number | { toString(): string }, currencyCode: string) =>
   serializeHistoricalMoney(amount, currencyCode);
@@ -84,6 +89,22 @@ export const getCustomerDirectoryStats = async () => {
   };
 };
 
+const nullsLast = (sort: SortDir) => ({ sort, nulls: 'last' as const });
+
+const CUSTOMER_SORT_MAP: Record<string, (dir: SortDir) => Prisma.UserOrderByWithRelationInput> = {
+  customerCode: (dir) => ({ customerCode: nullsLast(dir) }),
+  fullName: (dir) => ({ fullName: dir }),
+  email: (dir) => ({ email: dir }),
+  mobileNumber: (dir) => ({ mobileNumber: dir }),
+  city: (dir) => ({ city: nullsLast(dir) }),
+  country: (dir) => ({ country: nullsLast(dir) }),
+  totalOrders: (dir) => ({ jobs: { _count: dir } }),
+  status: (dir) => ({ status: dir }),
+  emailVerified: (dir) => ({ emailVerified: dir }),
+  mobileVerified: (dir) => ({ mobileVerified: dir }),
+  joinedAt: (dir) => ({ createdAt: dir }),
+};
+
 export const listCustomers = async (filters: CustomerQueryFilters) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
@@ -111,23 +132,52 @@ export const listCustomers = async (filters: CustomerQueryFilters) => {
     where.country = { contains: filters.country, mode: 'insensitive' };
   }
 
-  const [total, users] = await Promise.all([
-    prisma.user.count({ where }),
-    prisma.user.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: {
-            jobs: true,
-            payments: true,
-          },
-        },
-      },
-    }),
-  ]);
+  if (filters.city) {
+    where.city = { contains: filters.city, mode: 'insensitive' };
+  }
+  if (filters.emailVerified !== undefined) where.emailVerified = filters.emailVerified;
+  if (filters.mobileVerified !== undefined) where.mobileVerified = filters.mobileVerified;
+  const joined = dateRangeWhere(filters.joinedFrom, filters.joinedTo);
+  if (joined) where.createdAt = joined;
+
+  const include = { _count: { select: { jobs: true, payments: true } } } as const;
+  let users: Prisma.UserGetPayload<{ include: typeof include }>[];
+  let total: number;
+
+  if (filters.sortBy === 'totalSpent') {
+    const dir = resolveSortDir(filters.sortOrder);
+    const ids = (await prisma.user.findMany({ where, select: { id: true } })).map((u) => u.id);
+    const spent = await prisma.payment.groupBy({
+      by: ['userId'],
+      where: { userId: { in: ids }, status: 'COMPLETED' },
+      _sum: { amount: true },
+    });
+    const spentById = new Map(spent.map((s) => [s.userId, Number(s._sum.amount ?? 0)]));
+    const ranked = ids
+      .sort((a, b) => compareValues(spentById.get(a) ?? 0, spentById.get(b) ?? 0, dir) || a.localeCompare(b))
+      .slice(skip, skip + limit);
+    total = ids.length;
+    const rows = await prisma.user.findMany({ where: { id: { in: ranked } }, include });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    users = ranked.map((id) => byId.get(id)).filter((u): u is (typeof rows)[number] => Boolean(u));
+  } else {
+    [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: buildListOrderBy<Prisma.UserOrderByWithRelationInput>(
+          filters.sortBy,
+          filters.sortOrder,
+          CUSTOMER_SORT_MAP,
+          { sortBy: 'joinedAt', sortOrder: 'desc' },
+          { id: 'asc' }
+        ),
+        include,
+      }),
+    ]);
+  }
 
   const formattedCustomers = await Promise.all(
     users.map(async (u) => {
@@ -146,8 +196,8 @@ export const listCustomers = async (filters: CustomerQueryFilters) => {
         alternatePhone: u.alternatePhone,
         profilePhotoUrl: u.profilePhotoUrl,
         location: {
-          city: u.city || 'London',
-          country: u.country || 'United Kingdom',
+          city: u.city || null,
+          country: u.country || null,
         },
         totalOrders: u._count.jobs,
         totalSpent: spentAgg._sum.amount ? Number(spentAgg._sum.amount) : 0,
@@ -360,6 +410,17 @@ export const getDeletionRequestStats = async () => {
   };
 };
 
+const DELETION_REQUEST_SORT_MAP: Record<string, (dir: SortDir) => Prisma.AccountDeletionRequestOrderByWithRelationInput> = {
+  requestRef: (dir) => ({ requestRef: nullsLast(dir) }),
+  customerName: (dir) => ({ user: { fullName: dir } }),
+  email: (dir) => ({ user: { email: dir } }),
+  phone: (dir) => ({ user: { mobileNumber: dir } }),
+  reason: (dir) => ({ reason: nullsLast(dir) }),
+  requestedAt: (dir) => ({ requestedAt: dir }),
+  status: (dir) => ({ status: dir }),
+  reviewedBy: (dir) => ({ reviewedByLabel: nullsLast(dir) }),
+};
+
 export const listDeletionRequests = async (filters: DeletionRequestQueryFilters) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
@@ -386,8 +447,16 @@ export const listDeletionRequests = async (filters: DeletionRequestQueryFilters)
     where.reason = { contains: filters.reason, mode: 'insensitive' };
   }
 
-  const orderBy: Prisma.AccountDeletionRequestOrderByWithRelationInput =
-    filters.sort === 'oldest' ? { requestedAt: 'asc' } : { requestedAt: 'desc' };
+  const requestedAt = dateRangeWhere(filters.from, filters.to);
+  if (requestedAt) where.requestedAt = requestedAt;
+
+  const orderBy = buildListOrderBy<Prisma.AccountDeletionRequestOrderByWithRelationInput>(
+    filters.sortBy,
+    filters.sortOrder,
+    DELETION_REQUEST_SORT_MAP,
+    { sortBy: 'requestedAt', sortOrder: filters.sort === 'oldest' ? 'asc' : 'desc' },
+    { id: 'asc' }
+  );
 
   const [total, requests] = await Promise.all([
     prisma.accountDeletionRequest.count({ where }),
@@ -431,7 +500,7 @@ export const listDeletionRequests = async (filters: DeletionRequestQueryFilters)
         },
         email: user.email,
         phone: user.mobileNumber,
-        reason: req.reason || 'Privacy concerns',
+        reason: req.reason || null,
         requestedAt: req.requestedAt,
         status: req.status,
         adminNote: req.adminNote,
@@ -598,7 +667,24 @@ export const getCustomerPaymentHeaderStats = async () => {
   };
 };
 
-export const listPaymentTransactions = async (filters: any) => {
+const TRANSACTION_SORT_MAP: Record<string, (dir: SortDir) => Prisma.PaymentOrderByWithRelationInput | Prisma.PaymentOrderByWithRelationInput[]> = {
+  createdAt: (dir) => ({ createdAt: dir }),
+  transactionRef: (dir) => ({ transactionRef: nullsLast(dir) }),
+  date: (dir) => [{ paidAt: nullsLast(dir) }, { createdAt: dir }],
+  customerName: (dir) => ({ user: { fullName: dir } }),
+  jobTitle: (dir) => ({ invoice: { booking: { job: { title: dir } } } }),
+  bookingRef: (dir) => ({ invoice: { booking: { bookingRef: nullsLast(dir) } } }),
+  categoryName: (dir) => ({ invoice: { booking: { job: { category: { name: dir } } } } }),
+  traderName: (dir) => ({ invoice: { booking: { trader: { user: { fullName: dir } } } } }),
+  serviceCharge: (dir) => ({ serviceCharge: nullsLast(dir) }),
+  discount: (dir) => ({ discountAmount: nullsLast(dir) }),
+  fee: (dir) => ({ feeAmount: nullsLast(dir) }),
+  totalPaid: (dir) => ({ amount: dir }),
+  paymentMethod: (dir) => ({ method: dir }),
+  status: (dir) => ({ status: dir }),
+};
+
+export const listPaymentTransactions = async (filters: PaymentTransactionQueryFilters) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
   const skip = (page - 1) * limit;
@@ -622,8 +708,27 @@ export const listPaymentTransactions = async (filters: any) => {
     where.method = filters.method as PaymentMethod;
   }
 
-  const orderBy: Prisma.PaymentOrderByWithRelationInput =
-    filters.sort === 'oldest' ? { createdAt: 'asc' } : { createdAt: 'desc' };
+  if (filters.customerId) where.userId = filters.customerId;
+  if (filters.traderId || filters.categoryId) {
+    where.invoice = {
+      booking: {
+        ...(filters.traderId ? { traderId: filters.traderId } : {}),
+        ...(filters.categoryId ? { job: { categoryId: filters.categoryId } } : {}),
+      },
+    };
+  }
+  const createdAt = dateRangeWhere(filters.from, filters.to);
+  if (createdAt) where.createdAt = createdAt;
+  const amount = numberRangeWhere(filters.minAmount, filters.maxAmount);
+  if (amount) where.amount = amount;
+
+  const orderBy = buildListOrderBy<Prisma.PaymentOrderByWithRelationInput>(
+    filters.sortBy,
+    filters.sortOrder,
+    TRANSACTION_SORT_MAP,
+    { sortBy: 'createdAt', sortOrder: filters.sort === 'oldest' ? 'asc' : 'desc' },
+    { id: 'asc' }
+  );
 
   const [total, payments] = await Promise.all([
     prisma.payment.count({ where }),
@@ -783,7 +888,17 @@ export const getTransactionById = async (id: string) => {
   };
 };
 
-export const listBillingInvoices = async (filters: any) => {
+const INVOICE_SORT_MAP: Record<string, (dir: SortDir) => Prisma.InvoiceOrderByWithRelationInput> = {
+  invoiceNumber: (dir) => ({ invoiceNumber: nullsLast(dir) }),
+  customerName: (dir) => ({ booking: { customer: { fullName: dir } } }),
+  jobTitle: (dir) => ({ booking: { job: { title: dir } } }),
+  traderName: (dir) => ({ booking: { trader: { user: { fullName: dir } } } }),
+  invoiceDate: (dir) => ({ createdAt: dir }),
+  amount: (dir) => ({ totalAmount: dir }),
+  status: (dir) => ({ status: dir }),
+};
+
+export const listBillingInvoices = async (filters: InvoiceQueryFilters) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
   const skip = (page - 1) * limit;
@@ -802,13 +917,30 @@ export const listBillingInvoices = async (filters: any) => {
     where.status = filters.status;
   }
 
+  if (filters.customerId || filters.traderId) {
+    where.booking = {
+      ...(filters.customerId ? { customerId: filters.customerId } : {}),
+      ...(filters.traderId ? { traderId: filters.traderId } : {}),
+    };
+  }
+  const invoiceDate = dateRangeWhere(filters.from, filters.to);
+  if (invoiceDate) where.createdAt = invoiceDate;
+  const amount = numberRangeWhere(filters.minAmount, filters.maxAmount);
+  if (amount) where.totalAmount = amount;
+
   const [total, invoices] = await Promise.all([
     prisma.invoice.count({ where }),
     prisma.invoice.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: buildListOrderBy<Prisma.InvoiceOrderByWithRelationInput>(
+        filters.sortBy,
+        filters.sortOrder,
+        INVOICE_SORT_MAP,
+        { sortBy: 'invoiceDate', sortOrder: 'desc' },
+        { id: 'asc' }
+      ),
       include: {
         booking: {
           include: {
@@ -930,7 +1062,19 @@ export const getInvoiceById = async (id: string) => {
   };
 };
 
-export const listRefundsQueue = async (filters: any) => {
+const REFUND_SORT_MAP: Record<string, (dir: SortDir) => Prisma.RefundOrderByWithRelationInput> = {
+  refundRef: (dir) => ({ refundRef: dir }),
+  transactionRef: (dir) => ({ transactionRef: nullsLast(dir) }),
+  customerName: (dir) => ({ user: { fullName: dir } }),
+  jobTitle: (dir) => ({ payment: { invoice: { booking: { job: { title: dir } } } } }),
+  originalAmount: (dir) => ({ originalAmount: dir }),
+  refundAmount: (dir) => ({ refundAmount: dir }),
+  reason: (dir) => ({ reason: dir }),
+  status: (dir) => ({ status: dir }),
+  requestedAt: (dir) => ({ createdAt: dir }),
+};
+
+export const listRefundsQueue = async (filters: RefundQueryFilters) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
   const skip = (page - 1) * limit;
@@ -951,13 +1095,25 @@ export const listRefundsQueue = async (filters: any) => {
     where.status = filters.status;
   }
 
+  if (filters.customerId) where.userId = filters.customerId;
+  const requestedAt = dateRangeWhere(filters.from, filters.to);
+  if (requestedAt) where.createdAt = requestedAt;
+  const refundAmount = numberRangeWhere(filters.minAmount, filters.maxAmount);
+  if (refundAmount) where.refundAmount = refundAmount;
+
   const [total, refunds] = await Promise.all([
     prisma.refund.count({ where }),
     prisma.refund.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: buildListOrderBy<Prisma.RefundOrderByWithRelationInput>(
+        filters.sortBy,
+        filters.sortOrder,
+        REFUND_SORT_MAP,
+        { sortBy: 'requestedAt', sortOrder: 'desc' },
+        { id: 'asc' }
+      ),
       include: {
         user: true,
         payment: {

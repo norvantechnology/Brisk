@@ -1,6 +1,19 @@
 import { z } from 'zod';
 import { SurveyRegistrationStatus } from '@prisma/client';
 import { requireNoteWhenRejected } from '../../utils/reject-note';
+import { sortByParam, sortOrderParam } from '../../utils/list-sort';
+
+export const ADMIN_CONTACT_SORT_FIELDS = [
+  'referenceCode',
+  'name',
+  'email',
+  'phone',
+  'subject',
+  'status',
+  'reviewedBy',
+  'submittedAt',
+  'updatedAt',
+] as const;
 
 const paginationQuery = {
   page: z.string().optional(),
@@ -26,8 +39,8 @@ export const contactFilterSchema = z.object({
     search: z.string().optional(),
     status: z.nativeEnum(SurveyRegistrationStatus).optional(),
     sort: z.enum(['newest', 'oldest']).optional(),
-    sortBy: z.enum(['name', 'status', 'submittedAt', 'subject']).optional(),
-    sortOrder: z.enum(['asc', 'desc']).optional(),
+    sortBy: sortByParam(ADMIN_CONTACT_SORT_FIELDS),
+    sortOrder: sortOrderParam,
     submittedFrom: z.string().optional(),
     submittedTo: z.string().optional(),
     dateFilter: z.string().optional(),

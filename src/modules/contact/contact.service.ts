@@ -104,23 +104,33 @@ const buildWhere = (filters: ContactSubmissionFilters): Prisma.ContactSubmission
   return where;
 };
 
+const CONTACT_SORT_MAP: Record<string, (order: Prisma.SortOrder) => Prisma.ContactSubmissionOrderByWithRelationInput> = {
+  referenceCode: (order) => ({ referenceCode: order }),
+  name: (order) => ({ fullName: order }),
+  email: (order) => ({ email: order }),
+  phone: (order) => ({ phone: { sort: order, nulls: 'last' } }),
+  subject: (order) => ({ subject: order }),
+  status: (order) => ({ status: order }),
+  reviewedBy: (order) => ({ reviewedBy: { fullName: order } }),
+  submittedAt: (order) => ({ submittedAt: order }),
+  updatedAt: (order) => ({ updatedAt: order }),
+};
+
+const DATE_SORTS = new Set(['submittedAt', 'updatedAt']);
+
 const buildOrderBy = (
   filters: ContactSubmissionFilters
-): Prisma.ContactSubmissionOrderByWithRelationInput => {
+): Prisma.ContactSubmissionOrderByWithRelationInput[] => {
+  const sortBy = filters.sortBy && CONTACT_SORT_MAP[filters.sortBy] ? filters.sortBy : undefined;
   const order: Prisma.SortOrder =
     filters.sortOrder === 'asc' || filters.sortOrder === 'desc'
       ? filters.sortOrder
-      : filters.sortBy === 'submittedAt'
+      : !sortBy || DATE_SORTS.has(sortBy)
         ? 'desc'
-        : filters.sortBy
-          ? 'asc'
-          : 'desc';
+        : 'asc';
 
-  if (filters.sortBy === 'name') return { fullName: order };
-  if (filters.sortBy === 'status') return { status: order };
-  if (filters.sortBy === 'subject') return { subject: order };
-  if (filters.sortBy === 'submittedAt') return { submittedAt: order };
-  return { submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc' };
+  if (sortBy) return [CONTACT_SORT_MAP[sortBy](order), { submittedAt: 'desc' }, { id: 'asc' }];
+  return [{ submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc' }, { id: 'asc' }];
 };
 
 export const generateContactReferenceCode = async (): Promise<string> => {

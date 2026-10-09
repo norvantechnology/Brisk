@@ -6,6 +6,13 @@ export interface CustomerQueryFilters {
   search?: string;
   status?: UserStatus;
   country?: string;
+  city?: string;
+  emailVerified?: boolean;
+  mobileVerified?: boolean;
+  joinedFrom?: string;
+  joinedTo?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface DeletionRequestQueryFilters {
@@ -15,6 +22,10 @@ export interface DeletionRequestQueryFilters {
   status?: DeletionRequestStatus;
   reason?: string;
   sort?: 'newest' | 'oldest';
+  from?: string;
+  to?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface PaymentTransactionQueryFilters {
@@ -24,6 +35,15 @@ export interface PaymentTransactionQueryFilters {
   status?: PaymentStatus;
   method?: string;
   sort?: 'newest' | 'oldest';
+  customerId?: string;
+  traderId?: string;
+  categoryId?: string;
+  from?: string;
+  to?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface InvoiceQueryFilters {
@@ -31,6 +51,14 @@ export interface InvoiceQueryFilters {
   limit?: number;
   search?: string;
   status?: InvoiceStatus;
+  customerId?: string;
+  traderId?: string;
+  from?: string;
+  to?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface RefundQueryFilters {
@@ -38,6 +66,13 @@ export interface RefundQueryFilters {
   limit?: number;
   search?: string;
   status?: RefundStatus;
+  customerId?: string;
+  from?: string;
+  to?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface CreateCustomerInput {

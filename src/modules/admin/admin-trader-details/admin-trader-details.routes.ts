@@ -130,7 +130,8 @@ router.get(
  *         description: Entity-level vs category-level documents (`ALL` or omit = no scope filter)
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [uploadedAt, name, status, reviewedAt], default: uploadedAt }
+ *         description: "Column to sort by (default `uploadedAt`). Unknown values return 400. `name` = document name; `scope` = Entity/Company vs Category doc."
+ *         schema: { type: string, enum: [name, documentKey, required, scope, categoryName, fileName, status, expiryDate, reviewedAt, uploadedAt], default: uploadedAt }
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
@@ -169,8 +170,8 @@ router.get(
  *                   reviewedAt: null
  *                   reviewedById: null
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
- *       401:
- *         description: Unauthorized.
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       404:
  *         description: Trader not found.
  */
@@ -259,7 +260,8 @@ router.get(
  *         schema: { type: string, format: uuid }
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [createdAt, scheduledDate, amount, status, title], default: createdAt }
+ *         description: "Column to sort by (default `createdAt`). Unknown values return 400. `amount` and `date` sort by the displayed values (invoice total / service charge / visit fee; scheduled date else created date)."
+ *         schema: { type: string, enum: [jobRef, title, customerName, categoryName, subcategoryName, date, scheduledDate, amount, status, siteVisitFee, siteVisitStatus, bookingRef, createdAt], default: createdAt }
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
@@ -273,20 +275,22 @@ router.get(
  *         description: Filter createdAt to
  *     responses:
  *       200:
- *         description: Paginated jobs (`data` array includes `siteVisitStatus`).
+ *         description: |
+ *           Paginated jobs (`data` array, pagination in `meta`).
+ *           `siteVisitStatus` is null when no site visit, else one of Visit Pending / Visit Scheduled / Visit In Progress / Visit Completed / Visit Cancelled.
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Trader jobs retrieved successfully.
  *               data:
- *                 - id: uuid
+ *                 - id: d3738495-0000-4000-8000-000000000007
  *                   jobRef: JOB-0001
  *                   title: Boiler repair
- *                   customer: { id: uuid, fullName: Jane Doe, email: jane@example.com }
+ *                   customer: { id: 0a1b2c3d-0000-4000-8000-000000000020, fullName: Jane Doe, email: jane@example.com }
  *                   service: Boiler repair
- *                   category: { id: uuid, name: Plumbing }
- *                   subcategory: { id: uuid, name: Boilers }
+ *                   category: { id: f5a6b7c8-0000-4000-8000-000000000009, name: Plumbing }
+ *                   subcategory: { id: a6b7c8d9-0000-4000-8000-000000000010, name: Boilers }
  *                   date: '2026-09-01T09:00:00.000Z'
  *                   createdAt: '2026-08-28T12:00:00.000Z'
  *                   scheduledDate: '2026-09-01T09:00:00.000Z'
@@ -295,11 +299,13 @@ router.get(
  *                   status: COMPLETED
  *                   siteVisitRequested: true
  *                   siteVisitFee: 40
- *                   siteVisitStatus: COMPLETED
- *                   bookingId: uuid
+ *                   siteVisitStatus: Visit Completed
+ *                   bookingId: b7c8d9e0-0000-4000-8000-000000000011
+ *                   bookingRef: BK-0001
+ *                   invoiceId: c8d9e0f1-0000-4000-8000-000000000012
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
- *       401:
- *         description: Unauthorized.
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       404:
  *         description: Trader not found.
  */
@@ -440,7 +446,8 @@ router.get(
  *         description: Filter by exact star rating (1–5)
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [createdAt, stars], default: createdAt }
+ *         description: "Column to sort by (default `createdAt`). Unknown values return 400."
+ *         schema: { type: string, enum: [stars, review, customerName, bookingRef, jobRef, jobTitle, categoryName, createdAt], default: createdAt }
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
@@ -476,8 +483,8 @@ router.get(
  *                     title: Boiler repair
  *                     category: { id: uuid, name: Plumbing }
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
- *       401:
- *         description: Unauthorized.
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       404:
  *         description: Trader not found.
  */
@@ -564,7 +571,8 @@ router.get(
  *         schema: { type: string, enum: [PENDING, PROCESSING, COMPLETED, FAILED] }
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [createdAt, amount, status, processedAt], default: createdAt }
+ *         description: "Column to sort by (default `createdAt`). Unknown values return 400."
+ *         schema: { type: string, enum: [payoutRef, amount, currencyCode, status, stripeTransferId, processedAt, createdAt], default: createdAt }
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
@@ -596,8 +604,8 @@ router.get(
  *                     bankHolderName: Acme Plumbing Ltd
  *                     accountNumberMasked: '****1234'
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
- *       401:
- *         description: Unauthorized.
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       404:
  *         description: Trader not found.
  */
@@ -723,12 +731,14 @@ router.get(
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, EXPIRED, DISABLED] }
+ *         description: Effective status. `EXPIRED` includes ACTIVE offers whose `validUntil` is in the past; `ACTIVE` excludes them.
  *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [createdAt, claimsCount, viewsCount, validUntil, title], default: createdAt }
+ *         description: "Column to sort by (default `createdAt`). Unknown values return 400. `status` = effective status (ACTIVE past validUntil sorts as EXPIRED)."
+ *         schema: { type: string, enum: [offerCode, title, couponCode, discountType, discountValue, categoryName, validFrom, validUntil, status, claimsCount, revenueGenerated, viewsCount, createdAt, updatedAt], default: createdAt }
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
@@ -747,16 +757,67 @@ router.get(
  *               success: true
  *               message: Trader offers retrieved successfully.
  *               data:
- *                 - id: uuid
- *                   offerCode: OFF-1001
- *                   title: 10% off plumbing
- *                   status: ACTIVE
- *                   claimsCount: 12
- *                   viewsCount: 80
+ *                 - id: 0d6b1f6e-0000-4000-8000-000000000060
+ *                   offerId: 0d6b1f6e-0000-4000-8000-000000000060
+ *                   offerCode: OFF-1004
+ *                   offerType: TRADER
+ *                   title: 10% off Pest Control
+ *                   badgeTag: special_local_promo
+ *                   couponCode: PEST10BRISK
+ *                   shortDescription: Save on pest control this month
+ *                   fullDescription: Valid for residential properties only.
+ *                   description: Valid for residential properties only.
+ *                   bannerImageUrl: 'https://api.brisk.ie/uploads/offers/pest.jpg'
+ *                   discountType: PERCENTAGE
+ *                   discountValue: 10
+ *                   currencyCode: EUR
+ *                   discountLabel: 10% off
+ *                   validFrom: '2026-08-01T00:00:00.000Z'
  *                   validUntil: '2026-12-31T23:59:59.000Z'
+ *                   status: ACTIVE
+ *                   storedStatus: ACTIVE
+ *                   claimsCount: 8
+ *                   revenueGenerated: 960
+ *                   viewsCount: 240
+ *                   ctaLabel: Claim Offer
+ *                   ctaAction: CLAIM
+ *                   createdAt: '2026-07-28T09:00:00.000Z'
+ *                   updatedAt: '2026-08-02T12:00:00.000Z'
+ *                   createdBy: null
+ *                   traderId: 4d5e6f70-0000-4000-8000-000000000030
+ *                   trader:
+ *                     id: 4d5e6f70-0000-4000-8000-000000000030
+ *                     businessName: Byrne Pest Control
+ *                     traderType: COMPANY
+ *                     fullName: John Byrne
+ *                     displayName: Byrne Pest Control
+ *                     avgRating: 4.7
+ *                     reviewsCount: 23
+ *                     topRated: true
+ *                     isVerified: true
+ *                     yearsExperience: 10
+ *                     experienceLabel: 10+ Yrs
+ *                     jobsDoneCount: 54
+ *                     city: Dublin
+ *                     country: Ireland
+ *                     location: 'Dublin, Ireland'
+ *                     profilePhotoUrl: null
+ *                     imageUrl: null
+ *                   termsAndConditions: Valid for residential properties only.
+ *                   expiresOn: '2026-12-31T23:59:59.000Z'
+ *                   categoryLabel: Pest Control
+ *                   primaryCategory: { id: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, name: Pest Control, categoryCode: CAT-0007, iconName: pest, iconUrl: 'https://api.brisk.ie/uploads/categories/pest.svg' }
+ *                   categories:
+ *                     - { id: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, name: Pest Control, categoryCode: CAT-0007, iconName: pest, iconUrl: 'https://api.brisk.ie/uploads/categories/pest.svg' }
+ *                   subcategories:
+ *                     - { id: 8a44f8fb-1598-40c9-a658-7f3db5748f14, name: Rodent Control, categoryId: e076d231-b0da-46cb-b60d-8aa9fbb8ce26, siteVisitEnabled: false, siteVisitFee: 0, priceEnabled: true, priceEnteredBy: TRADER }
+ *                   siteVisitEnabled: false
+ *                   priceEnabled: true
+ *                   siteVisitFee: 0
+ *                   priceEnteredBy: TRADER
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
- *       401:
- *         description: Unauthorized.
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       404:
  *         description: Trader not found.
  */

@@ -4,6 +4,11 @@ import {
   buildOnboardingProgress,
   toUpperOnboardingScreen,
 } from '../traders/onboarding/onboarding-progress';
+import {
+  getStepKey,
+  ONBOARDING_STEPS,
+  TOTAL_ONBOARDING_STEPS,
+} from '../traders/onboarding/onboarding.constants';
 
 /** App-level navigation keys returned by auth and onboarding status APIs. */
 export const APP_NEXT_STEP = {
@@ -87,27 +92,14 @@ const buildTraderOnboardingSnapshot = async (userId: string): Promise<TraderOnbo
     return {
       onboardingScreen: ONBOARDING_SCREEN.BUSINESS_VERIFICATION,
       entityType: entityType ? String(entityType) : null,
-      currentStep: 1,
-      totalSteps: 7,
-      currentStepKey: 'business_type',
-      steps: Array.from({ length: 7 }, (_, i) => ({
+      currentStep: ONBOARDING_STEPS.BUSINESS_TYPE,
+      totalSteps: TOTAL_ONBOARDING_STEPS,
+      currentStepKey: getStepKey(ONBOARDING_STEPS.BUSINESS_TYPE, entityType ?? TraderType.SOLO),
+      steps: Array.from({ length: TOTAL_ONBOARDING_STEPS }, (_, i) => ({
         step: i + 1,
-        key:
-          i + 1 === 1
-            ? 'business_type'
-            : i + 1 === 2
-              ? 'entity_documents'
-              : i + 1 === 3
-                ? 'categories'
-                : i + 1 === 4
-                  ? 'category_documents'
-                  : i + 1 === 5
-                    ? 'personal_info'
-                    : i + 1 === 6
-                      ? 'bank_details'
-                      : 'service_radius',
+        key: getStepKey(i + 1, entityType ?? TraderType.SOLO),
         completed: false,
-        current: i === 0,
+        current: i + 1 === ONBOARDING_STEPS.BUSINESS_TYPE,
       })),
       profile: {
         fullLegalName: null,
@@ -139,7 +131,6 @@ const buildTraderOnboardingSnapshot = async (userId: string): Promise<TraderOnbo
   const progress = await buildOnboardingProgress({
     trader,
     entityType,
-    registrationCurrentStep: registration.currentStep,
     stepData,
   });
 

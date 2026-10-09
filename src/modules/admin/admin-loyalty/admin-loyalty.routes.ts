@@ -24,21 +24,50 @@ router.use(adminAuthMiddleware);
  *       **Admin → Loyalty / BRP Offers management.**
  *       Offers created here appear dynamically on customer `GET /loyalty/offers`.
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
+ *       - $ref: '#/components/parameters/AdminPage'
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20 }
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
  *       - in: query
  *         name: search
+ *         description: Title or description.
  *         schema: { type: string }
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [active, inactive] }
+ *       - in: query
+ *         name: minPoints
+ *         schema: { type: integer, minimum: 0, example: 100 }
+ *       - in: query
+ *         name: maxPoints
+ *         schema: { type: integer, minimum: 0, example: 1000 }
+ *       - in: query
+ *         name: sortBy
+ *         description: Omit for the default order (status, then pointsRequired ascending, then newest).
+ *         schema: { type: string, enum: [title, pointsRequired, status, redemptionsCount, createdAt, updatedAt] }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
  *         description: Paginated loyalty offers.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Loyalty offers retrieved successfully.
+ *               data:
+ *                 meta: { total: 3, page: 1, limit: 20, totalPages: 1 }
+ *                 offers:
+ *                   - id: 9a8b7c6d-0000-4000-8000-000000000070
+ *                     title: €10 off your next job
+ *                     pointsRequired: 500
+ *                     description: Redeem 500 BRP for €10 off any booking.
+ *                     imageUrl: 'https://api.brisk.ie/uploads/loyalty/10-off.png'
+ *                     status: active
+ *                     redemptionsCount: 14
+ *                     createdAt: '2026-08-01T09:00:00.000Z'
+ *                     updatedAt: '2026-08-01T09:00:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/loyalty/offers', validate(listLoyaltyOffersSchema), controller.listLoyaltyOffers);
 

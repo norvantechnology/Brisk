@@ -41,30 +41,79 @@ router.get('/customers/stats', customerAdminController.getCustomerDirectoryStats
  * @swagger
  * /admin/customers:
  *   get:
- *     summary: List Customers Directory (Paginated, Search, Status & Country Filters)
+ *     summary: List Customers Directory (search, filter and sort on every column)
  *     tags: ['Admin / Customers']
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
  *       - in: query
  *         name: search
- *         schema: { type: string }
- *         description: Search by customer name, email, mobile, or customer ID (CUST-####).
+ *         schema: { type: string, example: 'Murphy' }
+ *         description: Search by customer name, email, mobile, or customer code.
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, INACTIVE, PENDING, BLOCKED, SUSPENDED] }
  *       - in: query
  *         name: country
- *         schema: { type: string }
+ *         schema: { type: string, example: Ireland }
+ *         description: Partial, case-insensitive.
+ *       - in: query
+ *         name: city
+ *         schema: { type: string, example: Dublin }
+ *         description: Partial, case-insensitive.
+ *       - in: query
+ *         name: emailVerified
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: mobileVerified
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: joinedFrom
+ *         schema: { type: string, example: '2026-09-01' }
+ *         description: Inclusive start of joinedAt (ISO date or datetime).
+ *       - in: query
+ *         name: joinedTo
+ *         schema: { type: string, example: '2026-09-30' }
+ *         description: Inclusive end of joinedAt (ISO date or datetime).
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [customerCode, fullName, email, mobileNumber, city, country, totalOrders, totalSpent, status, emailVerified, mobileVerified, joinedAt]
+ *           default: joinedAt
+ *         description: Table column to sort by (`city`/`country` = location.*). Default newest joined first.
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Customer directory retrieved matching Screenshot 1 format.
+ *         description: Customer directory page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customers retrieved successfully.
+ *               data:
+ *                 meta: { total: 42, page: 1, limit: 10, totalPages: 5 }
+ *                 customers:
+ *                   - id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                     customerCode: CUS-1001
+ *                     fullName: Sarah Murphy
+ *                     email: sarah.murphy@example.com
+ *                     mobileNumber: '+353871234567'
+ *                     alternatePhone: null
+ *                     profilePhotoUrl: 'https://api.brisk.ie/uploads/profile/sarah.jpg'
+ *                     location: { city: Dublin, country: Ireland }
+ *                     totalOrders: 6
+ *                     totalSpent: 845.5
+ *                     status: ACTIVE
+ *                     mobileVerified: true
+ *                     emailVerified: true
+ *                     preferredLanguage: English (UK)
+ *                     preferredTimeSlot: 'Morning (09:00 - 12:00)'
+ *                     joinedAt: '2026-07-14T09:30:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/customers', validate(customerFilterSchema), customerAdminController.listCustomers);
 
@@ -130,26 +179,66 @@ router.get('/customers/deletion-requests/stats', customerAdminController.getDele
  * @swagger
  * /admin/customers/deletion-requests:
  *   get:
- *     summary: List GDPR account deletion requests
+ *     summary: List GDPR account deletion requests (search, filter and sort on every column)
  *     tags: ['Admin / Deletion Requests']
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
- *       - in: query
- *         name: status
- *         schema: { type: string }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
  *       - in: query
  *         name: search
+ *         schema: { type: string, example: 'DEL-1001' }
+ *         description: Search by request ref, reason, customer name, email or phone.
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [PENDING, UNDER_REVIEW, APPROVED, REJECTED, COMPLETED] }
+ *       - in: query
+ *         name: reason
  *         schema: { type: string }
+ *         description: Reason contains (case-insensitive).
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [requestRef, customerName, email, phone, reason, requestedAt, status, reviewedBy]
+ *           default: requestedAt
+ *       - $ref: '#/components/parameters/AdminSortOrder'
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [newest, oldest] }
+ *         description: Legacy requestedAt order — ignored when `sortBy` is sent.
  *     responses:
  *       200:
- *         description: Deletion requests retrieved.
+ *         description: Deletion requests page. `from`/`to` filter `requestedAt`.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Account deletion requests retrieved successfully.
+ *               data:
+ *                 meta: { total: 3, page: 1, limit: 10, totalPages: 1 }
+ *                 requests:
+ *                   - id: 2b3c4d5e-0000-4000-8000-000000000010
+ *                     requestRef: DEL-1001
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       customerCode: CUS-1001
+ *                       fullName: Sarah Murphy
+ *                       profilePhotoUrl: null
+ *                     email: sarah.murphy@example.com
+ *                     phone: '+353871234567'
+ *                     reason: No longer need the service
+ *                     requestedAt: '2026-09-20T11:00:00.000Z'
+ *                     status: REJECTED
+ *                     adminNote: Customer has an active job.
+ *                     adminNotes: Customer has an active job.
+ *                     rejectionReason: Customer has an active job.
+ *                     reviewedByLabel: Snehal Patel (SUPER_ADMIN)
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get(
   '/customers/deletion-requests',
@@ -308,33 +397,84 @@ router.get('/customer-payments/stats', customerAdminController.getCustomerPaymen
  * @swagger
  * /admin/customer-payments/transactions:
  *   get:
- *     summary: List Payment Transactions (Paginated, Search, Status & Method Filters)
+ *     summary: List Payment Transactions (search, filter and sort on every column)
  *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
  *       - in: query
  *         name: search
- *         schema: { type: string }
- *         description: Search by transaction reference (TXN-#######), customer, job, or trader.
+ *         schema: { type: string, example: 'TXN-' }
+ *         description: Search by transaction reference, customer, job, or trader.
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [PENDING, COMPLETED, FAILED, REFUNDED] }
+ *         schema: { type: string, enum: [PENDING, COMPLETED, FAILED] }
  *       - in: query
  *         name: method
- *         schema: { type: string }
+ *         schema: { type: string, enum: [CARD, APPLE_PAY, GOOGLE_PAY] }
+ *         description: Case-insensitive.
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: traderId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string, format: uuid }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - $ref: '#/components/parameters/AdminMinAmount'
+ *       - $ref: '#/components/parameters/AdminMaxAmount'
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [transactionRef, date, customerName, jobTitle, bookingRef, categoryName, traderName, serviceCharge, discount, fee, totalPaid, paymentMethod, status]
+ *           default: date
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *       - in: query
  *         name: sort
- *         schema: { type: string, enum: [newest, oldest], default: newest }
+ *         schema: { type: string, enum: [newest, oldest] }
+ *         description: Legacy date order — ignored when `sortBy` is sent.
  *     responses:
  *       200:
- *         description: Customer payment transactions retrieved matching Screenshots 1 & 2 format.
+ *         description: Transactions page. `from`/`to` filter created date; `minAmount`/`maxAmount` filter totalPaid.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Payment transactions retrieved successfully.
+ *               data:
+ *                 meta: { total: 120, page: 1, limit: 10, totalPages: 12 }
+ *                 transactions:
+ *                   - id: 3c4d5e6f-0000-4000-8000-000000000020
+ *                     transactionRef: TXN-8F2A91C0
+ *                     date: '2026-09-28T14:05:00.000Z'
+ *                     currencyCode: EUR
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       customerCode: CUS-1001
+ *                       fullName: Sarah Murphy
+ *                     jobBooking:
+ *                       title: Kitchen tap replacement
+ *                       bookingRef: BK-10023
+ *                       categoryName: Plumbing
+ *                     trader:
+ *                       id: 4d5e6f70-0000-4000-8000-000000000030
+ *                       fullName: John Byrne
+ *                       traderCode: TRD-2001
+ *                     serviceCharge: 120
+ *                     serviceChargeMoney: { amount: 120, currency: EUR, formatted: '€120.00', isHistorical: true }
+ *                     feeOffer: { discount: 0, fee: 24 }
+ *                     totalPaid: 144
+ *                     totalPaidMoney: { amount: 144, currency: EUR, formatted: '€144.00', isHistorical: true }
+ *                     paymentMethod: { method: CARD, brand: visa, last4: '4242' }
+ *                     status: COMPLETED
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/customer-payments/transactions', validate(paymentTransactionFilterSchema), customerAdminController.listPaymentTransactions);
 
@@ -363,27 +503,60 @@ router.get('/customer-payments/transactions/:id', customerAdminController.getTra
  * @swagger
  * /admin/customer-payments/invoices:
  *   get:
- *     summary: List Billing & Invoices (Paginated, Search & Status Filters)
+ *     summary: List Billing & Invoices (search, filter and sort on every column)
  *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
  *       - in: query
  *         name: search
- *         schema: { type: string }
- *         description: Search by invoice number (INV-####-###), customer, job, or trader.
+ *         schema: { type: string, example: 'INV-' }
+ *         description: Search by invoice number, customer, job, or trader.
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [UNPAID, PAID, REFUNDED] }
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: traderId
+ *         schema: { type: string, format: uuid }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - $ref: '#/components/parameters/AdminMinAmount'
+ *       - $ref: '#/components/parameters/AdminMaxAmount'
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [invoiceNumber, customerName, jobTitle, traderName, invoiceDate, amount, status]
+ *           default: invoiceDate
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Customer billing invoices retrieved matching Screenshot 3 format.
+ *         description: Invoices page. `from`/`to` filter invoiceDate; `minAmount`/`maxAmount` filter amount.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Billing invoices retrieved successfully.
+ *               data:
+ *                 meta: { total: 58, page: 1, limit: 10, totalPages: 6 }
+ *                 invoices:
+ *                   - id: 5e6f7081-0000-4000-8000-000000000040
+ *                     invoiceNumber: INV-2026-0042
+ *                     customerName: Sarah Murphy
+ *                     jobBookingTitle: Kitchen tap replacement
+ *                     traderName: John Byrne
+ *                     invoiceDate: '2026-09-28T14:00:00.000Z'
+ *                     currencyCode: EUR
+ *                     amount: 144
+ *                     amountMoney: { amount: 144, currency: EUR, formatted: '€144.00', isHistorical: true }
+ *                     status: PAID
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/customer-payments/invoices', validate(invoiceFilterSchema), customerAdminController.listBillingInvoices);
 
@@ -412,27 +585,61 @@ router.get('/customer-payments/invoices/:id', customerAdminController.getInvoice
  * @swagger
  * /admin/customer-payments/refunds:
  *   get:
- *     summary: List Refunds Management Queue (Paginated, Search & Status Filters)
+ *     summary: List Refunds Management Queue (search, filter and sort on every column)
  *     tags: ['Admin / Payments']
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
  *       - in: query
  *         name: search
- *         schema: { type: string }
- *         description: Search by refund reference (REF-####), TXN ID, customer, or job.
+ *         schema: { type: string, example: 'REF-' }
+ *         description: Search by refund reference, transaction ref, customer, or job.
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [PENDING, APPROVED, COMPLETED, REJECTED] }
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string, format: uuid }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - $ref: '#/components/parameters/AdminMinAmount'
+ *       - $ref: '#/components/parameters/AdminMaxAmount'
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [refundRef, transactionRef, customerName, jobTitle, originalAmount, refundAmount, reason, status, requestedAt]
+ *           default: requestedAt
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Refunds queue list retrieved matching Screenshot 4 format.
+ *         description: Refunds page. `from`/`to` filter requestedAt; `minAmount`/`maxAmount` filter refundAmount.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Refunds management queue retrieved successfully.
+ *               data:
+ *                 meta: { total: 4, page: 1, limit: 10, totalPages: 1 }
+ *                 refunds:
+ *                   - id: 6f708192-0000-4000-8000-000000000050
+ *                     refundRef: REF-1004
+ *                     transactionRef: TXN-8F2A91C0
+ *                     customerName: Sarah Murphy
+ *                     jobBookingTitle: Kitchen tap replacement
+ *                     currencyCode: EUR
+ *                     originalAmount: 144
+ *                     originalAmountMoney: { amount: 144, currency: EUR, formatted: '€144.00', isHistorical: true }
+ *                     refundAmount: 50
+ *                     refundAmountMoney: { amount: 50, currency: EUR, formatted: '€50.00', isHistorical: true }
+ *                     reason: Job partly completed
+ *                     status: PENDING
+ *                     adminNote: null
+ *                     requestedAt: '2026-09-29T10:15:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/customer-payments/refunds', validate(refundFilterSchema), customerAdminController.listRefundsQueue);
 

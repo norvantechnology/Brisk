@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ActorType,
   CmsAudience,
   CmsPublishStatus,
   CmsActiveStatus,
@@ -8,6 +9,8 @@ import {
 } from '@prisma/client';
 import { parseCmsPageType } from '../../cms/cms-page-type';
 import { requireNoteWhenRejected } from '../../../utils/reject-note';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
+import { boolParam, isoDateParam, minLteMax } from '../../../utils/list-filters';
 
 const paginationQuery = {
   page: z.string().optional(),
@@ -56,18 +59,74 @@ const typeQueryInput = z
   .optional()
   .transform((v) => (v === undefined ? undefined : parseCmsPageType(v)));
 
-export const listFilterSchema = z.object({
-  query: z.object({
-    ...paginationQuery,
-    status: z.string().optional(),
-    audience: z.string().optional(),
-    categoryId: z.string().optional(),
-    featured: z.string().optional(),
-    sort: z.string().optional(),
-    type: typeQueryInput,
-    pageType: pageTypeInput,
-  }),
+const cmsListQuery = z.object({
+  ...paginationQuery,
+  status: z.string().optional(),
+  audience: z.string().optional(),
+  categoryId: z.string().optional(),
+  featured: z.string().optional(),
+  sort: z.string().optional(),
+  type: typeQueryInput,
+  pageType: pageTypeInput,
+  from: isoDateParam,
+  to: isoDateParam,
+  sortOrder: sortOrderParam,
 });
+
+const cmsListSchema = <T extends readonly [string, ...string[]]>(fields: T) =>
+  z.object({ query: cmsListQuery.extend({ sortBy: sortByParam(fields) }) });
+
+export const CMS_PAGE_SORT_FIELDS = ['title', 'slug', 'targetAudience', 'status', 'isActive', 'updatedBy', 'createdAt', 'updatedAt'] as const;
+export const CMS_SOCIAL_LINK_SORT_FIELDS = ['platform', 'profileUrl', 'sortOrder', 'status', 'createdAt', 'updatedAt'] as const;
+export const CMS_FAQ_CATEGORY_SORT_FIELDS = ['name', 'slug', 'faqsCount', 'createdAt', 'updatedAt'] as const;
+export const CMS_FAQ_SORT_FIELDS = [
+  'question',
+  'categoryName',
+  'pageType',
+  'targetAudience',
+  'status',
+  'displayOrder',
+  'createdAt',
+  'updatedAt',
+] as const;
+export const CMS_TESTIMONIAL_SORT_FIELDS = [
+  'authorName',
+  'authorRole',
+  'companyName',
+  'rating',
+  'pageType',
+  'targetAudience',
+  'status',
+  'isVerified',
+  'isFeatured',
+  'displayOrder',
+  'createdAt',
+  'updatedAt',
+] as const;
+export const CMS_LEGAL_POLICY_SORT_FIELDS = [
+  'name',
+  'slug',
+  'showInFooter',
+  'status',
+  'versionCount',
+  'effectiveDate',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+export const listCmsPagesSchema = cmsListSchema(CMS_PAGE_SORT_FIELDS);
+export const listCmsSocialLinksSchema = cmsListSchema(CMS_SOCIAL_LINK_SORT_FIELDS);
+export const listCmsFaqCategoriesSchema = cmsListSchema(CMS_FAQ_CATEGORY_SORT_FIELDS);
+export const listCmsFaqsSchema = cmsListSchema(CMS_FAQ_SORT_FIELDS);
+export const listCmsTestimonialsSchema = z.object({
+  query: cmsListQuery.extend({
+    sortBy: sortByParam(CMS_TESTIMONIAL_SORT_FIELDS),
+    isVerified: boolParam,
+    minRating: z.coerce.number().min(0).max(5).optional(),
+    maxRating: z.coerce.number().min(0).max(5).optional(),
+  }).superRefine(minLteMax('minRating', 'maxRating')),
+});
+export const listCmsLegalPoliciesSchema = cmsListSchema(CMS_LEGAL_POLICY_SORT_FIELDS);
 
 export const idParamSchema = z.object({
   params: z.object({
@@ -160,10 +219,20 @@ export const reorderFaqsSchema = z.object({
   }),
 });
 
+export const CMS_AUDIT_SORT_FIELDS = ['eventType', 'actorType', 'actorLabel', 'subjectType', 'description', 'createdAt'] as const;
+
 export const dashboardAuditSchema = z.object({
   query: z.object({
     page: z.string().optional(),
     limit: z.string().optional(),
+    search: z.string().trim().optional(),
+    eventType: z.string().trim().min(1).optional(),
+    actorType: z.string().trim().toUpperCase().pipe(z.nativeEnum(ActorType)).optional(),
+    subjectType: z.string().trim().min(1).optional(),
+    from: isoDateParam,
+    to: isoDateParam,
+    sortBy: sortByParam(CMS_AUDIT_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }),
 });
 
@@ -368,8 +437,24 @@ export const updateContactSettingsSchema = z.object({
   }),
 });
 
-export const surveyFilterSchema = z.object({
-  query: z.object({
+const SURVEY_COMMON_SORT_FIELDS = [
+  'registrationCode',
+  'name',
+  'email',
+  'phone',
+  'country',
+  'consentLaunchUpdates',
+  'consentMarketing',
+  'consentPartnerComm',
+  'status',
+  'reviewedBy',
+  'submittedAt',
+  'updatedAt',
+] as const;
+export const SURVEY_CONSUMER_SORT_FIELDS = [...SURVEY_COMMON_SORT_FIELDS, 'county', 'ageRange'] as const;
+export const SURVEY_TRADER_SORT_FIELDS = [...SURVEY_COMMON_SORT_FIELDS, 'companyName', 'companyWebsite'] as const;
+
+const surveyFilterQuery = z.object({
     ...paginationQuery,
     search: z.string().optional(),
     status: z.nativeEnum(SurveyRegistrationStatus).optional(),
@@ -381,9 +466,7 @@ export const surveyFilterSchema = z.object({
     consentPartnerComm: z.string().optional(),
     /** Legacy date sort: newest | oldest (still supported) */
     sort: z.enum(['newest', 'oldest']).optional(),
-    /** Admin UI sort: name | status | submittedAt */
-    sortBy: z.enum(['name', 'status', 'submittedAt', 'companyName']).optional(),
-    sortOrder: z.enum(['asc', 'desc']).optional(),
+    sortOrder: sortOrderParam,
     /** Date filters (ISO date YYYY-MM-DD or datetime) — filters submittedAt */
     dateFrom: z.string().optional(),
     dateTo: z.string().optional(),
@@ -396,7 +479,14 @@ export const surveyFilterSchema = z.object({
      * (also accepts this_week / this_month / "This Week")
      */
     dateFilter: z.string().optional(),
-  }),
+});
+
+export const surveyConsumerFilterSchema = z.object({
+  query: surveyFilterQuery.extend({ sortBy: sortByParam(SURVEY_CONSUMER_SORT_FIELDS) }),
+});
+
+export const surveyTraderFilterSchema = z.object({
+  query: surveyFilterQuery.extend({ sortBy: sortByParam(SURVEY_TRADER_SORT_FIELDS) }),
 });
 
 export const updateSurveyConsumerSchema = z.object({

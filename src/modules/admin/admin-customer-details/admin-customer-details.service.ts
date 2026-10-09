@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
+import { buildListOrderBy, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import { formatAddressLine } from '../../property/property.service';
@@ -149,6 +150,121 @@ export const getCustomerVerification = async (customerId: string) => {
 // Addresses
 // ---------------------------------------------------------------------------
 
+type DetailSortMap<O> = Record<string, (dir: SortDir) => O | O[]>;
+
+/** Whitelisted `sortBy`; omitted keeps the tab default column, honouring `sortOrder`. */
+const detailOrderBy = <O>(
+  filters: { sortBy?: string; sortOrder?: string },
+  map: DetailSortMap<O>,
+  fallbackSortBy: string
+): O[] =>
+  buildListOrderBy<O>(
+    filters.sortBy,
+    filters.sortOrder,
+    map,
+    { sortBy: fallbackSortBy, sortOrder: resolveSortDir(filters.sortOrder) },
+    { id: 'asc' } as O
+  );
+
+const ADDRESS_SORT_MAP: DetailSortMap<Prisma.AddressOrderByWithRelationInput> = {
+  label: (dir) => ({ label: { sort: dir, nulls: 'last' } }),
+  addressType: (dir) => ({ addressType: dir }),
+  addressLine1: (dir) => ({ addressLine1: dir }),
+  city: (dir) => ({ city: dir }),
+  county: (dir) => ({ county: { sort: dir, nulls: 'last' } }),
+  eircode: (dir) => ({ eircode: { sort: dir, nulls: 'last' } }),
+  country: (dir) => ({ country: dir }),
+  isDefault: (dir) => ({ isDefault: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const PROPERTY_SORT_MAP: DetailSortMap<Prisma.PropertyOrderByWithRelationInput> = {
+  propertyName: (dir) => ({ propertyName: dir }),
+  addressLine1: (dir) => ({ addressLine1: dir }),
+  city: (dir) => ({ city: dir }),
+  county: (dir) => ({ county: { sort: dir, nulls: 'last' } }),
+  eircode: (dir) => ({ eircode: { sort: dir, nulls: 'last' } }),
+  country: (dir) => ({ country: dir }),
+  metersCount: (dir) => ({ meters: { _count: dir } }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const CUSTOMER_JOB_SORT_MAP: DetailSortMap<Prisma.JobOrderByWithRelationInput> = {
+  jobRef: (dir) => ({ jobRef: { sort: dir, nulls: 'last' } }),
+  title: (dir) => ({ title: dir }),
+  status: (dir) => [{ status: dir }, { createdAt: 'desc' }],
+  categoryName: (dir) => [{ category: { name: dir } }, { createdAt: 'desc' }],
+  traderName: (dir) => [{ trader: { businessName: { sort: dir, nulls: 'last' } } }, { createdAt: 'desc' }],
+  city: (dir) => [{ city: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  postcode: (dir) => [{ postcode: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  serviceCharge: (dir) => [{ serviceCharge: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  quotesCount: (dir) => [{ quotes: { _count: dir } }, { createdAt: 'desc' }],
+  photosCount: (dir) => [{ photos: { _count: dir } }, { createdAt: 'desc' }],
+  scheduledDate: (dir) => [{ scheduledDate: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+const CUSTOMER_PAYMENT_SORT_MAP: DetailSortMap<Prisma.PaymentOrderByWithRelationInput> = {
+  transactionRef: (dir) => ({ transactionRef: { sort: dir, nulls: 'last' } }),
+  amount: (dir) => [{ amount: dir }, { createdAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { createdAt: 'desc' }],
+  method: (dir) => [{ method: dir }, { createdAt: 'desc' }],
+  billingType: (dir) => [{ billingType: dir }, { createdAt: 'desc' }],
+  invoiceNumber: (dir) => [{ invoice: { invoiceNumber: { sort: dir, nulls: 'last' } } }, { createdAt: 'desc' }],
+  jobRef: (dir) => [{ invoice: { booking: { job: { jobRef: { sort: dir, nulls: 'last' } } } } }, { createdAt: 'desc' }],
+  traderName: (dir) => [{ invoice: { booking: { trader: { businessName: { sort: dir, nulls: 'last' } } } } }, { createdAt: 'desc' }],
+  paidAt: (dir) => [{ paidAt: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+const CUSTOMER_REFUND_SORT_MAP: DetailSortMap<Prisma.RefundOrderByWithRelationInput> = {
+  refundRef: (dir) => ({ refundRef: dir }),
+  transactionRef: (dir) => [{ transactionRef: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  amount: (dir) => [{ refundAmount: dir }, { createdAt: 'desc' }],
+  originalAmount: (dir) => [{ originalAmount: dir }, { createdAt: 'desc' }],
+  reason: (dir) => [{ reason: dir }, { createdAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { createdAt: 'desc' }],
+  processedAt: (dir) => [{ processedAt: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+const CUSTOMER_OFFER_SORT_MAP: DetailSortMap<Prisma.OfferClaimOrderByWithRelationInput> = {
+  offerCode: (dir) => [{ offer: { offerCode: dir } }, { claimedAt: 'desc' }],
+  title: (dir) => [{ offer: { title: dir } }, { claimedAt: 'desc' }],
+  couponCode: (dir) => [{ offer: { couponCode: { sort: dir, nulls: 'last' } } }, { claimedAt: 'desc' }],
+  discountValue: (dir) => [{ offer: { discountValue: dir } }, { claimedAt: 'desc' }],
+  validUntil: (dir) => [{ offer: { validUntil: dir } }, { claimedAt: 'desc' }],
+  jobRef: (dir) => [{ job: { jobRef: { sort: dir, nulls: 'last' } } }, { claimedAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { claimedAt: 'desc' }],
+  usedAt: (dir) => [{ usedAt: { sort: dir, nulls: 'last' } }, { claimedAt: 'desc' }],
+  claimedAt: (dir) => ({ claimedAt: dir }),
+};
+
+const CUSTOMER_REVIEW_SORT_MAP: DetailSortMap<Prisma.RatingReviewOrderByWithRelationInput> = {
+  stars: (dir) => [{ stars: dir }, { createdAt: 'desc' }],
+  review: (dir) => [{ review: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  traderName: (dir) => [{ trader: { businessName: { sort: dir, nulls: 'last' } } }, { createdAt: 'desc' }],
+  jobRef: (dir) => [{ booking: { job: { jobRef: { sort: dir, nulls: 'last' } } } }, { createdAt: 'desc' }],
+  jobTitle: (dir) => [{ booking: { job: { title: dir } } }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+const CUSTOMER_NOTIFICATION_SORT_MAP: DetailSortMap<Prisma.NotificationOrderByWithRelationInput> = {
+  type: (dir) => [{ type: dir }, { createdAt: 'desc' }],
+  read: (dir) => [{ read: dir }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+const CUSTOMER_ACTIVITY_SORT_MAP: DetailSortMap<Prisma.AuditLogOrderByWithRelationInput> = {
+  eventType: (dir) => [{ eventType: dir }, { createdAt: 'desc' }],
+  actorType: (dir) => [{ actorType: dir }, { createdAt: 'desc' }],
+  actorLabel: (dir) => [{ actorLabel: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  description: (dir) => [{ description: dir }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
 export const listCustomerAddresses = async (
   customerId: string,
   filters: {
@@ -165,7 +281,6 @@ export const listCustomerAddresses = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.AddressWhereInput = { userId: customerId };
   if (filters.addressType) where.addressType = filters.addressType;
@@ -180,12 +295,7 @@ export const listCustomerAddresses = async (
     ];
   }
 
-  const orderBy: Prisma.AddressOrderByWithRelationInput =
-    filters.sortBy === 'city'
-      ? { city: sortOrder }
-      : filters.sortBy === 'addressType'
-        ? { addressType: sortOrder }
-        : { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.AddressOrderByWithRelationInput>(filters, ADDRESS_SORT_MAP, 'createdAt');
 
   const [total, rows] = await Promise.all([
     prisma.address.count({ where }),
@@ -259,7 +369,7 @@ export const listCustomerProperties = async (
     page?: string;
     limit?: string;
     search?: string;
-    sortBy?: 'createdAt' | 'propertyName' | 'city';
+    sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }
 ) => {
@@ -268,7 +378,6 @@ export const listCustomerProperties = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.PropertyWhereInput = { userId: customerId };
   if (filters.search?.trim()) {
@@ -288,7 +397,7 @@ export const listCustomerProperties = async (
       where,
       skip,
       take: limit,
-      orderBy: { [filters.sortBy ?? 'createdAt']: sortOrder },
+      orderBy: detailOrderBy<Prisma.PropertyOrderByWithRelationInput>(filters, PROPERTY_SORT_MAP, 'createdAt'),
       include: {
         address: { include: { _count: { select: { jobs: true } } } },
         meters: { select: { meterType: true, mprnGprn: true } },
@@ -438,7 +547,6 @@ export const listCustomerJobs = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.JobWhereInput = {
     customerId,
@@ -460,14 +568,7 @@ export const listCustomerJobs = async (
     ];
   }
 
-  const orderBy: Prisma.JobOrderByWithRelationInput =
-    filters.sortBy === 'status'
-      ? { status: sortOrder }
-      : filters.sortBy === 'scheduledDate'
-        ? { scheduledDate: sortOrder }
-        : filters.sortBy === 'title'
-          ? { title: sortOrder }
-          : { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.JobOrderByWithRelationInput>(filters, CUSTOMER_JOB_SORT_MAP, 'createdAt');
 
   const [total, rows] = await Promise.all([
     prisma.job.count({ where }),
@@ -827,7 +928,6 @@ export const listCustomerPayments = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.PaymentWhereInput = {
     userId: customerId,
@@ -849,14 +949,7 @@ export const listCustomerPayments = async (
     ];
   }
 
-  const orderBy: Prisma.PaymentOrderByWithRelationInput =
-    filters.sortBy === 'amount'
-      ? { amount: sortOrder }
-      : filters.sortBy === 'status'
-        ? { status: sortOrder }
-        : filters.sortBy === 'paidAt'
-          ? { paidAt: sortOrder }
-          : { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.PaymentOrderByWithRelationInput>(filters, CUSTOMER_PAYMENT_SORT_MAP, 'createdAt');
 
   const [total, rows] = await Promise.all([
     prisma.payment.count({ where }),
@@ -936,6 +1029,7 @@ export const listCustomerRefunds = async (
     sortOrder?: 'asc' | 'desc';
     from?: string;
     to?: string;
+    status?: RefundStatus;
   }
 ) => {
   await assertCustomerExists(customerId);
@@ -943,11 +1037,11 @@ export const listCustomerRefunds = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.RefundWhereInput = {
     userId: customerId,
     ...dateRangeFilter(filters.from, filters.to, 'createdAt'),
+    ...(filters.status ? { status: filters.status } : {}),
   };
 
   if (filters.search?.trim()) {
@@ -958,12 +1052,7 @@ export const listCustomerRefunds = async (
     ];
   }
 
-  const orderBy: Prisma.RefundOrderByWithRelationInput =
-    filters.sortBy === 'amount'
-      ? { refundAmount: sortOrder }
-      : filters.sortBy === 'status'
-        ? { status: sortOrder }
-        : { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.RefundOrderByWithRelationInput>(filters, CUSTOMER_REFUND_SORT_MAP, 'createdAt');
 
   const [total, rows] = await Promise.all([
     prisma.refund.count({ where }),
@@ -1051,7 +1140,6 @@ export const listCustomerOffers = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.OfferClaimWhereInput = {
     userId: customerId,
@@ -1077,12 +1165,7 @@ export const listCustomerOffers = async (
     ];
   }
 
-  const orderBy: Prisma.OfferClaimOrderByWithRelationInput =
-    filters.sortBy === 'usedAt'
-      ? { usedAt: sortOrder }
-      : filters.sortBy === 'status'
-        ? { status: sortOrder }
-        : { claimedAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.OfferClaimOrderByWithRelationInput>(filters, CUSTOMER_OFFER_SORT_MAP, 'claimedAt');
 
   const [total, rows] = await Promise.all([
     prisma.offerClaim.count({ where }),
@@ -1199,7 +1282,6 @@ export const listCustomerReviews = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.RatingReviewWhereInput = {
     customerId,
@@ -1217,8 +1299,7 @@ export const listCustomerReviews = async (
     ];
   }
 
-  const orderBy: Prisma.RatingReviewOrderByWithRelationInput =
-    filters.sortBy === 'stars' ? { stars: sortOrder } : { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.RatingReviewOrderByWithRelationInput>(filters, CUSTOMER_REVIEW_SORT_MAP, 'createdAt');
 
   const [total, rows] = await Promise.all([
     prisma.ratingReview.count({ where }),
@@ -1297,7 +1378,6 @@ export const listCustomerNotifications = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.NotificationWhereInput = {
     userId: customerId,
@@ -1312,7 +1392,7 @@ export const listCustomerNotifications = async (
     where.OR = [{ type: { contains: q, mode: 'insensitive' } }];
   }
 
-  const orderBy: Prisma.NotificationOrderByWithRelationInput = { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.NotificationOrderByWithRelationInput>(filters, CUSTOMER_NOTIFICATION_SORT_MAP, 'createdAt');
 
   const [total, unreadCount, rows] = await Promise.all([
     prisma.notification.count({ where }),
@@ -1368,11 +1448,11 @@ export const listCustomerActivity = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
 
   const where: Prisma.AuditLogWhereInput = {
     OR: [
       { subjectType: 'USER', subjectId: customerId },
+      { subjectType: 'User', subjectId: customerId },
       { subjectType: 'Customer', subjectId: customerId },
       { subjectType: 'customer', subjectId: customerId },
       { actorType: 'CUSTOMER', actorId: customerId },
@@ -1400,7 +1480,7 @@ export const listCustomerActivity = async (
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: sortOrder },
+      orderBy: detailOrderBy<Prisma.AuditLogOrderByWithRelationInput>(filters, CUSTOMER_ACTIVITY_SORT_MAP, 'createdAt'),
     }),
   ]);
 

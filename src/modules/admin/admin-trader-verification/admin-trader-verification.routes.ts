@@ -54,24 +54,36 @@ router.get('/trader-verification/stats', controller.getStats);
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
  *       - in: query
  *         name: status
+ *         description: Verification status.
  *         schema: { type: string, enum: [PENDING, VERIFIED, REJECTED, SUSPENDED] }
  *       - in: query
  *         name: entityType
  *         schema: { type: string, enum: [SOLO, COMPANY] }
  *       - in: query
+ *         name: onboardingStatus
+ *         description: Omit for all three queue states.
+ *         schema: { type: string, enum: [SUBMITTED, APPROVED, REJECTED] }
+ *       - in: query
  *         name: search
+ *         description: Business / legal name, trader code, contact name or email.
  *         schema: { type: string }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         description: '`contactName` / `email` / `mobileNumber` = trader user. `from`/`to` and `submittedAt` = onboardingSubmittedAt.'
+ *         schema:
+ *           type: string
+ *           enum: [traderCode, traderType, businessName, fullLegalName, contactName, email, mobileNumber, verificationStatus, onboardingStatus, submittedAt]
+ *           default: submittedAt
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Queue retrieved.
+ *         description: Queue page.
  *         content:
  *           application/json:
  *             example:
@@ -82,15 +94,16 @@ router.get('/trader-verification/stats', controller.getStats);
  *                   traderCode: TRD-1001
  *                   traderType: SOLO
  *                   businessName: The Book Nook
+ *                   fullLegalName: Liam O Connor
  *                   verificationStatus: PENDING
  *                   onboardingStatus: SUBMITTED
- *               meta:
- *                 total: 1
- *                 page: 1
- *                 limit: 10
- *                 totalPages: 1
- *       401:
- *         description: Unauthorized.
+ *                   onboardingSubmittedAt: '2026-09-30T08:12:00.000Z'
+ *                   categories:
+ *                     - { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Residential Plumbing }
+ *                   user: { fullName: Liam O Connor, email: liam@example.com, mobileNumber: '+353871112223' }
+ *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get(
   '/trader-verification/queue',

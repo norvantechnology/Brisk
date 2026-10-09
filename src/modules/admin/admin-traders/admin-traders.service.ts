@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../../../config/database';
 import { ConflictError, NotFoundError } from '../../../utils/errors';
 import { describePersonalId } from '../../traders/personal-id';
+import { buildListOrderBy, compareValues, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import {
   CreateTraderInput,
   TraderAccountStatus,
@@ -231,6 +232,81 @@ export const getTraderDirectoryStats = async (filters: TraderStatsFilters = {}) 
   };
 };
 
+const nullsLast = (sort: SortDir) => ({ sort, nulls: 'last' as const });
+
+const TRADER_SORT_MAP: Record<string, (dir: SortDir) => Prisma.TraderOrderByWithRelationInput | Prisma.TraderOrderByWithRelationInput[]> = {
+  traderCode: (dir) => ({ traderCode: nullsLast(dir) }),
+  businessType: (dir) => ({ traderType: dir }),
+  contactName: (dir) => ({ user: { fullName: dir } }),
+  email: (dir) => ({ user: { email: dir } }),
+  mobileNumber: (dir) => ({ user: { mobileNumber: dir } }),
+  listingsCount: (dir) => ({ offers: { _count: dir } }),
+  bookingsCount: (dir) => ({ bookings: { _count: dir } }),
+  jobsDoneCount: (dir) => ({ jobsDoneCount: dir }),
+  rating: (dir) => ({ avgRating: dir }),
+  reviewsCount: (dir) => ({ ratingsReceived: { _count: dir } }),
+  verificationStatus: (dir) => ({ verificationStatus: dir }),
+  onboardingStatus: (dir) => ({ onboardingStatus: dir }),
+  joinedAt: (dir) => ({ createdAt: dir }),
+};
+
+/** Columns whose displayed value is derived in formatTraderRow (fallbacks / aggregates). */
+const COMPUTED_TRADER_SORTS = new Set(['businessName', 'revenue', 'status', 'country', 'city']);
+
+const rankTraderIdsByComputedColumn = async (
+  where: Prisma.TraderWhereInput,
+  sortBy: string,
+  dir: SortDir
+): Promise<string[]> => {
+  const rows = await prisma.trader.findMany({
+    where,
+    select: {
+      id: true,
+      businessName: true,
+      fullLegalName: true,
+      status: true,
+      country: true,
+      city: true,
+      user: { select: { fullName: true, status: true, country: true, city: true } },
+    },
+  });
+
+  let revenueById = new Map<string, number>();
+  if (sortBy === 'revenue' && rows.length) {
+    const payments = await prisma.payment.findMany({
+      where: { status: 'COMPLETED', invoice: { booking: { traderId: { in: rows.map((r) => r.id) } } } },
+      select: { amount: true, invoice: { select: { booking: { select: { traderId: true } } } } },
+    });
+    revenueById = payments.reduce((m, p) => {
+      const traderId = p.invoice.booking?.traderId;
+      if (traderId) m.set(traderId, (m.get(traderId) ?? 0) + Number(p.amount));
+      return m;
+    }, new Map<string, number>());
+  }
+
+  const keyOf = (r: (typeof rows)[number]): string | number | null => {
+    switch (sortBy) {
+      case 'businessName':
+        return r.businessName?.trim() || r.fullLegalName?.trim() || r.user.fullName;
+      case 'revenue':
+        return revenueById.get(r.id) ?? 0;
+      case 'status':
+        return toApiTraderStatus(r.status, r.user.status);
+      case 'country':
+        return r.country || r.user.country || null;
+      case 'city':
+        return r.city || r.user.city || null;
+      default:
+        return null;
+    }
+  };
+
+  return rows
+    .map((r) => ({ id: r.id, key: keyOf(r) }))
+    .sort((a, b) => compareValues(a.key, b.key, dir) || a.id.localeCompare(b.id))
+    .map((r) => r.id);
+};
+
 export const listTraders = async (filters: TraderListFilters) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
@@ -305,6 +381,30 @@ export const listTraders = async (filters: TraderListFilters) => {
     ];
   }
 
+  if (filters.city?.trim()) {
+    const city = filters.city.trim();
+    where.AND = [
+      ...((where.AND as Prisma.TraderWhereInput[]) || []),
+      {
+        OR: [
+          { city: { contains: city, mode: 'insensitive' } },
+          { user: { city: { contains: city, mode: 'insensitive' } } },
+        ],
+      },
+    ];
+  }
+
+  if (filters.traderType) {
+    where.traderType = filters.traderType as TraderType;
+  }
+
+  if (filters.minRating !== undefined || filters.maxRating !== undefined) {
+    where.avgRating = {
+      ...(filters.minRating !== undefined ? { gte: filters.minRating } : {}),
+      ...(filters.maxRating !== undefined ? { lte: filters.maxRating } : {}),
+    };
+  }
+
   const include = {
     user: {
       select: {
@@ -333,16 +433,36 @@ export const listTraders = async (filters: TraderListFilters) => {
     },
   } as const;
 
-  const [total, traders] = await Promise.all([
-    prisma.trader.count({ where }),
-    prisma.trader.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include,
-    }),
-  ]);
+  const dir = resolveSortDir(filters.sortOrder);
+  let traders: Prisma.TraderGetPayload<{ include: typeof include }>[];
+  let total: number;
+
+  if (filters.sortBy && COMPUTED_TRADER_SORTS.has(filters.sortBy)) {
+    // Display value is derived (fallbacks / revenue) — rank matching ids in memory, then load the page.
+    const ranked = await rankTraderIdsByComputedColumn(where, filters.sortBy, dir);
+    total = ranked.length;
+    const pageIds = ranked.slice(skip, skip + limit);
+    const rows = await prisma.trader.findMany({ where: { id: { in: pageIds } }, include });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    traders = pageIds.map((id) => byId.get(id)).filter((r): r is (typeof rows)[number] => Boolean(r));
+  } else {
+    [total, traders] = await Promise.all([
+      prisma.trader.count({ where }),
+      prisma.trader.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: buildListOrderBy<Prisma.TraderOrderByWithRelationInput>(
+          filters.sortBy,
+          filters.sortOrder,
+          TRADER_SORT_MAP,
+          { sortBy: 'joinedAt', sortOrder: 'desc' },
+          { id: 'asc' }
+        ),
+        include,
+      }),
+    ]);
+  }
 
   const rows = await Promise.all(traders.map((trader) => formatTraderRow(trader)));
 

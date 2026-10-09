@@ -15,8 +15,10 @@ import type Stripe from 'stripe';
 import { prisma } from '../../../config/database';
 import { getStripe, toMinorUnits, toPaymentError } from '../../../services/stripe.service';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
+import { buildListOrderBy, pageIdsByComputedKey, resolveSortDir, type SortDir } from '../../../utils/list-sort';
+import { findOfferPage } from '../admin-offers/admin-offers.service';
 import type { CreateTraderPayoutInput } from './admin-trader-details.validation';
-import { offerInclude, serializeOffer } from '../../offers/offers.serializers';
+import { serializeOffer } from '../../offers/offers.serializers';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
 import { formatDocumentExpiryDate } from '../../document-rules/document-expiry';
 import {
@@ -61,6 +63,36 @@ const assertTraderExists = async (traderId: string) => {
   });
   if (!trader) throw new NotFoundError('Trader not found.');
   return trader;
+};
+
+type DetailSortMap<O> = Record<string, (dir: SortDir) => O | O[]>;
+
+/** Whitelisted `sortBy`; omitted keeps the tab default column, honouring `sortOrder`. */
+const detailOrderBy = <O>(
+  filters: { sortBy?: string; sortOrder?: string },
+  map: DetailSortMap<O>,
+  fallbackSortBy: string
+): O[] =>
+  buildListOrderBy<O>(
+    filters.sortBy,
+    filters.sortOrder,
+    map,
+    { sortBy: fallbackSortBy, sortOrder: resolveSortDir(filters.sortOrder) },
+    { id: 'asc' } as O
+  );
+
+/** Ranks every matching row by a computed key, then loads only the requested page in that order. */
+const loadPageInOrder = async <R extends { id: string; createdAt: Date }, T extends { id: string }>(
+  candidates: R[],
+  keyOf: (row: R) => unknown,
+  sortOrder: string | undefined,
+  skip: number,
+  take: number,
+  loadByIds: (ids: string[]) => Promise<T[]>
+): Promise<T[]> => {
+  const ids = pageIdsByComputedKey(candidates, keyOf, resolveSortDir(sortOrder), skip, take);
+  const byId = new Map((await loadByIds(ids)).map((r) => [r.id, r]));
+  return ids.map((id) => byId.get(id)).filter((r): r is T => Boolean(r));
 };
 
 const dateRangeFilter = (from?: string, to?: string, field = 'createdAt') => {
@@ -131,6 +163,18 @@ export const getTraderDocumentsStats = async (traderId: string) => {
   };
 };
 
+const TRADER_DOCUMENT_SORT_MAP: DetailSortMap<Prisma.TraderDocumentOrderByWithRelationInput> = {
+  name: (dir) => [{ documentRule: { name: dir } }, { uploadedAt: 'desc' }],
+  documentKey: (dir) => [{ documentRule: { documentKey: dir } }, { uploadedAt: 'desc' }],
+  required: (dir) => [{ documentRule: { required: dir } }, { uploadedAt: 'desc' }],
+  scope: (dir) => [{ documentRule: { scope: dir } }, { documentRule: { traderType: dir } }, { uploadedAt: 'desc' }],
+  fileName: (dir) => [{ fileName: { sort: dir, nulls: 'last' } }, { uploadedAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { uploadedAt: 'desc' }],
+  expiryDate: (dir) => [{ expiryDate: { sort: dir, nulls: 'last' } }, { uploadedAt: 'desc' }],
+  reviewedAt: (dir) => [{ reviewedAt: { sort: dir, nulls: 'last' } }, { uploadedAt: 'desc' }],
+  uploadedAt: (dir) => ({ uploadedAt: dir }),
+};
+
 export const listTraderDocuments = async (
   traderId: string,
   filters: {
@@ -150,8 +194,6 @@ export const listTraderDocuments = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
-
   const where: Prisma.TraderDocumentWhereInput = {
     traderId,
     ...dateRangeFilter(filters.from, filters.to, 'uploadedAt'),
@@ -175,40 +217,48 @@ export const listTraderDocuments = async (
     ];
   }
 
-  const orderBy: Prisma.TraderDocumentOrderByWithRelationInput =
-    filters.sortBy === 'name'
-      ? { documentRule: { name: sortOrder } }
-      : filters.sortBy === 'status'
-        ? { status: sortOrder }
-        : filters.sortBy === 'reviewedAt'
-          ? { reviewedAt: sortOrder }
-          : { uploadedAt: sortOrder };
+  const include = {
+    documentRule: {
+      select: {
+        id: true,
+        documentKey: true,
+        name: true,
+        description: true,
+        required: true,
+        scope: true,
+        traderType: true,
+        categoryId: true,
+        acceptedFormats: true,
+        category: { select: { id: true, name: true } },
+      },
+    },
+  } satisfies Prisma.TraderDocumentInclude;
 
-  const [total, rows] = await Promise.all([
-    prisma.traderDocument.count({ where }),
-    prisma.traderDocument.findMany({
+  const findPage = async () => {
+    if (filters.sortBy === 'categoryName') {
+      const candidates = await prisma.traderDocument.findMany({
+        where,
+        select: { id: true, uploadedAt: true, documentRule: { select: { category: { select: { name: true } } } } },
+      });
+      return loadPageInOrder(
+        candidates.map((d) => ({ id: d.id, createdAt: d.uploadedAt, categoryName: d.documentRule.category?.name ?? null })),
+        (r) => r.categoryName,
+        filters.sortOrder,
+        skip,
+        limit,
+        (ids) => prisma.traderDocument.findMany({ where: { id: { in: ids } }, include })
+      );
+    }
+    return prisma.traderDocument.findMany({
       where,
       skip,
       take: limit,
-      orderBy,
-      include: {
-        documentRule: {
-          select: {
-            id: true,
-            documentKey: true,
-            name: true,
-            description: true,
-            required: true,
-            scope: true,
-            traderType: true,
-            categoryId: true,
-            acceptedFormats: true,
-            category: { select: { id: true, name: true } },
-          },
-        },
-      },
-    }),
-  ]);
+      orderBy: detailOrderBy<Prisma.TraderDocumentOrderByWithRelationInput>(filters, TRADER_DOCUMENT_SORT_MAP, 'uploadedAt'),
+      include,
+    });
+  };
+
+  const [total, rows] = await Promise.all([prisma.traderDocument.count({ where }), findPage()]);
 
   return {
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
@@ -265,6 +315,41 @@ const resolveSiteVisitStatus = (job: {
     return 'Visit Cancelled';
   }
   return 'Visit Pending';
+};
+
+const TRADER_JOB_SORT_MAP: DetailSortMap<Prisma.JobOrderByWithRelationInput> = {
+  jobRef: (dir) => ({ jobRef: { sort: dir, nulls: 'last' } }),
+  title: (dir) => [{ title: dir }, { createdAt: 'desc' }],
+  customerName: (dir) => [{ customer: { fullName: dir } }, { createdAt: 'desc' }],
+  categoryName: (dir) => [{ category: { name: dir } }, { createdAt: 'desc' }],
+  scheduledDate: (dir) => [{ scheduledDate: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { createdAt: 'desc' }],
+  siteVisitFee: (dir) => [{ siteVisitFee: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+const TRADER_JOB_RANK_SELECT = {
+  id: true,
+  createdAt: true,
+  scheduledDate: true,
+  serviceCharge: true,
+  siteVisitFee: true,
+  siteVisitRequested: true,
+  quoteType: true,
+  status: true,
+  subcategory: { select: { name: true } },
+  booking: { select: { bookingRef: true, status: true, invoice: { select: { totalAmount: true } } } },
+} satisfies Prisma.JobSelect;
+
+type TraderJobRankRow = Prisma.JobGetPayload<{ select: typeof TRADER_JOB_RANK_SELECT }>;
+
+/** Same values the jobs tab displays (COALESCE / optional relations), ranked in memory. */
+const COMPUTED_TRADER_JOB_SORTS: Record<string, (row: TraderJobRankRow) => unknown> = {
+  amount: (r) => round2(money(r.booking?.invoice?.totalAmount ?? r.serviceCharge ?? r.siteVisitFee)),
+  date: (r) => r.scheduledDate ?? r.createdAt,
+  subcategoryName: (r) => r.subcategory?.name ?? null,
+  bookingRef: (r) => r.booking?.bookingRef ?? null,
+  siteVisitStatus: (r) => resolveSiteVisitStatus(r),
 };
 
 export const getTraderJobsStats = async (traderId: string) => {
@@ -349,8 +434,6 @@ export const listTraderJobs = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
-
   const where: Prisma.JobWhereInput = {
     traderId,
     ...dateRangeFilter(filters.from, filters.to, 'createdAt'),
@@ -370,46 +453,45 @@ export const listTraderJobs = async (
     ];
   }
 
-  const orderBy: Prisma.JobOrderByWithRelationInput =
-    filters.sortBy === 'amount'
-      ? { serviceCharge: sortOrder }
-      : filters.sortBy === 'status'
-        ? { status: sortOrder }
-        : filters.sortBy === 'scheduledDate'
-          ? { scheduledDate: sortOrder }
-          : filters.sortBy === 'title'
-            ? { title: sortOrder }
-            : { createdAt: sortOrder };
-
-  const [total, rows] = await Promise.all([
-    prisma.job.count({ where }),
-    prisma.job.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy,
-      include: {
-        customer: { select: { id: true, fullName: true, email: true } },
-        category: { select: { id: true, name: true } },
-        subcategory: { select: { id: true, name: true } },
-        booking: {
+  const include = {
+    customer: { select: { id: true, fullName: true, email: true } },
+    category: { select: { id: true, name: true } },
+    subcategory: { select: { id: true, name: true } },
+    booking: {
+      select: {
+        id: true,
+        bookingRef: true,
+        status: true,
+        invoice: {
           select: {
             id: true,
-            bookingRef: true,
+            totalAmount: true,
+            currencyCode: true,
             status: true,
-            invoice: {
-              select: {
-                id: true,
-                totalAmount: true,
-                currencyCode: true,
-                status: true,
-              },
-            },
           },
         },
       },
-    }),
-  ]);
+    },
+  } satisfies Prisma.JobInclude;
+
+  const computedKey = filters.sortBy ? COMPUTED_TRADER_JOB_SORTS[filters.sortBy] : undefined;
+  const findPage = async () => {
+    if (computedKey) {
+      const candidates = await prisma.job.findMany({ where, select: TRADER_JOB_RANK_SELECT });
+      return loadPageInOrder(candidates, computedKey, filters.sortOrder, skip, limit, (ids) =>
+        prisma.job.findMany({ where: { id: { in: ids } }, include })
+      );
+    }
+    return prisma.job.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: detailOrderBy<Prisma.JobOrderByWithRelationInput>(filters, TRADER_JOB_SORT_MAP, 'createdAt'),
+      include,
+    });
+  };
+
+  const [total, rows] = await Promise.all([prisma.job.count({ where }), findPage()]);
 
   return {
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
@@ -491,6 +573,17 @@ export const getTraderReviewsStats = async (traderId: string) => {
   };
 };
 
+const TRADER_REVIEW_SORT_MAP: DetailSortMap<Prisma.RatingReviewOrderByWithRelationInput> = {
+  stars: (dir) => [{ stars: dir }, { createdAt: 'desc' }],
+  review: (dir) => [{ review: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  customerName: (dir) => [{ customer: { fullName: dir } }, { createdAt: 'desc' }],
+  bookingRef: (dir) => [{ booking: { bookingRef: { sort: dir, nulls: 'last' } } }, { createdAt: 'desc' }],
+  jobRef: (dir) => [{ booking: { job: { jobRef: { sort: dir, nulls: 'last' } } } }, { createdAt: 'desc' }],
+  jobTitle: (dir) => [{ booking: { job: { title: dir } } }, { createdAt: 'desc' }],
+  categoryName: (dir) => [{ booking: { job: { category: { name: dir } } } }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
 export const listTraderReviews = async (
   traderId: string,
   filters: {
@@ -509,8 +602,6 @@ export const listTraderReviews = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
-
   const where: Prisma.RatingReviewWhereInput = {
     traderId,
     ...dateRangeFilter(filters.from, filters.to, 'createdAt'),
@@ -528,10 +619,7 @@ export const listTraderReviews = async (
     ];
   }
 
-  const orderBy: Prisma.RatingReviewOrderByWithRelationInput =
-    filters.sortBy === 'stars'
-      ? { stars: sortOrder }
-      : { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.RatingReviewOrderByWithRelationInput>(filters, TRADER_REVIEW_SORT_MAP, 'createdAt');
 
   const [total, rows] = await Promise.all([
     prisma.ratingReview.count({ where }),
@@ -642,6 +730,16 @@ export const getTraderEarningsSummary = async (traderId: string) => {
   };
 };
 
+const TRADER_PAYOUT_SORT_MAP: DetailSortMap<Prisma.PayoutOrderByWithRelationInput> = {
+  payoutRef: (dir) => ({ id: dir }),
+  amount: (dir) => [{ amount: dir }, { createdAt: 'desc' }],
+  currencyCode: (dir) => [{ currencyCode: dir }, { createdAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { createdAt: 'desc' }],
+  stripeTransferId: (dir) => [{ stripeTransferId: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  processedAt: (dir) => [{ processedAt: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
 export const listTraderPayouts = async (
   traderId: string,
   filters: {
@@ -660,8 +758,6 @@ export const listTraderPayouts = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
-
   const where: Prisma.PayoutWhereInput = {
     traderId,
     ...dateRangeFilter(filters.from, filters.to, 'createdAt'),
@@ -678,14 +774,7 @@ export const listTraderPayouts = async (
     }
   }
 
-  const orderBy: Prisma.PayoutOrderByWithRelationInput =
-    filters.sortBy === 'amount'
-      ? { amount: sortOrder }
-      : filters.sortBy === 'status'
-        ? { status: sortOrder }
-        : filters.sortBy === 'processedAt'
-          ? { processedAt: sortOrder }
-          : { createdAt: sortOrder };
+  const orderBy = detailOrderBy<Prisma.PayoutOrderByWithRelationInput>(filters, TRADER_PAYOUT_SORT_MAP, 'createdAt');
 
   const [total, rows] = await Promise.all([
     prisma.payout.count({ where }),
@@ -870,15 +959,21 @@ export const listTraderOffers = async (
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
   const skip = (page - 1) * limit;
-  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
-
   const where: Prisma.OfferWhereInput = {
     traderId,
     offerType: OfferType.TRADER,
     ...dateRangeFilter(filters.from, filters.to, 'createdAt'),
   };
 
-  if (filters.status) where.status = filters.status;
+  const now = new Date();
+  if (filters.status === OfferStatus.ACTIVE) {
+    where.status = OfferStatus.ACTIVE;
+    where.validUntil = { gte: now };
+  } else if (filters.status === OfferStatus.EXPIRED) {
+    where.AND = [{ OR: [{ status: OfferStatus.EXPIRED }, { status: OfferStatus.ACTIVE, validUntil: { lt: now } }] }];
+  } else if (filters.status) {
+    where.status = filters.status;
+  }
   if (filters.categoryId) {
     where.categories = { some: { categoryId: filters.categoryId } };
   }
@@ -892,26 +987,9 @@ export const listTraderOffers = async (
     ];
   }
 
-  const orderBy: Prisma.OfferOrderByWithRelationInput =
-    filters.sortBy === 'claimsCount'
-      ? { claimsCount: sortOrder }
-      : filters.sortBy === 'viewsCount'
-        ? { viewsCount: sortOrder }
-      : filters.sortBy === 'validUntil'
-        ? { validUntil: sortOrder }
-        : filters.sortBy === 'title'
-          ? { title: sortOrder }
-          : { createdAt: sortOrder };
-
   const [total, rows] = await Promise.all([
     prisma.offer.count({ where }),
-    prisma.offer.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy,
-      include: offerInclude,
-    }),
+    findOfferPage(where, filters.sortBy, filters.sortOrder, skip, limit, resolveSortDir(filters.sortOrder)),
   ]);
 
   return {

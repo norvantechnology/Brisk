@@ -19,6 +19,12 @@ export type TraderListFilters = {
   joinedFrom?: string;
   /** Inclusive end of trader.createdAt (ISO date or datetime). */
   joinedTo?: string;
+  traderType?: 'SOLO' | 'COMPANY';
+  city?: string;
+  minRating?: number;
+  maxRating?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 };
 
 export type TraderStatsFilters = {

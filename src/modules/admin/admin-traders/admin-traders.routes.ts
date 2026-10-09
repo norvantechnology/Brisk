@@ -266,6 +266,14 @@ router.get('/traders/stats', validate(traderStatsFilterSchema), controller.getSt
  *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 20, maximum: 100 }
+ *       - in: query
+ *         name: sortBy
+ *         description: "Column to sort by (default `expiryDate`, soonest first). `daysLeft` = `expiryDate`. `traderName` = business name, else full name. Unknown values return 400."
+ *         schema: { type: string, enum: [expiryDate, daysLeft, documentName, documentKey, scope, categoryName, required, fileName, status, lastReminderStage, uploadedAt, traderName, email, mobileNumber], default: expiryDate }
+ *       - in: query
+ *         name: sortOrder
+ *         description: Sort direction. Defaults to `asc` for this list. Empty values are always listed last.
+ *         schema: { type: string, enum: [asc, desc], default: asc }
  *     responses:
  *       200:
  *         description: Expiring documents retrieved.
@@ -309,8 +317,8 @@ router.get('/traders/stats', validate(traderStatsFilterSchema), controller.getSt
  *                       mobileNumber: '+353871234567'
  *                       profilePhotoUrl: null
  *                 meta: { total: 12, page: 1, limit: 20, totalPages: 1 }
- *       401:
- *         description: Missing/invalid admin token.
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get(
   '/traders/documents/expiring',
@@ -396,6 +404,35 @@ router.get(
  *         name: joinedTo
  *         schema: { type: string, example: '2026-09-30' }
  *         description: Inclusive end of `trader.createdAt` (ISO date or datetime). Date-only = 23:59:59.999Z.
+ *       - in: query
+ *         name: traderType
+ *         schema: { type: string, enum: [SOLO, COMPANY] }
+ *         description: Business Type column filter (SOLO = Individual, COMPANY = Business).
+ *       - in: query
+ *         name: city
+ *         schema: { type: string, example: 'Dublin' }
+ *         description: City filter (partial, case-insensitive).
+ *       - in: query
+ *         name: minRating
+ *         schema: { type: number, minimum: 0, maximum: 5, example: 4 }
+ *         description: Rating column — minimum average rating (inclusive).
+ *       - in: query
+ *         name: maxRating
+ *         schema: { type: number, minimum: 0, maximum: 5, example: 5 }
+ *         description: Rating column — maximum average rating (inclusive). Must be ≥ minRating.
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [traderCode, businessName, businessType, contactName, email, mobileNumber, listingsCount, bookingsCount, jobsDoneCount, revenue, rating, reviewsCount, status, verificationStatus, onboardingStatus, country, city, joinedAt]
+ *           default: joinedAt
+ *         description: |
+ *           Sort column (one per table column). Default `joinedAt` (newest first).
+ *           `rating` = rating.average, `reviewsCount` = rating.reviewsCount, `contactName`/`email`/`mobileNumber` = contact.*.
+ *           Empty values (e.g. no city) are always listed last.
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc], default: desc }
  *     responses:
  *       200:
  *         description: Paginated trader rows for the table.
@@ -448,12 +485,21 @@ router.get(
  *                     profilePhotoUrl: null
  *                     joinedAt: '2025-01-08T10:00:00.000Z'
  *       400:
- *         description: Validation error on query params.
+ *         description: Validation error on query params (bad enum, sortBy, uuid, date, or minRating > maxRating).
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiErrorEnvelope' }
+ *             example:
+ *               success: false
+ *               message: Validation Error
+ *               error:
+ *                 - field: query.sortBy
+ *                   message: 'sortBy must be one of: traderCode, businessName, businessType, contactName, email, mobileNumber, listingsCount, bookingsCount, jobsDoneCount, revenue, rating, reviewsCount, status, verificationStatus, onboardingStatus, country, city, joinedAt'
  *       401:
- *         description: Unauthorized.
+ *         description: Missing or invalid admin token.
+ *         content:
+ *           application/json:
+ *             example: { success: false, message: 'Admin access token is missing or invalid.' }
  */
 router.get('/traders', validate(traderFilterSchema), controller.listTraders);
 

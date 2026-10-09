@@ -255,7 +255,6 @@ const serializeOnboardingStatus = async (
   const progress = await buildOnboardingProgress({
     trader,
     entityType: registration.entityType,
-    registrationCurrentStep: registration.currentStep,
     stepData,
   });
 
@@ -416,7 +415,7 @@ export const saveBusinessType = async (userId: string, input: BusinessTypeInput)
       where: { userId },
       data: {
         entityType: input.entityType as TraderType,
-        currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.ENTITY_DOCUMENTS),
+        currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.PROFILE_INFO),
         stepData: mergeStepData(registration.stepData, 'business_type', input),
         status: 'in_progress',
       },
@@ -574,7 +573,7 @@ export const uploadDocument = async (
       if (complete) {
         await prisma.traderRegistration.update({
           where: { userId },
-          data: { currentStep: ONBOARDING_STEPS.PROFILE_INFO },
+          data: { currentStep: ONBOARDING_STEPS.SERVICE_RADIUS },
         });
       }
     }
@@ -974,7 +973,7 @@ export const saveBankDetails = async (userId: string, input: BankDetailsInput) =
     prisma.traderRegistration.update({
       where: { userId },
       data: {
-        currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.SERVICE_RADIUS),
+        currentStep: Math.max(registration.currentStep, ONBOARDING_STEPS.ENTITY_DOCUMENTS),
         stepData: mergeStepData(registration.stepData, 'bank_details', input),
       },
     }),

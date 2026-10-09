@@ -831,9 +831,54 @@
  *       **Filter:** Automatically scoped to homepage reviews (`pageType: HOME`).
  *
  *       **Response fields:** authorName, authorRole, badgeLabel, authorAvatarUrl, quoteText, rating, displayOrder, status, isVerified
+ *
+ *       Same filters and sorting as `GET /admin/cms/testimonials` (pageType is always HOME).
+ *     parameters:
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
+ *       - { in: query, name: search, schema: { type: string }, description: Author, company or quote }
+ *       - { in: query, name: status, schema: { type: string, enum: [DRAFT, SCHEDULED, PUBLISHED, ARCHIVED] } }
+ *       - { in: query, name: audience, schema: { type: string, enum: [BOTH, CUSTOMER, TRADER] } }
+ *       - { in: query, name: featured, schema: { type: boolean } }
+ *       - { in: query, name: isVerified, schema: { type: boolean } }
+ *       - { in: query, name: minRating, schema: { type: number, minimum: 0, maximum: 5 } }
+ *       - { in: query, name: maxRating, schema: { type: number, minimum: 0, maximum: 5 } }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         description: Omit for display order (displayOrder, then newest).
+ *         schema: { type: string, enum: [authorName, authorRole, companyName, rating, pageType, targetAudience, status, isVerified, isFeatured, displayOrder, createdAt, updatedAt] }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Paginated testimonials list for homepage.
+ *         description: Paginated homepage reviews.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Home reviews retrieved successfully.
+ *               data:
+ *                 meta: { total: 4, page: 1, limit: 10, totalPages: 1 }
+ *                 testimonials:
+ *                   - id: 6f708192-0000-4000-8000-000000000088
+ *                     authorName: Diana Johnston
+ *                     authorRole: Verified Trader
+ *                     companyName: null
+ *                     badgeLabel: Verified Business User
+ *                     authorAvatarUrl: null
+ *                     quoteText: Brisk keeps my calendar full.
+ *                     rating: 4.8
+ *                     pageType: HOME
+ *                     isVerified: true
+ *                     targetAudience: BOTH
+ *                     status: PUBLISHED
+ *                     isFeatured: false
+ *                     displayOrder: 1
+ *                     createdAt: '2026-06-01T09:00:00.000Z'
+ *                     updatedAt: '2026-06-01T09:00:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *   post:
  *     summary: Create homepage review
  *     tags: ['Admin / Website / Home']

@@ -114,43 +114,47 @@ export const resolveOnboardingScreenKey = async (
   return 'service_radius';
 };
 
-/** Prefer registration.currentStep, but never leave user on an earlier step once later work is done. */
-export const resolveEffectiveCurrentStep = async (
-  registrationCurrentStep: number,
+/**
+ * First unfinished step from saved data (same checks as `resolveOnboardingScreenKey`), so
+ * `currentStepKey` always belongs to `onboardingScreen` — also after the user navigates back.
+ */
+export const resolveCurrentStep = async (
   trader: TraderProgressFields,
-  entityType: TraderType
+  entityType: TraderType,
+  stepData: Record<string, unknown> | null
 ): Promise<number> => {
-  let step = Math.min(Math.max(registrationCurrentStep, 1), TOTAL_ONBOARDING_STEPS);
+  if (
+    trader.onboardingStatus === TraderOnboardingStatus.SUBMITTED ||
+    trader.onboardingStatus === TraderOnboardingStatus.APPROVED
+  ) {
+    return ONBOARDING_STEPS.SERVICE_RADIUS;
+  }
+  if (!(stepData && stepData.business_type)) return ONBOARDING_STEPS.BUSINESS_TYPE;
+  if (profileMissing(trader, entityType)) return ONBOARDING_STEPS.PROFILE_INFO;
+  if (!isBankComplete(trader)) return ONBOARDING_STEPS.BANK_DETAILS;
+
+  const needsVerificationDoc =
+    entityType === TraderType.COMPANY && !hasDocKey(trader, VERIFICATION_SCREEN_DOCUMENT_KEYS[entityType]);
+  const entityDocs = await validateRequiredDocumentsUploaded(trader.id, entityType, []);
+  if (needsVerificationDoc || !entityDocs.complete) return ONBOARDING_STEPS.ENTITY_DOCUMENTS;
 
   const categoryIds = trader.categories.map((c) => c.categoryId);
-  if (categoryIds.length) {
-    const { complete } = await validateRequiredDocumentsUploaded(trader.id, entityType, categoryIds);
-    if (
-      complete &&
-      !profileMissing(trader, entityType) &&
-      isBankComplete(trader) &&
-      step < ONBOARDING_STEPS.SERVICE_RADIUS
-    ) {
-      step = ONBOARDING_STEPS.SERVICE_RADIUS;
-    }
-  }
+  if (!categoryIds.length) return ONBOARDING_STEPS.CATEGORIES;
 
-  return step;
+  const allDocs = await validateRequiredDocumentsUploaded(trader.id, entityType, categoryIds);
+  if (!allDocs.complete) return ONBOARDING_STEPS.CATEGORY_DOCUMENTS;
+
+  return ONBOARDING_STEPS.SERVICE_RADIUS;
 };
 
 export const buildOnboardingProgress = async (params: {
   trader: TraderProgressFields;
   entityType: TraderType;
-  registrationCurrentStep: number;
   stepData: Record<string, unknown> | null;
 }): Promise<OnboardingProgress> => {
-  const { trader, entityType, registrationCurrentStep, stepData } = params;
+  const { trader, entityType, stepData } = params;
 
-  const currentStep = await resolveEffectiveCurrentStep(
-    registrationCurrentStep,
-    trader,
-    entityType
-  );
+  const currentStep = await resolveCurrentStep(trader, entityType, stepData);
   const onboardingScreen = await resolveOnboardingScreenKey(
     trader,
     entityType,

@@ -7,6 +7,8 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError, BadRequestError } from '../../../utils/errors';
+import { buildListOrderBy, type SortDir } from '../../../utils/list-sort';
+import { dateRangeWhere } from '../../../utils/list-filters';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
 import {
   formatDocumentExpiryDate,
@@ -284,22 +286,45 @@ export const getVerificationStats = async () => {
   return { pending, verified, rejected, submitted };
 };
 
+const VERIFICATION_QUEUE_SORT_MAP: Record<string, (dir: SortDir) => Prisma.TraderOrderByWithRelationInput> = {
+  traderCode: (dir) => ({ traderCode: { sort: dir, nulls: 'last' } }),
+  traderType: (dir) => ({ traderType: dir }),
+  businessName: (dir) => ({ businessName: { sort: dir, nulls: 'last' } }),
+  fullLegalName: (dir) => ({ fullLegalName: { sort: dir, nulls: 'last' } }),
+  contactName: (dir) => ({ user: { fullName: dir } }),
+  email: (dir) => ({ user: { email: dir } }),
+  mobileNumber: (dir) => ({ user: { mobileNumber: dir } }),
+  verificationStatus: (dir) => ({ verificationStatus: dir }),
+  onboardingStatus: (dir) => ({ onboardingStatus: dir }),
+  submittedAt: (dir) => ({ onboardingSubmittedAt: { sort: dir, nulls: 'last' } }),
+};
+
 export const listVerificationQueue = async (filters: {
   page?: string;
   limit?: string;
   status?: VerificationStatus;
   entityType?: 'SOLO' | 'COMPANY';
+  onboardingStatus?: TraderOnboardingStatus;
   search?: string;
+  from?: string;
+  to?: string;
+  sortBy?: string;
+  sortOrder?: string;
 }) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
   const skip = (page - 1) * limit;
 
   const where: Prisma.TraderWhereInput = {
-    onboardingStatus: {
+    onboardingStatus: filters.onboardingStatus ?? {
       in: [TraderOnboardingStatus.SUBMITTED, TraderOnboardingStatus.APPROVED, TraderOnboardingStatus.REJECTED],
     },
   };
+
+  const submittedRange = dateRangeWhere(filters.from, filters.to);
+  if (submittedRange) {
+    where.onboardingSubmittedAt = submittedRange;
+  }
 
   if (filters.status) {
     where.verificationStatus = filters.status;
@@ -326,7 +351,13 @@ export const listVerificationQueue = async (filters: {
       where,
       skip,
       take: limit,
-      orderBy: { onboardingSubmittedAt: 'desc' },
+      orderBy: buildListOrderBy(
+        filters.sortBy,
+        filters.sortOrder,
+        VERIFICATION_QUEUE_SORT_MAP,
+        { sortBy: 'submittedAt', sortOrder: 'desc' },
+        { id: 'asc' }
+      ),
       include: {
         user: { select: { fullName: true, email: true, mobileNumber: true } },
         categories: {

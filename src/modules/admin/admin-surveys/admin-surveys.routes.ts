@@ -3,7 +3,8 @@ import * as surveyAdminController from './admin-surveys.controller';
 import { validate } from '../../../middlewares/validate.middleware';
 import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware';
 import {
-  surveyFilterSchema,
+  surveyConsumerFilterSchema,
+  surveyTraderFilterSchema,
   updateSurveyConsumerSchema,
   updateSurveyTraderSchema,
   bulkDeleteSurveyRegistrationsSchema,
@@ -118,7 +119,7 @@ router.get('/consumer/stats', surveyAdminController.getConsumerStats);
  *       401:
  *         description: Admin not logged in or token expired.
  */
-router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminController.exportConsumers);
+router.get('/consumer/export', validate(surveyConsumerFilterSchema), surveyAdminController.exportConsumers);
 
 /**
  * @swagger
@@ -182,20 +183,14 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  *         schema: { type: string, enum: [true, false] }
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [name, status, submittedAt] }
+ *         schema: { type: string, enum: [registrationCode, name, email, phone, country, county, ageRange, consentLaunchUpdates, consentMarketing, consentPartnerComm, status, reviewedBy, submittedAt, updatedAt] }
  *         description: |
- *           Admin Sort dropdown:
- *           - name + asc = Name A–Z
- *           - name + desc = Name Z–A
- *           - status + asc = Status A–Z
- *           - status + desc = Status Z–A
- *           - submittedAt + desc = Newest First (default if sortOrder omitted)
- *           - submittedAt + asc = Oldest First
+ *           Any table column (`name` = full name, `reviewedBy` = admin full name). Empty values are listed last.
  *           Example: /admin/surveys/consumer?sortBy=name&sortOrder=asc
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc] }
- *         description: Used with sortBy (default asc when sortBy is set)
+ *         description: Default `desc` for submittedAt/updatedAt, `asc` for other columns.
  *       - in: query
  *         name: sort
  *         schema: { type: string, enum: [newest, oldest] }
@@ -221,10 +216,37 @@ router.get('/consumer/export', validate(surveyFilterSchema), surveyAdminControll
  *     responses:
  *       200:
  *         description: Paginated list of consumer survey registrations.
- *       401:
- *         description: Admin not logged in or token expired.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Survey consumer registrations retrieved successfully.
+ *               data:
+ *                 meta: { total: 120, page: 1, limit: 10, totalPages: 12 }
+ *                 registrations:
+ *                   - id: a3b4c5d6-0000-4000-8000-000000000091
+ *                     registrationCode: CS-0120
+ *                     fullName: Ciara Walsh
+ *                     email: ciara@example.com
+ *                     phone: '+353861112223'
+ *                     country: Ireland
+ *                     county: Cork
+ *                     ageRange: 30-44
+ *                     consentLaunchUpdates: true
+ *                     consentMarketing: false
+ *                     consentPartnerComm: false
+ *                     agreementAccepted: true
+ *                     status: NEW
+ *                     notes: null
+ *                     submittedAt: '2026-09-30T09:00:00.000Z'
+ *                     reviewedById: null
+ *                     createdAt: '2026-09-30T09:00:00.000Z'
+ *                     updatedAt: '2026-09-30T09:00:00.000Z'
+ *                     reviewedBy: null
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/consumer', validate(surveyFilterSchema), surveyAdminController.listConsumers);
+router.get('/consumer', validate(surveyConsumerFilterSchema), surveyAdminController.listConsumers);
 
 /**
  * @swagger
@@ -424,7 +446,7 @@ router.get('/trader/stats', surveyAdminController.getTraderStats);
  *       401:
  *         description: Admin not logged in or token expired.
  */
-router.get('/trader/export', validate(surveyFilterSchema), surveyAdminController.exportTraders);
+router.get('/trader/export', validate(surveyTraderFilterSchema), surveyAdminController.exportTraders);
 
 /**
  * @swagger
@@ -472,11 +494,12 @@ router.get('/trader/export', validate(surveyFilterSchema), surveyAdminController
  *         schema: { type: string, enum: [newest, oldest] }
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [name, status, submittedAt, companyName] }
- *         description: Same Sort dropdown as Consumer tab (+ companyName for traders)
+ *         schema: { type: string, enum: [registrationCode, name, companyName, email, phone, country, companyWebsite, consentLaunchUpdates, consentMarketing, consentPartnerComm, status, reviewedBy, submittedAt, updatedAt] }
+ *         description: Any table column (`name` = full name, `reviewedBy` = admin full name). Empty values are listed last.
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc] }
+ *         description: Default `desc` for submittedAt/updatedAt, `asc` for other columns.
  *       - in: query
  *         name: dateFrom
  *         schema: { type: string, format: date, example: '2026-08-28' }
@@ -498,10 +521,37 @@ router.get('/trader/export', validate(surveyFilterSchema), surveyAdminController
  *     responses:
  *       200:
  *         description: Paginated list of trader survey registrations.
- *       401:
- *         description: Admin not logged in or token expired.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Survey trader registrations retrieved successfully.
+ *               data:
+ *                 meta: { total: 45, page: 1, limit: 10, totalPages: 5 }
+ *                 registrations:
+ *                   - id: b4c5d6e7-0000-4000-8000-000000000092
+ *                     registrationCode: TS-0045
+ *                     fullName: Liam Byrne
+ *                     companyName: Byrne Electrical Ltd
+ *                     email: liam@byrne-electrical.ie
+ *                     phone: '+353871234000'
+ *                     country: Ireland
+ *                     companyWebsite: 'https://byrne-electrical.ie'
+ *                     consentLaunchUpdates: true
+ *                     consentMarketing: true
+ *                     consentPartnerComm: false
+ *                     agreementAccepted: true
+ *                     status: CONTACTED
+ *                     notes: Interested in launch pricing.
+ *                     submittedAt: '2026-09-29T14:00:00.000Z'
+ *                     reviewedById: 0f1e2d3c-0000-4000-8000-000000000001
+ *                     createdAt: '2026-09-29T14:00:00.000Z'
+ *                     updatedAt: '2026-10-01T09:00:00.000Z'
+ *                     reviewedBy: { id: 0f1e2d3c-0000-4000-8000-000000000001, fullName: Snehal Patel, email: admin@brisk.ie }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/trader', validate(surveyFilterSchema), surveyAdminController.listTraders);
+router.get('/trader', validate(surveyTraderFilterSchema), surveyAdminController.listTraders);
 
 /**
  * @swagger

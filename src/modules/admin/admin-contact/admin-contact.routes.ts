@@ -65,12 +65,8 @@ router.get(
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
  *       - in: query
  *         name: search
  *         schema: { type: string }
@@ -79,17 +75,56 @@ router.get(
  *         name: status
  *         schema: { type: string, enum: [NEW, PENDING, REVIEWED, CONTACTED, REJECTED] }
  *       - in: query
- *         name: sortBy
- *         schema: { type: string, enum: [name, status, submittedAt, subject] }
- *       - in: query
- *         name: sortOrder
- *         schema: { type: string, enum: [asc, desc] }
- *       - in: query
  *         name: dateFilter
  *         schema: { type: string, enum: [all, today, thisWeek, thisMonth] }
+ *       - in: query
+ *         name: submittedFrom
+ *         schema: { type: string, example: '2026-09-01T00:00:00.000Z' }
+ *       - in: query
+ *         name: submittedTo
+ *         schema: { type: string, example: '2026-09-30T23:59:59.999Z' }
+ *       - in: query
+ *         name: sortBy
+ *         description: '`name` = full name, `reviewedBy` = admin full name. Default newest submitted first.'
+ *         schema: { type: string, enum: [referenceCode, name, email, phone, subject, status, reviewedBy, submittedAt, updatedAt], default: submittedAt }
+ *       - in: query
+ *         name: sortOrder
+ *         description: Default `desc` for dates, `asc` for text columns.
+ *         schema: { type: string, enum: [asc, desc] }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [newest, oldest] }
+ *         description: Legacy submittedAt order — ignored when `sortBy` is sent.
  *     responses:
  *       200:
  *         description: Paginated list in `data.submissions` with `data.meta`.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Contact submissions retrieved successfully.
+ *               data:
+ *                 meta: { total: 18, page: 1, limit: 10, totalPages: 2 }
+ *                 submissions:
+ *                   - id: 92a3b4c5-0000-4000-8000-000000000090
+ *                     referenceCode: CNT-0018
+ *                     fullName: Aoife Kelly
+ *                     email: aoife@example.com
+ *                     phone: '+353861234567'
+ *                     subject: Partnership enquiry
+ *                     message: We would like to list our services on Brisk.
+ *                     agreementAccepted: true
+ *                     status: REVIEWED
+ *                     notes: Called back on Monday.
+ *                     submittedAt: '2026-09-28T10:00:00.000Z'
+ *                     reviewedById: 0f1e2d3c-0000-4000-8000-000000000001
+ *                     userEmailSent: true
+ *                     adminEmailSent: true
+ *                     createdAt: '2026-09-28T10:00:00.000Z'
+ *                     updatedAt: '2026-09-29T08:00:00.000Z'
+ *                     reviewedBy: { id: 0f1e2d3c-0000-4000-8000-000000000001, fullName: Snehal Patel, email: admin@brisk.ie }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get(
   '/contact-submissions',

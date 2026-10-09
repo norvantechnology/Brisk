@@ -52,17 +52,44 @@ router.use(adminAuthMiddleware);
  *         description: Filter featured categories.
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [name, categoryCode, displayOrder, status, createdAt, updatedAt] }
- *         description: Column to sort by. Defaults to `createdAt`.
- *       - in: query
- *         name: sortOrder
- *         schema: { type: string, enum: [asc, desc] }
- *         description: Sort direction. Defaults to `desc` (newest first).
+ *         schema: { type: string, enum: [name, categoryCode, urlSlug, displayOrder, status, featured, subCategoriesCount, tradersCount, jobsCount, createdAt, updatedAt], default: createdAt }
+ *         description: Any table column. Defaults to `createdAt`.
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Master Categories retrieved successfully.
- *       401:
- *         description: Missing or invalid Admin JWT token.
+ *         description: Master categories page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Master Categories retrieved successfully.
+ *               data:
+ *                 meta: { total: 16, page: 1, limit: 10, totalPages: 2 }
+ *                 categories:
+ *                   - id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+ *                     name: Plumbing
+ *                     categoryCode: CAT-0001
+ *                     urlSlug: plumbing
+ *                     description: Leaks, taps, boilers and more.
+ *                     iconName: plumbing
+ *                     iconUrl: 'https://api.brisk.ie/uploads/categories/plumbing.svg'
+ *                     brandThemeColor: '#1E88E5'
+ *                     bannerImageUrl: null
+ *                     displayOrder: 1
+ *                     status: active
+ *                     featured: true
+ *                     documentsStatus: N_A
+ *                     documentsComplete: false
+ *                     documentUpload: false
+ *                     requiredDocumentsCount: 0
+ *                     uploadedRequiredDocumentsCount: 0
+ *                     subCategoriesCount: 6
+ *                     tradersCount: 12
+ *                     jobsCount: 48
+ *                     createdAt: '2026-05-01T09:00:00.000Z'
+ *                     updatedAt: '2026-09-01T09:00:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/categories', validate(categoryFilterSchema), categoryAdminController.listCategories);
 
@@ -238,15 +265,40 @@ router.delete('/categories/:id', validate(idParamSchema), categoryAdminControlle
  *         schema: { type: boolean }
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [name, code, urlSlug, status, createdAt, updatedAt] }
- *         description: Column to sort by. Defaults to `createdAt`.
- *       - in: query
- *         name: sortOrder
- *         schema: { type: string, enum: [asc, desc] }
- *         description: Sort direction. Defaults to `desc` (newest first).
+ *         schema: { type: string, enum: [name, code, urlSlug, categoryName, serviceType, featured, status, siteVisitEnabled, siteVisitFee, priceEnabled, priceEnteredBy, jobsCount, createdAt, updatedAt], default: createdAt }
+ *         description: Any table column (`categoryName` = parent category). Empty values are listed last.
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Sub-Categories retrieved successfully matching Screenshot 4 format.
+ *         description: Sub-categories page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Sub-Categories retrieved successfully.
+ *               data:
+ *                 meta: { total: 40, page: 1, limit: 10, totalPages: 4 }
+ *                 subcategories:
+ *                   - id: 8a44f8fb-1598-40c9-a658-7f3db5748f14
+ *                     categoryId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+ *                     name: Leak Repair
+ *                     serviceType: Repair
+ *                     code: SUB-0001
+ *                     urlSlug: leak-repair
+ *                     featured: false
+ *                     status: active
+ *                     siteVisitEnabled: true
+ *                     siteVisitFee: 25
+ *                     priceEnabled: true
+ *                     priceEnteredBy: TRADER
+ *                     qaFormSchema: []
+ *                     parentCategory: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Plumbing, categoryCode: CAT-0001 }
+ *                     jobsCount: 9
+ *                     rowNumber: 1
+ *                     createdAt: '2026-05-01T09:00:00.000Z'
+ *                     updatedAt: '2026-09-01T09:00:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminController.listSubcategories);
 

@@ -316,34 +316,66 @@ const buildConsumerWhere = (filters: SurveyConsumerFilters): Prisma.SurveyConsum
   return where;
 };
 
-const buildConsumerOrderBy = (
-  filters: SurveyConsumerFilters
-): Prisma.SurveyConsumerRegistrationOrderByWithRelationInput => {
-  const hasSortBy = Boolean(filters.sortBy);
+type SurveyOrderMap<O> = Record<string, (order: Prisma.SortOrder) => O>;
+
+const SURVEY_DATE_SORTS = new Set(['submittedAt', 'updatedAt']);
+
+/** Text columns default asc, dates desc; no/unknown sortBy keeps legacy `sort=newest|oldest`. */
+const buildSurveyOrderBy = <O>(
+  filters: SurveyConsumerFilters,
+  map: SurveyOrderMap<O>,
+  submittedAt: (order: Prisma.SortOrder) => O,
+  tiebreak: O
+): O[] => {
+  const sortBy = filters.sortBy && map[filters.sortBy] ? filters.sortBy : undefined;
+  if (!sortBy) return [submittedAt(filters.sort === 'oldest' ? 'asc' : 'desc'), tiebreak];
   const order: Prisma.SortOrder =
     filters.sortOrder === 'asc' || filters.sortOrder === 'desc'
       ? filters.sortOrder
-      : filters.sortBy === 'submittedAt'
+      : SURVEY_DATE_SORTS.has(sortBy)
         ? 'desc'
-        : hasSortBy
-          ? 'asc'
-          : 'desc';
-
-  if (filters.sortBy === 'name') {
-    return { fullName: order };
-  }
-  if (filters.sortBy === 'status') {
-    return { status: order };
-  }
-  if (filters.sortBy === 'submittedAt') {
-    return { submittedAt: order };
-  }
-
-  // Legacy: sort=newest|oldest (default newest)
-  return {
-    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
-  };
+        : 'asc';
+  return [map[sortBy](order), submittedAt('desc'), tiebreak];
 };
+
+const SURVEY_CONSUMER_ORDER_MAP: SurveyOrderMap<Prisma.SurveyConsumerRegistrationOrderByWithRelationInput> = {
+  registrationCode: (order) => ({ registrationCode: order }),
+  name: (order) => ({ fullName: order }),
+  email: (order) => ({ email: order }),
+  phone: (order) => ({ phone: { sort: order, nulls: 'last' } }),
+  country: (order) => ({ country: { sort: order, nulls: 'last' } }),
+  county: (order) => ({ county: { sort: order, nulls: 'last' } }),
+  ageRange: (order) => ({ ageRange: { sort: order, nulls: 'last' } }),
+  consentLaunchUpdates: (order) => ({ consentLaunchUpdates: order }),
+  consentMarketing: (order) => ({ consentMarketing: order }),
+  consentPartnerComm: (order) => ({ consentPartnerComm: order }),
+  status: (order) => ({ status: order }),
+  reviewedBy: (order) => ({ reviewedBy: { fullName: order } }),
+  submittedAt: (order) => ({ submittedAt: order }),
+  updatedAt: (order) => ({ updatedAt: order }),
+};
+
+const SURVEY_TRADER_ORDER_MAP: SurveyOrderMap<Prisma.SurveyTraderRegistrationOrderByWithRelationInput> = {
+  registrationCode: (order) => ({ registrationCode: order }),
+  name: (order) => ({ fullName: order }),
+  companyName: (order) => ({ companyName: order }),
+  email: (order) => ({ email: order }),
+  phone: (order) => ({ phone: order }),
+  country: (order) => ({ country: order }),
+  companyWebsite: (order) => ({ companyWebsite: { sort: order, nulls: 'last' } }),
+  consentLaunchUpdates: (order) => ({ consentLaunchUpdates: order }),
+  consentMarketing: (order) => ({ consentMarketing: order }),
+  consentPartnerComm: (order) => ({ consentPartnerComm: order }),
+  status: (order) => ({ status: order }),
+  reviewedBy: (order) => ({ reviewedBy: { fullName: order } }),
+  submittedAt: (order) => ({ submittedAt: order }),
+  updatedAt: (order) => ({ updatedAt: order }),
+};
+
+const buildConsumerOrderBy = (
+  filters: SurveyConsumerFilters
+): Prisma.SurveyConsumerRegistrationOrderByWithRelationInput[] =>
+  buildSurveyOrderBy(filters, SURVEY_CONSUMER_ORDER_MAP, (order) => ({ submittedAt: order }), { id: 'asc' });
 
 const reviewedBySelect = {
   id: true,
@@ -703,34 +735,8 @@ const buildTraderWhere = (filters: SurveyTraderFilters): Prisma.SurveyTraderRegi
 
 const buildTraderOrderBy = (
   filters: SurveyTraderFilters
-): Prisma.SurveyTraderRegistrationOrderByWithRelationInput => {
-  const hasSortBy = Boolean(filters.sortBy);
-  const order: Prisma.SortOrder =
-    filters.sortOrder === 'asc' || filters.sortOrder === 'desc'
-      ? filters.sortOrder
-      : filters.sortBy === 'submittedAt'
-        ? 'desc'
-        : hasSortBy
-          ? 'asc'
-          : 'desc';
-
-  if (filters.sortBy === 'name') {
-    return { fullName: order };
-  }
-  if (filters.sortBy === 'companyName') {
-    return { companyName: order };
-  }
-  if (filters.sortBy === 'status') {
-    return { status: order };
-  }
-  if (filters.sortBy === 'submittedAt') {
-    return { submittedAt: order };
-  }
-
-  return {
-    submittedAt: filters.sort === 'oldest' ? 'asc' : 'desc',
-  };
-};
+): Prisma.SurveyTraderRegistrationOrderByWithRelationInput[] =>
+  buildSurveyOrderBy(filters, SURVEY_TRADER_ORDER_MAP, (order) => ({ submittedAt: order }), { id: 'asc' });
 
 // ==========================================
 // TRADER SURVEY — STATS / CRUD / EXPORT

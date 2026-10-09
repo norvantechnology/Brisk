@@ -4,7 +4,12 @@ import * as pageSectionsAdminController from './page-sections.controller';
 import { validate } from '../../../middlewares/validate.middleware';
 import { adminAuthMiddleware } from '../../../middlewares/admin-auth.middleware';
 import {
-  listFilterSchema,
+  listCmsPagesSchema,
+  listCmsSocialLinksSchema,
+  listCmsFaqCategoriesSchema,
+  listCmsFaqsSchema,
+  listCmsTestimonialsSchema,
+  listCmsLegalPoliciesSchema,
   idParamSchema,
   createPageSchema,
   updatePageSchema,
@@ -78,21 +83,51 @@ router.get('/dashboard/stats', cmsAdminController.getCmsDashboardStats);
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *         description: Page number (1-based).
+ *       - $ref: '#/components/parameters/AdminPage'
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20 }
- *         description: Rows per page (max 100). Default 20.
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *       - in: query
+ *         name: search
+ *         description: Description, event type or actor label contains.
+ *         schema: { type: string }
+ *       - in: query
+ *         name: eventType
+ *         schema: { type: string, example: CMS_PAGE_UPDATED }
+ *       - in: query
+ *         name: actorType
+ *         schema: { type: string, enum: [ADMIN, TRADER, CUSTOMER, SYSTEM] }
+ *       - in: query
+ *         name: subjectType
+ *         schema: { type: string, example: CmsStaticPage }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [eventType, actorType, actorLabel, subjectType, description, createdAt], default: createdAt }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: |
- *           CMS dashboard audit activity retrieved successfully.
- *           `data.items` shape is unchanged; `data.meta` adds `{ total, page, limit, totalPages }`.
- *       401:
- *         description: Missing or invalid Admin JWT token.
+ *         description: CMS audit page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: CMS dashboard audit activity retrieved successfully.
+ *               data:
+ *                 items:
+ *                   - id: 1a2b3c4d-0000-4000-8000-000000000080
+ *                     eventType: CMS_PAGE_UPDATED
+ *                     actorType: ADMIN
+ *                     actorId: 0f1e2d3c-0000-4000-8000-000000000001
+ *                     actorLabel: Snehal Patel (SUPER_ADMIN)
+ *                     subjectType: CmsStaticPage
+ *                     subjectId: 2b3c4d5e-0000-4000-8000-000000000081
+ *                     description: 'Updated page: "About Us".'
+ *                     createdAt: '2026-10-01T10:00:00.000Z'
+ *                 meta: { total: 35, page: 1, limit: 20, totalPages: 2 }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/dashboard/audit', validate(dashboardAuditSchema), cmsAdminController.getCmsDashboardAudit);
 
@@ -129,17 +164,43 @@ router.get('/dashboard/audit', validate(dashboardAuditSchema), cmsAdminControlle
  *         name: audience
  *         schema: { type: string, enum: [BOTH, CUSTOMER, TRADER] }
  *         description: Filter by target audience.
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         description: '`updatedBy` = admin full name. `from`/`to` filter updatedAt (Last Updated).'
+ *         schema: { type: string, enum: [title, slug, targetAudience, status, isActive, updatedBy, createdAt, updatedAt], default: updatedAt }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *       - in: query
  *         name: sort
- *         schema: { type: string }
- *         description: Sort order (e.g. newest, oldest).
+ *         schema: { type: string, enum: [newest, oldest] }
+ *         description: Legacy updatedAt order — ignored when `sortBy` is sent.
  *     responses:
  *       200:
- *         description: Website pages retrieved successfully.
- *       401:
- *         description: Missing or invalid Admin JWT token.
+ *         description: Website pages page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Website pages retrieved successfully.
+ *               data:
+ *                 meta: { total: 6, page: 1, limit: 10, totalPages: 1 }
+ *                 pages:
+ *                   - id: 2b3c4d5e-0000-4000-8000-000000000081
+ *                     title: About Us
+ *                     slug: about-us
+ *                     content: '<p>Brisk connects customers with trusted local trades.</p>'
+ *                     targetAudience: BOTH
+ *                     status: PUBLISHED
+ *                     isActive: true
+ *                     updatedById: 0f1e2d3c-0000-4000-8000-000000000001
+ *                     createdAt: '2026-06-01T09:00:00.000Z'
+ *                     updatedAt: '2026-10-01T10:00:00.000Z'
+ *                     updatedBy: { id: 0f1e2d3c-0000-4000-8000-000000000001, fullName: Snehal Patel, email: admin@brisk.ie }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/pages', validate(listFilterSchema), cmsAdminController.listPages);
+router.get('/pages', validate(listCmsPagesSchema), cmsAdminController.listPages);
 
 /**
  * @swagger
@@ -319,14 +380,35 @@ router.delete('/pages/:id', validate(idParamSchema), cmsAdminController.deletePa
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, INACTIVE] }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
  *       - in: query
- *         name: sort
- *         schema: { type: string }
+ *         name: sortBy
+ *         description: Omit for display order (sortOrder ascending). `from`/`to` filter createdAt.
+ *         schema: { type: string, enum: [platform, profileUrl, sortOrder, status, createdAt, updatedAt] }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Social links retrieved successfully.
+ *         description: Social links page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Social links retrieved successfully.
+ *               data:
+ *                 meta: { total: 4, page: 1, limit: 10, totalPages: 1 }
+ *                 socialLinks:
+ *                   - id: 3c4d5e6f-0000-4000-8000-000000000082
+ *                     platform: LinkedIn
+ *                     profileUrl: 'https://linkedin.com/company/brisk'
+ *                     sortOrder: 0
+ *                     status: ACTIVE
+ *                     createdAt: '2026-06-01T09:00:00.000Z'
+ *                     updatedAt: '2026-06-01T09:00:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/social-links', validate(listFilterSchema), cmsAdminController.listSocialLinks);
+router.get('/social-links', validate(listCmsSocialLinksSchema), cmsAdminController.listSocialLinks);
 
 /**
  * @swagger
@@ -432,15 +514,36 @@ router.delete('/social-links/:id', validate(idParamSchema), cmsAdminController.d
  *         schema: { type: integer, default: 10 }
  *       - in: query
  *         name: search
+ *         description: Name or slug.
  *         schema: { type: string }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
  *       - in: query
- *         name: sort
- *         schema: { type: string }
+ *         name: sortBy
+ *         description: Omit for name A→Z. `faqsCount` = FAQs in the category. `from`/`to` filter createdAt.
+ *         schema: { type: string, enum: [name, slug, faqsCount, createdAt, updatedAt] }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: FAQ categories retrieved successfully.
+ *         description: FAQ categories page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: FAQ categories retrieved successfully.
+ *               data:
+ *                 meta: { total: 3, page: 1, limit: 10, totalPages: 1 }
+ *                 faqCategories:
+ *                   - id: 4d5e6f70-0000-4000-8000-000000000083
+ *                     name: Payments
+ *                     slug: payments
+ *                     createdAt: '2026-06-01T09:00:00.000Z'
+ *                     updatedAt: '2026-06-01T09:00:00.000Z'
+ *                     _count: { faqs: 5 }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/faq-categories', validate(listFilterSchema), cmsAdminController.listFaqCategories);
+router.get('/faq-categories', validate(listCmsFaqCategoriesSchema), cmsAdminController.listFaqCategories);
 
 /**
  * @swagger
@@ -502,14 +605,43 @@ router.post('/faq-categories', validate(createFaqCategorySchema), cmsAdminContro
  *         name: pageType
  *         schema: { type: string, enum: [CUSTOMER, TRADER, HOME, ABOUT_US, aboutUs] }
  *         description: Filter by page. Use `aboutUs` for About Us FAQs.
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         description: Omit for display order (displayOrder, then newest). `categoryName` = FAQ category. `from`/`to` filter createdAt.
+ *         schema: { type: string, enum: [question, categoryName, pageType, targetAudience, status, displayOrder, createdAt, updatedAt] }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *       - in: query
  *         name: sort
- *         schema: { type: string }
+ *         schema: { type: string, enum: [newest, oldest] }
+ *         description: Legacy createdAt order inside the default display order — ignored when `sortBy` is sent.
  *     responses:
  *       200:
- *         description: FAQs retrieved successfully.
+ *         description: FAQs page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: FAQs retrieved successfully.
+ *               data:
+ *                 meta: { total: 12, page: 1, limit: 10, totalPages: 2 }
+ *                 faqs:
+ *                   - id: 5e6f7081-0000-4000-8000-000000000084
+ *                     question: How do I pay for a job?
+ *                     answer: Pay securely by card, Apple Pay or Google Pay once the job is complete.
+ *                     categoryId: 4d5e6f70-0000-4000-8000-000000000083
+ *                     pageType: CUSTOMER
+ *                     targetAudience: CUSTOMER
+ *                     status: PUBLISHED
+ *                     displayOrder: 1
+ *                     createdAt: '2026-06-01T09:00:00.000Z'
+ *                     updatedAt: '2026-06-01T09:00:00.000Z'
+ *                     category: { id: 4d5e6f70-0000-4000-8000-000000000083, name: Payments, slug: payments, createdAt: '2026-06-01T09:00:00.000Z', updatedAt: '2026-06-01T09:00:00.000Z' }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/faqs', validate(listFilterSchema), cmsAdminController.listFaqs);
+router.get('/faqs', validate(listCmsFaqsSchema), cmsAdminController.listFaqs);
 
 /**
  * @swagger
@@ -697,13 +829,59 @@ router.get('/testimonials/stats', cmsAdminController.getTestimonialStats);
  *         name: featured
  *         schema: { type: boolean }
  *       - in: query
+ *         name: pageType
+ *         schema: { type: string, enum: [CUSTOMER, TRADER, HOME, ABOUT_US, aboutUs] }
+ *       - in: query
+ *         name: isVerified
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: minRating
+ *         schema: { type: number, minimum: 0, maximum: 5, example: 4 }
+ *       - in: query
+ *         name: maxRating
+ *         schema: { type: number, minimum: 0, maximum: 5, example: 5 }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         description: Omit for display order (displayOrder, then newest). `from`/`to` filter createdAt.
+ *         schema: { type: string, enum: [authorName, authorRole, companyName, rating, pageType, targetAudience, status, isVerified, isFeatured, displayOrder, createdAt, updatedAt] }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
+ *       - in: query
  *         name: sort
- *         schema: { type: string }
+ *         schema: { type: string, enum: [newest, oldest] }
+ *         description: Legacy createdAt order inside the default display order — ignored when `sortBy` is sent.
  *     responses:
  *       200:
- *         description: Testimonials retrieved successfully.
+ *         description: Testimonials page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Testimonials retrieved successfully.
+ *               data:
+ *                 meta: { total: 9, page: 1, limit: 10, totalPages: 1 }
+ *                 testimonials:
+ *                   - id: 6f708192-0000-4000-8000-000000000085
+ *                     authorName: Sarah Murphy
+ *                     authorRole: Homeowner
+ *                     companyName: null
+ *                     badgeLabel: Verified Customer
+ *                     authorAvatarUrl: null
+ *                     quoteText: Booked a plumber in minutes and the job was spotless.
+ *                     rating: 5
+ *                     pageType: CUSTOMER
+ *                     isVerified: true
+ *                     targetAudience: CUSTOMER
+ *                     status: PUBLISHED
+ *                     isFeatured: true
+ *                     displayOrder: 1
+ *                     createdAt: '2026-06-01T09:00:00.000Z'
+ *                     updatedAt: '2026-06-01T09:00:00.000Z'
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/testimonials', validate(listFilterSchema), cmsAdminController.listTestimonials);
+router.get('/testimonials', validate(listCmsTestimonialsSchema), cmsAdminController.listTestimonials);
 
 /**
  * @swagger
@@ -1675,13 +1853,48 @@ router.patch(
  *         schema: { type: string }
  *         description: Search by policy name or slug.
  *       - in: query
- *         name: sort
- *         schema: { type: string }
+ *         name: status
+ *         description: Status of the latest version (DRAFT when the policy has no version).
+ *         schema: { type: string, enum: [DRAFT, SCHEDULED, PUBLISHED, ARCHIVED] }
+ *       - $ref: '#/components/parameters/AdminDateFrom'
+ *       - $ref: '#/components/parameters/AdminDateTo'
+ *       - in: query
+ *         name: sortBy
+ *         description: Omit for name A→Z. `status` / `effectiveDate` = latest version. `from`/`to` filter updatedAt.
+ *         schema: { type: string, enum: [name, slug, showInFooter, status, versionCount, effectiveDate, createdAt, updatedAt] }
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
- *         description: Legal policies retrieved successfully.
+ *         description: Legal policies page.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Legal policies retrieved successfully.
+ *               data:
+ *                 meta: { total: 3, page: 1, limit: 10, totalPages: 1 }
+ *                 policies:
+ *                   - id: 708192a3-0000-4000-8000-000000000086
+ *                     name: Privacy Policy
+ *                     slug: privacy-policy
+ *                     showInFooter: true
+ *                     status: PUBLISHED
+ *                     content: '<p>We respect your privacy…</p>'
+ *                     createdAt: '2026-06-01T09:00:00.000Z'
+ *                     updatedAt: '2026-09-15T09:00:00.000Z'
+ *                     versionCount: 2
+ *                     latestPublishedVersion:
+ *                       id: 8192a3b4-0000-4000-8000-000000000087
+ *                       versionLabel: v2.0
+ *                       content: '<p>We respect your privacy…</p>'
+ *                       effectiveDate: '2026-09-15T00:00:00.000Z'
+ *                       status: PUBLISHED
+ *                       publishedAt: '2026-09-15T09:00:00.000Z'
+ *                       publishedBy: { id: 0f1e2d3c-0000-4000-8000-000000000001, fullName: Snehal Patel, email: admin@brisk.ie }
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
-router.get('/legal-policies', validate(listFilterSchema), cmsAdminController.listLegalPolicies);
+router.get('/legal-policies', validate(listCmsLegalPoliciesSchema), cmsAdminController.listLegalPolicies);
 
 /**
  * @swagger

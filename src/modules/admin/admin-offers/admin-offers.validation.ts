@@ -1,4 +1,24 @@
 import { z } from 'zod';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
+
+export const ADMIN_OFFER_SORT_FIELDS = [
+  'offerCode',
+  'title',
+  'offerType',
+  'couponCode',
+  'discountType',
+  'discountValue',
+  'traderName',
+  'categoryName',
+  'validFrom',
+  'validUntil',
+  'status',
+  'claimsCount',
+  'revenueGenerated',
+  'viewsCount',
+  'createdAt',
+  'updatedAt',
+] as const;
 
 export const offerFilterSchema = z.object({
   query: z.object({
@@ -17,6 +37,8 @@ export const offerFilterSchema = z.object({
     to: z.string().optional(),
     trader_ids: z.string().optional(),
     category_id: z.string().optional(),
+    sortBy: sortByParam(ADMIN_OFFER_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }),
 });
 

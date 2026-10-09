@@ -174,10 +174,15 @@ router.get('/jobs/stats', validate(adminJobsStatsQuerySchema), controller.getSta
  *       - $ref: '#/components/parameters/AdminJobsArchived'
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [createdAt, scheduledDate, status, title, amount], default: createdAt }
- *       - in: query
- *         name: sortOrder
- *         schema: { type: string, enum: [asc, desc], default: desc }
+ *         description: |
+ *           Any table column. `categoryName` / `subcategoryName` / `customerName` / `traderName` (business name, else
+ *           trader full name) · `amount` (invoice total, else service charge) · `paymentStatus` (NOT_INVOICED when no invoice)
+ *           · `offerApplied` · `quotesCount`. Empty values are always last.
+ *         schema:
+ *           type: string
+ *           enum: [createdAt, scheduledDate, status, title, amount, jobRef, categoryName, subcategoryName, customerName, traderName, city, postcode, paymentStatus, offerApplied, quotesCount]
+ *           default: createdAt
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
  *         description: Paginated jobs (`meta.total`, `page`, `limit`, `totalPages`).
@@ -211,8 +216,8 @@ router.get('/jobs/stats', validate(adminJobsStatsQuerySchema), controller.getSta
  *                   coverPhotoUrl: null
  *                   booking: { id: 6b2c3d4e-0000-4000-8000-000000000003, bookingRef: BK-1042, status: COMPLETED, invoiceId: 7c3d4e5f-0000-4000-8000-000000000004 }
  *               meta: { total: 9, page: 1, limit: 10, totalPages: 1 }
- *       400:
- *         description: Invalid filter (bad status, uuid, date, or minAmount > maxAmount).
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/jobs', validate(adminJobsListQuerySchema), controller.listJobs);
 
@@ -450,12 +455,24 @@ router.get('/jobs/:id/site-visits', validate(adminJobIdParamSchema), controller.
  *       - { in: query, name: jobId, schema: { type: string, format: uuid } }
  *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
  *       - { in: query, name: traderId, schema: { type: string, format: uuid } }
- *       - { in: query, name: from, schema: { type: string, format: date } }
- *       - { in: query, name: to, schema: { type: string, format: date } }
- *       - { in: query, name: page, schema: { type: integer, default: 1 } }
- *       - { in: query, name: limit, schema: { type: integer, default: 10 } }
+ *       - { in: query, name: reason, schema: { type: string }, description: Reason contains (case-insensitive) }
+ *       - { in: query, name: from, schema: { type: string, format: date }, description: Created from (inclusive) }
+ *       - { in: query, name: to, schema: { type: string, format: date }, description: Created to (inclusive) }
+ *       - $ref: '#/components/parameters/AdminPage'
+ *       - $ref: '#/components/parameters/AdminLimit'
+ *       - in: query
+ *         name: sortBy
+ *         description: '`traderName` = business name, else trader full name. Empty values are always last.'
+ *         schema:
+ *           type: string
+ *           enum: [disputeRef, reason, status, jobRef, jobTitle, customerName, traderName, resolvedAt, createdAt, updatedAt]
+ *           default: createdAt
+ *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       200:
+ *         description: Disputes page.
  *         content:
  *           application/json:
  *             example:

@@ -1,6 +1,7 @@
 import { ActorType, InvoiceStatus, JobStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
+import { buildListOrderBy, pageIdsByComputedKey, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import { cancelJob } from '../../jobs/jobs.service';
 import { rescheduleJob } from '../../jobs/jobs.my-job.service';
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
@@ -105,19 +106,27 @@ const buildJobWhere = (filters: AdminJobFilters, includeStatus = true): Prisma.J
   return { AND: and };
 };
 
-const buildOrderBy = (query: AdminJobsListQuery): Prisma.JobOrderByWithRelationInput[] => {
-  const sort = query.sortOrder === 'asc' ? 'asc' : 'desc';
-  switch (query.sortBy) {
-    case 'scheduledDate':
-      return [{ scheduledDate: { sort, nulls: 'last' } }, { createdAt: 'desc' }];
-    case 'status':
-      return [{ status: sort }, { createdAt: 'desc' }];
-    case 'title':
-      return [{ title: sort }, { createdAt: 'desc' }];
-    default:
-      return [{ createdAt: sort }];
-  }
+const JOB_SORT_MAP: Record<string, (dir: SortDir) => Prisma.JobOrderByWithRelationInput | Prisma.JobOrderByWithRelationInput[]> = {
+  createdAt: (dir) => ({ createdAt: dir }),
+  scheduledDate: (dir) => [{ scheduledDate: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { createdAt: 'desc' }],
+  title: (dir) => [{ title: dir }, { createdAt: 'desc' }],
+  jobRef: (dir) => ({ jobRef: { sort: dir, nulls: 'last' } }),
+  categoryName: (dir) => [{ category: { name: dir } }, { createdAt: 'desc' }],
+  customerName: (dir) => [{ customer: { fullName: dir } }, { createdAt: 'desc' }],
+  city: (dir) => [{ city: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  postcode: (dir) => [{ postcode: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  quotesCount: (dir) => [{ quotes: { _count: dir } }, { createdAt: 'desc' }],
 };
+
+const buildOrderBy = (query: AdminJobsListQuery): Prisma.JobOrderByWithRelationInput[] =>
+  buildListOrderBy(
+    query.sortBy,
+    query.sortOrder,
+    JOB_SORT_MAP,
+    { sortBy: 'createdAt', sortOrder: resolveSortDir(query.sortOrder) },
+    { id: 'asc' }
+  );
 
 export const getAdminJobsStats = async (filters: AdminJobFilters) => {
   const grouped = await prisma.job.groupBy({
@@ -172,34 +181,40 @@ const JOB_LIST_INCLUDE = {
   },
 } satisfies Prisma.JobInclude;
 
+const JOB_RANK_SELECT = {
+  id: true,
+  createdAt: true,
+  serviceCharge: true,
+  offerId: true,
+  subcategory: { select: { name: true } },
+  trader: { select: { businessName: true, user: { select: { fullName: true } } } },
+  booking: { select: { invoice: { select: { totalAmount: true, status: true } } } },
+} satisfies Prisma.JobSelect;
+
+type JobRankRow = Prisma.JobGetPayload<{ select: typeof JOB_RANK_SELECT }>;
+
 /**
- * `amount` = invoice total, else agreed service charge — a COALESCE Prisma cannot ORDER BY,
- * so rank the filtered ids on that value, then load only the requested page.
+ * Columns Prisma cannot ORDER BY with empty values last (COALESCE / optional relations):
+ * `amount` = invoice total else service charge; `paymentStatus` = invoice status else NOT_INVOICED.
  */
-const findPageByAmount = async (where: Prisma.JobWhereInput, sort: 'asc' | 'desc', skip: number, take: number) => {
-  const candidates = await prisma.job.findMany({
-    where,
-    select: {
-      id: true,
-      createdAt: true,
-      serviceCharge: true,
-      booking: { select: { invoice: { select: { totalAmount: true } } } },
-    },
-  });
-  const amountOf = (c: (typeof candidates)[number]) => money(c.booking?.invoice?.totalAmount ?? c.serviceCharge);
-  const pageIds = candidates
-    .sort((a, b) => {
-      const x = amountOf(a);
-      const y = amountOf(b);
-      if (x === null || y === null) {
-        if (x !== y) return x === null ? 1 : -1;
-      } else if (x !== y) {
-        return sort === 'asc' ? x - y : y - x;
-      }
-      return b.createdAt.getTime() - a.createdAt.getTime();
-    })
-    .slice(skip, skip + take)
-    .map((c) => c.id);
+const COMPUTED_JOB_SORTS: Record<string, (row: JobRankRow) => unknown> = {
+  amount: (r) => money(r.booking?.invoice?.totalAmount ?? r.serviceCharge),
+  subcategoryName: (r) => r.subcategory?.name ?? null,
+  traderName: (r) => (r.trader ? r.trader.businessName || r.trader.user?.fullName || null : null),
+  paymentStatus: (r) => r.booking?.invoice?.status ?? 'NOT_INVOICED',
+  offerApplied: (r) => (r.offerId ? 1 : 0),
+};
+
+/** Rank the filtered ids on a computed column, then load only the requested page. */
+const findPageByComputed = async (
+  where: Prisma.JobWhereInput,
+  keyOf: (row: JobRankRow) => unknown,
+  sort: SortDir,
+  skip: number,
+  take: number
+) => {
+  const candidates = await prisma.job.findMany({ where, select: JOB_RANK_SELECT });
+  const pageIds = pageIdsByComputedKey(candidates, keyOf, sort, skip, take);
 
   const rows = await prisma.job.findMany({ where: { id: { in: pageIds } }, include: JOB_LIST_INCLUDE });
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -211,11 +226,12 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
   const limit = query.limit ?? 10;
   const skip = (page - 1) * limit;
   const where = buildJobWhere(query);
+  const computedKey = query.sortBy ? COMPUTED_JOB_SORTS[query.sortBy] : undefined;
 
   const [total, rows] = await Promise.all([
     prisma.job.count({ where }),
-    query.sortBy === 'amount'
-      ? findPageByAmount(where, query.sortOrder === 'asc' ? 'asc' : 'desc', skip, limit)
+    computedKey
+      ? findPageByComputed(where, computedKey, resolveSortDir(query.sortOrder), skip, limit)
       : prisma.job.findMany({ where, skip, take: limit, orderBy: buildOrderBy(query), include: JOB_LIST_INCLUDE }),
   ]);
 
@@ -384,11 +400,27 @@ const serializeAdminDispute = (d: Prisma.JobDisputeGetPayload<{ include: typeof 
     : null,
 });
 
+const DISPUTE_SORT_MAP: Record<
+  string,
+  (dir: SortDir) => Prisma.JobDisputeOrderByWithRelationInput | Prisma.JobDisputeOrderByWithRelationInput[]
+> = {
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+  resolvedAt: (dir) => [{ resolvedAt: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  disputeRef: (dir) => ({ disputeRef: dir }),
+  reason: (dir) => [{ reason: dir }, { createdAt: 'desc' }],
+  status: (dir) => [{ status: dir }, { createdAt: 'desc' }],
+  jobRef: (dir) => [{ job: { jobRef: { sort: dir, nulls: 'last' } } }, { createdAt: 'desc' }],
+  jobTitle: (dir) => [{ job: { title: dir } }, { createdAt: 'desc' }],
+  customerName: (dir) => [{ customer: { fullName: dir } }, { createdAt: 'desc' }],
+};
+
 export const listAdminDisputes = async (query: AdminDisputesListQuery) => {
   const page = query.page ?? 1;
   const limit = query.limit ?? 10;
   const and: Prisma.JobDisputeWhereInput[] = [dateRangeFilter(query.from, query.to, 'createdAt')];
   if (query.status) and.push({ status: query.status });
+  if (query.reason) and.push({ reason: { contains: query.reason, mode: 'insensitive' } });
   if (query.jobId) and.push({ jobId: query.jobId });
   if (query.customerId) and.push({ customerId: query.customerId });
   if (query.traderId) and.push({ traderId: query.traderId });
@@ -409,16 +441,38 @@ export const listAdminDisputes = async (query: AdminDisputesListQuery) => {
     });
   }
   const where: Prisma.JobDisputeWhereInput = { AND: and };
+  const skip = (page - 1) * limit;
+  const dir = resolveSortDir(query.sortOrder);
+
+  const findPage = async () => {
+    if (query.sortBy === 'traderName') {
+      const candidates = await prisma.jobDispute.findMany({
+        where,
+        select: { id: true, createdAt: true, trader: { select: { businessName: true, user: { select: { fullName: true } } } } },
+      });
+      const ids = pageIdsByComputedKey(
+        candidates,
+        (r) => (r.trader ? r.trader.businessName || r.trader.user.fullName : null),
+        dir,
+        skip,
+        limit
+      );
+      const found = await prisma.jobDispute.findMany({ where: { id: { in: ids } }, include: DISPUTE_INCLUDE });
+      const byId = new Map(found.map((r) => [r.id, r]));
+      return ids.map((id) => byId.get(id)!).filter(Boolean);
+    }
+    return prisma.jobDispute.findMany({
+      where,
+      orderBy: buildListOrderBy(query.sortBy, query.sortOrder, DISPUTE_SORT_MAP, { sortBy: 'createdAt', sortOrder: 'desc' }, { id: 'asc' }),
+      skip,
+      take: limit,
+      include: DISPUTE_INCLUDE,
+    });
+  };
 
   const [total, rows, byStatus] = await Promise.all([
     prisma.jobDispute.count({ where }),
-    prisma.jobDispute.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-      include: DISPUTE_INCLUDE,
-    }),
+    findPage(),
     prisma.jobDispute.groupBy({ by: ['status'], _count: { _all: true } }),
   ]);
 

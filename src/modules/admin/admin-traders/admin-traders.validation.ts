@@ -1,5 +1,27 @@
 import { z } from 'zod';
 import { VerificationStatus } from '@prisma/client';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
+
+export const ADMIN_TRADER_SORT_FIELDS = [
+  'traderCode',
+  'businessName',
+  'businessType',
+  'contactName',
+  'email',
+  'mobileNumber',
+  'listingsCount',
+  'bookingsCount',
+  'jobsDoneCount',
+  'revenue',
+  'rating',
+  'reviewsCount',
+  'status',
+  'verificationStatus',
+  'onboardingStatus',
+  'country',
+  'city',
+  'joinedAt',
+] as const;
 
 const traderAccountStatus = z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']);
 const traderType = z.enum(['SOLO', 'COMPANY']);
@@ -39,6 +61,17 @@ export const traderFilterSchema = z.object({
     country: z.string().optional(),
     joinedFrom: isoDateOrDateTime.optional(),
     joinedTo: isoDateOrDateTime.optional(),
+    /** Business Type column: SOLO = Individual, COMPANY = Business. */
+    traderType: z.string().trim().toUpperCase().pipe(traderType).optional(),
+    city: z.string().trim().optional(),
+    minRating: z.coerce.number().min(0).max(5).optional(),
+    maxRating: z.coerce.number().min(0).max(5).optional(),
+    sortBy: sortByParam(ADMIN_TRADER_SORT_FIELDS),
+    sortOrder: sortOrderParam,
+  })
+  .refine((q) => q.minRating === undefined || q.maxRating === undefined || q.minRating <= q.maxRating, {
+    message: 'minRating cannot be greater than maxRating.',
+    path: ['minRating'],
   }),
 });
 
@@ -50,8 +83,27 @@ export const traderStatsFilterSchema = z.object({
   }),
 });
 
+export const ADMIN_EXPIRING_DOCUMENT_SORT_FIELDS = [
+  'expiryDate',
+  'daysLeft',
+  'documentName',
+  'documentKey',
+  'scope',
+  'categoryName',
+  'required',
+  'fileName',
+  'status',
+  'lastReminderStage',
+  'uploadedAt',
+  'traderName',
+  'email',
+  'mobileNumber',
+] as const;
+
 export const adminExpiringDocumentsSchema = z.object({
   query: z.object({
+    sortBy: sortByParam(ADMIN_EXPIRING_DOCUMENT_SORT_FIELDS),
+    sortOrder: sortOrderParam,
     withinDays: z.coerce.number().int().min(0).max(365).optional(),
     expiryStatus: z.enum(['EXPIRED', 'EXPIRES_TODAY', 'EXPIRING_SOON']).optional(),
     search: z.string().trim().max(100).optional(),

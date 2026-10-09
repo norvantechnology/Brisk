@@ -1,6 +1,21 @@
 import { z } from 'zod';
-import { TraderDocumentStatus, VerificationStatus } from '@prisma/client';
+import { TraderDocumentStatus, TraderOnboardingStatus, VerificationStatus } from '@prisma/client';
 import { documentExpiryDateSchema } from '../../document-rules/document-expiry';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
+import { isoDateParam } from '../../../utils/list-filters';
+
+export const ADMIN_VERIFICATION_QUEUE_SORT_FIELDS = [
+  'traderCode',
+  'traderType',
+  'businessName',
+  'fullLegalName',
+  'contactName',
+  'email',
+  'mobileNumber',
+  'verificationStatus',
+  'onboardingStatus',
+  'submittedAt',
+] as const;
 
 export const verificationQueueSchema = z.object({
   query: z.object({
@@ -8,7 +23,14 @@ export const verificationQueueSchema = z.object({
     limit: z.string().optional(),
     status: z.nativeEnum(VerificationStatus).optional(),
     entityType: z.enum(['SOLO', 'COMPANY']).optional(),
+    onboardingStatus: z
+      .enum([TraderOnboardingStatus.SUBMITTED, TraderOnboardingStatus.APPROVED, TraderOnboardingStatus.REJECTED])
+      .optional(),
     search: z.string().optional(),
+    from: isoDateParam,
+    to: isoDateParam,
+    sortBy: sortByParam(ADMIN_VERIFICATION_QUEUE_SORT_FIELDS),
+    sortOrder: sortOrderParam,
   }),
 });
 

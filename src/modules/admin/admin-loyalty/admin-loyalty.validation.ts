@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
+import { minLteMax } from '../../../utils/list-filters';
 
 const loyaltyStatusSchema = z.enum(['active', 'inactive']);
 
@@ -6,13 +8,28 @@ export const loyaltyOfferIdParamSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
 });
 
+export const ADMIN_LOYALTY_OFFER_SORT_FIELDS = [
+  'title',
+  'pointsRequired',
+  'status',
+  'redemptionsCount',
+  'createdAt',
+  'updatedAt',
+] as const;
+
 export const listLoyaltyOffersSchema = z.object({
-  query: z.object({
-    page: z.coerce.number().int().min(1).optional().default(1),
-    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-    search: z.string().optional(),
-    status: loyaltyStatusSchema.optional(),
-  }),
+  query: z
+    .object({
+      page: z.coerce.number().int().min(1).optional().default(1),
+      limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+      search: z.string().optional(),
+      status: loyaltyStatusSchema.optional(),
+      minPoints: z.coerce.number().int().min(0).optional(),
+      maxPoints: z.coerce.number().int().min(0).optional(),
+      sortBy: sortByParam(ADMIN_LOYALTY_OFFER_SORT_FIELDS),
+      sortOrder: sortOrderParam,
+    })
+    .superRefine(minLteMax('minPoints', 'maxPoints')),
 });
 
 export const createLoyaltyOfferSchema = z.object({

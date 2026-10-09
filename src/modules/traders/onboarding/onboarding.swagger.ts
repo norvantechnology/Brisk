@@ -31,14 +31,20 @@
  *           enum: [SOLO, COMPANY]
  *         currentStep:
  *           type: integer
- *           example: 3
- *           description: Current wizard step (1–7).
+ *           example: 2
+ *           description: |
+ *             First unfinished step (1–7), calculated from saved data — so it always belongs to
+ *             `onboardingScreen`, also after navigating back. Order:
+ *             1 business_type · 2 personal_info / company_info · 3 bank_details (Verification screen) ·
+ *             4 entity_documents · 5 categories · 6 category_documents (Document Verification screen; company
+ *             director photo ID is on the Verification screen) · 7 service_radius.
  *         totalSteps:
  *           type: integer
  *           example: 7
  *         currentStepKey:
  *           type: string
- *           example: sole_trader_verification
+ *           enum: [business_type, personal_info, company_info, bank_details, entity_documents, categories, category_documents, service_radius]
+ *           example: personal_info
  *         nextStep:
  *           type: string
  *           enum: [TRADER_ONBOARDING, TRADER_PENDING_APPROVAL, TRADER_HOME]

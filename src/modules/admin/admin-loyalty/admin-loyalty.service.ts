@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
+import { buildListOrderBy, type SortDir } from '../../../utils/list-sort';
+import { numberRangeWhere } from '../../../utils/list-filters';
 
 export type CreateLoyaltyOfferInput = {
   title: string;
@@ -17,6 +19,19 @@ export type LoyaltyOfferListFilters = {
   limit?: number | string;
   search?: string;
   status?: string;
+  minPoints?: number;
+  maxPoints?: number;
+  sortBy?: string;
+  sortOrder?: string;
+};
+
+const LOYALTY_OFFER_SORT_MAP: Record<string, (dir: SortDir) => Prisma.LoyaltyOfferOrderByWithRelationInput> = {
+  title: (dir) => ({ title: dir }),
+  pointsRequired: (dir) => ({ pointsRequired: dir }),
+  status: (dir) => ({ status: dir }),
+  redemptionsCount: (dir) => ({ redemptions: { _count: dir } }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
 };
 
 const serializeLoyaltyOffer = (offer: {
@@ -59,13 +74,23 @@ export const listLoyaltyOffers = async (filters: LoyaltyOfferListFilters = {}) =
     ];
   }
 
+  const points = numberRangeWhere(filters.minPoints, filters.maxPoints);
+  if (points) {
+    where.pointsRequired = points;
+  }
+
+  const orderBy: Prisma.LoyaltyOfferOrderByWithRelationInput[] =
+    filters.sortBy && LOYALTY_OFFER_SORT_MAP[filters.sortBy]
+      ? buildListOrderBy(filters.sortBy, filters.sortOrder, LOYALTY_OFFER_SORT_MAP, { sortBy: 'createdAt', sortOrder: 'desc' }, { id: 'asc' })
+      : [{ status: 'asc' }, { pointsRequired: 'asc' }, { createdAt: 'desc' }, { id: 'asc' }];
+
   const [total, rows] = await Promise.all([
     prisma.loyaltyOffer.count({ where }),
     prisma.loyaltyOffer.findMany({
       where,
       skip,
       take: limit,
-      orderBy: [{ status: 'asc' }, { pointsRequired: 'asc' }, { createdAt: 'desc' }],
+      orderBy,
       include: { _count: { select: { redemptions: true } } },
     }),
   ]);

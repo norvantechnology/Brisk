@@ -10,6 +10,8 @@ import {
   SurveyRegistrationStatus,
 } from '@prisma/client';
 import { parseCmsPageType } from '../../cms/cms-page-type';
+import { buildListOrderBy, pageIdsByComputedKey, resolveSortDir, type SortDir } from '../../../utils/list-sort';
+import { dateRangeWhere, numberRangeWhere } from '../../../utils/list-filters';
 
 // ==========================================
 // TYPES
@@ -26,6 +28,93 @@ export type CmsListFilters = {
   sort?: string;
   type?: string;
   pageType?: string;
+  from?: string;
+  to?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  isVerified?: boolean;
+  minRating?: number;
+  maxRating?: number;
+};
+
+type SortMap<O> = Record<string, (dir: SortDir) => O | O[]>;
+
+/** Whitelisted `sortBy`, else the list's existing default order (kept for current FE). */
+const cmsOrderBy = <O>(filters: CmsListFilters, map: SortMap<O>, fallback: O[], tiebreak: O): O[] =>
+  filters.sortBy && map[filters.sortBy]
+    ? buildListOrderBy(filters.sortBy, filters.sortOrder, map, { sortBy: filters.sortBy, sortOrder: 'desc' }, tiebreak)
+    : [...fallback, tiebreak];
+
+const PAGE_SORT_MAP: SortMap<Prisma.CmsStaticPageOrderByWithRelationInput> = {
+  title: (dir) => ({ title: dir }),
+  slug: (dir) => ({ slug: dir }),
+  targetAudience: (dir) => ({ targetAudience: dir }),
+  status: (dir) => ({ status: dir }),
+  isActive: (dir) => ({ isActive: dir }),
+  updatedBy: (dir) => ({ updatedBy: { fullName: dir } }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const SOCIAL_LINK_SORT_MAP: SortMap<Prisma.CmsSocialLinkOrderByWithRelationInput> = {
+  platform: (dir) => ({ platform: dir }),
+  profileUrl: (dir) => ({ profileUrl: dir }),
+  sortOrder: (dir) => ({ sortOrder: dir }),
+  status: (dir) => ({ status: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const FAQ_CATEGORY_SORT_MAP: SortMap<Prisma.CmsFaqCategoryOrderByWithRelationInput> = {
+  name: (dir) => ({ name: dir }),
+  slug: (dir) => ({ slug: dir }),
+  faqsCount: (dir) => ({ faqs: { _count: dir } }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const FAQ_SORT_MAP: SortMap<Prisma.CmsFaqOrderByWithRelationInput> = {
+  question: (dir) => ({ question: dir }),
+  categoryName: (dir) => [{ category: { name: dir } }, { createdAt: 'desc' }],
+  pageType: (dir) => [{ pageType: dir }, { displayOrder: 'asc' }],
+  targetAudience: (dir) => [{ targetAudience: dir }, { displayOrder: 'asc' }],
+  status: (dir) => [{ status: dir }, { displayOrder: 'asc' }],
+  displayOrder: (dir) => ({ displayOrder: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const TESTIMONIAL_SORT_MAP: SortMap<Prisma.CmsTestimonialOrderByWithRelationInput> = {
+  authorName: (dir) => ({ authorName: dir }),
+  authorRole: (dir) => ({ authorRole: { sort: dir, nulls: 'last' } }),
+  companyName: (dir) => ({ companyName: { sort: dir, nulls: 'last' } }),
+  rating: (dir) => [{ rating: dir }, { createdAt: 'desc' }],
+  pageType: (dir) => [{ pageType: dir }, { displayOrder: 'asc' }],
+  targetAudience: (dir) => [{ targetAudience: dir }, { displayOrder: 'asc' }],
+  status: (dir) => [{ status: dir }, { displayOrder: 'asc' }],
+  isVerified: (dir) => [{ isVerified: dir }, { displayOrder: 'asc' }],
+  isFeatured: (dir) => [{ isFeatured: dir }, { displayOrder: 'asc' }],
+  displayOrder: (dir) => ({ displayOrder: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const LEGAL_POLICY_SORT_MAP: SortMap<Prisma.CmsLegalPolicyOrderByWithRelationInput> = {
+  name: (dir) => ({ name: dir }),
+  slug: (dir) => ({ slug: dir }),
+  showInFooter: (dir) => [{ showInFooter: dir }, { name: 'asc' }],
+  versionCount: (dir) => [{ versions: { _count: dir } }, { name: 'asc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const AUDIT_SORT_MAP: SortMap<Prisma.AuditLogOrderByWithRelationInput> = {
+  eventType: (dir) => [{ eventType: dir }, { createdAt: 'desc' }],
+  actorType: (dir) => [{ actorType: dir }, { createdAt: 'desc' }],
+  actorLabel: (dir) => [{ actorLabel: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  subjectType: (dir) => [{ subjectType: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
+  description: (dir) => [{ description: dir }, { createdAt: 'desc' }],
+  createdAt: (dir) => ({ createdAt: dir }),
 };
 
 export type CreatePageInput = {
@@ -324,6 +413,14 @@ export const getCmsDashboardStats = async () => {
 export const getCmsDashboardAudit = async (filters: {
   page?: string | number;
   limit?: string | number;
+  search?: string;
+  eventType?: string;
+  actorType?: ActorType;
+  subjectType?: string;
+  from?: string;
+  to?: string;
+  sortBy?: string;
+  sortOrder?: string;
 } = {}) => {
   const page = Math.max(1, Number(filters.page) || 1);
   // Keep previous default of 20 (other CMS lists default to 10).
@@ -344,18 +441,36 @@ export const getCmsDashboardAudit = async (filters: {
     'ContactSubmission',
   ];
 
-  const where: Prisma.AuditLogWhereInput = {
-    OR: [
-      { subjectType: { in: cmsSubjectTypes } },
-      { eventType: { startsWith: 'CMS_' } },
-    ],
-  };
+  const and: Prisma.AuditLogWhereInput[] = [
+    {
+      OR: [
+        { subjectType: { in: cmsSubjectTypes } },
+        { eventType: { startsWith: 'CMS_' } },
+      ],
+    },
+  ];
+  if (filters.eventType) and.push({ eventType: filters.eventType });
+  if (filters.actorType) and.push({ actorType: filters.actorType });
+  if (filters.subjectType) and.push({ subjectType: filters.subjectType });
+  const createdAt = dateRangeWhere(filters.from, filters.to);
+  if (createdAt) and.push({ createdAt });
+  const search = filters.search?.trim();
+  if (search) {
+    and.push({
+      OR: [
+        { description: { contains: search, mode: 'insensitive' } },
+        { eventType: { contains: search, mode: 'insensitive' } },
+        { actorLabel: { contains: search, mode: 'insensitive' } },
+      ],
+    });
+  }
+  const where: Prisma.AuditLogWhereInput = { AND: and };
 
   const [total, items] = await Promise.all([
     prisma.auditLog.count({ where }),
     prisma.auditLog.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: buildListOrderBy<Prisma.AuditLogOrderByWithRelationInput>(filters.sortBy, filters.sortOrder, AUDIT_SORT_MAP, { sortBy: 'createdAt', sortOrder: 'desc' }, { id: 'asc' }),
       skip,
       take: limit,
     }),
@@ -394,13 +509,16 @@ export const listPages = async (filters: CmsListFilters) => {
   const audience = asAudience(filters.audience);
   if (audience) where.targetAudience = audience;
 
+  const updatedAt = dateRangeWhere(filters.from, filters.to);
+  if (updatedAt) where.updatedAt = updatedAt;
+
   const [total, pages] = await Promise.all([
     prisma.cmsStaticPage.count({ where }),
     prisma.cmsStaticPage.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { updatedAt: createdOrder(filters.sort) },
+      orderBy: cmsOrderBy(filters, PAGE_SORT_MAP, [{ updatedAt: createdOrder(filters.sort) }], { id: 'asc' }),
       include: {
         updatedBy: {
           select: { id: true, fullName: true, email: true },
@@ -610,13 +728,16 @@ export const listSocialLinks = async (filters: CmsListFilters = {}) => {
   const status = asActiveStatus(filters.status);
   if (status) where.status = status;
 
+  const createdAt = dateRangeWhere(filters.from, filters.to);
+  if (createdAt) where.createdAt = createdAt;
+
   const [total, socialLinks] = await Promise.all([
     prisma.cmsSocialLink.count({ where }),
     prisma.cmsSocialLink.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { sortOrder: 'asc' },
+      orderBy: cmsOrderBy(filters, SOCIAL_LINK_SORT_MAP, [{ sortOrder: 'asc' }], { id: 'asc' }),
     }),
   ]);
 
@@ -724,13 +845,16 @@ export const listFaqCategories = async (filters: CmsListFilters = {}) => {
     ];
   }
 
+  const createdAt = dateRangeWhere(filters.from, filters.to);
+  if (createdAt) where.createdAt = createdAt;
+
   const [total, faqCategories] = await Promise.all([
     prisma.cmsFaqCategory.count({ where }),
     prisma.cmsFaqCategory.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { name: 'asc' },
+      orderBy: cmsOrderBy(filters, FAQ_CATEGORY_SORT_MAP, [{ name: 'asc' }], { id: 'asc' }),
       include: {
         _count: { select: { faqs: true } },
       },
@@ -808,13 +932,21 @@ export const listFaqs = async (filters: CmsListFilters = {}) => {
     where.categoryId = filters.categoryId;
   }
 
+  const createdAt = dateRangeWhere(filters.from, filters.to);
+  if (createdAt) where.createdAt = createdAt;
+
   const [total, faqs] = await Promise.all([
     prisma.cmsFaq.count({ where }),
     prisma.cmsFaq.findMany({
       where,
       skip,
       take: limit,
-      orderBy: [{ displayOrder: 'asc' }, { createdAt: createdOrder(filters.sort) }],
+      orderBy: cmsOrderBy(
+        filters,
+        FAQ_SORT_MAP,
+        [{ displayOrder: 'asc' }, { createdAt: createdOrder(filters.sort) }],
+        { id: 'asc' }
+      ),
       include: { category: true },
     }),
   ]);
@@ -1019,13 +1151,26 @@ export const listTestimonials = async (filters: CmsListFilters = {}) => {
     where.pageType = pageType;
   }
 
+  if (filters.isVerified !== undefined) where.isVerified = filters.isVerified;
+
+  const rating = numberRangeWhere(filters.minRating, filters.maxRating);
+  if (rating) where.rating = rating;
+
+  const createdAt = dateRangeWhere(filters.from, filters.to);
+  if (createdAt) where.createdAt = createdAt;
+
   const [total, testimonials] = await Promise.all([
     prisma.cmsTestimonial.count({ where }),
     prisma.cmsTestimonial.findMany({
       where,
       skip,
       take: limit,
-      orderBy: [{ displayOrder: 'asc' }, { createdAt: createdOrder(filters.sort) }],
+      orderBy: cmsOrderBy(
+        filters,
+        TESTIMONIAL_SORT_MAP,
+        [{ displayOrder: 'asc' }, { createdAt: createdOrder(filters.sort) }],
+        { id: 'asc' }
+      ),
     }),
   ]);
 
@@ -1221,27 +1366,72 @@ export const listLegalPolicies = async (filters: CmsListFilters = {}) => {
     ];
   }
 
-  const [total, rows] = await Promise.all([
-    prisma.cmsLegalPolicy.count({ where }),
-    prisma.cmsLegalPolicy.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { name: 'asc' },
+  const updatedAt = dateRangeWhere(filters.from, filters.to);
+  if (updatedAt) where.updatedAt = updatedAt;
+
+  const include = {
+    versions: {
+      orderBy: [{ createdAt: 'desc' }],
+      take: 1,
       include: {
-        versions: {
-          orderBy: [{ createdAt: 'desc' }],
-          take: 1,
-          include: {
-            publishedBy: {
-              select: { id: true, fullName: true, email: true },
-            },
-          },
+        publishedBy: {
+          select: { id: true, fullName: true, email: true },
         },
-        _count: { select: { versions: true } },
       },
-    }),
-  ]);
+    },
+    _count: { select: { versions: true } },
+  } satisfies Prisma.CmsLegalPolicyInclude;
+
+  // `status` / `effectiveDate` come from the latest version, so filter + rank those in memory.
+  const status = asPublishStatus(filters.status);
+  const computedKey: ((r: { versions: { status: CmsPublishStatus; effectiveDate: Date | null }[] }) => unknown) | undefined =
+    filters.sortBy === 'status'
+      ? (r) => r.versions[0]?.status ?? CmsPublishStatus.DRAFT
+      : filters.sortBy === 'effectiveDate'
+        ? (r) => r.versions[0]?.effectiveDate?.getTime() ?? null
+        : undefined;
+
+  let total: number;
+  let rows: Prisma.CmsLegalPolicyGetPayload<{ include: typeof include }>[];
+  if (status || computedKey) {
+    const candidates = (
+      await prisma.cmsLegalPolicy.findMany({
+        where,
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          createdAt: true,
+          versions: { orderBy: [{ createdAt: 'desc' }], take: 1, select: { status: true, effectiveDate: true } },
+        },
+      })
+    ).filter((c) => !status || (c.versions[0]?.status ?? CmsPublishStatus.DRAFT) === status);
+    total = candidates.length;
+    if (computedKey) {
+      const ids = pageIdsByComputedKey(candidates, computedKey, resolveSortDir(filters.sortOrder), skip, limit);
+      const found = await prisma.cmsLegalPolicy.findMany({ where: { id: { in: ids } }, include });
+      const byId = new Map(found.map((r) => [r.id, r]));
+      rows = ids.map((id) => byId.get(id)!).filter(Boolean);
+    } else {
+      rows = await prisma.cmsLegalPolicy.findMany({
+        where: { id: { in: candidates.map((c) => c.id) } },
+        orderBy: cmsOrderBy(filters, LEGAL_POLICY_SORT_MAP, [{ name: 'asc' }], { id: 'asc' }),
+        skip,
+        take: limit,
+        include,
+      });
+    }
+  } else {
+    [total, rows] = await Promise.all([
+      prisma.cmsLegalPolicy.count({ where }),
+      prisma.cmsLegalPolicy.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: cmsOrderBy(filters, LEGAL_POLICY_SORT_MAP, [{ name: 'asc' }], { id: 'asc' }),
+        include,
+      }),
+    ]);
+  }
 
   const policies = rows.map((policy) => {
     const latestVersion = policy.versions[0] ?? null;

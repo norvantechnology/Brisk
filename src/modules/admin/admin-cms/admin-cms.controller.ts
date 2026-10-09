@@ -31,7 +31,9 @@ export const getCmsDashboardAudit = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await cmsService.getCmsDashboardAudit(req.query as { page?: string; limit?: string });
+    const result = await cmsService.getCmsDashboardAudit(
+      req.query as Parameters<typeof cmsService.getCmsDashboardAudit>[0]
+    );
     sendResponse({
       res,
       statusCode: 200,

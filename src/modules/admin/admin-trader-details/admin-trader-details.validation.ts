@@ -5,13 +5,20 @@ import {
   PayoutStatus,
   TraderDocumentStatus,
 } from '@prisma/client';
+import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
+
+export const TRADER_DOCUMENT_SORT_FIELDS = ['name', 'documentKey', 'required', 'scope', 'categoryName', 'fileName', 'status', 'expiryDate', 'reviewedAt', 'uploadedAt'] as const;
+export const TRADER_JOB_SORT_FIELDS = ['jobRef', 'title', 'customerName', 'categoryName', 'subcategoryName', 'date', 'scheduledDate', 'amount', 'status', 'siteVisitFee', 'siteVisitStatus', 'bookingRef', 'createdAt'] as const;
+export const TRADER_REVIEW_SORT_FIELDS = ['stars', 'review', 'customerName', 'bookingRef', 'jobRef', 'jobTitle', 'categoryName', 'createdAt'] as const;
+export const TRADER_PAYOUT_SORT_FIELDS = ['payoutRef', 'amount', 'currencyCode', 'status', 'stripeTransferId', 'processedAt', 'createdAt'] as const;
+export const TRADER_OFFER_SORT_FIELDS = ['offerCode', 'title', 'couponCode', 'discountType', 'discountValue', 'categoryName', 'validFrom', 'validUntil', 'status', 'claimsCount', 'revenueGenerated', 'viewsCount', 'createdAt', 'updatedAt'] as const;
 
 const paginationQuery = {
   page: z.string().optional(),
   limit: z.string().optional(),
   search: z.string().optional(),
   sortBy: z.string().optional(),
-  sortOrder: z.enum(['asc', 'desc']).optional(),
+  sortOrder: sortOrderParam,
   from: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
   to: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
 };
@@ -28,6 +35,7 @@ export const traderDocumentsQuerySchema = z.object({
   }),
   query: z.object({
     ...paginationQuery,
+    sortBy: sortByParam(TRADER_DOCUMENT_SORT_FIELDS),
     status: z.nativeEnum(TraderDocumentStatus).optional(),
     scope: z.enum(['ENTITY', 'CATEGORY', 'ALL']).optional(),
   }),
@@ -39,6 +47,7 @@ export const traderJobsQuerySchema = z.object({
   }),
   query: z.object({
     ...paginationQuery,
+    sortBy: sortByParam(TRADER_JOB_SORT_FIELDS),
     status: z.nativeEnum(JobStatus).optional(),
     categoryId: z.string().uuid().optional(),
   }),
@@ -50,6 +59,7 @@ export const traderReviewsQuerySchema = z.object({
   }),
   query: z.object({
     ...paginationQuery,
+    sortBy: sortByParam(TRADER_REVIEW_SORT_FIELDS),
     stars: z.string().regex(/^[1-5]$/).optional(),
   }),
 });
@@ -60,6 +70,7 @@ export const traderPayoutsQuerySchema = z.object({
   }),
   query: z.object({
     ...paginationQuery,
+    sortBy: sortByParam(TRADER_PAYOUT_SORT_FIELDS),
     status: z.nativeEnum(PayoutStatus).optional(),
   }),
 });
@@ -84,6 +95,7 @@ export const traderOffersQuerySchema = z.object({
   }),
   query: z.object({
     ...paginationQuery,
+    sortBy: sortByParam(TRADER_OFFER_SORT_FIELDS),
     status: z.nativeEnum(OfferStatus).optional(),
     categoryId: z.string().uuid().optional(),
   }),

@@ -11,7 +11,7 @@ import {
   homePageUpdateSchema,
   homeCreateItemSchema,
 } from '../../cms/page-sections.validation';
-import { idParamSchema, testimonialStatusSchema } from './admin-cms.validation';
+import { idParamSchema, listCmsTestimonialsSchema, testimonialStatusSchema } from './admin-cms.validation';
 
 /** Admin homepage CMS — see home-admin.swagger.ts for full API docs. */
 const router = Router();
@@ -115,7 +115,7 @@ router.put(
   homeAdminController.sortAdminHomeSectionItems
 );
 
-router.get('/reviews', homeAdminController.listAdminHomeReviews);
+router.get('/reviews', validate(listCmsTestimonialsSchema), homeAdminController.listAdminHomeReviews);
 router.put('/reviews/sort', validate(bulkItemSortSchema), homeAdminController.sortAdminHomeReviews);
 router.post('/reviews', homeAdminController.createAdminHomeReview);
 router.get('/reviews/:id', validate(idParamSchema), homeAdminController.getAdminHomeReview);

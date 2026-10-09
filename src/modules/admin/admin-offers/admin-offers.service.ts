@@ -1,6 +1,7 @@
-import { OfferClaimStatus, OfferStatus, OfferType } from '@prisma/client';
+import { OfferClaimStatus, OfferStatus, OfferType, Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { NotFoundError } from '../../../utils/errors';
+import { buildListOrderBy, pageIdsByComputedKey, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import { offerInclude, serializeOffer } from '../../offers/offers.serializers';
 import { buildOfferWhere, normalizeOfferListFilters } from '../../offers/offers.query';
 import {
@@ -51,6 +52,73 @@ export const getOfferStats = async () => {
   };
 };
 
+const OFFER_SORT_MAP: Record<string, (dir: SortDir) => Prisma.OfferOrderByWithRelationInput> = {
+  offerCode: (dir) => ({ offerCode: dir }),
+  title: (dir) => ({ title: dir }),
+  offerType: (dir) => ({ offerType: dir }),
+  couponCode: (dir) => ({ couponCode: { sort: dir, nulls: 'last' } }),
+  discountType: (dir) => ({ discountType: dir }),
+  discountValue: (dir) => ({ discountValue: dir }),
+  validFrom: (dir) => ({ validFrom: dir }),
+  validUntil: (dir) => ({ validUntil: dir }),
+  claimsCount: (dir) => ({ claims: { _count: dir } }),
+  revenueGenerated: (dir) => ({ revenueGenerated: dir }),
+  viewsCount: (dir) => ({ viewsCount: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+/** `status` is the effective status (ACTIVE past validUntil = EXPIRED); names come from optional relations. */
+const COMPUTED_OFFER_SORTS: Record<
+  string,
+  (row: {
+    status: OfferStatus;
+    validUntil: Date;
+    trader: { businessName: string | null; user: { fullName: string } } | null;
+    categories: { category: { name: string } }[];
+  }) => unknown
+> = {
+  status: (r) => (r.status === OfferStatus.ACTIVE && r.validUntil < new Date() ? OfferStatus.EXPIRED : r.status),
+  traderName: (r) => (r.trader ? r.trader.businessName || r.trader.user.fullName : null),
+  categoryName: (r) => r.categories[0]?.category.name ?? null,
+};
+
+/** One page of offers sorted by any admin offer column (Offers screen + Trader Details → Offers). */
+export const findOfferPage = async (
+  where: Prisma.OfferWhereInput,
+  sortBy: string | undefined,
+  sortOrder: string | undefined,
+  skip: number,
+  take: number,
+  fallbackSortOrder: SortDir = 'desc'
+) => {
+  const computedKey = sortBy ? COMPUTED_OFFER_SORTS[sortBy] : undefined;
+  if (computedKey) {
+    const candidates = await prisma.offer.findMany({
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        validUntil: true,
+        trader: { select: { businessName: true, user: { select: { fullName: true } } } },
+        categories: { take: 1, select: { category: { select: { name: true } } } },
+      },
+    });
+    const ids = pageIdsByComputedKey(candidates, computedKey, resolveSortDir(sortOrder), skip, take);
+    const rows = await prisma.offer.findMany({ where: { id: { in: ids } }, include: offerInclude });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return ids.map((id) => byId.get(id)!).filter(Boolean);
+  }
+  return prisma.offer.findMany({
+    where,
+    skip,
+    take,
+    orderBy: buildListOrderBy(sortBy, sortOrder, OFFER_SORT_MAP, { sortBy: 'createdAt', sortOrder: fallbackSortOrder }, { id: 'asc' }),
+    include: offerInclude,
+  });
+};
+
 export const listOffers = async (filters: Record<string, unknown>) => {
   const page = Math.max(1, Number(filters.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
@@ -59,13 +127,7 @@ export const listOffers = async (filters: Record<string, unknown>) => {
 
   const [total, offers] = await Promise.all([
     prisma.offer.count({ where }),
-    prisma.offer.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: offerInclude,
-    }),
+    findOfferPage(where, filters.sortBy as string | undefined, filters.sortOrder as string | undefined, skip, limit),
   ]);
 
   return {
