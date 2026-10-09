@@ -223,6 +223,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
             select: {
               id: true,
               status: true,
+              paymentRequestId: true,
               totalAmount: true,
               currencyCode: true,
               payments: {

@@ -6,6 +6,7 @@ import {
   OfferClaimStatus,
   PaymentStatus,
   Prisma,
+  TraderPaymentRequestStatus,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
@@ -27,6 +28,10 @@ import {
   toPaymentError,
 } from '../../services/stripe.service';
 import { computeInvoiceBreakdown } from '../jobs/jobs.service';
+import {
+  emitPaymentRequestPaidEvent,
+  markPaymentRequestPaid,
+} from '../payment-requests/payment-requests.service';
 import type {
   ApplyPromoInput,
   CreatePaymentIntentInput,
@@ -107,6 +112,15 @@ const invoiceOwnershipInclude = {
     },
   },
   payments: { orderBy: { createdAt: 'desc' as const } },
+  paymentRequest: {
+    select: {
+      id: true,
+      status: true,
+      materialsTotal: true,
+      siteVisitFee: true,
+      vatRate: true,
+    },
+  },
 } satisfies Prisma.InvoiceInclude;
 
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{ include: typeof invoiceOwnershipInclude }>;
@@ -187,6 +201,22 @@ const resolveInvoicePurpose = (job: {
   job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
     ? 'SITE_VISIT_FEE'
     : 'SERVICE';
+
+/** Invoice billing a trader's FULL_JOB payment request (final payment after the job is finished). */
+const invoicePurposeOf = (invoice: InvoiceWithRelations): 'SERVICE' | 'SITE_VISIT_FEE' =>
+  invoice.paymentRequestId ? 'SERVICE' : resolveInvoicePurpose(invoice.booking.job);
+
+const invoiceLineItems = (invoice: InvoiceWithRelations, purpose: 'SERVICE' | 'SITE_VISIT_FEE') => {
+  const items = buildLineItems(invoice, purpose);
+  const request = invoice.paymentRequest;
+  if (!request) return items;
+  const extras = [
+    { key: 'materialsTotal', amount: money(request.materialsTotal), type: 'charge' as const },
+    { key: 'siteVisitFee', amount: money(request.siteVisitFee), type: 'charge' as const },
+  ].filter((item) => item.amount > 0);
+  items.splice(1, 0, ...extras);
+  return items;
+};
 
 const formatTimeSlotRange = (timeSlot?: string | null) => {
   // No static slot ranges — return the stored timeSlot value only.
@@ -306,7 +336,8 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
   const job = invoice.booking.job;
   const trader = invoice.booking.trader;
   const breakdown = serializeInvoiceBreakdown(invoice);
-  const purpose = resolveInvoicePurpose(job);
+  const purpose = invoicePurposeOf(invoice);
+  const request = invoice.paymentRequest;
   const serviceProvider =
     trader?.businessName || trader?.user?.fullName || null;
   const orderId = invoice.invoiceNumber || invoice.booking.bookingRef || invoice.id;
@@ -321,10 +352,17 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     createdAt: invoice.createdAt,
     updatedAt: invoice.updatedAt,
     purpose,
+    paymentRequestId: invoice.paymentRequestId ?? null,
     ...breakdown,
-    siteVisitFee: purpose === 'SITE_VISIT_FEE' ? breakdown.serviceCharge : 0,
+    materialsTotal: request ? money(request.materialsTotal) : 0,
+    siteVisitFee: request
+      ? money(request.siteVisitFee)
+      : purpose === 'SITE_VISIT_FEE'
+        ? breakdown.serviceCharge
+        : 0,
+    vatRate: request ? money(request.vatRate) : 0,
     currencySymbol: currencySymbol(invoice.currencyCode),
-    lineItems: buildLineItems(invoice, purpose),
+    lineItems: invoiceLineItems(invoice, purpose),
     serviceSummary: {
       categoryName: job.category?.name ?? '',
       subcategoryName: job.subcategory?.name ?? '',
@@ -426,7 +464,7 @@ const buildReceipt = async (paymentId: string, userId: string) => {
   const trader = invoice.booking.trader;
   const amountPaid = money(payment.amount);
   const isPaid = payment.status === PaymentStatus.COMPLETED;
-  const purpose = resolveInvoicePurpose(job);
+  const purpose = invoicePurposeOf(invoice);
 
   return {
     paymentId: payment.id,
@@ -472,8 +510,9 @@ const buildReceipt = async (paymentId: string, userId: string) => {
       orderId: invoice.invoiceNumber || invoice.booking.bookingRef,
       status: invoice.status,
       purpose,
+      paymentRequestId: invoice.paymentRequestId ?? null,
       ...serializeInvoiceBreakdown(invoice),
-      lineItems: buildLineItems(invoice, purpose),
+      lineItems: invoiceLineItems(invoice, purpose),
     },
     booking: {
       id: invoice.booking.id,
@@ -513,7 +552,8 @@ const buildReceipt = async (paymentId: string, userId: string) => {
 
 /** Recompute fee/total from stored line amounts so GET never drifts. */
 const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
-  if (invoice.status !== InvoiceStatus.UNPAID) return invoice;
+  // Payment-request invoices keep the trader's billed totals (materials, site visit, VAT).
+  if (invoice.status !== InvoiceStatus.UNPAID || invoice.paymentRequestId) return invoice;
 
   const purpose = resolveInvoicePurpose(invoice.booking.job);
   const breakdown = computeInvoiceBreakdown({
@@ -607,6 +647,9 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
 
   if (invoice.status !== InvoiceStatus.UNPAID) {
     throw new BadRequestError('Promo codes can only be applied to unpaid invoices.');
+  }
+  if (invoice.paymentRequestId) {
+    throw new BadRequestError('Promo codes cannot be applied to a trader payment request.');
   }
 
   // One promo at a time (no stacking). Same code → idempotent "already applied".
@@ -729,6 +772,15 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
   }
   if (invoice.status === InvoiceStatus.REFUNDED) {
     throw new BadRequestError('Cannot pay a refunded invoice.');
+  }
+  if (
+    invoice.paymentRequest &&
+    invoice.paymentRequest.status !== TraderPaymentRequestStatus.SENT &&
+    invoice.paymentRequest.status !== TraderPaymentRequestStatus.PENDING
+  ) {
+    throw new BadRequestError(
+      `Payment request cannot be paid from status ${invoice.paymentRequest.status}.`
+    );
   }
 
   const existingCompleted = invoice.payments.find((p) => p.status === PaymentStatus.COMPLETED);
@@ -900,6 +952,7 @@ export const confirmPayment = async (userId: string, paymentId: string) => {
 
 /**
  * Marks an invoice payment as successful (invoice PAID, offer claim USED, job SCHEDULED).
+ * Payment-request invoice: marks the linked trader request PAID instead (FULL_JOB → job COMPLETED).
  * Idempotent — called by both the confirm API and the Stripe webhook; returns false if
  * the payment was already finalized.
  */
@@ -928,7 +981,7 @@ export const finalizeInvoicePayment = async (
         ...(method ? { method } : {}),
       },
     });
-    if (claimed.count === 0) return false;
+    if (claimed.count === 0) return null;
 
     await tx.payment.updateMany({
       where: {
@@ -943,6 +996,16 @@ export const finalizeInvoicePayment = async (
       where: { id: payment.invoiceId },
       data: { status: InvoiceStatus.PAID },
     });
+
+    if (payment.invoice.paymentRequestId) {
+      const paidRequest = await markPaymentRequestPaid(tx, payment.invoice.paymentRequestId, {
+        paidAt,
+        intentId: payment.stripePaymentIntentId,
+        details: charge,
+        method,
+      });
+      return { paidRequest };
+    }
 
     // Claim / apply offer only on Payment Successful — create or update → USED.
     // Job goes live (SCHEDULED) only after payment succeeds.
@@ -1018,7 +1081,7 @@ export const finalizeInvoicePayment = async (
         });
       }
     }
-    return true;
+    return { paidRequest: null };
   });
   if (!finalized) return false;
 
@@ -1042,8 +1105,10 @@ export const finalizeInvoicePayment = async (
     customerId: userId,
     traderId: booking?.traderId ?? null,
     traderUserId: booking?.trader?.userId ?? null,
-    at: new Date().toISOString(),
+    at: paidAt.toISOString(),
+    ...(payment.invoice.paymentRequestId ? { jobStatus: null, notifyTrader: false } : {}),
   });
+  if (finalized.paidRequest) emitPaymentRequestPaidEvent(finalized.paidRequest, paidAt);
   return true;
 };
 

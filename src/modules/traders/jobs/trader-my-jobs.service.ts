@@ -1,5 +1,6 @@
 import {
   BookingStatus,
+  InvoiceStatus,
   JobPhotoKind,
   JobQuoteType,
   JobStatus,
@@ -8,6 +9,7 @@ import {
   TraderPaymentRequestStatus,
   TraderPaymentRequestType,
   TraderSiteVisitStatus,
+  type TraderPaymentRequest,
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
@@ -34,6 +36,7 @@ import {
   JOB_PLATFORM_FEE,
   JOB_VAT_RATE,
   buildJobPaymentBreakdown,
+  generateInvoiceNumber,
   isAwaitingUpfrontPayment,
 } from '../../jobs/job-payment-state';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
@@ -752,7 +755,9 @@ const hasFinalPaymentRequest = (job: {
 
 /** Direct Trader job: the paid upfront invoice was the full service (a site-visit invoice only covers the visit). */
 const isPaidUpfrontInFull = (job: MyJobRow) =>
-  job.booking?.invoice?.status === 'PAID' && !job.siteVisitRequested;
+  job.booking?.invoice?.status === 'PAID' &&
+  !job.booking.invoice.paymentRequestId &&
+  !job.siteVisitRequested;
 
 /** Job status on finish — stays PAYMENT_PENDING until the customer has paid the full amount. */
 const jobStatusAfterFinish = async (job: MyJobRow, traderId: string) => {
@@ -789,6 +794,41 @@ const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderConte
     currencyCode: currency.currencyCode,
   };
   return { breakdown, data };
+};
+
+/**
+ * Invoice for the FULL_JOB request so the customer pays it through the standard invoice checkout
+ * (invoiceId). One invoice per booking — a booking with an upfront invoice keeps paying by paymentRequestId.
+ */
+const createPaymentRequestInvoice = (
+  tx: Prisma.TransactionClient,
+  job: MyJobRow,
+  request: TraderPaymentRequest
+) =>
+  job.booking && !job.booking.invoice
+    ? tx.invoice.create({
+        data: {
+          bookingId: job.booking.id,
+          invoiceNumber: generateInvoiceNumber(),
+          serviceCharge: request.serviceCharge,
+          platformFee: request.platformFee,
+          tax: request.vatAmount,
+          totalAmount: request.totalAmount,
+          currencyCode: request.currencyCode,
+          status: InvoiceStatus.UNPAID,
+          paymentRequestId: request.id,
+        },
+      })
+    : null;
+
+const createFullJobPaymentRequest = async (
+  tx: Prisma.TransactionClient,
+  job: MyJobRow,
+  data: Prisma.TraderPaymentRequestUncheckedCreateInput
+) => {
+  const request = await tx.traderPaymentRequest.create({ data });
+  await createPaymentRequestInvoice(tx, job, request);
+  return request;
 };
 
 const emitTraderJobProgress = (
@@ -1781,7 +1821,7 @@ export const finishJob = async (userId: string, jobId: string) => {
       where: { id: job.id },
       data: { status: nextStatus },
     });
-    return request ? tx.traderPaymentRequest.create({ data: request.data }) : null;
+    return request ? createFullJobPaymentRequest(tx, job, request.data) : null;
   });
   emitTraderJobProgress(job, userId, nextStatus, !paymentRequest);
   if (paymentRequest) await notifyPaymentRequested(trader.id, paymentRequest);
@@ -1926,7 +1966,7 @@ export const submitJobCompletion = async (
       where: { id: job.id },
       data: { status: nextStatus },
     });
-    return request ? tx.traderPaymentRequest.create({ data: request.data }) : null;
+    return request ? createFullJobPaymentRequest(tx, job, request.data) : null;
   });
   emitTraderJobProgress(job, userId, nextStatus, !paymentRequest);
   if (paymentRequest) await notifyPaymentRequested(trader.id, paymentRequest);
@@ -3115,6 +3155,11 @@ export const requestPayment = async (userId: string, jobId: string) => {
     throw new ConflictError('Payment already received for this job.');
   }
   if (existing) {
+    // Requests sent before invoices were linked — attach one so the customer can pay by invoiceId.
+    await createPaymentRequestInvoice(prisma, job, existing)?.catch((error) => {
+      const raced = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+      if (!raced) throw error;
+    });
     return {
       paymentRequestId: existing.id,
       jobRef: job.jobRef,
@@ -3130,7 +3175,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
   const { breakdown, data } = await buildFullJobPaymentRequestData(job, trader);
 
   const paymentRequest = await prisma.$transaction(async (tx) => {
-    const pr = await tx.traderPaymentRequest.create({ data });
+    const pr = await createFullJobPaymentRequest(tx, job, data);
     await tx.job.update({
       where: { id: jobId },
       data: { status: JobStatus.PAYMENT_PENDING },

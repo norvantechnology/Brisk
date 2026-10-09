@@ -1,4 +1,11 @@
 import { JobStatus } from '@prisma/client';
+import { randomBytes } from 'crypto';
+
+export const generateInvoiceNumber = () => {
+  const year = new Date().getFullYear();
+  const suffix = randomBytes(2).toString('hex').toUpperCase();
+  return `INV-${year}-${suffix}`;
+};
 
 /**
  * JobStatus.PAYMENT_PENDING has two meanings:

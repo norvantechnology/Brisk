@@ -270,10 +270,12 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *         `Charges` (paid total) · `Refunded` (completed refunds)
  *       - `currencyCode`, `currencySymbol`
  *       - `isPartPayment` — true when the trader billed in installments (open Installment Payments screen)
- *       - **Pay routing** (status `PAYMENT PENDING`):
- *         `invoiceId` set (statusLabel `Payment Pending`, upfront invoice) → `GET /invoices/{invoiceId}` + `POST /payments/intent`;
- *         `paymentRequestId` set (statusLabel `Payment Pending`, trader finished) → `GET /payment-requests/{paymentRequestId}` +
- *         `POST /payment-requests/{paymentRequestId}/payment-intent`. Both null = nothing to pay.
+ *       - **Pay routing** (status `PAYMENT PENDING`, only one of `invoiceId` / `paymentRequestId` is set):
+ *         `invoiceId` set → `GET /invoices/{invoiceId}` + `POST /payments/intent` + `POST /payments/{paymentId}/confirm`.
+ *         Upfront invoice, or the trader's final payment request (sent automatically when the trader finishes) —
+ *         that invoice carries the request's totals and `paymentRequestId`; paying it marks the request PAID and the job COMPLETED.
+ *         Only `paymentRequestId` set (installment, or booking already has an upfront invoice) →
+ *         `GET /payment-requests/{paymentRequestId}` + `POST /payment-requests/{paymentRequestId}/payment-intent`. Both null = nothing to pay.
  *       - `downloadUrl` — invoice PDF path once the trader finished the job, else null
  *     parameters:
  *       - in: query

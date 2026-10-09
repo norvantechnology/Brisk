@@ -565,18 +565,28 @@ export const emitQuoteReceived = (payload: QuoteRealtimePayload) => {
   })();
 };
 
-export const emitPaymentCompleted = (
-  payload: PaymentRealtimePayload & { traderUserId?: string | null }
-) => {
+/**
+ * jobStatus: status broadcast in job:status_changed (default SCHEDULED; null = caller emits it).
+ * notifyTrader: false when the trader is already notified by the payment-request event.
+ */
+export const emitPaymentCompleted = ({
+  jobStatus = 'SCHEDULED',
+  notifyTrader = true,
+  ...payload
+}: PaymentRealtimePayload & {
+  traderUserId?: string | null;
+  jobStatus?: string | null;
+  notifyTrader?: boolean;
+}) => {
   const rooms = [roomUser(payload.customerId)];
   if (payload.jobId) rooms.push(roomJob(payload.jobId));
   if (payload.bookingId) rooms.push(roomBooking(payload.bookingId));
   if (payload.traderUserId) rooms.push(roomUser(payload.traderUserId));
   emit(RealtimeEvents.PAYMENT_COMPLETED, rooms, { ...payload });
-  if (payload.jobId) {
+  if (payload.jobId && jobStatus) {
     emit(RealtimeEvents.JOB_STATUS_CHANGED, rooms, {
       jobId: payload.jobId,
-      status: 'SCHEDULED',
+      status: jobStatus,
       customerId: payload.customerId,
       traderId: payload.traderId ?? null,
       invoiceId: payload.invoiceId,
@@ -613,6 +623,7 @@ export const emitPaymentCompleted = (
       legacyData: payload,
       at: payload.at,
     });
+    if (!notifyTrader) return;
     await pushUserNotification([payload.traderUserId], {
       type: 'PAYMENT_RECEIVED',
       title: 'Payment received',

@@ -1,5 +1,8 @@
 import {
+  InvoiceStatus,
   JobStatus,
+  PaymentMethod,
+  PaymentStatus,
   Prisma,
   TraderPaymentRequestStatus,
   TraderPaymentRequestType,
@@ -337,48 +340,58 @@ export const confirmPaymentRequest = async (customerId: string, id: string) => {
 };
 
 /**
- * Idempotent PAID transition (confirm API + Stripe webhook). FULL_JOB also completes the job
- * (PAYMENT_PENDING → COMPLETED). Returns false if already finalized.
+ * PAID transition inside a transaction. FULL_JOB also completes the job (PAYMENT_PENDING → COMPLETED)
+ * and its linked invoice. Returns null if the request is no longer payable.
  */
-export const finalizePaymentRequest = async (
+export const markPaymentRequestPaid = async (
+  tx: Prisma.TransactionClient,
   id: string,
-  intent: Stripe.PaymentIntent,
-  charge?: ChargeDetails
-): Promise<boolean> => {
-  const details = charge ?? (await getChargeDetails(intent));
-  const paidAt = new Date();
-  const method = paymentMethodFromCharge(details);
-
-  const result = await prisma.$transaction(async (tx) => {
-    const claimed = await tx.traderPaymentRequest.updateMany({
-      where: { id, status: { in: PAYABLE_STATUSES } },
-      data: {
-        status: TraderPaymentRequestStatus.PAID,
-        paidAt,
-        stripePaymentIntentId: intent.id,
-        cardBrand: details.cardBrand,
-        cardLast4: details.cardLast4,
-        ...(method ? { paymentMethod: method } : {}),
-      },
-    });
-    if (claimed.count === 0) return null;
-
-    const request = await tx.traderPaymentRequest.findUniqueOrThrow({
-      where: { id },
-      include: { trader: { select: { userId: true } } },
-    });
-    let jobStatus: JobStatus | null = null;
-    if (request.type === TraderPaymentRequestType.FULL_JOB) {
-      const moved = await tx.job.updateMany({
-        where: { id: request.jobId, status: JobStatus.PAYMENT_PENDING },
-        data: { status: JobStatus.COMPLETED },
-      });
-      if (moved.count > 0) jobStatus = JobStatus.COMPLETED;
-    }
-    return { request, jobStatus };
+  paid: {
+    paidAt: Date;
+    intentId: string | null;
+    details: ChargeDetails | null;
+    method: PaymentMethod | null;
+  }
+) => {
+  const claimed = await tx.traderPaymentRequest.updateMany({
+    where: { id, status: { in: PAYABLE_STATUSES } },
+    data: {
+      status: TraderPaymentRequestStatus.PAID,
+      paidAt: paid.paidAt,
+      ...(paid.intentId ? { stripePaymentIntentId: paid.intentId } : {}),
+      cardBrand: paid.details?.cardBrand ?? null,
+      cardLast4: paid.details?.cardLast4 ?? null,
+      ...(paid.method ? { paymentMethod: paid.method } : {}),
+    },
   });
-  if (!result) return false;
+  if (claimed.count === 0) return null;
 
+  const request = await tx.traderPaymentRequest.findUniqueOrThrow({
+    where: { id },
+    include: { trader: { select: { userId: true } } },
+  });
+  let jobStatus: JobStatus | null = null;
+  if (request.type === TraderPaymentRequestType.FULL_JOB) {
+    const moved = await tx.job.updateMany({
+      where: { id: request.jobId, status: JobStatus.PAYMENT_PENDING },
+      data: { status: JobStatus.COMPLETED },
+    });
+    if (moved.count > 0) jobStatus = JobStatus.COMPLETED;
+  }
+  await tx.invoice.updateMany({
+    where: { paymentRequestId: id, status: InvoiceStatus.UNPAID },
+    data: { status: InvoiceStatus.PAID },
+  });
+  await tx.payment.updateMany({
+    where: { invoice: { paymentRequestId: id }, status: PaymentStatus.PENDING },
+    data: { status: PaymentStatus.FAILED },
+  });
+  return { request, jobStatus };
+};
+
+type PaidPaymentRequest = NonNullable<Awaited<ReturnType<typeof markPaymentRequestPaid>>>;
+
+export const emitPaymentRequestPaidEvent = (result: PaidPaymentRequest, paidAt: Date) =>
   emitPaymentRequestPaid({
     paymentRequestId: result.request.id,
     type: result.request.type,
@@ -392,5 +405,22 @@ export const finalizePaymentRequest = async (
     traderUserId: result.request.trader.userId,
     at: paidAt.toISOString(),
   });
+
+/** Idempotent PAID transition (confirm API + Stripe webhook). Returns false if already finalized. */
+export const finalizePaymentRequest = async (
+  id: string,
+  intent: Stripe.PaymentIntent,
+  charge?: ChargeDetails
+): Promise<boolean> => {
+  const details = charge ?? (await getChargeDetails(intent));
+  const paidAt = new Date();
+  const method = paymentMethodFromCharge(details);
+
+  const result = await prisma.$transaction((tx) =>
+    markPaymentRequestPaid(tx, id, { paidAt, intentId: intent.id, details, method })
+  );
+  if (!result) return false;
+
+  emitPaymentRequestPaidEvent(result, paidAt);
   return true;
 };

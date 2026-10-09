@@ -36,6 +36,8 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       **Key fields (numeric amounts; UI copy owned by mobile):**
  *       - `purpose` — SITE_VISIT_FEE vs SERVICE
  *       - `totalAmount` / `siteVisitFee`
+ *       - `paymentRequestId` — set when the invoice bills the trader's final payment request (after the job is finished);
+ *         then `materialsTotal`, `siteVisitFee`, `vatRate` and `tax` (VAT) come from that request and promo codes are not allowed
  *       - `trader` — name, verified, rating, reviewsCount, photo
  *       - `serviceSummary` — category/subcategory/title/scheduledDate/timeSlot from job
  *       - `billingTypes` / `paymentMethods` — keys only

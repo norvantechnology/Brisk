@@ -31,7 +31,7 @@ import type {
   UpdateJobInput,
 } from './jobs.validation';
 import type { JobFormEntryPoint } from './jobs.form-config';
-import { isAwaitingUpfrontPayment } from './job-payment-state';
+import { generateInvoiceNumber, isAwaitingUpfrontPayment } from './job-payment-state';
 import {
   assertRequiredQaFormAnswers,
   buildQaFormAnswerList,
@@ -78,11 +78,6 @@ export const customerStatusBadgeFor = (
 
 const generateJobRef = () => `JOB-${randomBytes(2).toString('hex').toUpperCase()}`;
 const generateBookingRef = () => `BKG-${randomBytes(2).toString('hex').toUpperCase()}`;
-const generateInvoiceNumber = () => {
-  const year = new Date().getFullYear();
-  const suffix = randomBytes(2).toString('hex').toUpperCase();
-  return `INV-${year}-${suffix}`;
-};
 
 export const formatAddressLine = (address: {
   houseNumber?: string | null;
@@ -208,6 +203,7 @@ const jobInclude = {
           id: true,
           invoiceNumber: true,
           status: true,
+          paymentRequestId: true,
           totalAmount: true,
           serviceCharge: true,
           traderOfferDiscount: true,
@@ -259,6 +255,11 @@ const serializeJob = (
   const offerApplied = Boolean(job.offer);
   const traderDisplayName =
     job.trader?.businessName || job.trader?.user?.fullName || null;
+  const payScreen =
+    !job.booking?.invoice?.paymentRequestId &&
+    (job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested)
+      ? 'SITE_VISIT_PAY_FEE'
+      : 'PAYMENT_DETAILS';
 
   return {
   id: job.id,
@@ -512,16 +513,11 @@ const serializeJob = (
         job.siteVisitRequested
           ? 'SITE_VISIT_PAY_FEE'
           : 'WAITING_FOR_QUOTES',
-      paymentScreen:
-        job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
-          ? 'SITE_VISIT_PAY_FEE'
-          : 'PAYMENT_DETAILS',
+      paymentScreen: payScreen,
       nextScreen: !job.addressId
         ? 'CHOOSE_LOCATION'
         : isAwaitingUpfrontPayment(job) || job.booking?.invoice?.status === InvoiceStatus.UNPAID
-          ? job.quoteType === JobQuoteType.ONSITE || job.siteVisitRequested
-            ? 'SITE_VISIT_PAY_FEE'
-            : 'PAYMENT_DETAILS'
+          ? payScreen
           : job.status === JobStatus.DRAFT
             ? 'PUBLISH'
             : '',
@@ -806,6 +802,7 @@ export const customerJobAmountSelect = {
         select: {
           id: true,
           status: true,
+          paymentRequestId: true,
           totalAmount: true,
           currencyCode: true,
           payments: {
@@ -836,8 +833,11 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
     )
   );
   const paidRequests = job.paymentRequests.filter((p) => p.status === 'PAID');
+  // A payment-request invoice is already counted through its PAID request.
   const charged = round2(
-    (invoice && invoice.status !== InvoiceStatus.UNPAID ? money(invoice.totalAmount) : 0) +
+    (invoice && !invoice.paymentRequestId && invoice.status !== InvoiceStatus.UNPAID
+      ? money(invoice.totalAmount)
+      : 0) +
       paidRequests.reduce((s, p) => s + money(p.totalAmount), 0)
   );
   const due = round2(
@@ -867,9 +867,13 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
   /** Trader billed in installments (sent or paid PARTIAL request) — customer opens the Installment Payments screen. */
   const isPartPayment = job.paymentRequests.some((p) => p.type === 'PARTIAL');
 
-  /** What to pay: unpaid upfront invoice → invoice checkout; trader request waiting → payment-request checkout. */
+  /**
+   * What to pay (only one is set): unpaid invoice (upfront, or the trader's final request) → invoice checkout;
+   * otherwise a waiting request without an invoice (installment / booking with upfront invoice) → payment-request checkout.
+   */
   const invoiceId = !cancelled && invoice?.status === InvoiceStatus.UNPAID ? invoice.id : null;
-  const paymentRequestId = cancelled ? null : (job.paymentRequests.find((p) => p.status === 'SENT')?.id ?? null);
+  const paymentRequestId =
+    cancelled || invoiceId ? null : (job.paymentRequests.find((p) => p.status === 'SENT')?.id ?? null);
 
   return {
     amount,
@@ -1149,7 +1153,9 @@ const buildCustomerJobView = async (
       : null,
     prisma.jobDispute.count({ where: { jobId, status: { in: ['OPEN', 'IN REVIEW'] } } }),
   ]);
-  const billedInvoice = invoice && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
+  // A payment-request invoice is already counted through its request row.
+  const billedInvoice =
+    invoice && !invoice.paymentRequestId && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
   const sum = (rows: typeof requests, pick: (r: (typeof requests)[number]) => Prisma.Decimal) =>
     rows.reduce((s, r) => s + money(pick(r)), 0);
 

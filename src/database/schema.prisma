@@ -760,12 +760,15 @@ model Invoice {
   totalAmount         Decimal       @map("total_amount") @db.Decimal(10, 2)
   currencyCode        String        @default("EUR") @map("currency_code")
   status              InvoiceStatus @default(UNPAID)
+  /// Set when this invoice bills the trader's FULL_JOB payment request (final payment after finish).
+  paymentRequestId    String?       @unique @map("payment_request_id") @db.Uuid
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
   // Relationships
-  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  payments Payment[]
+  booking        Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  payments       Payment[]
+  paymentRequest TraderPaymentRequest? @relation(fields: [paymentRequestId], references: [id], onDelete: SetNull)
 
   @@map("invoices")
 }
@@ -1189,8 +1192,9 @@ model TraderPaymentRequest {
   createdAt       DateTime                   @default(now()) @map("created_at")
   updatedAt       DateTime                   @updatedAt @map("updated_at")
 
-  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  job     Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  trader  Trader   @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  invoice Invoice?
 
   @@index([jobId, type])
   @@index([traderId, status])
