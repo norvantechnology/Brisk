@@ -145,7 +145,7 @@ router.use(adminAuthMiddleware);
  *       type: object
  *       properties:
  *         success: { type: boolean, example: false }
- *         message: { type: string, example: 'Validation Error' }
+ *         message: { type: string, example: 'Mobile must be E.164 (e.g. +353871234567).', description: 'For 400 validation errors this is the first field error (all errors are in `error`).' }
  *         error:
  *           oneOf:
  *             - type: array
@@ -491,7 +491,7 @@ router.get(
  *             schema: { $ref: '#/components/schemas/ApiErrorEnvelope' }
  *             example:
  *               success: false
- *               message: Validation Error
+ *               message: 'sortBy must be one of: traderCode, businessName, businessType, contactName, email, mobileNumber, listingsCount, bookingsCount, jobsDoneCount, revenue, rating, reviewsCount, status, verificationStatus, onboardingStatus, country, city, joinedAt'
  *               error:
  *                 - field: query.sortBy
  *                   message: 'sortBy must be one of: traderCode, businessName, businessType, contactName, email, mobileNumber, listingsCount, bookingsCount, jobsDoneCount, revenue, rating, reviewsCount, status, verificationStatus, onboardingStatus, country, city, joinedAt'
@@ -571,7 +571,7 @@ router.get('/traders', validate(traderFilterSchema), controller.listTraders);
  *             schema: { $ref: '#/components/schemas/ApiErrorEnvelope' }
  *             example:
  *               success: false
- *               message: Validation Error
+ *               message: 'Mobile must be E.164 (e.g. +353871234567).'
  *               error:
  *                 - field: body.mobileNumber
  *                   message: 'Mobile must be E.164 (e.g. +353871234567).'

@@ -16,11 +16,18 @@ export const errorMiddleware = (
 
   if (err instanceof ZodError) {
     statusCode = 400;
-    message = 'Validation Error';
     errors = err.errors.map((e) => ({
       field: e.path.join('.'),
       message: e.message,
     }));
+    // Apps show `message` as-is, so surface the first field error instead of a generic title.
+    const first = err.errors[0];
+    const missing = first?.code === 'invalid_type' && first.received === 'undefined';
+    message = !first
+      ? 'Validation Error'
+      : missing
+        ? `${String(first.path[first.path.length - 1] ?? 'Field')} is required`
+        : first.message;
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;

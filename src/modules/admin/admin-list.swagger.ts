@@ -56,12 +56,12 @@
  *         isHistorical: { type: boolean, example: true }
  *   responses:
  *     AdminListValidationError:
- *       description: Invalid query parameter (unknown sortBy/enum value, bad uuid or date, min greater than max).
+ *       description: Invalid query parameter (unknown sortBy/enum value, bad uuid or date, min greater than max). `message` = first field error; `error` lists all.
  *       content:
  *         application/json:
  *           example:
  *             success: false
- *             message: Validation Error
+ *             message: 'sortBy must be one of: …'
  *             error:
  *               - field: query.sortBy
  *                 message: 'sortBy must be one of: …'
