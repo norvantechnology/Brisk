@@ -7,6 +7,7 @@ import { pushUserNotification } from '../../sockets/realtime';
 import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
 import {
   customerJobAmountSelect,
+  customerHasFinalPaymentRequest,
   customerStatusBadgeFor,
   formatAddressLine,
   formatDisplayDay,
@@ -261,6 +262,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
   const booking = job.booking;
   const cancelled = isJobCancelled(job);
   const finished = Boolean(booking?.finishedAt) || job.status === JobStatus.COMPLETED;
+  const paymentRequested = customerHasFinalPaymentRequest(job);
   const pricing = resolveCustomerJobAmount(job);
   const paid = finished && pricing.amountDue === 0 && pricing.totalPaid > 0;
   const paidAt =
@@ -326,8 +328,16 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
     bookingRef: booking?.bookingRef ?? null,
     title: job.title,
     description: job.description,
-    status: toDisplayStatus(cancelled ? JobStatus.CANCELLED : job.status),
-    statusLabel: customerStatusBadgeFor(job.status, booking?.status ?? null, booking?.finishedAt ?? null),
+    status: toDisplayStatus(
+      cancelled
+        ? JobStatus.CANCELLED
+        : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+          ? 'WORK_COMPLETED'
+          : job.status
+    ),
+    statusLabel: customerStatusBadgeFor(job.status, booking?.status ?? null, booking?.finishedAt ?? null, {
+      paymentRequested,
+    }),
     category: job.category,
     subcategory: job.subcategory,
     scheduledDate,

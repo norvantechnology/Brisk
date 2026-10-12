@@ -35,8 +35,8 @@ const router = Router();
  *         name: tab
  *         schema: { type: string, enum: [ACTIVE, COMPLETED, OTHER], default: ACTIVE }
  *         description: |
- *           ACTIVE = in-progress / site-visit / awaiting payout.
- *           COMPLETED = finished jobs only.
+ *           ACTIVE = in-progress / site-visit / Payment Request Pending (finished, request not sent yet).
+ *           COMPLETED = finished and payment requested (or fully paid / COMPLETED).
  *           OTHER = cancelled jobs only.
  *       - $ref: '#/components/parameters/TraderPage'
  *       - in: query
@@ -496,8 +496,9 @@ router.post('/mine/:id/arrive', validate(myJobIdParamSchema), controller.arriveA
  *   post:
  *     summary: Finish job
  *     description: |
- *       Marks the work finished. If a balance is unpaid, the FULL_JOB payment request is sent to the
- *       customer automatically and job `status` becomes `PAYMENT_PENDING`; `COMPLETED` if already fully paid.
+ *       Marks the work finished. Job becomes `PAYMENT_PENDING` with `flowStatus=PAYMENT_REQUEST_PENDING`
+ *       until the trader calls `POST .../request-payment` (does **not** auto-create FULL_JOB).
+ *       `COMPLETED` only if already fully paid (e.g. Direct Trader upfront).
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -536,17 +537,17 @@ router.post('/mine/:id/finish', validate(myJobIdParamSchema), controller.finishJ
  *       Body accepts either `photoUrl` (single) or `photoUrls` (array). At least one is required.
  *
  *       **`isPartPayment`:**
- *       - `false` → Mark as Finished: save proof + finish job. If a balance is unpaid, the FULL_JOB payment
- *         request is sent to the customer automatically with its invoice (job `PAYMENT_PENDING`, customer pays by `invoiceId`);
- *         `COMPLETED` only once fully paid. Calling `POST .../request-payment` afterwards is optional (idempotent).
+ *       - `false` → Mark as Finished: save proof + finish job. Job stays trader ACTIVE as
+ *         `PAYMENT_REQUEST_PENDING` until `POST .../request-payment` (does **not** auto-create FULL_JOB).
+ *         Customer sees timeline **Work Completed** and cannot cancel; **Payment Pending** only after request.
  *       - `true` → Partial path: save proof only; job stays ACTIVE → then call
  *         `POST .../request-partial-payment` with `amount` + `description`
  *         (images already on Submit screen; Partial Payment screen needs no upload)
  *
- *       Response includes `paymentStatus`, `flowStatus`, `isPartPayment` for screen routing.
+ *       Response includes `paymentStatus`, `flowStatus`, `isPartPayment`, `nextStep` for screen routing.
  *
  *       **Response** is shaped for the Payment Request screen (no extra GET needed):
- *       `id`, `jobRef`, `title`, `completedAt`, `location.fullAddress`, `paymentSummary`, `paymentStatus`, `flowStatus`, `isPartPayment`.
+ *       `id`, `jobRef`, `title`, `completedAt`, `location.fullAddress`, `paymentSummary`, `paymentStatus`, `flowStatus=PAYMENT_REQUEST_PENDING`, `primaryAction=REQUEST_PAYMENT`.
  *
  *       `paymentStatus` is a **string** (not boolean) for future part-payment support, e.g.
  *       `UNPAID` | `PENDING` | `PARTIALLY_PAID` | `PAID` | `FAILED` | `REFUNDED` | `CANCELLED`.
@@ -927,8 +928,8 @@ router.get(
  *     responses:
  *       200:
  *         description: |
- *           Payment Request Sent payload. Finish already sends the FULL_JOB request, so this returns that
- *           request (same `paymentRequestId` / `invoiceId`); it only creates one for older finished jobs without a request.
+ *           Creates the FULL_JOB payment request + invoice (customer then sees Payment Pending / Completed tab).
+ *           Idempotent if a non-cancelled FULL_JOB request already exists.
  *       409:
  *         description: The full-job payment was already received
  */

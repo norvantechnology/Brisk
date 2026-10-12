@@ -57,12 +57,17 @@ export const round2 = (n: number) => Math.round(n * 100) / 100;
 export const customerStatusBadgeFor = (
   status: JobStatus,
   bookingStatus?: string | null,
-  finishedAt?: Date | null
+  finishedAt?: Date | null,
+  opts?: { paymentRequested?: boolean }
 ): string => {
   if (status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED) {
     return 'Cancelled';
   }
   if (isAwaitingUpfrontPayment({ status, booking: { finishedAt } })) return 'Payment Pending';
+  // Work finished, trader has not sent the payment request yet — not Payment Pending.
+  if (status === JobStatus.PAYMENT_PENDING && finishedAt && !opts?.paymentRequested) {
+    return 'Work Completed';
+  }
   if (status === JobStatus.PAYMENT_PENDING) return 'Payment Pending';
   if (status === JobStatus.COMPLETED) return 'Completed';
   if (
@@ -75,6 +80,14 @@ export const customerStatusBadgeFor = (
   if (status === JobStatus.DRAFT) return 'Draft';
   return 'Open';
 };
+
+/** Final/full payment request sent (or paid) — customer Completed tab + Payment Pending badge. */
+export const customerHasFinalPaymentRequest = (job: {
+  paymentRequests: { type: string; status: string }[];
+}) =>
+  job.paymentRequests.some(
+    (p) => p.type === 'FULL_JOB' && (p.status === 'SENT' || p.status === 'PAID')
+  );
 
 const generateJobRef = () => `JOB-${randomBytes(2).toString('hex').toUpperCase()}`;
 const generateBookingRef = () => `BKG-${randomBytes(2).toString('hex').toUpperCase()}`;
@@ -769,11 +782,11 @@ const CUSTOMER_NOT_FINISHED_WHERE: Prisma.JobWhereInput = {
 };
 
 /**
- * Same tab rules as trader My Jobs:
- * - ACTIVE — posted / in progress, not finished (upfront PAYMENT_PENDING stays here).
- * - COMPLETED — job COMPLETED, or trader finished (finishedAt) and still PAYMENT_PENDING for final pay.
+ * Customer My Jobs tabs:
+ * - ACTIVE — open jobs, plus work finished before the trader sends a payment request.
+ * - COMPLETED — job COMPLETED, or finished AND trader has sent a FULL_JOB payment request.
  * - OTHER — cancelled only.
- * - ALL — every non-draft status (Active + Completed + Cancelled).
+ * - ALL — every non-draft status.
  */
 const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
   if (tab === 'ALL') return { status: { not: JobStatus.DRAFT } };
@@ -786,14 +799,27 @@ const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
         {
           status: JobStatus.PAYMENT_PENDING,
           booking: { is: { finishedAt: { not: null } } },
+          paymentRequests: {
+            some: { type: 'FULL_JOB', status: { in: ['SENT', 'PAID'] } },
+          },
         },
       ],
     };
   }
   return {
-    status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] },
     NOT: CUSTOMER_CANCELLED_WHERE,
-    AND: [CUSTOMER_NOT_FINISHED_WHERE],
+    status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] },
+    OR: [
+      CUSTOMER_NOT_FINISHED_WHERE,
+      // Work done; waiting for trader to Request Payment — still Active for the customer.
+      {
+        status: JobStatus.PAYMENT_PENDING,
+        booking: { is: { finishedAt: { not: null } } },
+        paymentRequests: {
+          none: { type: 'FULL_JOB', status: { in: ['SENT', 'PAID'] } },
+        },
+      },
+    ],
   };
 };
 
@@ -942,6 +968,7 @@ export const listMyJobsByTab = async (
   const rows = jobs.map((job) => {
     const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
     const finished = job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt);
+    const paymentRequested = customerHasFinalPaymentRequest(job);
     const { amount, amountType, currencyCode, isPartPayment, invoiceId } = resolveCustomerJobAmount(job);
     currencyCodes.add(currencyCode);
 
@@ -951,12 +978,23 @@ export const listMyJobsByTab = async (
         ? (job.booking?.finishedAt ?? job.updatedAt)
         : (job.scheduledDate ?? job.createdAt);
 
+    const displayStatus = cancelled
+      ? JobStatus.CANCELLED
+      : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+        ? 'WORK_COMPLETED'
+        : job.status;
+
     return {
       id: job.id,
       jobRef: job.jobRef,
       title: job.title,
-      status: toDisplayStatus(cancelled ? JobStatus.CANCELLED : job.status),
-      statusLabel: customerStatusBadgeFor(job.status, job.booking?.status ?? null, job.booking?.finishedAt ?? null),
+      status: toDisplayStatus(displayStatus),
+      statusLabel: customerStatusBadgeFor(
+        job.status,
+        job.booking?.status ?? null,
+        job.booking?.finishedAt ?? null,
+        { paymentRequested }
+      ),
       date: formatDisplayDay(dateAt),
       dateAt,
       provider: job.trader ? job.trader.businessName || job.trader.user.fullName : null,
@@ -1125,23 +1163,6 @@ const buildCustomerJobView = async (
   const job = await getOwnedJob(customerId, jobId);
   const cancelled =
     job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
-  const completedLike =
-    job.status === JobStatus.COMPLETED ||
-    (job.status === JobStatus.PAYMENT_PENDING && !isAwaitingUpfrontPayment(job));
-
-  if (expected === 'COMPLETED' && !completedLike) {
-    throw new BadRequestError('Job is not completed.');
-  }
-  if (expected === 'CANCELLED' && !cancelled) {
-    throw new BadRequestError('Job is not cancelled.');
-  }
-  const kind = expected ?? (cancelled ? 'CANCELLED' : 'COMPLETED');
-
-  const eventAt =
-    kind === 'COMPLETED'
-      ? (job.booking?.finishedAt ?? job.updatedAt)
-      : (job.cancelledAt ?? job.updatedAt);
-
   const invoice = job.booking?.invoice ?? null;
   const review = job.booking?.ratingReview ?? null;
   const proofPhotos = job.photos.filter((p) => p.kind === JobPhotoKind.PROOF);
@@ -1153,6 +1174,7 @@ const buildCustomerJobView = async (
     prisma.traderPaymentRequest.findMany({
       where: { jobId, status: { in: ['SENT', 'PAID'] } },
       select: {
+        type: true,
         status: true,
         serviceCharge: true,
         materialsTotal: true,
@@ -1175,6 +1197,26 @@ const buildCustomerJobView = async (
       : null,
     prisma.jobDispute.count({ where: { jobId, status: { in: ['OPEN', 'IN REVIEW'] } } }),
   ]);
+
+  const paymentRequested = customerHasFinalPaymentRequest({ paymentRequests: requests });
+  const completedLike =
+    job.status === JobStatus.COMPLETED ||
+    (job.status === JobStatus.PAYMENT_PENDING &&
+      !isAwaitingUpfrontPayment(job) &&
+      paymentRequested);
+
+  if (expected === 'COMPLETED' && !completedLike) {
+    throw new BadRequestError('Job is not completed.');
+  }
+  if (expected === 'CANCELLED' && !cancelled) {
+    throw new BadRequestError('Job is not cancelled.');
+  }
+  const kind = expected ?? (cancelled ? 'CANCELLED' : 'COMPLETED');
+  const eventAt =
+    kind === 'COMPLETED'
+      ? (job.booking?.finishedAt ?? job.updatedAt)
+      : (job.cancelledAt ?? job.updatedAt);
+
   const billedInvoice = invoice && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
   const sum = (rows: typeof requests, pick: (r: (typeof requests)[number]) => Prisma.Decimal) =>
     rows.reduce((s, r) => s + money(pick(r)), 0);
@@ -1205,7 +1247,7 @@ const buildCustomerJobView = async (
   else if (amountDue > 0) paymentStatus = cancelled ? 'CANCELLED' : 'PENDING';
   else if (totalPaid > 0) paymentStatus = 'PAID';
   else if (cancelled) paymentStatus = 'CANCELLED';
-  else if (job.status === JobStatus.PAYMENT_PENDING) paymentStatus = 'PENDING';
+  else if (isAwaitingUpfrontPayment(job)) paymentStatus = 'PENDING';
 
   const card =
     [
@@ -1237,11 +1279,18 @@ const buildCustomerJobView = async (
     description: job.description,
     category: categoryLabel,
     photos: job.photos.filter((p) => p.kind !== JobPhotoKind.PROOF).map((p) => p.photoUrl),
-    status: toDisplayStatus(cancelled ? JobStatus.CANCELLED : job.status),
+    status: toDisplayStatus(
+      cancelled
+        ? JobStatus.CANCELLED
+        : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+          ? 'WORK_COMPLETED'
+          : job.status
+    ),
     statusBadge: customerStatusBadgeFor(
       job.status,
       job.booking?.status ?? null,
-      job.booking?.finishedAt ?? null
+      job.booking?.finishedAt ?? null,
+      { paymentRequested }
     ),
     completedAt: kind === 'COMPLETED' ? eventAt : null,
     cancelledAt: kind === 'CANCELLED' ? eventAt : null,

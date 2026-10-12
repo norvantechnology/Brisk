@@ -254,11 +254,11 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Tabs** (aligned with trader My Jobs)
- *       - `ACTIVE` — posted jobs not finished: awaiting/quoted, accepted, scheduled, in progress,
- *         upfront payment pending. Drafts and finished jobs excluded (use `GET /jobs?status=DRAFT`).
- *       - `COMPLETED` — status COMPLETED, **or** trader finished (`finishedAt`) while still
- *         `PAYMENT_PENDING` (final / installment payment due).
+ *       **Tabs**
+ *       - `ACTIVE` — open jobs, plus work finished before the trader sends a payment request
+ *         (badge `Work Completed`; customer cannot cancel). Drafts excluded (`GET /jobs?status=DRAFT`).
+ *       - `COMPLETED` — status COMPLETED, **or** finished **and** trader has sent a FULL_JOB payment request
+ *         (badge `Payment Pending` until paid).
  *       - `OTHER` — cancelled only.
  *       - `ALL` — every non-draft status (Active + Completed + Cancelled) in one list.
  *

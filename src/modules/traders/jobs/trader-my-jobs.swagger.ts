@@ -49,14 +49,17 @@
  *             - READY_TO_FINISH
  *             - SITE_VISIT_IN_PROGRESS
  *             - SITE_VISIT_PAYMENT_PENDING
+ *             - PARTIAL_PAYMENT_PENDING
+ *             - PARTIALLY_PAID
+ *             - PAYMENT_REQUEST_PENDING
  *             - AWAITING_PAYMENT
  *             - COMPLETED
  *             - CANCELLED
  *             - OPEN
  *           description: |
  *             Machine-readable progress for Flutter tabs.
- *             ACTIVE tab = not finished (READY_TO_ARRIVE … AWAITING_PAYMENT).
- *             COMPLETED tab = only flowStatus=COMPLETED (booking.finishedAt set).
+ *             ACTIVE includes PAYMENT_REQUEST_PENDING (work finished; trader must Request Payment).
+ *             COMPLETED tab = COMPLETED, or AWAITING_PAYMENT after the payment request is sent.
  *         arrivalStatus:
  *           type: string
  *           nullable: true
@@ -137,7 +140,7 @@
  *         statusLabel: { type: string, example: Completed, description: Human-readable progress label }
  *         flowStatus:
  *           type: string
- *           enum: [OPEN, READY_TO_ARRIVE, ARRIVED, WORK_PROOF_PENDING, READY_TO_FINISH, SITE_VISIT_IN_PROGRESS, SITE_VISIT_PAYMENT_PENDING, PARTIAL_PAYMENT_PENDING, PARTIALLY_PAID, AWAITING_PAYMENT, COMPLETED, CANCELLED]
+ *           enum: [OPEN, READY_TO_ARRIVE, ARRIVED, WORK_PROOF_PENDING, READY_TO_FINISH, SITE_VISIT_IN_PROGRESS, SITE_VISIT_PAYMENT_PENDING, PARTIAL_PAYMENT_PENDING, PARTIALLY_PAID, PAYMENT_REQUEST_PENDING, AWAITING_PAYMENT, COMPLETED, CANCELLED]
  *           example: COMPLETED
  *         paymentStatus: { type: string, enum: [UNPAID, PENDING, PARTIALLY_PAID, PAID], example: UNPAID }
  *         customerConfirmedAt: { type: string, format: date-time, nullable: true, example: null }
