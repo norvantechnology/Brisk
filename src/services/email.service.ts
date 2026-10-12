@@ -1,5 +1,8 @@
 import nodemailer, { type Transporter } from 'nodemailer';
+import { type EmailSettings, SmtpEncryption } from '@prisma/client';
+import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { decryptSecret } from '../utils/secret-box';
 
 const DEFAULT_ADMIN_EMAIL = 'support@brisk.ie';
 /** Manager: survey + transactional from-address */
@@ -96,6 +99,85 @@ const getSmtpPass = (): string | undefined => {
   if (raw == null) return undefined;
   // Strip wrapping quotes from .env values like 'pass&word'
   return raw.trim().replace(/^['"]|['"]$/g, '');
+};
+
+export type SmtpConfig = {
+  /** DATABASE = Admin Settings → Email Configuration; ENV = SMTP_* server variables. */
+  source: 'DATABASE' | 'ENV';
+  host: string;
+  port: number;
+  encryption: SmtpEncryption;
+  /** STARTTLS mandatory (admin TLS). Env config keeps opportunistic STARTTLS. */
+  requireTls: boolean;
+  user?: string;
+  pass?: string;
+  fromEmail: string;
+  fromName: string;
+  replyTo: string;
+};
+
+export const getEnvSmtpConfig = (): SmtpConfig | null => {
+  const host = process.env.SMTP_HOST?.trim();
+  if (!host) return null;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure =
+    process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || port === 465;
+  const fromEmail = getFromEmail();
+  return {
+    source: 'ENV',
+    host,
+    port,
+    encryption: secure ? SmtpEncryption.SSL : SmtpEncryption.TLS,
+    requireTls: false,
+    user: getSmtpUser(),
+    pass: getSmtpPass(),
+    fromEmail,
+    fromName: 'Brisk',
+    replyTo: fromEmail,
+  };
+};
+
+export const smtpConfigFromSettings = (row: EmailSettings): SmtpConfig => ({
+  source: 'DATABASE',
+  host: row.smtpHost,
+  port: row.smtpPort,
+  encryption: row.encryption,
+  requireTls: row.encryption === SmtpEncryption.TLS,
+  user: row.smtpUsername,
+  pass: decryptSecret(row.smtpPasswordEnc),
+  fromEmail: row.fromEmail,
+  fromName: row.fromName,
+  replyTo: row.replyToEmail,
+});
+
+/** Active outbound config — read per send so admin changes apply immediately without restart. */
+export const resolveSmtpConfig = async (): Promise<SmtpConfig | null> => {
+  try {
+    const row = await prisma.emailSettings.findFirst({ orderBy: { updatedAt: 'desc' } });
+    if (row) return smtpConfigFromSettings(row);
+  } catch (err) {
+    logger.error('[EMAIL] Saved SMTP settings unavailable - falling back to env', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return getEnvSmtpConfig();
+};
+
+const createSmtpTransport = (config: SmtpConfig): Transporter =>
+  nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.encryption === SmtpEncryption.SSL,
+    requireTLS: config.requireTls,
+    ignoreTLS: config.encryption === SmtpEncryption.NONE,
+    connectionTimeout: 15_000,
+    greetingTimeout: 10_000,
+    ...(config.user && config.pass ? { auth: { user: config.user, pass: config.pass } } : {}),
+  });
+
+/** Connects + authenticates without sending; throws the SMTP server error on failure. */
+export const verifySmtpConfig = async (config: SmtpConfig): Promise<void> => {
+  await createSmtpTransport(config).verify();
 };
 
 const escapeHtml = (value: string): string =>
@@ -441,63 +523,45 @@ const normalizeAddressList = (value?: string | string[]): string[] => {
   ];
 };
 
-const getSmtpTransport = (): Transporter | null => {
-  const host = process.env.SMTP_HOST?.trim();
-  if (!host) return null;
-
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = getSmtpUser();
-  const pass = getSmtpPass();
-  const secure =
-    process.env.SMTP_SECURE === 'true' ||
-    process.env.SMTP_SECURE === '1' ||
-    port === 465;
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    ...(user && pass ? { auth: { user, pass } } : {}),
-  });
-};
+export const isSmtpConfigured = async (): Promise<boolean> => Boolean(await resolveSmtpConfig());
 
 /**
- * Sends email via SMTP when SMTP_HOST is set; otherwise logs.
- * Visible From header is always noreply@brisk.ie (MAIL_FROM).
- * When SMTP auth mailbox differs, use envelope/sender = SMTP_USER so Hostinger
- * accepts the message while the recipient still sees noreply@brisk.ie.
+ * Sends email via the active SMTP config (admin settings, else SMTP_* env); logs when none.
+ * When the SMTP auth mailbox differs from the visible From, envelope/sender = auth mailbox so
+ * Hostinger-style servers accept the message while the recipient still sees the From address.
  */
 export const sendMail = async (input: SendMailInput): Promise<void> => {
-  const fromAddress = getFromEmail();
-  const smtpUser = getSmtpUser();
-  const transport = getSmtpTransport();
+  const config = await resolveSmtpConfig();
   const ccList = normalizeAddressList(input.cc).filter(
     (e) => e.toLowerCase() !== input.to.trim().toLowerCase()
   );
 
-  if (!transport) {
+  if (!config) {
     logger.info('[EMAIL] SMTP not configured - logging outbound mail', {
       to: input.to,
       cc: ccList,
-      from: fromAddress,
+      from: getFromEmail(),
       subject: input.subject,
       text: input.text,
     });
     return;
   }
 
+  const fromAddress = config.fromEmail;
+  const smtpUser = config.user;
+  // Non-mailbox usernames (e.g. SendGrid "apikey") cannot be an envelope sender.
   const useEnvelope =
-    Boolean(smtpUser) && smtpUser!.toLowerCase() !== fromAddress.toLowerCase();
+    Boolean(smtpUser?.includes('@')) && smtpUser!.toLowerCase() !== fromAddress.toLowerCase();
   const envelopeTo = [input.to, ...ccList];
 
-  await transport.sendMail({
-    from: `Brisk <${fromAddress}>`,
+  await createSmtpTransport(config).sendMail({
+    from: { name: config.fromName, address: fromAddress },
     to: input.to,
     ...(ccList.length ? { cc: ccList.join(', ') } : {}),
     subject: input.subject,
     text: input.text,
     html: input.html ?? input.text.replace(/\n/g, '<br/>'),
-    replyTo: fromAddress,
+    replyTo: config.replyTo,
     ...(useEnvelope
       ? {
           sender: smtpUser,
@@ -512,6 +576,7 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
     from: fromAddress,
     envelopeFrom: useEnvelope ? smtpUser : fromAddress,
     subject: input.subject,
+    smtpSource: config.source,
   });
 };
 

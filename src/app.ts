@@ -227,11 +227,12 @@ app.get('/health/smtp-test', async (req: Request, res: Response) => {
     return;
   }
 
-  if (!process.env.SMTP_HOST?.trim()) {
+  const { isSmtpConfigured, sendBrandedMail } = await import('./services/email.service');
+  if (!(await isSmtpConfigured())) {
     sendResponse({
       res,
       statusCode: 503,
-      message: 'SMTP is not configured on this server (SMTP_HOST missing).',
+      message: 'SMTP is not configured (no admin Email Configuration and SMTP_HOST missing).',
       data: { to: email, smtpConfigured: false },
     });
     return;
@@ -248,7 +249,6 @@ app.get('/health/smtp-test', async (req: Request, res: Response) => {
   ].join('\n');
 
   try {
-    const { sendBrandedMail } = await import('./services/email.service');
     await sendBrandedMail({
       to: email,
       subject,
@@ -272,7 +272,7 @@ app.get('/health/smtp-test', async (req: Request, res: Response) => {
         to: email,
         subject,
         sentAt: new Date().toISOString(),
-        smtpConfigured: Boolean(process.env.SMTP_HOST),
+        smtpConfigured: true,
       },
     });
   } catch (err) {
@@ -284,7 +284,7 @@ app.get('/health/smtp-test', async (req: Request, res: Response) => {
       message: 'SMTP send failed.',
       data: {
         to: email,
-        smtpConfigured: Boolean(process.env.SMTP_HOST),
+        smtpConfigured: true,
         error,
       },
     });

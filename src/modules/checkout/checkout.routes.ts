@@ -439,17 +439,21 @@ router.get(
  * @swagger
  * /invoices/{id}/receipt/download:
  *   get:
- *     summary: Download PDF receipt (Transaction History)
- *     tags: ['Customer / Checkout']
+ *     summary: Download PDF receipt (Transaction History / Trader Payments)
+ *     tags: ['Customer / Checkout', 'Trader / Payments']
  *     security:
  *       - bearerAuth: []
- *     description: Streams `application/pdf` for a PAID / REFUNDED invoice owned by the customer.
+ *     description: |
+ *       Streams `application/pdf` for a PAID / REFUNDED invoice.
+ *       Customer Bearer → own invoices; Trader Bearer → invoices of their jobs / payment requests.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
- *         description: Invoice UUID (`invoiceId` from GET /payments/history).
+ *         description: |
+ *           Invoice UUID — `invoiceId` from GET /payments/history (customer) or GET /traders/payments/history (trader).
+ *           Not the payment request id.
  *     responses:
  *       200:
  *         description: PDF file.
@@ -463,7 +467,8 @@ router.get(
  */
 router.get(
   '/invoices/:id/receipt/download',
-  ...customerOnly,
+  authMiddleware,
+  roleMiddleware(['CUSTOMER', 'TRADER']),
   validate(invoiceIdParamSchema),
   controller.downloadInvoiceReceipt
 );

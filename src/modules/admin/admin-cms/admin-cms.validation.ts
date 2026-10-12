@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   ActorType,
   CmsAudience,
+  SmtpEncryption,
   CmsPublishStatus,
   CmsActiveStatus,
   CmsTestimonialPageType,
@@ -436,6 +437,29 @@ export const updateContactSettingsSchema = z.object({
     showOfficeAddress: z.boolean().optional().default(true),
   }),
 });
+
+export const upsertEmailSettingsSchema = z.object({
+  body: z.object({
+    smtpHost: z.string().trim().min(1, 'SMTP host is required.'),
+    smtpPort: z.coerce.number().int().min(1, 'Valid port is required.').max(65535, 'Invalid port.'),
+    smtpUsername: z.string().trim().min(1, 'SMTP username is required.'),
+    /** Omit or send the masked value from GET to keep the stored password. */
+    smtpPassword: z.string().optional(),
+    encryption: z.nativeEnum(SmtpEncryption),
+    fromEmail: z.string().trim().email('Valid from email is required.'),
+    fromName: z.string().trim().min(1, 'From name is required.'),
+    replyToEmail: z.string().trim().email('Valid reply-to email is required.'),
+  }),
+});
+
+export const testEmailSettingsSchema = z.object({
+  body: z.object({
+    to: z.string().trim().email('Valid recipient email is required.'),
+  }),
+});
+
+export type UpsertEmailSettingsInput = z.infer<typeof upsertEmailSettingsSchema>['body'];
+export type TestEmailSettingsInput = z.infer<typeof testEmailSettingsSchema>['body'];
 
 const SURVEY_COMMON_SORT_FIELDS = [
   'registrationCode',

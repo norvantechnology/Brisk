@@ -26,7 +26,9 @@ const router = Router();
  *
  *       Example: `GET /traders/payments/history?page=1&limit=10&search=sink&filter=custom&startDate=2026-09-01&endDate=2026-09-30&status=PAID&type=FULL_JOB&minAmount=50&maxAmount=500&sortBy=paymentDate&sortOrder=desc`
  *
- *       **Receipt:** open `receiptUrl` (Bearer) → PDF invoice download.
+ *       **Receipt:** open `receiptUrl` (Bearer) → PDF. Paid rows → that payment's receipt
+ *       (`GET /invoices/{invoiceId}/receipt/download`); unpaid rows → job invoice PDF.
+ *       `id` is the payment request id — use `invoiceId` (not `id`) for invoice endpoints.
  *     tags: ['Trader / Payments']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -75,6 +77,7 @@ const router = Router();
  *               message: Payment history retrieved successfully.
  *               data:
  *                 - id: 11111111-2222-3333-4444-555555555555
+ *                   invoiceId: 99999999-8888-7777-6666-555555555555
  *                   jobId: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
  *                   jobCode: '#JOB-A43E'
  *                   jobTitle: Kitchen Sink Leak
@@ -85,7 +88,7 @@ const router = Router();
  *                   currencySymbol: €
  *                   status: PAID
  *                   paymentDate: '2026-09-20T10:00:00.000Z'
- *                   receiptUrl: https://api.brisk.ie/traders/jobs/mine/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/invoice/download
+ *                   receiptUrl: https://api.brisk.ie/invoices/99999999-8888-7777-6666-555555555555/receipt/download
  *               meta:
  *                 total: 1
  *                 page: 1

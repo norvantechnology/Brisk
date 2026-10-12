@@ -1,4 +1,4 @@
-import { Prisma, TraderPaymentRequestStatus } from '@prisma/client';
+import { InvoiceStatus, Prisma, TraderPaymentRequestStatus } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
 import { buildPaginationMeta, parsePageLimit } from '../../../utils/pagination';
@@ -222,6 +222,7 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
         currencyCode: true,
         createdAt: true,
         updatedAt: true,
+        invoice: { select: { id: true, status: true } },
         job: {
           select: {
             id: true,
@@ -251,8 +252,12 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
     const paymentDate =
       status === 'PAID' ? row.updatedAt : row.createdAt;
 
+    const receiptInvoiceId =
+      row.invoice && row.invoice.status !== InvoiceStatus.UNPAID ? row.invoice.id : null;
+
     return {
       id: row.id,
+      invoiceId: row.invoice?.id ?? null,
       jobId: row.jobId,
       jobCode: formatJobCode(row.job.jobRef, row.job.id),
       jobTitle: row.job.title,
@@ -263,7 +268,10 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
       currencySymbol: symbolByCode.get(currencyCode) || '€',
       status,
       paymentDate: paymentDate.toISOString(),
-      receiptUrl: `${apiBase}/traders/jobs/mine/${row.jobId}/invoice/download`,
+      /** Paid → that payment's receipt; not paid yet → the job invoice PDF. */
+      receiptUrl: receiptInvoiceId
+        ? `${apiBase}/invoices/${receiptInvoiceId}/receipt/download`
+        : `${apiBase}/traders/jobs/mine/${row.jobId}/invoice/download`,
     };
   });
 

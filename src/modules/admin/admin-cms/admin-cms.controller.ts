@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import * as cmsService from './admin-cms.service';
+import * as emailSettingsService from './admin-email-settings.service';
 import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
 
@@ -782,6 +783,84 @@ export const getContactSettings = async (
       statusCode: 200,
       message: 'Contact information loaded successfully.',
       data: { contact },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getEmailSettings = async (
+  _req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const emailConfig = await emailSettingsService.getEmailSettings();
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Email configuration loaded successfully.',
+      data: { emailConfig },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const upsertEmailSettings = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const emailConfig = await emailSettingsService.upsertEmailSettings(
+      req.adminUser!.id,
+      adminLabel,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Email configuration updated successfully.',
+      data: { emailConfig },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetEmailSettings = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const emailConfig = await emailSettingsService.resetEmailSettings(req.adminUser!.id, adminLabel);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Email configuration reset to server defaults.',
+      data: { emailConfig },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const sendTestEmail = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await emailSettingsService.sendTestEmail(req.body);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: `Test email sent successfully to ${data.recipient}`,
+      data,
     });
   } catch (error) {
     next(error);

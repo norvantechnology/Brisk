@@ -148,7 +148,7 @@ export const downloadInvoiceReceipt = async (
 ): Promise<void> => {
   try {
     const { buffer, filename } = await checkoutService.downloadInvoiceReceiptPdf(
-      req.user!.id,
+      req.user!,
       req.params.id
     );
     res.setHeader('Content-Type', 'application/pdf');

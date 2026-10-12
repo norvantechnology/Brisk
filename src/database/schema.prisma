@@ -320,6 +320,7 @@ model AdminUser {
   publishedLegalVersions  CmsLegalPolicyVersion[]  @relation("CmsLegalPublishedBy")
   updatedSeoSettings      CmsSeoSettings[]         @relation("CmsSeoUpdatedBy")
   updatedContactSettings  CmsContactSettings[]     @relation("CmsContactUpdatedBy")
+  updatedEmailSettings    EmailSettings[]          @relation("EmailSettingsUpdatedBy")
   reviewedSurveyConsumers SurveyConsumerRegistration[] @relation("SurveyConsumerReviewedBy")
   reviewedSurveyTraders   SurveyTraderRegistration[]   @relation("SurveyTraderReviewedBy")
   reviewedContactSubmissions ContactSubmission[]       @relation("ContactSubmissionReviewedBy")
@@ -1729,6 +1730,33 @@ model CmsContactSettings {
   updatedBy AdminUser? @relation("CmsContactUpdatedBy", fields: [updatedById], references: [id])
 
   @@map("cms_contact_settings")
+}
+
+enum SmtpEncryption {
+  SSL
+  TLS
+  NONE
+}
+
+/// Singleton row for Admin Settings → Email Configuration. When present, outbound mail uses it instead of SMTP_* env.
+model EmailSettings {
+  id              String         @id @default(uuid()) @db.Uuid
+  smtpHost        String         @map("smtp_host")
+  smtpPort        Int            @map("smtp_port")
+  smtpUsername    String         @map("smtp_username")
+  /// AES-256-GCM ciphertext (utils/secret-box) — never returned by the API.
+  smtpPasswordEnc String         @map("smtp_password_enc") @db.Text
+  encryption      SmtpEncryption @default(TLS)
+  fromEmail       String         @map("from_email")
+  fromName        String         @map("from_name")
+  replyToEmail    String         @map("reply_to_email")
+  updatedById     String?        @map("updated_by_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("EmailSettingsUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("email_settings")
 }
 
 // ==========================================

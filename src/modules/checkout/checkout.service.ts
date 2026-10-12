@@ -1405,20 +1405,24 @@ const RECEIPT_LINE_LABELS: Record<string, string> = {
   tax: 'VAT',
 };
 
-/** Transaction History "Download PDF Receipt" — one paid invoice. */
-export const downloadInvoiceReceiptPdf = async (userId: string, invoiceId: string) => {
+/** "Download PDF Receipt" — one paid invoice, for its customer or its trader. */
+export const downloadInvoiceReceiptPdf = async (
+  user: { id: string; role: 'CUSTOMER' | 'TRADER' },
+  invoiceId: string
+) => {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: invoiceOwnershipInclude,
   });
   if (!invoice) throw new NotFoundError('Invoice not found.');
-  assertInvoiceOwner(invoice, userId);
+  const { job, trader, customerId } = invoiceContext(invoice);
+  const isParty = user.role === 'TRADER' ? trader?.userId === user.id : customerId === user.id;
+  if (!isParty) throw new ForbiddenError('You do not have access to this invoice.');
   if (invoice.status === InvoiceStatus.UNPAID) {
     throw new BadRequestError('Receipt is available after payment is completed.');
   }
 
-  const { job } = invoiceContext(invoice);
-  const customer = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+  const customer = await prisma.user.findUnique({ where: { id: customerId }, select: { fullName: true } });
   const invoiceNumber = invoice.invoiceNumber || `INV-${invoice.id.slice(0, 8).toUpperCase()}`;
 
   const { buildInvoicePdfBuffer } = await import('../../utils/invoice-pdf');

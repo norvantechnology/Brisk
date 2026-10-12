@@ -28,6 +28,8 @@ import {
   publishLegalVersionSchema,
   updateSeoSchema,
   updateContactSettingsSchema,
+  upsertEmailSettingsSchema,
+  testEmailSettingsSchema,
   dashboardAuditSchema,
 } from './admin-cms.validation';
 import {
@@ -2275,6 +2277,139 @@ router.put(
   validate(updateContactSettingsSchema),
   cmsAdminController.upsertContactSettings
 );
+
+// ==========================================
+// EMAIL CONFIGURATION (Admin Settings → Email Configuration)
+// ==========================================
+
+/**
+ * @swagger
+ * /admin/cms/settings/email:
+ *   get:
+ *     summary: Get Email Configuration (SMTP)
+ *     description: |
+ *       **Admin Settings → Email Configuration**
+ *
+ *       Returns the SMTP config outbound mail is currently sent with.
+ *       - `source: DATABASE` — saved from this screen.
+ *       - `source: ENV` — not saved yet; showing the server SMTP_* defaults (`id: null`).
+ *       - `source: NONE` — no SMTP anywhere (mail is only logged).
+ *
+ *       The password is never returned: `smtpPassword` is `********` when one is set (`hasPassword`).
+ *     tags: ['Admin / Settings / Email']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Email configuration loaded successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Email configuration loaded successfully.
+ *               data:
+ *                 emailConfig:
+ *                   id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+ *                   source: DATABASE
+ *                   smtpHost: smtp.hostinger.com
+ *                   smtpPort: 465
+ *                   smtpUsername: support@brisk.ie
+ *                   smtpPassword: '********'
+ *                   hasPassword: true
+ *                   encryption: SSL
+ *                   fromEmail: noreply@brisk.ie
+ *                   fromName: Brisk
+ *                   replyToEmail: support@brisk.ie
+ *                   updatedAt: '2026-10-12T09:30:00.000Z'
+ *                   updatedBy: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, fullName: Snehal Patel, email: admin@brisk.ie }
+ *   put:
+ *     summary: Save Email Configuration (SMTP)
+ *     description: |
+ *       **Admin Settings → Email Configuration → Save**
+ *
+ *       Connects and logs in to the SMTP server first. If that fails nothing is saved
+ *       (400 `SMTP_VERIFY_FAILED`, server error in `data.error`) so live mail keeps working.
+ *       Applies to all outbound mail immediately — no restart.
+ *
+ *       `smtpPassword`: send the new password, or omit / send `********` to keep the current one.
+ *
+ *       `encryption`: `SSL` (implicit TLS, usually 465), `TLS` (STARTTLS required, usually 587), `NONE`.
+ *     tags: ['Admin / Settings / Email']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [smtpHost, smtpPort, smtpUsername, encryption, fromEmail, fromName, replyToEmail]
+ *             properties:
+ *               smtpHost: { type: string }
+ *               smtpPort: { type: integer, minimum: 1, maximum: 65535 }
+ *               smtpUsername: { type: string }
+ *               smtpPassword: { type: string }
+ *               encryption: { type: string, enum: [SSL, TLS, NONE] }
+ *               fromEmail: { type: string, format: email }
+ *               fromName: { type: string }
+ *               replyToEmail: { type: string, format: email }
+ *           example:
+ *             smtpHost: smtp.hostinger.com
+ *             smtpPort: 465
+ *             smtpUsername: support@brisk.ie
+ *             smtpPassword: your-mailbox-password
+ *             encryption: SSL
+ *             fromEmail: noreply@brisk.ie
+ *             fromName: Brisk
+ *             replyToEmail: support@brisk.ie
+ *     responses:
+ *       200:
+ *         description: "Saved. data: { emailConfig } (same shape as GET)."
+ *       400:
+ *         description: Validation error, `SMTP_PASSWORD_REQUIRED`, or `SMTP_VERIFY_FAILED`.
+ *   delete:
+ *     summary: Reset Email Configuration to server defaults
+ *     description: Removes the saved config; outbound mail uses the server SMTP_* env again.
+ *     tags: ['Admin / Settings / Email']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: "data: { emailConfig } with source ENV / NONE."
+ */
+router.get('/settings/email', cmsAdminController.getEmailSettings);
+router.put('/settings/email', validate(upsertEmailSettingsSchema), cmsAdminController.upsertEmailSettings);
+router.delete('/settings/email', cmsAdminController.resetEmailSettings);
+
+/**
+ * @swagger
+ * /admin/cms/settings/email/test:
+ *   post:
+ *     summary: Send Test Email
+ *     description: |
+ *       **Email Configuration → Send Test Email.** Really sends through the active SMTP config.
+ *       On failure returns 400 `SMTP_SEND_FAILED` with the SMTP server error in `data.error`.
+ *     tags: ['Admin / Settings / Email']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           example: { to: you@example.com }
+ *     responses:
+ *       200:
+ *         description: Sent.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Test email sent successfully to you@example.com
+ *               data: { recipient: you@example.com, sentAt: '2026-10-12T09:31:00.000Z', source: DATABASE, smtpHost: smtp.hostinger.com }
+ *       400:
+ *         description: Validation error, `SMTP_NOT_CONFIGURED`, or `SMTP_SEND_FAILED`.
+ */
+router.post('/settings/email/test', validate(testEmailSettingsSchema), cmsAdminController.sendTestEmail);
 
 router.use('/home', homeAdminRoutes);
 
