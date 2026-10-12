@@ -11,6 +11,7 @@ import { countActiveJobs } from '../jobs/trader-my-jobs.service';
 import {
   buildTraderPaymentRequestWhere,
   findTraderPaymentRequestPage,
+  traderReceiptUrl,
 } from '../payments/trader-payments.service';
 import type {
   EarningsDashboardQuery,
@@ -95,6 +96,7 @@ const transactionSelect = {
   currencyCode: true,
   createdAt: true,
   updatedAt: true,
+  invoice: { select: { id: true, status: true } },
   job: { select: { title: true, status: true } },
 } satisfies Prisma.TraderPaymentRequestSelect;
 
@@ -122,6 +124,7 @@ const serializeTransaction = (
   const amount = money(row.totalAmount);
   return {
     id: row.id,
+    invoiceId: row.invoice?.id ?? null,
     jobId: row.jobId,
     title: row.job.title,
     formattedDate: formatDisplayDate(isPaid ? row.updatedAt : row.createdAt, timeZone),
@@ -134,6 +137,7 @@ const serializeTransaction = (
     payoutStatus: paymentStatusLabel(row.status),
     paymentStatus: traderPaymentStatus(row.status),
     paymentType: row.type,
+    receiptUrl: traderReceiptUrl(row),
   };
 };
 

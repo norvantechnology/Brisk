@@ -64,6 +64,7 @@ const router = Router();
  *                   jobsInProgressCount: 3
  *                 recentTransactions:
  *                   - id: 11111111-2222-3333-4444-555555555555
+ *                     invoiceId: 77777777-6666-5555-4444-333333333333
  *                     jobId: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
  *                     title: Kitchen Sink Leak
  *                     formattedDate: 28 Sep 2026, 2:30 PM
@@ -76,6 +77,7 @@ const router = Router();
  *                     payoutStatus: PAID
  *                     paymentStatus: RECEIVED
  *                     paymentType: FULL_JOB
+ *                     receiptUrl: https://api.brisk.ie/invoices/77777777-6666-5555-4444-333333333333/receipt/download
  *                 recentFeedbacks:
  *                   - id: 99999999-8888-7777-6666-555555555555
  *                     rating: 5
@@ -159,6 +161,7 @@ router.get('/dashboard', validate(earningsDashboardQuerySchema), controller.getE
  *               message: Payment transactions fetched successfully.
  *               data:
  *                 - id: 11111111-2222-3333-4444-555555555555
+ *                   invoiceId: 77777777-6666-5555-4444-333333333333
  *                   jobId: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
  *                   title: Bathroom Pipe Leakage Repair
  *                   formattedDate: 24 Oct 2026, 10:30 AM
@@ -171,6 +174,7 @@ router.get('/dashboard', validate(earningsDashboardQuerySchema), controller.getE
  *                   payoutStatus: PAID
  *                   paymentStatus: RECEIVED
  *                   paymentType: FULL_JOB
+ *                   receiptUrl: https://api.brisk.ie/invoices/77777777-6666-5555-4444-333333333333/receipt/download
  *               meta: { page: 1, limit: 10, total: 25, totalPages: 3 }
  *       400:
  *         description: Invalid query (bad enum / sortBy, bad date or timezone, custom range without dates, minAmount > maxAmount).

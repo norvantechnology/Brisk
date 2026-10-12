@@ -200,6 +200,15 @@ export const findTraderPaymentRequestPage = async <
  * Trader Payment History — paginated list for Profile / Payments screen.
  * GET /traders/payments/history
  */
+/** Paid request → that payment's receipt PDF; not paid yet → the job invoice PDF. */
+export const traderReceiptUrl = (
+  row: { jobId: string; invoice: { id: string; status: InvoiceStatus } | null },
+  apiBase = getPublicApiBase()
+) =>
+  row.invoice && row.invoice.status !== InvoiceStatus.UNPAID
+    ? `${apiBase}/invoices/${row.invoice.id}/receipt/download`
+    : `${apiBase}/traders/jobs/mine/${row.jobId}/invoice/download`;
+
 export const listPaymentHistory = async (userId: string, query: PaymentHistoryQuery) => {
   const trader = await prisma.trader.findUnique({
     where: { userId },
@@ -252,9 +261,6 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
     const paymentDate =
       status === 'PAID' ? row.updatedAt : row.createdAt;
 
-    const receiptInvoiceId =
-      row.invoice && row.invoice.status !== InvoiceStatus.UNPAID ? row.invoice.id : null;
-
     return {
       id: row.id,
       invoiceId: row.invoice?.id ?? null,
@@ -268,10 +274,7 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
       currencySymbol: symbolByCode.get(currencyCode) || '€',
       status,
       paymentDate: paymentDate.toISOString(),
-      /** Paid → that payment's receipt; not paid yet → the job invoice PDF. */
-      receiptUrl: receiptInvoiceId
-        ? `${apiBase}/invoices/${receiptInvoiceId}/receipt/download`
-        : `${apiBase}/traders/jobs/mine/${row.jobId}/invoice/download`,
+      receiptUrl: traderReceiptUrl(row, apiBase),
     };
   });
 
