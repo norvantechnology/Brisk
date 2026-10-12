@@ -1618,12 +1618,19 @@ export const getJobOutcomeDetail = async (
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
   const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
+  // Completed screen only after FULL_JOB payment request (or fully paid / COMPLETED).
   const completedLike =
     job.status === JobStatus.COMPLETED ||
-    (job.status === JobStatus.PAYMENT_PENDING && !isAwaitingUpfrontPayment(job));
+    (job.status === JobStatus.PAYMENT_PENDING &&
+      !isAwaitingUpfrontPayment(job) &&
+      hasFinalPaymentRequest(job));
 
   if (expected === 'COMPLETED' && !completedLike) {
-    throw new BadRequestError('Job is not completed.');
+    throw new BadRequestError(
+      job.booking?.finishedAt && !hasFinalPaymentRequest(job)
+        ? 'Request payment before opening the completed job screen.'
+        : 'Job is not completed.'
+    );
   }
   if (expected === 'CANCELLED' && !cancelled) {
     throw new BadRequestError('Job is not cancelled.');
@@ -1723,7 +1730,15 @@ export const getJobOutcomeDetail = async (
     subcategoryName: job.subcategory?.name ?? null,
     tags,
     status: job.status,
-    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null),
+    statusBadge: statusBadgeFor(
+      job.status,
+      job.booking?.status ?? null,
+      job.status === JobStatus.COMPLETED
+        ? 'COMPLETED'
+        : hasFinalPaymentRequest(job)
+          ? 'AWAITING_PAYMENT'
+          : 'PAYMENT_REQUEST_PENDING'
+    ),
     siteVisit: isSiteVisitJob,
     siteVisitRequested: Boolean(job.siteVisitRequested),
     siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
