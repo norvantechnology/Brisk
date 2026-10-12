@@ -387,16 +387,29 @@ router.get(
  *         name: search
  *         schema: { type: string }
  *       - in: query
+ *         name: date_range
+ *         schema: { type: string, enum: [all, last_30_days, last_6_months, last_1_year, custom], default: all }
+ *         description: Preferred mobile param. Alias of `filter`.
+ *       - in: query
  *         name: filter
  *         schema: { type: string, enum: [all, last_30_days, last_6_months, last_1_year, custom], default: all }
+ *         description: Alias of `date_range` (kept for compatibility).
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, example: '2020-01-01' }
+ *         description: YYYY-MM-DD, required when date_range=custom. Alias of `startDate`.
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, example: '2020-01-04' }
+ *         description: YYYY-MM-DD, required when date_range=custom. Alias of `endDate`.
  *       - in: query
  *         name: startDate
  *         schema: { type: string, example: '2026-01-01' }
- *         description: YYYY-MM-DD, required when filter=custom.
+ *         description: Alias of `from`.
  *       - in: query
  *         name: endDate
  *         schema: { type: string, example: '2026-10-09' }
- *         description: YYYY-MM-DD, required when filter=custom.
+ *         description: Alias of `to`.
  *     responses:
  *       200:
  *         description: Paginated transactions.

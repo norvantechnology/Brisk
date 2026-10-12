@@ -1,11 +1,14 @@
 import { BillingType, PaymentMethod } from '@prisma/client';
 import { z } from 'zod';
-import {
-  paymentListQueryBase,
-  requireCustomRange,
-} from '../traders/payments/trader-payments.validation';
+import { requireCustomRange } from '../traders/payments/trader-payments.validation';
 
 const uuid = z.string().uuid();
+
+const dateString = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
+  .optional();
 
 export const invoiceIdParamSchema = z.object({
   params: z.object({ id: uuid }),
@@ -73,10 +76,40 @@ export const bookingIdParamSchema = z.object({
   params: z.object({ id: uuid }),
 });
 
-/** Same filter contract as trader payment history (All / Last 30 Days / Last 6 Months / 1 Year / Custom). */
+const historyPeriod = z
+  .enum(['all', 'last_30_days', 'last_6_months', 'last_1_year', 'custom'])
+  .optional();
+
+/**
+ * Customer Transaction History filters.
+ * Mobile sends `date_range` + `from`/`to`; also accepts trader-style `filter` + `startDate`/`endDate`.
+ */
 export const paymentHistoryQuerySchema = z.object({
-  query: paymentListQueryBase
-    .pick({ page: true, limit: true, search: true, filter: true, startDate: true, endDate: true })
+  query: z
+    .object({
+      page: z.string().optional(),
+      limit: z.string().optional(),
+      search: z.string().optional(),
+      filter: historyPeriod,
+      date_range: historyPeriod,
+      startDate: dateString,
+      endDate: dateString,
+      from: dateString,
+      to: dateString,
+    })
+    .transform((q) => {
+      const filter = q.date_range ?? q.filter ?? 'all';
+      const startDate = q.from ?? q.startDate;
+      const endDate = q.to ?? q.endDate;
+      return {
+        page: q.page,
+        limit: q.limit,
+        search: q.search,
+        filter,
+        startDate,
+        endDate,
+      };
+    })
     .superRefine(requireCustomRange),
 });
 
