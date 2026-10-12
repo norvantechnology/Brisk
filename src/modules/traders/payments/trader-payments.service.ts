@@ -17,7 +17,7 @@ const money = (v: Prisma.Decimal | number | null | undefined): number => {
   return Number(v);
 };
 
-const getPublicApiBase = (): string =>
+export const getPublicApiBase = (): string =>
   (
     process.env.PUBLIC_API_URL ||
     process.env.UPLOAD_PUBLIC_BASE_URL ||
@@ -38,7 +38,7 @@ const mapPaymentStatus = (
   return 'PENDING';
 };
 
-const resolveDateRange = (
+export const resolveDateRange = (
   filter: PaymentListFilters['filter'],
   startDate?: string,
   endDate?: string

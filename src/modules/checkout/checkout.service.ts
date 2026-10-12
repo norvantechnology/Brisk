@@ -6,6 +6,7 @@ import {
   OfferClaimStatus,
   PaymentStatus,
   Prisma,
+  RefundStatus,
   TraderPaymentRequestStatus,
   TraderPaymentRequestType,
 } from '@prisma/client';
@@ -13,6 +14,9 @@ import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { pageIdsByComputedKey } from '../../utils/list-sort';
+import { buildPaginationMeta, parsePageLimit } from '../../utils/pagination';
+import { getPublicApiBase, resolveDateRange } from '../traders/payments/trader-payments.service';
 import {
   type ChargeDetails,
   STRIPE_KIND_INVOICE,
@@ -37,6 +41,7 @@ import type {
   ApplyPromoInput,
   CreatePaymentIntentInput,
   FailPaymentInput,
+  PaymentHistoryQuery,
 } from './checkout.validation';
 import {
   emitInvoiceUpdated,
@@ -1250,6 +1255,190 @@ export const getPaymentReceipt = async (userId: string, paymentId: string) => {
     throw new BadRequestError('Receipt is available after payment is completed.');
   }
   return buildReceipt(paymentId, userId);
+};
+
+const customerInvoiceWhere = (userId: string): Prisma.InvoiceWhereInput => ({
+  OR: [{ booking: { customerId: userId } }, { paymentRequest: { customerId: userId } }],
+});
+
+const invoiceSearchWhere = (search: string): Prisma.InvoiceWhereInput => {
+  const contains = { contains: search, mode: 'insensitive' as const };
+  const party = {
+    OR: [
+      { trader: { businessName: contains } },
+      { trader: { user: { fullName: contains } } },
+      { job: { title: contains } },
+      { job: { jobRef: contains } },
+      { job: { category: { name: contains } } },
+    ],
+  };
+  return { OR: [{ invoiceNumber: contains }, { booking: party }, { paymentRequest: party }] };
+};
+
+const settledPaymentSelect = {
+  where: { status: PaymentStatus.COMPLETED },
+  orderBy: { paidAt: 'desc' as const },
+  take: 1,
+} as const;
+
+/** When the money moved: Stripe payment, else the request settled outside invoice checkout, else last invoice update. */
+const invoiceSettledAt = (invoice: {
+  updatedAt: Date;
+  payments: { paidAt: Date | null }[];
+  paymentRequest: { paidAt: Date | null } | null;
+}) => invoice.payments[0]?.paidAt ?? invoice.paymentRequest?.paidAt ?? invoice.updatedAt;
+
+const OPEN_REFUND_STATUSES: RefundStatus[] = [RefundStatus.PENDING, RefundStatus.APPROVED];
+
+/** Customer Transaction History — paid / refunded invoices (upfront + trader payment requests), newest first. */
+export const listPaymentHistory = async (userId: string, query: PaymentHistoryQuery) => {
+  const { page, limit, skip } = parsePageLimit(query, { defaultLimit: 10, maxLimit: 50 });
+  const range = resolveDateRange(query.filter, query.startDate, query.endDate);
+  const search = query.search?.trim();
+
+  const candidates = await prisma.invoice.findMany({
+    where: {
+      AND: [
+        customerInvoiceWhere(userId),
+        { status: { in: [InvoiceStatus.PAID, InvoiceStatus.REFUNDED] } },
+        ...(search ? [invoiceSearchWhere(search)] : []),
+      ],
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      updatedAt: true,
+      payments: { ...settledPaymentSelect, select: { paidAt: true } },
+      paymentRequest: { select: { paidAt: true } },
+    },
+  });
+
+  const inRange = range
+    ? candidates.filter((row) => {
+        const at = invoiceSettledAt(row);
+        return (!range.gte || at >= range.gte) && (!range.lte || at <= range.lte);
+      })
+    : candidates;
+  const pageIds = pageIdsByComputedKey(
+    inRange,
+    (row) => invoiceSettledAt(row).getTime(),
+    'desc',
+    skip,
+    limit
+  );
+
+  const invoices = await prisma.invoice.findMany({
+    where: { id: { in: pageIds } },
+    include: {
+      ...invoiceOwnershipInclude,
+      payments: {
+        ...settledPaymentSelect,
+        include: { refunds: { select: { status: true } } },
+      },
+      paymentRequest: {
+        select: {
+          ...invoiceOwnershipInclude.paymentRequest.select,
+          paidAt: true,
+          paymentMethod: true,
+          cardBrand: true,
+          cardLast4: true,
+        },
+      },
+    },
+  });
+  const byId = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+  const apiBase = getPublicApiBase();
+
+  const data = pageIds.flatMap((id) => {
+    const invoice = byId.get(id);
+    if (!invoice) return [];
+    const { job, trader } = invoiceContext(invoice);
+    const payment = invoice.payments[0] ?? null;
+    const request = invoice.paymentRequest;
+    const refundOpen = payment?.refunds.some((r) => OPEN_REFUND_STATUSES.includes(r.status)) ?? false;
+
+    return [
+      {
+        id: invoice.id,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        paymentId: payment?.id ?? null,
+        transactionRef: payment?.transactionRef ?? null,
+        /** PAID | PROCESSING (refund under review) | REFUNDED */
+        status:
+          invoice.status === InvoiceStatus.REFUNDED ? 'REFUNDED' : refundOpen ? 'PROCESSING' : 'PAID',
+        /** UPFRONT (job publish) or the trader request type: FULL_JOB | PARTIAL | SITE_VISIT_FEE */
+        paymentType: request?.type ?? 'UPFRONT',
+        purpose: invoicePurposeOf(invoice),
+        date: invoiceSettledAt(invoice).toISOString(),
+        totalAmount: money(payment?.amount ?? invoice.totalAmount),
+        currencyCode: invoice.currencyCode,
+        currencySymbol: currencySymbol(invoice.currencyCode),
+        method: payment?.method ?? request?.paymentMethod ?? null,
+        cardBrand: payment?.cardBrand ?? request?.cardBrand ?? null,
+        cardLast4: payment?.cardLast4 ?? request?.cardLast4 ?? null,
+        serviceCategory: job.category,
+        serviceSubcategory: job.subcategory,
+        job: { id: job.id, jobRef: job.jobRef, title: job.title },
+        trader: trader
+          ? {
+              id: trader.id,
+              displayName: trader.businessName || trader.user?.fullName || null,
+              profilePhotoUrl: trader.profilePhotoUrl || trader.user?.profilePhotoUrl || null,
+            }
+          : null,
+        receiptUrl: `${apiBase}/invoices/${invoice.id}/receipt/download`,
+      },
+    ];
+  });
+
+  return { data, meta: buildPaginationMeta(inRange.length, page, limit) };
+};
+
+const RECEIPT_LINE_LABELS: Record<string, string> = {
+  serviceCharge: 'Service charge',
+  materialsTotal: 'Materials',
+  siteVisitFee: 'Site visit fee',
+  platformFee: 'Platform fee',
+  traderOfferDiscount: 'Trader offer',
+  promoDiscount: 'Promo discount',
+  tax: 'VAT',
+};
+
+/** Transaction History "Download PDF Receipt" — one paid invoice. */
+export const downloadInvoiceReceiptPdf = async (userId: string, invoiceId: string) => {
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: invoiceOwnershipInclude,
+  });
+  if (!invoice) throw new NotFoundError('Invoice not found.');
+  assertInvoiceOwner(invoice, userId);
+  if (invoice.status === InvoiceStatus.UNPAID) {
+    throw new BadRequestError('Receipt is available after payment is completed.');
+  }
+
+  const { job } = invoiceContext(invoice);
+  const customer = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+  const invoiceNumber = invoice.invoiceNumber || `INV-${invoice.id.slice(0, 8).toUpperCase()}`;
+
+  const { buildInvoicePdfBuffer } = await import('../../utils/invoice-pdf');
+  const buffer = await buildInvoicePdfBuffer({
+    invoiceNumber,
+    jobRef: job.jobRef,
+    title: job.title,
+    completedAt: null,
+    customerName: customer?.fullName || '',
+    address: [job.addressLine, job.city, job.postcode].filter(Boolean).join(', '),
+    currencyCode: invoice.currencyCode,
+    lines: invoiceLineItems(invoice, invoicePurposeOf(invoice)).map((item) => ({
+      label: RECEIPT_LINE_LABELS[item.key] ?? item.key,
+      amount: item.amount,
+    })),
+    totalAmount: money(invoice.totalAmount),
+    paymentStatus: invoice.status,
+  });
+
+  return { buffer, filename: `${invoiceNumber}.pdf` };
 };
 
 export const getBooking = async (userId: string, bookingId: string) => {

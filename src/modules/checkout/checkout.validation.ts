@@ -1,5 +1,9 @@
 import { BillingType, PaymentMethod } from '@prisma/client';
 import { z } from 'zod';
+import {
+  paymentListQueryBase,
+  requireCustomRange,
+} from '../traders/payments/trader-payments.validation';
 
 const uuid = z.string().uuid();
 
@@ -69,6 +73,14 @@ export const bookingIdParamSchema = z.object({
   params: z.object({ id: uuid }),
 });
 
+/** Same filter contract as trader payment history (All / Last 30 Days / Last 6 Months / 1 Year / Custom). */
+export const paymentHistoryQuerySchema = z.object({
+  query: paymentListQueryBase
+    .pick({ page: true, limit: true, search: true, filter: true, startDate: true, endDate: true })
+    .superRefine(requireCustomRange),
+});
+
 export type ApplyPromoInput = z.infer<typeof applyPromoSchema>['body'];
 export type CreatePaymentIntentInput = z.infer<typeof createPaymentIntentSchema>['body'];
 export type FailPaymentInput = z.infer<typeof failPaymentSchema>['body'];
+export type PaymentHistoryQuery = z.infer<typeof paymentHistoryQuerySchema>['query'];

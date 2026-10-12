@@ -10,6 +10,7 @@ import {
   createPaymentIntentSchema,
   failPaymentSchema,
   invoiceIdParamSchema,
+  paymentHistoryQuerySchema,
   paymentIdParamSchema,
 } from './checkout.validation';
 
@@ -354,6 +355,117 @@ router.get(
   ...customerOnly,
   validate(paymentIdParamSchema),
   controller.getPaymentReceipt
+);
+
+/**
+ * @swagger
+ * /payments/history:
+ *   get:
+ *     summary: Customer Transaction History
+ *     tags: ['Customer / Checkout']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Mobile screen:** Profile → Transaction History.
+ *
+ *       Paid / refunded invoices of the logged-in customer: upfront job payments and every trader payment
+ *       request (final payment, installment, site visit fee). Newest first by `date` (settled time).
+ *
+ *       **Row status:** `PAID`, `PROCESSING` (refund under review), `REFUNDED`.
+ *
+ *       **Search:** invoice number, trader business / full name, job title, job ref, service category.
+ *
+ *       **Receipt:** `receiptUrl` → GET /invoices/{id}/receipt/download (PDF, Bearer auth).
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10, maximum: 50 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: filter
+ *         schema: { type: string, enum: [all, last_30_days, last_6_months, last_1_year, custom], default: all }
+ *       - in: query
+ *         name: startDate
+ *         schema: { type: string, example: '2026-01-01' }
+ *         description: YYYY-MM-DD, required when filter=custom.
+ *       - in: query
+ *         name: endDate
+ *         schema: { type: string, example: '2026-10-09' }
+ *         description: YYYY-MM-DD, required when filter=custom.
+ *     responses:
+ *       200:
+ *         description: Paginated transactions.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Transaction history retrieved successfully.
+ *               data:
+ *                 - id: 6bd0d86e-0000-0000-0000-000000000000
+ *                   invoiceId: 6bd0d86e-0000-0000-0000-000000000000
+ *                   invoiceNumber: INV-2026-0042
+ *                   paymentId: 1f2e3d4c-0000-0000-0000-000000000000
+ *                   transactionRef: TXN-9A1B2C3D
+ *                   status: PAID
+ *                   paymentType: PARTIAL
+ *                   purpose: SERVICE
+ *                   date: '2026-10-09T16:40:00.000Z'
+ *                   totalAmount: 120
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
+ *                   method: CARD
+ *                   cardBrand: visa
+ *                   cardLast4: '4242'
+ *                   serviceCategory: { id: 2b6c0000-0000-0000-0000-000000000000, name: Handyman }
+ *                   serviceSubcategory: null
+ *                   job: { id: 9c1d0000-0000-0000-0000-000000000000, jobRef: '#D4D2', title: Fix kitchen tap }
+ *                   trader: { id: 7e8f0000-0000-0000-0000-000000000000, displayName: Marcus Thompson, profilePhotoUrl: null }
+ *                   receiptUrl: https://api.brisk.ie/invoices/6bd0d86e-0000-0000-0000-000000000000/receipt/download
+ *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ */
+router.get(
+  '/payments/history',
+  ...customerOnly,
+  validate(paymentHistoryQuerySchema),
+  controller.listPaymentHistory
+);
+
+/**
+ * @swagger
+ * /invoices/{id}/receipt/download:
+ *   get:
+ *     summary: Download PDF receipt (Transaction History)
+ *     tags: ['Customer / Checkout']
+ *     security:
+ *       - bearerAuth: []
+ *     description: Streams `application/pdf` for a PAID / REFUNDED invoice owned by the customer.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Invoice UUID (`invoiceId` from GET /payments/history).
+ *     responses:
+ *       200:
+ *         description: PDF file.
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       400:
+ *         description: Invoice not paid yet.
+ *       404:
+ *         description: Invoice not found.
+ */
+router.get(
+  '/invoices/:id/receipt/download',
+  ...customerOnly,
+  validate(invoiceIdParamSchema),
+  controller.downloadInvoiceReceipt
 );
 
 /**
