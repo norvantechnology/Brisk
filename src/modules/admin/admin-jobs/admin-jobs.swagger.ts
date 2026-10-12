@@ -4,20 +4,25 @@
  *   schemas:
  *     QaFormAnswerItem:
  *       type: object
- *       description: One answered question of the subcategory Q&A form (unanswered fields are omitted).
+ *       description: |
+ *         One questionnaire row for Job Details (customer + trader). Full admin schema order —
+ *         unanswered rows keep the question with `value` / `displayValue` null.
  *       properties:
  *         fieldId: { type: string, example: property_type }
- *         label: { type: string, example: Property type }
- *         type: { type: string, example: select, description: text | textarea | number | boolean | select | multiselect | radio | checkbox | date }
+ *         label: { type: string, example: What type of property is this }
+ *         type: { type: string, example: dropdown, description: text | textarea | number | boolean | dropdown | single_choice | multi_choice | date }
+ *         required: { type: boolean, example: true }
  *         value:
- *           description: Raw answer (string, number, boolean or array of option values)
+ *           nullable: true
+ *           description: Raw answer (string, number, boolean or array of option values). null if unanswered.
  *           oneOf:
  *             - { type: string }
  *             - { type: number }
  *             - { type: boolean }
  *             - { type: array, items: { type: string } }
+ *             - { type: 'null' }
  *           example: apartment
- *         displayValue: { type: string, example: Apartment, description: 'Human-readable answer (option labels joined by comma)' }
+ *         displayValue: { type: string, nullable: true, example: Apartment, description: 'Human-readable answer; null if unanswered' }
  *     AdminJobDetail:
  *       type: object
  *       description: Admin job drawer payload (GET /admin/jobs/{id}). Nullable objects are null when not linked yet.

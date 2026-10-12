@@ -118,6 +118,8 @@ router.use(authMiddleware);
  *                 page: 1
  *                 limit: 20
  *                 totalPages: 1
+ *                 unreadCount: 3
+ *                 unreadByTab: { REGULAR: 2, BRISK: 1 }
  *       401:
  *         description: Missing/invalid token
  */
@@ -165,7 +167,11 @@ router.get('/types', controller.listTypes);
  * @swagger
  * /notifications/unread-count:
  *   get:
- *     summary: Unread notification badge count
+ *     summary: Unread notification badge count (Customer + Trader)
+ *     description: |
+ *       Same endpoint for **both** apps. Use Bearer access token from customer or trader login.
+ *       `count` = total unread; `byTab` splits REGULAR vs BRISK tabs.
+ *       Also available on `GET /notifications` as `data.unreadCount` / `meta.unreadCount`.
  *     tags: ['Notifications']
  *     security:
  *       - bearerAuth: []

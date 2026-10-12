@@ -282,8 +282,9 @@ const serializeJob = (
     phoneNumber: str(job.phoneNumber),
     serviceCharge: job.serviceCharge != null ? money(job.serviceCharge) : 0,
     quoteType: job.quoteType ?? JobQuoteType.REMOTE,
-    minBudget: job.minBudget != null ? money(job.minBudget) : 0,
-    maxBudget: job.maxBudget != null ? money(job.maxBudget) : 0,
+    /** null when customer skipped budget — never fake 0. */
+    minBudget: job.minBudget != null ? money(job.minBudget) : null,
+    maxBudget: job.maxBudget != null ? money(job.maxBudget) : null,
     siteVisitRequested: job.siteVisitRequested,
     siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
   status: job.status,

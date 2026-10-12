@@ -26,6 +26,9 @@ export const listNotifications = async (
         page: result.meta.page,
         limit: result.meta.limit,
         totalPages: result.meta.totalPages,
+        /** Same badge numbers as data.unreadCount / GET /notifications/unread-count (customer + trader). */
+        unreadCount: result.meta.unreadCount,
+        unreadByTab: result.meta.unreadByTab,
       },
     });
   } catch (error) {

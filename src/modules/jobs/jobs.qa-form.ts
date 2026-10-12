@@ -100,33 +100,75 @@ export const assertRequiredQaFormAnswers = (schema: unknown, answers: unknown) =
   }
 };
 
-/** Answered questions in admin form order, with option labels resolved for display. */
+/**
+ * Full questionnaire in admin form order for Job Details (trader + customer).
+ * Every schema question is returned; unanswered rows have `value` / `displayValue` null.
+ * If the subcategory has no schema but answers exist, falls back to raw answer keys.
+ */
 export const buildQaFormAnswerList = (schema: unknown, answers: unknown) => {
   const fields = parseQaFormSchema(schema);
-  const input = (answers && typeof answers === 'object' ? answers : {}) as Record<string, unknown>;
+  const input =
+    answers && typeof answers === 'object' && !Array.isArray(answers)
+      ? (answers as Record<string, unknown>)
+      : {};
 
-  return fields
-    .filter((field) => !isEmptyAnswer(input[field.id]))
-    .map((field) => {
-      const value = input[field.id] as QaFormAnswerValue;
-      const labelFor = (v: unknown) =>
-        field.options?.find((o) => o.value === v)?.label ?? String(v);
-
-      let displayValue: string;
-      if (CHOICE_TYPES.has(field.type)) {
-        displayValue = (Array.isArray(value) ? value : [value]).map(labelFor).join(', ');
-      } else if (field.type === 'boolean') {
-        displayValue = value === true || value === 'true' ? 'Yes' : 'No';
-      } else {
-        displayValue = String(value);
-      }
-
+  const toItem = (field: QaFormField, raw: unknown) => {
+    if (isEmptyAnswer(raw)) {
       return {
         fieldId: field.id,
         label: field.label,
         type: field.type,
+        required: Boolean(field.required),
+        value: null as QaFormAnswerValue | null,
+        displayValue: null as string | null,
+      };
+    }
+
+    const value = raw as QaFormAnswerValue;
+    const labelFor = (v: unknown) =>
+      field.options?.find((o) => o.value === v)?.label ?? String(v);
+
+    let displayValue: string;
+    if (CHOICE_TYPES.has(field.type)) {
+      displayValue = (Array.isArray(value) ? value : [value]).map(labelFor).join(', ');
+    } else if (field.type === 'boolean') {
+      displayValue = value === true || value === 'true' ? 'Yes' : 'No';
+    } else {
+      displayValue = String(value);
+    }
+
+    return {
+      fieldId: field.id,
+      label: field.label,
+      type: field.type,
+      required: Boolean(field.required),
+      value,
+      displayValue,
+    };
+  };
+
+  if (fields.length) {
+    return fields.map((field) => toItem(field, input[field.id]));
+  }
+
+  // Legacy / schema removed — still show whatever the customer submitted.
+  return Object.entries(input)
+    .filter(([, raw]) => !isEmptyAnswer(raw))
+    .map(([fieldId, raw]) => {
+      const value = raw as QaFormAnswerValue;
+      return {
+        fieldId,
+        label: fieldId.replace(/_/g, ' '),
+        type: Array.isArray(value) ? 'multi_choice' : typeof value === 'boolean' ? 'boolean' : 'text',
+        required: false,
         value,
-        displayValue,
+        displayValue: Array.isArray(value)
+          ? value.map(String).join(', ')
+          : typeof value === 'boolean'
+            ? value
+              ? 'Yes'
+              : 'No'
+            : String(value),
       };
     });
 };

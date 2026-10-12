@@ -208,8 +208,8 @@
  *         phoneNumber: { type: string }
  *         serviceCharge: { type: number, example: 125 }
  *         quoteType: { $ref: '#/components/schemas/JobQuoteType' }
- *         minBudget: { type: number }
- *         maxBudget: { type: number }
+ *         minBudget: { type: number, nullable: true, description: Optional. null when customer skipped budget. }
+ *         maxBudget: { type: number, nullable: true, description: Optional. null when customer skipped budget. }
  *         siteVisitRequested: { type: boolean }
  *         siteVisitFee: { type: number }
  *         status: { $ref: '#/components/schemas/JobStatus' }
@@ -221,12 +221,15 @@
  *         qaFormAnswers: { type: object, description: Raw answers keyed by qaFormSchema field id }
  *         qaFormAnswerList:
  *           type: array
- *           description: Answered questions in admin form order, option labels resolved (same list on trader + admin job details).
+ *           description: |
+ *             Full questionnaire in admin form order (same on trader Discover/My Jobs + admin).
+ *             Unanswered rows have value/displayValue null.
  *           items:
  *             type: object
  *             properties:
  *               fieldId: { type: string }
  *               label: { type: string, example: Where is the Boiler located }
+ *               required: { type: boolean }
  *               type: { type: string, enum: [text, textarea, number, dropdown, single_choice, multi_choice, date, boolean] }
  *               value: { description: 'string | number | boolean | string[]' }
  *               displayValue: { type: string, example: Kitchen }
@@ -408,14 +411,16 @@
  *             FIXED/BUDGET_RANGE/OPEN_QUOTE = legacy compatibility.
  *         minBudget:
  *           type: number
+ *           nullable: true
  *           description: |
- *             Min Budget (€) when formConfig.showMinBudget and quoteType is REMOTE.
- *             Must be ≤ maxBudget when both set.
+ *             Optional. Min Budget (€) when formConfig.showMinBudget and quoteType is REMOTE.
+ *             Omit or send null to skip. Must be ≤ maxBudget when both set.
  *         maxBudget:
  *           type: number
+ *           nullable: true
  *           description: |
- *             Max Budget (€) when formConfig.showMaxBudget.
- *             Also used as SERVICE publish fallback if serviceCharge omitted.
+ *             Optional. Max Budget (€) when formConfig.showMaxBudget.
+ *             Omit or send null to skip. Also used as SERVICE publish fallback if serviceCharge omitted.
  *         siteVisitRequested:
  *           type: boolean
  *           description: |

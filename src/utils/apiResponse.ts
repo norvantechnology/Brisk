@@ -6,7 +6,8 @@ interface ApiResponseOptions<T> {
   statusCode?: number;
   message?: string;
   data?: T;
-  meta?: PaginationMeta;
+  /** Pagination plus optional extras (e.g. unreadCount on notification list). */
+  meta?: PaginationMeta & Record<string, unknown>;
   error?: any;
 }
 

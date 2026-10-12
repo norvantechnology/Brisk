@@ -16,10 +16,17 @@ const coerceOptionalBool = z.preprocess((v) => {
   return v;
 }, z.boolean().optional());
 
+/** Empty / missing budget → null (never coerced to 0). Both min and max are optional. */
+const optionalBudgetAmount = z.preprocess((v) => {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v === 'string' && v.trim() === '') return null;
+  return v;
+}, z.coerce.number().nonnegative().nullable().optional());
+
 const budgetFields = {
   quoteType: z.nativeEnum(JobQuoteType).optional(),
-  minBudget: z.coerce.number().nonnegative().nullable().optional(),
-  maxBudget: z.coerce.number().nonnegative().nullable().optional(),
+  minBudget: optionalBudgetAmount,
+  maxBudget: optionalBudgetAmount,
   /** Preferred flag when Site Visit card selected. */
   siteVisitRequested: coerceOptionalBool,
   /** Aliases — same meaning as siteVisitRequested (mobile naming variants). */
