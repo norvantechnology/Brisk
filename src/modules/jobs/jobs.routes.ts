@@ -254,11 +254,13 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Tabs**
+ *       **Tabs** (aligned with trader My Jobs)
  *       - `ACTIVE` — posted jobs not finished: awaiting/quoted, accepted, scheduled, in progress,
- *         payment pending (site-visit reschedule stays here). Drafts excluded (use `GET /jobs?status=DRAFT`).
- *       - `COMPLETED` — status COMPLETED.
+ *         upfront payment pending. Drafts and finished jobs excluded (use `GET /jobs?status=DRAFT`).
+ *       - `COMPLETED` — status COMPLETED, **or** trader finished (`finishedAt`) while still
+ *         `PAYMENT_PENDING` (final / installment payment due).
  *       - `OTHER` — cancelled only.
+ *       - `ALL` — every non-draft status (Active + Completed + Cancelled) in one list.
  *
  *       **Card fields**
  *       - `id` (uuid string), `jobRef`, `title`, `statusLabel`
@@ -278,7 +280,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *     parameters:
  *       - in: query
  *         name: tab
- *         schema: { type: string, enum: [ACTIVE, COMPLETED, OTHER], default: ACTIVE }
+ *         schema: { type: string, enum: [ACTIVE, COMPLETED, OTHER, ALL], default: ACTIVE }
  *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }

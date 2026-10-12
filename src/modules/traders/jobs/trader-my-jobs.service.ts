@@ -722,7 +722,10 @@ const siteVisitBlock = (job: MyJobRow) => {
   };
 };
 
-const arrivalStatus = (job: MyJobRow): 'ARRIVING_SOON' | 'ARRIVED' | null => {
+/** Display text for mobile — no underscores (e.g. "ARRIVING SOON"). */
+const arrivalStatus = (job: {
+  booking?: { arrivedAt: Date | null; status: BookingStatus } | null;
+}): 'ARRIVING SOON' | 'ARRIVED' | null => {
   const booking = job.booking;
   if (!booking) return null;
   if (booking.arrivedAt) return 'ARRIVED';
@@ -730,7 +733,7 @@ const arrivalStatus = (job: MyJobRow): 'ARRIVING_SOON' | 'ARRIVED' | null => {
     booking.status === BookingStatus.SCHEDULED ||
     booking.status === BookingStatus.IN_PROGRESS
   ) {
-    return 'ARRIVING_SOON';
+    return 'ARRIVING SOON';
   }
   return null;
 };
@@ -1150,11 +1153,7 @@ const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
       isSiteVisitDone,
       // Second label for UI: show with Cancelled when site-visit job was cancelled.
       siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
-      arrivalStatus: job.booking?.arrivedAt
-        ? 'ARRIVED'
-        : job.booking
-          ? 'ARRIVING_SOON'
-          : null,
+      arrivalStatus: arrivalStatus(job),
       siteVisitedBadge: Boolean(siteVisitedBadge),
       customerName: job.customer.fullName,
       customerProfilePhotoUrl: job.customer.profilePhotoUrl,

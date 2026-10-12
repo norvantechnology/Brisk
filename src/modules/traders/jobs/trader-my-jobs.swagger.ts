@@ -60,8 +60,8 @@
  *         arrivalStatus:
  *           type: string
  *           nullable: true
- *           enum: [ARRIVING_SOON, ARRIVED]
- *           description: Null when no booking yet
+ *           enum: ['ARRIVING SOON', ARRIVED]
+ *           description: Display text without underscores. Null when no booking yet.
  *         siteVisitedBadge:
  *           type: boolean
  *           description: true if site visit is confirmed or completed for this trader
@@ -256,7 +256,7 @@
  *         isPartPayment: { type: boolean, example: false, description: Same as isPartialJob }
  *         estimatedEarnings: { type: number, nullable: true, example: 1500 }
  *         durationLabel: { type: string, nullable: true, example: 2-3 hours }
- *         arrivalStatus: { type: string, nullable: true, enum: [ARRIVING_SOON, ARRIVED], example: ARRIVED }
+ *         arrivalStatus: { type: string, nullable: true, enum: ['ARRIVING SOON', ARRIVED], example: ARRIVED, description: Display text without underscores }
  *         scheduledDate: { type: string, format: date-time, nullable: true, example: '2026-07-29T00:00:00.000Z' }
  *     TraderMaterialsList:
  *       type: object

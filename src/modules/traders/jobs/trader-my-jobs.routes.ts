@@ -98,7 +98,7 @@ const router = Router();
  *                     siteVisitRequested: false
  *                     isSiteVisitDone: false
  *                     siteVisitLabel: null
- *                     arrivalStatus: ARRIVING_SOON
+ *                     arrivalStatus: ARRIVING SOON
  *                     siteVisitedBadge: false
  *                     customerName: John Murphy
  *                     customerProfilePhotoUrl: https://cdn.brisk.ie/avatars/john.jpg

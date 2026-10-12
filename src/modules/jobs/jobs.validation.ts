@@ -91,7 +91,13 @@ export const listJobsSchema = z.object({
 
 export const myJobsTabQuerySchema = z.object({
   query: z.object({
-    tab: z.string().trim().toUpperCase().pipe(z.enum(['ACTIVE', 'COMPLETED', 'OTHER'])).optional().default('ACTIVE'),
+    tab: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .pipe(z.enum(['ACTIVE', 'COMPLETED', 'OTHER', 'ALL']))
+      .optional()
+      .default('ACTIVE'),
     page: z.coerce.number().int().min(1).optional().default(1),
     limit: z.coerce.number().int().min(1).max(100).optional().default(20),
   }),

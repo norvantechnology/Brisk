@@ -757,19 +757,42 @@ export const listJobs = async (customerId: string, status?: JobStatus) => {
   return { jobs: jobs.map(serializeJob) };
 };
 
-export type CustomerJobsTab = 'ACTIVE' | 'COMPLETED' | 'OTHER';
+export type CustomerJobsTab = 'ACTIVE' | 'COMPLETED' | 'OTHER' | 'ALL';
 
 const CUSTOMER_CANCELLED_WHERE: Prisma.JobWhereInput = {
   OR: [{ status: JobStatus.CANCELLED }, { booking: { is: { status: BookingStatus.CANCELLED } } }],
 };
 
-/** ACTIVE = posted and not finished (incl. site-visit reschedule, payment pending); OTHER = cancelled only. */
+const CUSTOMER_NOT_FINISHED_WHERE: Prisma.JobWhereInput = {
+  OR: [{ booking: null }, { booking: { is: { finishedAt: null } } }],
+};
+
+/**
+ * Same tab rules as trader My Jobs:
+ * - ACTIVE — posted / in progress, not finished (upfront PAYMENT_PENDING stays here).
+ * - COMPLETED — job COMPLETED, or trader finished (finishedAt) and still PAYMENT_PENDING for final pay.
+ * - OTHER — cancelled only.
+ * - ALL — every non-draft status (Active + Completed + Cancelled).
+ */
 const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
-  if (tab === 'COMPLETED') return { status: JobStatus.COMPLETED, NOT: CUSTOMER_CANCELLED_WHERE };
+  if (tab === 'ALL') return { status: { not: JobStatus.DRAFT } };
   if (tab === 'OTHER') return CUSTOMER_CANCELLED_WHERE;
+  if (tab === 'COMPLETED') {
+    return {
+      NOT: CUSTOMER_CANCELLED_WHERE,
+      OR: [
+        { status: JobStatus.COMPLETED },
+        {
+          status: JobStatus.PAYMENT_PENDING,
+          booking: { is: { finishedAt: { not: null } } },
+        },
+      ],
+    };
+  }
   return {
     status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] },
     NOT: CUSTOMER_CANCELLED_WHERE,
+    AND: [CUSTOMER_NOT_FINISHED_WHERE],
   };
 };
 
