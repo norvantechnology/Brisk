@@ -58,8 +58,8 @@
  *             - OPEN
  *           description: |
  *             Machine-readable progress for Flutter tabs.
- *             ACTIVE includes PAYMENT_REQUEST_PENDING (work finished; trader must Request Payment).
- *             COMPLETED tab = COMPLETED, or AWAITING_PAYMENT after the payment request is sent.
+ *             ACTIVE includes PAYMENT_REQUEST_PENDING and AWAITING_PAYMENT (unpaid).
+ *             COMPLETED tab = flowStatus COMPLETED only (customer has paid).
  *         arrivalStatus:
  *           type: string
  *           nullable: true
@@ -90,6 +90,23 @@
  *           type: number
  *           nullable: true
  *           description: Agreed quote / service charge
+ *         paymentSummary:
+ *           type: object
+ *           description: |
+ *             Same numeric Payment Summary as `GET /traders/jobs/mine/{id}/payment-request`
+ *             (Base Rate, Platform Fee, Offer Applied, VAT, Total Amount, …). Live from quote / materials / invoice.
+ *           properties:
+ *             baseRate: { type: number }
+ *             materialCost: { type: number }
+ *             materialsTotal: { type: number }
+ *             platformFee: { type: number }
+ *             offerApplied: { type: number }
+ *             siteVisitFee: { type: number }
+ *             vatRate: { type: number }
+ *             vatPercentage: { type: number }
+ *             vatAmount: { type: number }
+ *             totalAmount: { type: number }
+ *             netPayout: { type: number }
  *         scheduledDate:
  *           type: string
  *           format: date-time
@@ -316,8 +333,13 @@
  *         jobRef: { type: string, nullable: true }
  *         title: { type: string, example: Kitchen Sink Leak }
  *         description: { type: string, description: Customer note, example: Water leaking under the sink. }
- *         distanceKm: { type: number, example: 2.4 }
- *         distanceMiles: { type: number, example: 1.5, description: DISTANCE card }
+ *         distanceKm:
+ *           type: number
+ *           example: 2.4
+ *           description: |
+ *             DISTANCE card (km). Pass `lat`/`lng` on incoming GETs (same as Discover) so this
+ *             matches the Discover list. Without them, uses trader service centre.
+ *         distanceMiles: { type: number, example: 1.5, description: distanceKm converted to miles }
  *         charges: { type: number, example: 120, description: 'Accepted quotation amount (CHARGES card → €120)' }
  *         quoteAmount: { type: number, example: 120, description: Alias of charges }
  *         currencyCode: { type: string, example: EUR }

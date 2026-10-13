@@ -149,6 +149,17 @@ export const myJobPartialPaymentBodySchema = z.object({
   }),
 });
 
+/** Optional device location — same as Discover so incoming DISTANCE matches list cards. */
+const originQuerySchema = z.object({
+  lat: z.string().optional(),
+  lng: z.string().optional(),
+});
+
+export const incomingLatestQuerySchema = z.object({
+  query: originQuerySchema,
+});
+
 export const incomingJobIdParamSchema = z.object({
   params: jobIdParam,
+  query: originQuerySchema,
 });

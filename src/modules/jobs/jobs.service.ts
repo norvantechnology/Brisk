@@ -81,7 +81,7 @@ export const customerStatusBadgeFor = (
   return 'Open';
 };
 
-/** Final/full payment request sent (or paid) — customer Completed tab + Payment Pending badge. */
+/** Final/full payment request sent (or paid) — drives Payment Pending vs Work Completed badge. */
 export const customerHasFinalPaymentRequest = (job: {
   paymentRequests: { type: string; status: string }[];
 }) =>
@@ -777,14 +777,10 @@ const CUSTOMER_CANCELLED_WHERE: Prisma.JobWhereInput = {
   OR: [{ status: JobStatus.CANCELLED }, { booking: { is: { status: BookingStatus.CANCELLED } } }],
 };
 
-const CUSTOMER_NOT_FINISHED_WHERE: Prisma.JobWhereInput = {
-  OR: [{ booking: null }, { booking: { is: { finishedAt: null } } }],
-};
-
 /**
  * Customer My Jobs tabs:
- * - ACTIVE — open jobs, plus work finished before the trader sends a payment request.
- * - COMPLETED — job COMPLETED, or finished AND trader has sent a FULL_JOB payment request.
+ * - ACTIVE — open jobs, plus finished work still unpaid (Work Completed / Payment Pending).
+ * - COMPLETED — paid / status COMPLETED only.
  * - OTHER — cancelled only.
  * - ALL — every non-draft status.
  */
@@ -794,32 +790,13 @@ const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
   if (tab === 'COMPLETED') {
     return {
       NOT: CUSTOMER_CANCELLED_WHERE,
-      OR: [
-        { status: JobStatus.COMPLETED },
-        {
-          status: JobStatus.PAYMENT_PENDING,
-          booking: { is: { finishedAt: { not: null } } },
-          paymentRequests: {
-            some: { type: 'FULL_JOB', status: { in: ['SENT', 'PAID'] } },
-          },
-        },
-      ],
+      status: JobStatus.COMPLETED,
     };
   }
+  // ACTIVE: anything still open or awaiting payment (including finished + payment requested).
   return {
     NOT: CUSTOMER_CANCELLED_WHERE,
     status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] },
-    OR: [
-      CUSTOMER_NOT_FINISHED_WHERE,
-      // Work done; waiting for trader to Request Payment — still Active for the customer.
-      {
-        status: JobStatus.PAYMENT_PENDING,
-        booking: { is: { finishedAt: { not: null } } },
-        paymentRequests: {
-          none: { type: 'FULL_JOB', status: { in: ['SENT', 'PAID'] } },
-        },
-      },
-    ],
   };
 };
 
@@ -1199,11 +1176,8 @@ const buildCustomerJobView = async (
   ]);
 
   const paymentRequested = customerHasFinalPaymentRequest({ paymentRequests: requests });
-  const completedLike =
-    job.status === JobStatus.COMPLETED ||
-    (job.status === JobStatus.PAYMENT_PENDING &&
-      !isAwaitingUpfrontPayment(job) &&
-      paymentRequested);
+  // Completed screen only after the customer has paid (job status COMPLETED).
+  const completedLike = job.status === JobStatus.COMPLETED;
 
   if (expected === 'COMPLETED' && !completedLike) {
     throw new BadRequestError('Job is not completed.');

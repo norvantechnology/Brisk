@@ -255,10 +255,10 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - bearerAuth: []
  *     description: |
  *       **Tabs**
- *       - `ACTIVE` — open jobs, plus work finished before the trader sends a payment request
- *         (badge `Work Completed`; customer cannot cancel). Drafts excluded (`GET /jobs?status=DRAFT`).
- *       - `COMPLETED` — status COMPLETED, **or** finished **and** trader has sent a FULL_JOB payment request
- *         (badge `Payment Pending` until paid).
+ *       - `ACTIVE` — open jobs, plus finished work still unpaid
+ *         (badge `Work Completed` until trader requests payment, then `Payment Pending`; cannot cancel once finished).
+ *         Drafts excluded (`GET /jobs?status=DRAFT`).
+ *       - `COMPLETED` — paid jobs only (`status=COMPLETED`).
  *       - `OTHER` — cancelled only.
  *       - `ALL` — every non-draft status (Active + Completed + Cancelled) in one list.
  *

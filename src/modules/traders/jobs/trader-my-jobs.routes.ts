@@ -3,6 +3,7 @@ import { validate } from '../../../middlewares/validate.middleware';
 import * as controller from './trader-my-jobs.controller';
 import {
   incomingJobIdParamSchema,
+  incomingLatestQuerySchema,
   myJobAcceptBodySchema,
   myJobIdParamSchema,
   myJobMaterialBodySchema,
@@ -35,8 +36,8 @@ const router = Router();
  *         name: tab
  *         schema: { type: string, enum: [ACTIVE, COMPLETED, OTHER], default: ACTIVE }
  *         description: |
- *           ACTIVE = in-progress / site-visit / Payment Request Pending (finished, request not sent yet).
- *           COMPLETED = finished and payment requested (or fully paid / COMPLETED).
+ *           ACTIVE = in-progress / site-visit / Payment Request Pending / Awaiting Customer Payment.
+ *           COMPLETED = paid jobs only (`status=COMPLETED`).
  *           OTHER = cancelled jobs only.
  *       - $ref: '#/components/parameters/TraderPage'
  *       - in: query
@@ -105,6 +106,18 @@ const router = Router();
  *                     areaName: Dublin
  *                     distanceKm: 4.2
  *                     quotePrice: 120
+ *                     paymentSummary:
+ *                       baseRate: 120
+ *                       materialCost: 0
+ *                       materialsTotal: 0
+ *                       platformFee: 10
+ *                       offerApplied: 0
+ *                       siteVisitFee: 0
+ *                       vatRate: 20
+ *                       vatPercentage: 20
+ *                       vatAmount: 26
+ *                       totalAmount: 156
+ *                       netPayout: 156
  *                     scheduledDate: '2026-09-18T09:00:00.000Z'
  *                     createdAt: '2026-09-10T11:30:00.000Z'
  *                     primaryAction: ARRIVE
@@ -138,8 +151,20 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *       Fields: `jobId`, `quoteId`, `title`, `description` (note), `distanceKm`, `distanceMiles`,
  *       `charges` (accepted quote amount), `currencyCode`, `currencySymbol`,
  *       `customer{fullName, profileImage, isVerifiedCustomer}`, `actions`, `acceptedAt`.
+ *
+ *       **Distance:** pass the same `lat`/`lng` as Discover so `distanceKm` matches the Discover card.
+ *       Without them, distance is from the trader service centre (can disagree with Discover).
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: lat
+ *         schema: { type: string }
+ *         description: Device latitude (same as Discover)
+ *       - in: query
+ *         name: lng
+ *         schema: { type: string }
+ *         description: Device longitude (same as Discover)
  *     responses:
  *       200:
  *         description: Incoming job payload or null
@@ -178,7 +203,7 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *                 createdAt: '2026-10-02T09:00:00.000Z'
  *                 acceptedAt: '2026-10-02T10:15:00.000Z'
  */
-router.get('/incoming/latest', controller.getIncomingLatest);
+router.get('/incoming/latest', validate(incomingLatestQuerySchema), controller.getIncomingLatest);
 
 /**
  * @swagger
@@ -193,6 +218,8 @@ router.get('/incoming/latest', controller.getIncomingLatest);
  *       Same payload as `GET /traders/jobs/incoming/latest`. `data: null` when the job is no longer
  *       waiting for this trader (already accepted / declined, customer picked another trader or
  *       cancelled) — then open `GET /traders/jobs/mine/{jobId}` or show the message instead.
+ *
+ *       Pass `lat`/`lng` (same as Discover) so the DISTANCE card matches Discover.
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -201,6 +228,14 @@ router.get('/incoming/latest', controller.getIncomingLatest);
  *         required: true
  *         description: Job id from the notification (`data.jobId`); the quote id is accepted too.
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: lat
+ *         schema: { type: string }
+ *         description: Device latitude (same as Discover)
+ *       - in: query
+ *         name: lng
+ *         schema: { type: string }
+ *         description: Device longitude (same as Discover)
  *     responses:
  *       200:
  *         description: Incoming job payload, or null when no longer waiting

@@ -159,10 +159,28 @@ const getTraderContext = async (userId: string) => {
   return trader;
 };
 
-const resolveOrigin = (trader: {
-  serviceCenterLat: Prisma.Decimal | null;
-  serviceCenterLng: Prisma.Decimal | null;
-}): Origin => {
+/**
+ * Same origin rules as Discover:
+ * 1) optional device `lat`/`lng` (preferred — matches Discover cards)
+ * 2) trader service centre
+ * 3) Dublin fallback
+ */
+const resolveOrigin = (
+  trader: {
+    serviceCenterLat: Prisma.Decimal | null;
+    serviceCenterLng: Prisma.Decimal | null;
+  },
+  lat?: string | number | null,
+  lng?: string | number | null
+): Origin => {
+  if (lat != null && lng != null && lat !== '' && lng !== '') {
+    const parsedLat = Number(lat);
+    const parsedLng = Number(lng);
+    if (Number.isFinite(parsedLat) && Number.isFinite(parsedLng)) {
+      return { lat: parsedLat, lng: parsedLng };
+    }
+    throw new BadRequestError('lat and lng must be valid numbers.');
+  }
   if (trader.serviceCenterLat != null && trader.serviceCenterLng != null) {
     return {
       lat: Number(trader.serviceCenterLat),
@@ -171,6 +189,8 @@ const resolveOrigin = (trader: {
   }
   return DUBLIN_ORIGIN;
 };
+
+type OriginQuery = { lat?: string | number | null; lng?: string | number | null };
 
 const traderJobAccessWhere = (traderId: string): Prisma.JobWhereInput => ({
   OR: [
@@ -181,23 +201,10 @@ const traderJobAccessWhere = (traderId: string): Prisma.JobWhereInput => ({
   ],
 });
 
-const FINAL_PAYMENT_REQUEST_SOME: Prisma.TraderPaymentRequestListRelationFilter = {
-  some: {
-    type: TraderPaymentRequestType.FULL_JOB,
-    status: { not: TraderPaymentRequestStatus.CANCELLED },
-  },
-};
-
-const FINAL_PAYMENT_REQUEST_NONE: Prisma.TraderPaymentRequestListRelationFilter = {
-  none: {
-    type: TraderPaymentRequestType.FULL_JOB,
-    status: { not: TraderPaymentRequestStatus.CANCELLED },
-  },
-};
-
 const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput => {
   if (tab === 'ACTIVE') {
-    // In-progress jobs + finished jobs waiting for trader to Request Payment (not Completed yet).
+    // In-progress + finished unpaid (Payment Request Pending / Awaiting Customer Payment).
+    // Completed tab only after the customer pays (status COMPLETED).
     return {
       status: { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] },
       OR: [
@@ -231,28 +238,21 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
             },
           ],
         },
-        // Work finished — trader still needs to send the payment request.
+        // Work finished — unpaid (request not sent yet, or awaiting customer payment).
         {
           traderId,
           status: JobStatus.PAYMENT_PENDING,
           booking: { traderId, finishedAt: { not: null } },
-          paymentRequests: FINAL_PAYMENT_REQUEST_NONE,
         },
       ],
     };
   }
   if (tab === 'COMPLETED') {
-    // Finished AND (fully COMPLETED, or final payment request already sent).
+    // Paid / fully complete only.
     return {
       traderId,
+      status: JobStatus.COMPLETED,
       booking: { traderId, finishedAt: { not: null } },
-      OR: [
-        { status: JobStatus.COMPLETED },
-        {
-          status: JobStatus.PAYMENT_PENDING,
-          paymentRequests: FINAL_PAYMENT_REQUEST_SOME,
-        },
-      ],
     };
   }
   // OTHER tab = cancelled jobs only (not site-visit / quotes / other leftovers).
@@ -561,7 +561,10 @@ const materialsSummary = (materials: { price: Prisma.Decimal }[]) => {
   };
 };
 
-const resolveQuotePrice = (job: MyJobRow): number | null => {
+const resolveQuotePrice = (job: {
+  quotes: { quotedAmount: Prisma.Decimal }[];
+  serviceCharge?: Prisma.Decimal | null;
+}): number | null => {
   const q = job.quotes[0];
   if (q) return money(q.quotedAmount);
   if (job.serviceCharge != null) return money(job.serviceCharge);
@@ -771,7 +774,25 @@ const arrivalStatus = (job: {
   return null;
 };
 
-const computePaymentBreakdown = (job: MyJobRow, opts?: { siteVisitOnly?: boolean }) =>
+/** Minimal job fields needed to compute the Payment Summary block (list + payment-request). */
+type PaymentSummarySource = {
+  quotes: { quotedAmount: Prisma.Decimal }[];
+  serviceCharge?: Prisma.Decimal | null;
+  siteVisitFee?: Prisma.Decimal | null;
+  materials: { price: Prisma.Decimal }[];
+  booking?: {
+    invoice?: {
+      serviceCharge: Prisma.Decimal;
+      platformFee: Prisma.Decimal;
+      traderOfferDiscount: Prisma.Decimal;
+      promoDiscount: Prisma.Decimal;
+      tax: Prisma.Decimal;
+      totalAmount: Prisma.Decimal;
+    } | null;
+  } | null;
+};
+
+const computePaymentBreakdown = (job: PaymentSummarySource, opts?: { siteVisitOnly?: boolean }) =>
   buildJobPaymentBreakdown({
     quotePrice: resolveQuotePrice(job) ?? 0,
     materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
@@ -914,12 +935,26 @@ const myJobCardSelect = (traderId: string) =>
             arrivedAt: true,
             finishedAt: true,
             scheduledDate: true,
+            invoice: {
+              select: {
+                serviceCharge: true,
+                platformFee: true,
+                traderOfferDiscount: true,
+                promoDiscount: true,
+                tax: true,
+                totalAmount: true,
+              },
+            },
           },
         },
         photos: {
           where: { kind: JobPhotoKind.PROOF },
           select: { id: true },
           take: 1,
+        },
+        materials: {
+          where: { traderId },
+          select: { price: true },
         },
         paymentRequests: {
           where: {
@@ -1162,6 +1197,9 @@ const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
     const scheduledDate =
       job.scheduledDate ?? job.booking?.scheduledDate ?? visit?.visitDate ?? null;
 
+    // Same object as GET .../payment-request — FE can render Payment Summary from the list.
+    const paymentSummary = buildSubmitPaymentSummary(job);
+
     return {
       id: job.id,
       jobRef: job.jobRef,
@@ -1176,6 +1214,7 @@ const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
         alreadyPaidAmount,
         job.paymentRequests.some((p) => p.status === TraderPaymentRequestStatus.SENT)
       ),
+      paymentSummary,
       isPartPayment: isPartialJob,
       isPartialJob,
       siteVisit: isSiteVisitJob,
@@ -1545,8 +1584,9 @@ const resolvePaymentStatusLabel = (job: MyJobRow): string => {
 };
 
 /** Payment Request screen breakdown (Submit & Next response). */
-const buildSubmitPaymentSummary = (job: MyJobRow) => {
-  const invoice = job.booking?.invoice;
+/** Same shape as GET .../payment-request `paymentSummary` (numeric; FE formats currency). */
+const buildSubmitPaymentSummary = (job: PaymentSummarySource) => {
+  const invoice = job.booking?.invoice ?? null;
   const breakdown = computePaymentBreakdown(job);
   const offerDiscount = invoice
     ? round2(money(invoice.traderOfferDiscount) + money(invoice.promoDiscount))
@@ -1618,17 +1658,13 @@ export const getJobOutcomeDetail = async (
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
   const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
-  // Completed screen only after FULL_JOB payment request (or fully paid / COMPLETED).
-  const completedLike =
-    job.status === JobStatus.COMPLETED ||
-    (job.status === JobStatus.PAYMENT_PENDING &&
-      !isAwaitingUpfrontPayment(job) &&
-      hasFinalPaymentRequest(job));
+  // Completed screen only after the customer has paid (job status COMPLETED).
+  const completedLike = job.status === JobStatus.COMPLETED;
 
   if (expected === 'COMPLETED' && !completedLike) {
     throw new BadRequestError(
-      job.booking?.finishedAt && !hasFinalPaymentRequest(job)
-        ? 'Request payment before opening the completed job screen.'
+      job.booking?.finishedAt && job.status === JobStatus.PAYMENT_PENDING
+        ? 'Job stays Active until the customer pays.'
         : 'Job is not completed.'
     );
   }
@@ -3402,10 +3438,12 @@ type IncomingQuoteRow = Prisma.QuoteGetPayload<{ include: typeof incomingQuoteIn
 /** Bottom-sheet payload — same shape for `job:accept` socket and GET /traders/jobs/incoming/latest. */
 const buildIncomingSheet = async (
   trader: Awaited<ReturnType<typeof getTraderContext>>,
-  quote: IncomingQuoteRow
+  quote: IncomingQuoteRow,
+  originQuery?: OriginQuery
 ) => {
   const { job } = quote;
-  const origin = resolveOrigin(trader);
+  // Prefer device lat/lng (same as Discover) so DISTANCE matches the Discover card.
+  const origin = resolveOrigin(trader, originQuery?.lat, originQuery?.lng);
   const coords = resolveJobCoords(
     {
       id: job.id,
@@ -3453,34 +3491,42 @@ const buildIncomingSheet = async (
   };
 };
 
-export const getIncomingForQuote = async (traderUserId: string, quoteId: string) => {
+export const getIncomingForQuote = async (
+  traderUserId: string,
+  quoteId: string,
+  originQuery?: OriginQuery
+) => {
   const trader = await getTraderContext(traderUserId);
   const quote = await prisma.quote.findFirst({
     where: { id: quoteId, ...awaitingTraderConfirmationWhere(trader.id) },
     include: incomingQuoteInclude,
   });
-  return quote ? buildIncomingSheet(trader, quote) : null;
+  return quote ? buildIncomingSheet(trader, quote, originQuery) : null;
 };
 
 /** QUOTE_ACCEPTED notification tap — same sheet for that job (`id` = jobId or quoteId). */
-export const getIncomingForJob = async (userId: string, id: string) => {
+export const getIncomingForJob = async (
+  userId: string,
+  id: string,
+  originQuery?: OriginQuery
+) => {
   const trader = await getTraderContext(userId);
   const quote = await prisma.quote.findFirst({
     where: { ...awaitingTraderConfirmationWhere(trader.id), OR: [{ jobId: id }, { id }] },
     include: incomingQuoteInclude,
   });
-  return quote ? buildIncomingSheet(trader, quote) : null;
+  return quote ? buildIncomingSheet(trader, quote, originQuery) : null;
 };
 
 /** Latest customer-accepted quotation awaiting this trader (re-open the sheet on app launch). */
-export const getIncomingLatest = async (userId: string) => {
+export const getIncomingLatest = async (userId: string, originQuery?: OriginQuery) => {
   const trader = await getTraderContext(userId);
   const quote = await prisma.quote.findFirst({
     where: awaitingTraderConfirmationWhere(trader.id),
     orderBy: { updatedAt: 'desc' },
     include: incomingQuoteInclude,
   });
-  return quote ? buildIncomingSheet(trader, quote) : null;
+  return quote ? buildIncomingSheet(trader, quote, originQuery) : null;
 };
 
 /** View & Accept → job assigned to this trader and moves to My Jobs ACTIVE. */

@@ -467,7 +467,11 @@ export const getIncomingJob = async (
 ): Promise<void> => {
   try {
     await tradersService.ensureTraderProfile(req.user!.id);
-    const data = await service.getIncomingForJob(req.user!.id, String(req.params.id));
+    const q = req.query as { lat?: string; lng?: string };
+    const data = await service.getIncomingForJob(req.user!.id, String(req.params.id), {
+      lat: q.lat,
+      lng: q.lng,
+    });
     sendResponse({
       res,
       statusCode: 200,
@@ -488,7 +492,8 @@ export const getIncomingLatest = async (
 ): Promise<void> => {
   try {
     await tradersService.ensureTraderProfile(req.user!.id);
-    const data = await service.getIncomingLatest(req.user!.id);
+    const q = req.query as { lat?: string; lng?: string };
+    const data = await service.getIncomingLatest(req.user!.id, { lat: q.lat, lng: q.lng });
     sendResponse({
       res,
       statusCode: 200,
