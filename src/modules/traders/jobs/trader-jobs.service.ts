@@ -1721,6 +1721,246 @@ export const requestDiscoverJob = async (
 };
 
 /**
+ * Jobs Queue — trader proposals still waiting on the customer (not My Jobs ACTIVE yet).
+ *
+ * Includes:
+ *  - PENDING quotation on an open marketplace job (quote sent / request job)
+ *  - PENDING site-visit schedule or reschedule proposal awaiting customer confirm
+ *
+ * Excludes assigned jobs, confirmed visits, and CUSTOMER_ACCEPTED (Incoming sheet).
+ */
+export const listJobsQueue = async (
+  userId: string,
+  query: { page?: string; limit?: string; search?: string; lat?: string; lng?: string } = {}
+) => {
+  const trader = await getTraderContext(userId);
+  const origin = resolveOrigin(trader, query.lat, query.lng);
+  void rememberTraderDeviceOrigin(trader.id, query.lat, query.lng);
+
+  const page = parsePage(query.page);
+  const limit = parseLimit(query.limit);
+  const search = query.search?.trim();
+
+  const openJobWhere: Prisma.JobWhereInput = {
+    status: JobStatus.PUBLISHED,
+    traderId: null,
+    ...(search
+      ? {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { jobRef: { contains: search, mode: 'insensitive' } },
+            { city: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const jobSelect = {
+    id: true,
+    jobRef: true,
+    title: true,
+    city: true,
+    postcode: true,
+    latitude: true,
+    longitude: true,
+    siteVisitRequested: true,
+    quoteType: true,
+    createdAt: true,
+    updatedAt: true,
+    address: { select: { city: true, county: true, country: true, latitude: true, longitude: true } },
+    customer: {
+      select: {
+        fullName: true,
+        preferredCurrency: true,
+        country: true,
+      },
+    },
+  } satisfies Prisma.JobSelect;
+
+  const [quotes, visits] = await Promise.all([
+    prisma.quote.findMany({
+      where: {
+        traderId: trader.id,
+        status: QuoteStatus.PENDING,
+        job: openJobWhere,
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: {
+        id: true,
+        quotedAmount: true,
+        currencyCode: true,
+        requestedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        job: { select: jobSelect },
+      },
+    }),
+    prisma.traderSiteVisitRequest.findMany({
+      where: {
+        traderId: trader.id,
+        status: TraderSiteVisitStatus.PENDING,
+        job: openJobWhere,
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      include: {
+        job: { select: jobSelect },
+        slots: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            visitDate: true,
+            timeSlot: true,
+            startTime: true,
+            endTime: true,
+            sortOrder: true,
+            isSelected: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  type QueueAcc = {
+    job: (typeof quotes)[number]['job'];
+    quote: (typeof quotes)[number] | null;
+    visit: (typeof visits)[number] | null;
+    queuedAt: Date;
+  };
+
+  const byJob = new Map<string, QueueAcc>();
+
+  for (const q of quotes) {
+    byJob.set(q.job.id, {
+      job: q.job,
+      quote: q,
+      visit: null,
+      queuedAt: q.requestedAt ?? q.updatedAt,
+    });
+  }
+
+  for (const v of visits) {
+    const existing = byJob.get(v.job.id);
+    const queuedAt = v.updatedAt;
+    if (existing) {
+      existing.visit = v;
+      if (queuedAt > existing.queuedAt) existing.queuedAt = queuedAt;
+    } else {
+      byJob.set(v.job.id, {
+        job: v.job,
+        quote: null,
+        visit: v,
+        queuedAt,
+      });
+    }
+  }
+
+  // Prefer site-visit card when a PENDING visit exists; otherwise quote-sent card.
+  const rows = [...byJob.values()].sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
+  const total = rows.length;
+  const pageRows = rows.slice((page - 1) * limit, page * limit);
+
+  const items = await Promise.all(
+    pageRows.map(async (row) => {
+      const { job, quote, visit } = row;
+      const coords = resolveJobCoords(
+        {
+          id: job.id,
+          latitude: job.latitude ?? job.address?.latitude ?? null,
+          longitude: job.longitude ?? job.address?.longitude ?? null,
+        },
+        origin
+      );
+      const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
+      const areaName = areaNameOf(job);
+      const currency = await resolveDiscoverCurrency({
+        customerPreferredCurrency: job.customer.preferredCurrency,
+        traderPreferredCurrency: trader.user.preferredCurrency,
+        jobCountry: job.address?.country ?? job.customer.country,
+        traderCountry: trader.user.country ?? trader.country,
+      });
+
+      const quoteAmount = quote ? money(quote.quotedAmount) : null;
+      const visitPayload = visit ? toSiteVisitPayload(visit) : null;
+      const isSiteVisitQueue = Boolean(visit && visitPayload && visitPayload.status === 'PENDING');
+      // Reschedule proposals are also PENDING; treat updates after create as reschedule wait.
+      const isRescheduleRequest = Boolean(
+        visit && visit.updatedAt.getTime() - visit.createdAt.getTime() > 60_000
+      );
+
+      const queueKind = isSiteVisitQueue
+        ? isRescheduleRequest
+          ? ('SITE_VISIT_RESCHEDULED' as const)
+          : ('SITE_VISIT_REQUESTED' as const)
+        : ('QUOTE_SENT' as const);
+
+      const statusBadge =
+        queueKind === 'QUOTE_SENT'
+          ? 'Quote Sent'
+          : queueKind === 'SITE_VISIT_RESCHEDULED'
+            ? 'Reschedule Requested'
+            : 'Site Visit Requested';
+
+      const statusLabel =
+        queueKind === 'QUOTE_SENT'
+          ? quote?.requestedAt
+            ? 'Awaiting Customer Confirmation'
+            : 'Awaiting Customer Response'
+          : 'Site Visit Pending Confirmation';
+
+      const scheduled =
+        isSiteVisitQueue && visitPayload && visitPayload.visitDate
+          ? {
+              visitDate: visitPayload.visitDate,
+              timeSlot: visitPayload.timeSlot,
+              startTime: visitPayload.startTime,
+              endTime: visitPayload.endTime,
+              slots: visitPayload.slots,
+            }
+          : null;
+
+      return {
+        id: job.id,
+        jobId: job.id,
+        jobRef: job.jobRef ?? null,
+        title: job.title,
+        queueKind,
+        statusBadge,
+        statusLabel,
+        queuedAt: row.queuedAt,
+        distanceKm,
+        areaName,
+        /** Convenience for list subtitle: `2.5 km • Dublin 4`. */
+        locationLabel: `${distanceKm} km • ${areaName}`,
+        yourQuote: quoteAmount,
+        quoteAmount,
+        currency_code: currency.currencyCode,
+        currency_symbol: currency.currencySymbol,
+        scheduled,
+        quoteId: quote?.id ?? null,
+        siteVisitRequestId: visit?.id ?? null,
+        isJobRequested: Boolean(quote?.requestedAt),
+        isWaitingForCustomerConfirmation: true,
+        isSiteVisit: isSiteVisitJob(job) || isSiteVisitQueue,
+        assignmentStatus: isSiteVisitQueue
+          ? 'WAITING_FOR_CUSTOMER'
+          : quote?.requestedAt
+            ? 'WAITING_FOR_CUSTOMER'
+            : 'QUOTED',
+        customerName: job.customer.fullName,
+        primaryAction: 'VIEW_DETAILS' as const,
+        primaryActionLabel: 'View Details',
+      };
+    })
+  );
+
+  return {
+    queuedCount: total,
+    items,
+    meta: buildPaginationMeta(total, page, limit),
+  };
+};
+
+/**
  * Home Active/Waiting card — jobs this trader requested, awaiting customer confirmation.
  */
 export const listWaitingJobs = async (userId: string) => {

@@ -181,6 +181,26 @@ export const requestDiscoverJob = async (
   }
 };
 
+/** Jobs Queue — quotes / site-visit / reschedule awaiting customer approval. */
+export const listJobsQueue = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.listJobsQueue(req.user!.id, req.query as any);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Jobs queue retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 /** Home Active/Waiting (blue) cards — awaiting customer confirmation. */
 export const listWaitingJobs = async (
   req: AuthenticatedRequest,

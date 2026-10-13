@@ -102,6 +102,19 @@ export const siteVisitRequestBodySchema = z.object({
     }),
 });
 
+/** Jobs Queue — quotes / site-visit / reschedule proposals awaiting customer approval. */
+export const jobsQueueQuerySchema = z.object({
+  query: z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    search: z.string().trim().max(100).optional(),
+    lat: z.string().optional(),
+    lng: z.string().optional(),
+  }),
+});
+
+export type JobsQueueQuery = z.infer<typeof jobsQueueQuerySchema>['query'];
+
 /** POST Submit Quote from Discover Job Details */
 export const discoverQuoteBodySchema = z.object({
   params: z.object({

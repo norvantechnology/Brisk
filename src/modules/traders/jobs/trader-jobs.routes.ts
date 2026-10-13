@@ -8,6 +8,7 @@ import {
   siteVisitRequestBodySchema,
   discoverQuoteBodySchema,
   discoverRequestJobBodySchema,
+  jobsQueueQuerySchema,
 } from './trader-jobs.validation';
 
 const router = Router();
@@ -138,6 +139,92 @@ const router = Router();
  *         $ref: '#/components/responses/TraderForbidden'
  */
 router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscoverJobs);
+
+/**
+ * @swagger
+ * /traders/jobs/queue:
+ *   get:
+ *     summary: Jobs Queue — awaiting customer approval
+ *     tags: ['Trader / Discover Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       **Jobs Queue** screen: jobs where this trader has submitted a quotation,
+ *       site-visit schedule, or reschedule proposal and is still waiting for the customer.
+ *
+ *       Included:
+ *       - `QUOTE_SENT` — PENDING quote on open marketplace job
+ *       - `SITE_VISIT_REQUESTED` — PENDING site-visit slots awaiting customer confirm
+ *       - `SITE_VISIT_RESCHEDULED` — PENDING visit after a later slot update / reschedule
+ *
+ *       Excluded: assigned My Jobs, confirmed visits, Incoming (`CUSTOMER_ACCEPTED`).
+ *       Tap **View Details** → `GET /traders/jobs/discover/{id}`.
+ *
+ *       Pass `lat`/`lng` (same as Discover) for correct `distanceKm`.
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: string, example: '1' }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: string, example: '20' }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Filter by title / jobRef / city
+ *       - in: query
+ *         name: lat
+ *         schema: { type: string }
+ *       - in: query
+ *         name: lng
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Queued job cards
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data: { $ref: '#/components/schemas/TraderJobsQueueResponse' }
+ *             example:
+ *               success: true
+ *               message: Jobs queue retrieved successfully.
+ *               data:
+ *                 queuedCount: 2
+ *                 items:
+ *                   - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     title: Commercial Boiler Installation & Pipe Check
+ *                     queueKind: QUOTE_SENT
+ *                     statusBadge: Quote Sent
+ *                     statusLabel: Awaiting Customer Confirmation
+ *                     queuedAt: '2026-10-13T10:00:00.000Z'
+ *                     distanceKm: 2.5
+ *                     areaName: Dublin 4
+ *                     locationLabel: 2.5 km • Dublin 4
+ *                     yourQuote: 480
+ *                     currency_symbol: €
+ *                     currency_code: EUR
+ *                     scheduled: null
+ *                     primaryAction: VIEW_DETAILS
+ *                   - id: 9b9a352d-8a4e-4905-929e-b6085c514476
+ *                     title: Emergency Gas Leak Inspection & Repair
+ *                     queueKind: SITE_VISIT_REQUESTED
+ *                     statusBadge: Site Visit Requested
+ *                     statusLabel: Site Visit Pending Confirmation
+ *                     distanceKm: 3.8
+ *                     areaName: Rathmines, Dublin
+ *                     yourQuote: 220
+ *                     scheduled:
+ *                       visitDate: '2026-10-15'
+ *                       timeSlot: MORNING
+ *                       startTime: '08:00'
+ *                       endTime: '12:00'
+ *                     primaryAction: VIEW_DETAILS
+ *                 meta: { total: 2, page: 1, limit: 20, totalPages: 1 }
+ */
+router.get('/queue', validate(jobsQueueQuerySchema), controller.listJobsQueue);
 
 /**
  * @swagger

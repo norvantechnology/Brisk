@@ -170,6 +170,57 @@
  *           type: array
  *           items: { $ref: '#/components/schemas/TraderWaitingJobCard' }
  *         count: { type: integer, description: Waiting job count }
+ *     TraderJobsQueueCard:
+ *       type: object
+ *       description: Jobs Queue list card (awaiting customer approval)
+ *       properties:
+ *         id: { type: string, format: uuid }
+ *         jobId: { type: string, format: uuid }
+ *         jobRef: { type: string, nullable: true }
+ *         title: { type: string }
+ *         queueKind:
+ *           type: string
+ *           enum: [QUOTE_SENT, SITE_VISIT_REQUESTED, SITE_VISIT_RESCHEDULED]
+ *         statusBadge:
+ *           type: string
+ *           description: Chip text — Quote Sent | Site Visit Requested | Reschedule Requested
+ *         statusLabel:
+ *           type: string
+ *           description: Footer progress text
+ *         queuedAt: { type: string, format: date-time, description: For relative time (e.g. 2 hours ago) }
+ *         distanceKm: { type: number }
+ *         areaName: { type: string }
+ *         locationLabel: { type: string, example: '2.5 km • Dublin 4' }
+ *         yourQuote: { type: number, nullable: true, description: Trader quote amount }
+ *         quoteAmount: { type: number, nullable: true }
+ *         currency_code: { type: string, example: EUR }
+ *         currency_symbol: { type: string, example: € }
+ *         scheduled:
+ *           type: object
+ *           nullable: true
+ *           description: Present for site-visit / reschedule queue cards
+ *           properties:
+ *             visitDate: { type: string, example: '2026-10-15' }
+ *             timeSlot: { type: string, enum: [MORNING, AFTERNOON, EVENING, ANYTIME] }
+ *             startTime: { type: string, example: '08:00' }
+ *             endTime: { type: string, example: '12:00' }
+ *         quoteId: { type: string, format: uuid, nullable: true }
+ *         siteVisitRequestId: { type: string, format: uuid, nullable: true }
+ *         isJobRequested: { type: boolean }
+ *         isWaitingForCustomerConfirmation: { type: boolean }
+ *         isSiteVisit: { type: boolean }
+ *         assignmentStatus: { type: string }
+ *         customerName: { type: string }
+ *         primaryAction: { type: string, example: VIEW_DETAILS }
+ *         primaryActionLabel: { type: string, example: View Details }
+ *     TraderJobsQueueResponse:
+ *       type: object
+ *       properties:
+ *         queuedCount: { type: integer, description: Total queued jobs (badge e.g. 4 Queued) }
+ *         items:
+ *           type: array
+ *           items: { $ref: '#/components/schemas/TraderJobsQueueCard' }
+ *         meta: { $ref: '#/components/schemas/TraderListMeta' }
  *     TraderDiscoverJobDetail:
  *       allOf:
  *         - $ref: '#/components/schemas/TraderDiscoverJobCard'
