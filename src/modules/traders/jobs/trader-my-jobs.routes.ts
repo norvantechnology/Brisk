@@ -118,6 +118,11 @@ const router = Router();
  *                       vatAmount: 26
  *                       totalAmount: 156
  *                       netPayout: 156
+ *                     paymentDetails:
+ *                       - { label: Base Rate, amount: 120, currency_symbol: €, currency_code: EUR }
+ *                       - { label: Platform Fee, amount: 10, currency_symbol: €, currency_code: EUR }
+ *                       - { label: Offer Applied, amount: 0, currency_symbol: €, currency_code: EUR }
+ *                       - { label: 'VAT (20%)', percentage: 20, amount: 26, currency_symbol: €, currency_code: EUR }
  *                     scheduledDate: '2026-09-18T09:00:00.000Z'
  *                     createdAt: '2026-09-10T11:30:00.000Z'
  *                     primaryAction: ARRIVE

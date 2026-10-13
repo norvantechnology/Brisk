@@ -913,13 +913,22 @@ const myJobCardSelect = (traderId: string) =>
         scheduledDate: true,
         createdAt: true,
         updatedAt: true,
-        customer: { select: { fullName: true, profilePhotoUrl: true } },
-        address: { select: { city: true, county: true, latitude: true, longitude: true } },
+        customer: {
+          select: {
+            fullName: true,
+            profilePhotoUrl: true,
+            preferredCurrency: true,
+            country: true,
+          },
+        },
+        address: {
+          select: { city: true, county: true, country: true, latitude: true, longitude: true },
+        },
         quotes: {
           where: { traderId },
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: { quotedAmount: true, status: true },
+          select: { quotedAmount: true, status: true, currencyCode: true },
         },
         siteVisitRequests: {
           // Keep cancelled visits so cancelled site-visit jobs still get siteVisit=true.
@@ -961,7 +970,7 @@ const myJobCardSelect = (traderId: string) =>
             traderId,
             status: { not: TraderPaymentRequestStatus.CANCELLED },
           },
-          select: { id: true, type: true, status: true, totalAmount: true },
+          select: { id: true, type: true, status: true, totalAmount: true, currencyCode: true },
           take: 20,
         },
         siteVisitRequested: true,
@@ -996,7 +1005,7 @@ const MY_JOB_SORT_MAP: Record<string, (dir: SortDir) => Prisma.JobOrderByWithRel
   categoryName: (dir) => ({ category: { name: dir } }),
 };
 
-type MyJobCard = ReturnType<ReturnType<typeof myJobCardMapper>>;
+type MyJobCard = Awaited<ReturnType<ReturnType<typeof myJobCardMapper>>>;
 
 /** Card values the UI shows but the DB cannot ORDER BY (derived from quotes, bookings, visits). */
 const COMPUTED_MY_JOB_SORTS: Record<string, (card: MyJobCard) => unknown> = {
@@ -1046,14 +1055,17 @@ export const listMyJobs = async (userId: string, query: MyJobsListQuery) => {
   };
 
   const select = myJobCardSelect(trader.id);
-  const toCard = myJobCardMapper(resolveOrigin(trader));
+  const toCard = myJobCardMapper(resolveOrigin(trader), {
+    preferredCurrency: trader.user.preferredCurrency,
+    country: trader.country,
+  });
   const computedKey = query.sortBy ? COMPUTED_MY_JOB_SORTS[query.sortBy] : undefined;
 
   const loadPage = async (): Promise<MyJobCard[]> => {
     if (computedKey) {
       const dir = resolveSortDir(query.sortOrder);
       const all = await prisma.job.findMany({ where, select });
-      const cards = all.map(toCard);
+      const cards = await Promise.all(all.map(toCard));
       const byId = new Map(cards.map((card) => [card.id, card]));
       const rows = all.map((job) => ({ id: job.id, createdAt: job.createdAt }));
       return pageIdsByComputedKey(rows, (row) => computedKey(byId.get(row.id)!), dir, skip, limit).map(
@@ -1073,7 +1085,7 @@ export const listMyJobs = async (userId: string, query: MyJobsListQuery) => {
       skip,
       take: limit,
     });
-    return jobs.map(toCard);
+    return Promise.all(jobs.map(toCard));
   };
 
   const [total, items] = await Promise.all([prisma.job.count({ where }), loadPage()]);
@@ -1085,7 +1097,12 @@ export const listMyJobs = async (userId: string, query: MyJobsListQuery) => {
   };
 };
 
-const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
+const myJobCardMapper =
+  (
+    origin: Origin,
+    traderCurrency: { preferredCurrency?: string | null; country?: string | null }
+  ) =>
+  async (job: MyJobCardRow) => {
     const visits = job.siteVisitRequests;
     const activeVisit =
       visits.find(
@@ -1197,8 +1214,15 @@ const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
     const scheduledDate =
       job.scheduledDate ?? job.booking?.scheduledDate ?? visit?.visitDate ?? null;
 
-    // Same object as GET .../payment-request — FE can render Payment Summary from the list.
+    // Same totals + labeled rows as GET .../payment-request (dynamic Payment Summary UI).
     const paymentSummary = buildSubmitPaymentSummary(job);
+    const currency = await resolveDiscoverCurrency({
+      customerPreferredCurrency: job.customer.preferredCurrency,
+      traderPreferredCurrency: traderCurrency.preferredCurrency,
+      jobCountry: job.address?.country ?? job.customer.country,
+      traderCountry: traderCurrency.country,
+    });
+    const paymentDetails = buildPaymentSummaryDetails(paymentSummary, currency);
 
     return {
       id: job.id,
@@ -1215,6 +1239,7 @@ const myJobCardMapper = (origin: Origin) => (job: MyJobCardRow) => {
         job.paymentRequests.some((p) => p.status === TraderPaymentRequestStatus.SENT)
       ),
       paymentSummary,
+      paymentDetails,
       isPartPayment: isPartialJob,
       isPartialJob,
       siteVisit: isSiteVisitJob,
@@ -1583,8 +1608,7 @@ const resolvePaymentStatusLabel = (job: MyJobRow): string => {
   return 'UNPAID';
 };
 
-/** Payment Request screen breakdown (Submit & Next response). */
-/** Same shape as GET .../payment-request `paymentSummary` (numeric; FE formats currency). */
+/** Same shape as GET .../payment-request `paymentSummary` (numeric totals). */
 const buildSubmitPaymentSummary = (job: PaymentSummarySource) => {
   const invoice = job.booking?.invoice ?? null;
   const breakdown = computePaymentBreakdown(job);
@@ -1611,6 +1635,53 @@ const buildSubmitPaymentSummary = (job: PaymentSummarySource) => {
     totalAmount,
     netPayout: totalAmount,
   };
+};
+
+type PaymentSummaryNumbers = ReturnType<typeof buildSubmitPaymentSummary>;
+
+type PaymentDetailLine = {
+  label: string;
+  amount: number;
+  currency_symbol: string;
+  currency_code: string;
+  percentage?: number;
+};
+
+/**
+ * Dynamic Payment Summary rows for FE (list + payment-request).
+ * New fee lines can be appended here without a mobile release for layout.
+ */
+const buildPaymentSummaryDetails = (
+  summary: PaymentSummaryNumbers,
+  currency: { currencyCode: string; currencySymbol: string }
+): PaymentDetailLine[] => {
+  const currency_code = currency.currencyCode;
+  const currency_symbol = currency.currencySymbol;
+  const line = (label: string, amount: number, extra?: { percentage?: number }): PaymentDetailLine => ({
+    label,
+    amount: round2(amount),
+    currency_symbol,
+    currency_code,
+    ...extra,
+  });
+
+  const rows: PaymentDetailLine[] = [
+    line('Base Rate', summary.baseRate),
+  ];
+  if (summary.materialsTotal > 0) {
+    rows.push(line('Materials', summary.materialsTotal));
+  }
+  rows.push(line('Platform Fee', summary.platformFee));
+  rows.push(line('Offer Applied', summary.offerApplied));
+  if (summary.siteVisitFee > 0) {
+    rows.push(line('Site Visit Fee', summary.siteVisitFee));
+  }
+  rows.push(
+    line(`VAT (${summary.vatPercentage}%)`, summary.vatAmount, {
+      percentage: summary.vatPercentage,
+    })
+  );
+  return rows;
 };
 
 const formatMoneyWithSymbol = (currencySymbol: string, amount: number) => {
@@ -2044,7 +2115,10 @@ export const submitJobCompletion = async (
   emitTraderJobProgress(job, userId, nextStatus, nextStatus === JobStatus.COMPLETED);
 
   const fresh = await assertMyJob(trader.id, jobId);
-  const payload = buildPaymentRequestScreenPayload(fresh);
+  const payload = await buildPaymentRequestScreenPayload(fresh, {
+    preferredCurrency: trader.user.preferredCurrency,
+    country: trader.country,
+  });
   const awaitingRequest = nextStatus === JobStatus.PAYMENT_PENDING && !hasFinalPaymentRequest(fresh);
   return {
     ...payload,
@@ -2058,8 +2132,18 @@ export const submitJobCompletion = async (
 };
 
 /** Shared Payment Request screen payload (after Mark as Finished / reopen app). */
-const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
+const buildPaymentRequestScreenPayload = async (
+  job: MyJobRow,
+  traderCurrency?: { preferredCurrency?: string | null; country?: string | null }
+) => {
   const paymentSummary = buildSubmitPaymentSummary(job);
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: traderCurrency?.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: traderCurrency?.country,
+  });
+  const paymentDetails = buildPaymentSummaryDetails(paymentSummary, currency);
   const paymentStatus = resolvePaymentStatusLabel(job);
   const completedAt = job.booking?.finishedAt ?? job.updatedAt;
   const invoice = job.booking?.invoice;
@@ -2092,6 +2176,7 @@ const buildPaymentRequestScreenPayload = (job: MyJobRow) => {
       fullAddress: formatFullAddress(job),
     },
     paymentSummary,
+    paymentDetails,
     paymentStatus,
     isPartPayment: paymentStatus === 'PARTIALLY_PAID' || paymentStatus === 'PENDING',
     canRequestPayment:
@@ -2126,7 +2211,10 @@ export const getPaymentRequestScreen = async (userId: string, jobId: string) => 
     );
   }
 
-  return buildPaymentRequestScreenPayload(job);
+  return buildPaymentRequestScreenPayload(job, {
+    preferredCurrency: trader.user.preferredCurrency,
+    country: trader.country,
+  });
 };
 
 /** Customer realtime: a trader submitted / updated / requested a quotation on their open job. */

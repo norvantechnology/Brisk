@@ -92,9 +92,7 @@
  *           description: Agreed quote / service charge
  *         paymentSummary:
  *           type: object
- *           description: |
- *             Same numeric Payment Summary as `GET /traders/jobs/mine/{id}/payment-request`
- *             (Base Rate, Platform Fee, Offer Applied, VAT, Total Amount, …). Live from quote / materials / invoice.
+ *           description: Numeric totals (use `paymentDetails` for the labeled Payment Summary UI).
  *           properties:
  *             baseRate: { type: number }
  *             materialCost: { type: number }
@@ -107,6 +105,19 @@
  *             vatAmount: { type: number }
  *             totalAmount: { type: number }
  *             netPayout: { type: number }
+ *         paymentDetails:
+ *           type: array
+ *           description: |
+ *             Dynamic Payment Summary rows for the Request Payment UI. Render `label` + `amount` +
+ *             `currency_symbol` in order; VAT includes `percentage`. New lines can be added server-side.
+ *           items:
+ *             type: object
+ *             properties:
+ *               label: { type: string, example: Base Rate }
+ *               amount: { type: number, example: 200 }
+ *               currency_symbol: { type: string, example: € }
+ *               currency_code: { type: string, example: EUR }
+ *               percentage: { type: number, example: 20, description: Present on VAT line }
  *         scheduledDate:
  *           type: string
  *           format: date-time
