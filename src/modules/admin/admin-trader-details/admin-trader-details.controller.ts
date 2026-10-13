@@ -173,6 +173,43 @@ export const listPayouts = async (
   }
 };
 
+export const listPayoutJobs = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await service.listTraderPayoutJobs(req.params.id, req.query as any);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Trader payout jobs retrieved successfully.',
+      data: result.jobs,
+      meta: result.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getJobPayoutSummary = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.getTraderJobPayoutSummary(req.params.id, req.params.jobId);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job payout summary retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const createPayout = async (
   req: AuthenticatedAdminRequest,
   res: Response,
@@ -181,7 +218,12 @@ export const createPayout = async (
   try {
     const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
     const data = await service.createTraderPayout(req.adminUser!.id, adminLabel, req.params.id, req.body);
-    sendResponse({ res, statusCode: 201, message: 'Payout sent successfully.', data });
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: 'Job payout installment recorded successfully.',
+      data,
+    });
   } catch (error) {
     next(error);
   }

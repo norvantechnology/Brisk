@@ -669,6 +669,7 @@ model Job {
   siteVisitRequests TraderSiteVisitRequest[]
   materials    JobMaterial[]
   paymentRequests TraderPaymentRequest[]
+  payouts      Payout[]
 
   @@index([customerId, status])
   @@index([status, categoryId])
@@ -835,9 +836,15 @@ model Refund {
 model Payout {
   id               String       @id @default(uuid()) @db.Uuid
   traderId         String       @map("trader_id") @db.Uuid
+  /// Job this installment belongs to (required for job-wise admin bank payouts).
+  jobId            String?      @map("job_id") @db.Uuid
   amount           Decimal      @db.Decimal(10, 2)
   currencyCode     String       @default("EUR") @map("currency_code")
   status           PayoutStatus @default(PENDING)
+  /// Optional admin note (e.g. installment label).
+  note             String?      @db.Text
+  /// Bank transfer / remittance reference when paid manually (not via Stripe).
+  bankReference    String?      @map("bank_reference")
   stripeTransferId String?      @map("stripe_transfer_id")
   processedAt      DateTime?    @map("processed_at")
   processedById    String?      @map("processed_by_id") @db.Uuid
@@ -846,8 +853,11 @@ model Payout {
 
   // Relationships
   trader      Trader     @relation(fields: [traderId], references: [id], onDelete: Cascade)
+  job         Job?       @relation(fields: [jobId], references: [id], onDelete: SetNull)
   processedBy AdminUser? @relation("ProcessedByAdmin", fields: [processedById], references: [id])
 
+  @@index([traderId, jobId])
+  @@index([jobId])
   @@map("payouts")
 }
 

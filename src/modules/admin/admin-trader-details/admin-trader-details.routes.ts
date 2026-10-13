@@ -7,8 +7,10 @@ import {
   createTraderPayoutSchema,
   traderDetailsIdParamSchema,
   traderDocumentsQuerySchema,
+  traderJobPayoutSummarySchema,
   traderJobsQuerySchema,
   traderOffersQuerySchema,
+  traderPayoutJobsQuerySchema,
   traderPayoutsQuerySchema,
   traderReviewsQuerySchema,
 } from './admin-trader-details.validation';
@@ -31,7 +33,7 @@ router.use(adminAuthMiddleware);
  *       | Documents | `GET .../documents/stats` | `GET .../documents` |
  *       | Jobs | `GET .../jobs/stats` | `GET .../jobs` |
  *       | Reviews | `GET .../reviews/stats` | `GET .../reviews` |
- *       | Payouts & Earnings | `GET .../earnings/summary` | `GET .../payouts` |
+ *       | Payouts & Earnings | `GET .../earnings/summary` | `GET .../payout-jobs` + `GET .../payouts` · `POST .../payouts` (job installment) |
  *       | Offers | `GET .../offers/stats` | `GET .../offers` |
  *
  *       **Document approve/reject (same screen):**
@@ -500,7 +502,9 @@ router.get(
  *   get:
  *     summary: Payouts & Earnings — summary cards
  *     description: |
- *       Gross earnings, platform commission, net paid out, pending payout, and masked bank details.
+ *       Gross earnings, platform commission, net paid out to trader, and **pendingPayout** =
+ *       sum of `remainingBalance` across jobs still eligible (`eligibleJobsCount`).
+ *       Bank details are for manual transfer (not Stripe auto-payout).
  *     tags: ['Admin / Trader Details']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -522,6 +526,7 @@ router.get(
  *                 platformCommissionPercent: 10
  *                 netPaidOut: 8200
  *                 pendingPayout: 800
+ *                 eligibleJobsCount: 3
  *                 currencyCode: EUR
  *                 bank:
  *                   bankName: AIB
@@ -540,20 +545,21 @@ router.get(
 
 /**
  * @swagger
- * /admin/traders/{id}/payouts:
+ * /admin/traders/{id}/payout-jobs:
  *   get:
- *     summary: Payouts & Earnings — payout transactions
+ *     summary: Payouts & Earnings — jobs with payout balances
  *     description: |
- *       Paginated payout rows for the trader.
+ *       Job-wise payout queue for admin. Customer must pay first; then admin records manual bank
+ *       transfers in installments via `POST /admin/traders/{id}/payouts`.
  *
- *       A row exists only after an admin sends money with `POST /admin/traders/{id}/payouts`
- *       (requires the trader's connected Stripe account). Customer job payments are not payouts —
- *       they are totalled in `GET /admin/traders/{id}/earnings/summary` (`grossEarnings`). Empty `data` + `meta.total: 0`
- *       means no payout has been sent to this trader yet.
+ *       **FE eligibility / balances (per job row):**
+ *       - `eligibleForPayout` — `true` when `remainingBalance > 0` (enable Send Payout)
+ *       - `payoutStatus` — `UNPAID` | `PARTIALLY_PAID` | `PAID` (job-level)
+ *       - `totalPayable` — trader share from customer **PAID** amounts (ex platform fee & VAT)
+ *       - `amountPaid` — sum of **COMPLETED** payout installments for this job
+ *       - `remainingBalance` — `totalPayable − amountPaid`
  *
- *       **Filters:** `status`, `search`, `sortBy`, `sortOrder`, `from`, `to`, `page`, `limit`
- *
- *       **Payout statuses:** `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
+ *       Use `eligibleOnly=true` to list only jobs that still need a payout.
  *     tags: ['Admin / Trader Details']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -570,14 +576,119 @@ router.get(
  *       - in: query
  *         name: search
  *         schema: { type: string }
- *         description: Search stripeTransferId or exact payout UUID
+ *         description: jobRef or title
+ *       - in: query
+ *         name: payoutStatus
+ *         schema: { type: string, enum: [UNPAID, PARTIALLY_PAID, PAID] }
+ *       - in: query
+ *         name: eligibleOnly
+ *         schema: { type: string, enum: [true, false] }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [jobRef, title, totalPayable, amountPaid, remainingBalance, payoutStatus, updatedAt], default: updatedAt }
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc], default: desc }
+ *     responses:
+ *       200:
+ *         description: Paginated job payout balances
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Trader payout jobs retrieved successfully.
+ *               data:
+ *                 - jobId: 60501fbc-1da5-44fc-9f06-6f6fd69fa456
+ *                   jobRef: JOB-D681
+ *                   title: Sample Cat 1 Job
+ *                   jobStatus: PAYMENT_PENDING
+ *                   currencyCode: EUR
+ *                   totalPayable: 200
+ *                   amountPaid: 50
+ *                   remainingBalance: 150
+ *                   payoutStatus: PARTIALLY_PAID
+ *                   eligibleForPayout: true
+ *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ */
+router.get(
+  '/traders/:id/payout-jobs',
+  validate(traderPayoutJobsQuerySchema),
+  controller.listPayoutJobs
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/jobs/{jobId}/payout-summary:
+ *   get:
+ *     summary: Payouts & Earnings — one job balance + installment history
+ *     description: |
+ *       Open this when admin selects a job to pay. Returns the same balance fields as
+ *       `GET .../payout-jobs` plus `installments[]` (prior `POST .../payouts` rows) and `bank`.
+ *
+ *       **FE:** allow another payout only when `eligibleForPayout === true`; max amount =
+ *       `remainingBalance`.
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Job payout summary
+ *       404:
+ *         description: Job not found for this trader
+ */
+router.get(
+  '/traders/:id/jobs/:jobId/payout-summary',
+  validate(traderJobPayoutSummarySchema),
+  controller.getJobPayoutSummary
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/payouts:
+ *   get:
+ *     summary: Payouts & Earnings — payout installment transactions
+ *     description: |
+ *       Paginated **installment** rows (each admin bank transfer for a job).
+ *
+ *       Filter by `jobId` to see one job's history. Job-level balances live on
+ *       `GET /admin/traders/{id}/payout-jobs` (`payoutStatus` UNPAID / PARTIALLY_PAID / PAID).
+ *
+ *       **Row `status`:** `PENDING` | `PROCESSING` | `COMPLETED` | `FAILED`
+ *       (manual bank payouts are recorded as `COMPLETED`).
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: jobId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: bankReference, note, jobRef, title, or payout/job UUID
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [PENDING, PROCESSING, COMPLETED, FAILED] }
  *       - in: query
  *         name: sortBy
- *         description: "Column to sort by (default `createdAt`). Unknown values return 400."
- *         schema: { type: string, enum: [payoutRef, amount, currencyCode, status, stripeTransferId, processedAt, createdAt], default: createdAt }
+ *         schema: { type: string, enum: [payoutRef, amount, currencyCode, status, stripeTransferId, processedAt, createdAt, jobRef], default: createdAt }
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
@@ -589,7 +700,7 @@ router.get(
  *         schema: { type: string, example: '2026-12-31' }
  *     responses:
  *       200:
- *         description: Paginated payouts list.
+ *         description: Paginated payout installments
  *         content:
  *           application/json:
  *             example:
@@ -598,16 +709,21 @@ router.get(
  *               data:
  *                 - id: uuid
  *                   payoutRef: PO-ABCD1234
- *                   amount: 420.5
+ *                   jobId: 60501fbc-1da5-44fc-9f06-6f6fd69fa456
+ *                   jobRef: JOB-D681
+ *                   jobTitle: Sample Cat 1 Job
+ *                   amount: 50
  *                   currencyCode: EUR
  *                   status: COMPLETED
- *                   stripeTransferId: tr_xxx
- *                   processedAt: '2026-09-02T10:00:00.000Z'
- *                   createdAt: '2026-09-01T10:00:00.000Z'
+ *                   note: First installment
+ *                   bankReference: TXN-99821
+ *                   processedAt: '2026-10-13T10:00:00.000Z'
+ *                   createdAt: '2026-10-13T10:00:00.000Z'
  *                   bank:
  *                     bankName: AIB
  *                     bankHolderName: Acme Plumbing Ltd
  *                     accountNumberMasked: '****1234'
+ *                   jobPayout: null
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  *       400: { $ref: '#/components/responses/AdminListValidationError' }
  *       401: { $ref: '#/components/responses/AdminUnauthorized' }
@@ -624,15 +740,22 @@ router.get(
  * @swagger
  * /admin/traders/{id}/payouts:
  *   post:
- *     summary: Payouts & Earnings — send payout to trader (Stripe transfer)
+ *     summary: Payouts & Earnings — record job payout installment (manual bank)
  *     description: |
- *       Transfers `amount` from the Brisk Stripe balance to the trader's connected Stripe
- *       account (trader must finish `POST /traders/payouts/stripe/onboarding-link`). Stripe then
- *       pays out to the trader's bank on their payout schedule. The row appears in
- *       `GET /admin/traders/{id}/payouts` as COMPLETED (or FAILED if Stripe rejects it).
+ *       Records that admin **manually** transferred money to the trader's bank for a **specific job**.
+ *       Not a Stripe/payment-gateway transfer.
  *
- *       `currencyCode` defaults to the trader's Stripe account currency. The Brisk Stripe
- *       balance must have enough available funds in that currency.
+ *       **Rules**
+ *       - `jobId` required; job must belong to this trader
+ *       - Customer must have PAID amount(s) on the job (`totalPayable > 0`)
+ *       - `amount` must be ≤ `remainingBalance` (partial installments allowed)
+ *       - Creates a `COMPLETED` payout row; updates job balance to UNPAID → PARTIALLY_PAID → PAID
+ *
+ *       **FE flow**
+ *       1. `GET .../payout-jobs?eligibleOnly=true` — pick job (`eligibleForPayout`, `remainingBalance`)
+ *       2. Optional `GET .../jobs/{jobId}/payout-summary` — confirm balances + history
+ *       3. `POST .../payouts` with `{ jobId, amount, bankReference?, note? }`
+ *       4. Use response `jobPayout.payoutStatus` / `remainingBalance` to refresh UI
  *     tags: ['Admin / Trader Details']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -646,18 +769,47 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [amount]
+ *             required: [jobId, amount]
  *             properties:
- *               amount: { type: number, example: 420.5 }
+ *               jobId: { type: string, format: uuid, example: 60501fbc-1da5-44fc-9f06-6f6fd69fa456 }
+ *               amount: { type: number, example: 50 }
  *               currencyCode: { type: string, example: EUR }
- *               note: { type: string, example: September payout }
+ *               bankReference: { type: string, example: TXN-99821 }
+ *               note: { type: string, example: First installment after customer paid }
+ *           example:
+ *             jobId: 60501fbc-1da5-44fc-9f06-6f6fd69fa456
+ *             amount: 50
+ *             currencyCode: EUR
+ *             bankReference: TXN-99821
+ *             note: First installment
  *     responses:
  *       201:
- *         description: Payout row (same shape as the payouts list).
+ *         description: Installment recorded (includes updated `jobPayout` balance)
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Job payout installment recorded successfully.
+ *               data:
+ *                 id: uuid
+ *                 payoutRef: PO-ABCD1234
+ *                 jobId: 60501fbc-1da5-44fc-9f06-6f6fd69fa456
+ *                 jobRef: JOB-D681
+ *                 amount: 50
+ *                 currencyCode: EUR
+ *                 status: COMPLETED
+ *                 bankReference: TXN-99821
+ *                 jobPayout:
+ *                   totalPayable: 200
+ *                   amountPaid: 50
+ *                   remainingBalance: 150
+ *                   payoutStatus: PARTIALLY_PAID
+ *                   eligibleForPayout: true
  *       400:
- *         description: "`STRIPE_ACCOUNT_MISSING`, `STRIPE_ACCOUNT_NOT_READY`, or Stripe error (e.g. insufficient balance)."
+ *         description: |
+ *           `JOB_NOT_ELIGIBLE_FOR_PAYOUT` | `JOB_PAYOUT_ALREADY_COMPLETE` | `PAYOUT_EXCEEDS_REMAINING`
  *       404:
- *         description: Trader not found.
+ *         description: Trader or job not found
  */
 router.post(
   '/traders/:id/payouts',

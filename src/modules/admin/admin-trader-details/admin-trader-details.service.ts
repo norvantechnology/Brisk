@@ -1,6 +1,7 @@
 import {
   ActorType,
   DocumentRuleScope,
+  InvoiceStatus,
   JobStatus,
   OfferStatus,
   OfferType,
@@ -9,15 +10,17 @@ import {
   Prisma,
   QuoteStatus,
   TraderDocumentStatus,
+  TraderPaymentRequestStatus,
   type Payout,
 } from '@prisma/client';
-import type Stripe from 'stripe';
 import { prisma } from '../../../config/database';
-import { getStripe, toMinorUnits, toPaymentError } from '../../../services/stripe.service';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
 import { buildListOrderBy, pageIdsByComputedKey, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import { findOfferPage } from '../admin-offers/admin-offers.service';
-import type { CreateTraderPayoutInput } from './admin-trader-details.validation';
+import type {
+  CreateTraderPayoutInput,
+  JobPayoutBalanceStatus,
+} from './admin-trader-details.validation';
 import { serializeOffer } from '../../offers/offers.serializers';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
 import { formatDocumentExpiryDate } from '../../document-rules/document-expiry';
@@ -671,13 +674,148 @@ export const listTraderReviews = async (
 };
 
 // ---------------------------------------------------------------------------
-// Earnings / Payouts
+// Earnings / Job-wise Payouts (manual bank transfer; partial installments)
 // ---------------------------------------------------------------------------
+
+/**
+ * Amount owed to the trader for a job after the customer has paid.
+ * = PAID payment-request (serviceCharge + materials + siteVisitFee)
+ * + PAID booking upfront invoice not tied to a payment request (serviceCharge − trader offer discount).
+ * Platform fee + VAT are retained by Brisk / tax — not paid out to the trader.
+ */
+const traderPayableFromPaidRequest = (r: {
+  serviceCharge: Prisma.Decimal;
+  materialsTotal: Prisma.Decimal;
+  siteVisitFee: Prisma.Decimal;
+}) => round2(money(r.serviceCharge) + money(r.materialsTotal) + money(r.siteVisitFee));
+
+const traderPayableFromUpfrontInvoice = (inv: {
+  serviceCharge: Prisma.Decimal;
+  traderOfferDiscount: Prisma.Decimal;
+}) => round2(Math.max(0, money(inv.serviceCharge) - money(inv.traderOfferDiscount)));
+
+const jobPayoutBalanceStatus = (
+  totalPayable: number,
+  amountPaid: number
+): JobPayoutBalanceStatus => {
+  if (totalPayable <= 0) return 'UNPAID';
+  if (amountPaid <= 0) return 'UNPAID';
+  if (amountPaid + 0.001 >= totalPayable) return 'PAID';
+  return 'PARTIALLY_PAID';
+};
+
+type JobPayoutSource = {
+  id: string;
+  jobRef: string | null;
+  title: string;
+  status: JobStatus;
+  updatedAt: Date;
+  currencyCodeHint?: string | null;
+  paymentRequests: {
+    status: TraderPaymentRequestStatus;
+    currencyCode: string;
+    serviceCharge: Prisma.Decimal;
+    materialsTotal: Prisma.Decimal;
+    siteVisitFee: Prisma.Decimal;
+  }[];
+  booking: {
+    invoice: {
+      status: InvoiceStatus;
+      paymentRequestId: string | null;
+      currencyCode: string;
+      serviceCharge: Prisma.Decimal;
+      traderOfferDiscount: Prisma.Decimal;
+    } | null;
+  } | null;
+  payouts: { amount: Prisma.Decimal; status: PayoutStatus }[];
+};
+
+const buildJobPayoutBalance = (job: JobPayoutSource) => {
+  let totalPayable = 0;
+  let currencyCode = 'EUR';
+
+  for (const r of job.paymentRequests) {
+    if (r.status !== TraderPaymentRequestStatus.PAID) continue;
+    totalPayable = round2(totalPayable + traderPayableFromPaidRequest(r));
+    currencyCode = r.currencyCode || currencyCode;
+  }
+
+  const upfront = job.booking?.invoice;
+  if (
+    upfront &&
+    upfront.status === InvoiceStatus.PAID &&
+    !upfront.paymentRequestId
+  ) {
+    totalPayable = round2(totalPayable + traderPayableFromUpfrontInvoice(upfront));
+    currencyCode = upfront.currencyCode || currencyCode;
+  }
+
+  const amountPaid = round2(
+    job.payouts
+      .filter((p) => p.status === PayoutStatus.COMPLETED)
+      .reduce((s, p) => s + money(p.amount), 0)
+  );
+  const remainingBalance = round2(Math.max(0, totalPayable - amountPaid));
+  const payoutStatus = jobPayoutBalanceStatus(totalPayable, amountPaid);
+  const eligibleForPayout = totalPayable > 0 && remainingBalance > 0;
+
+  return {
+    jobId: job.id,
+    jobRef: job.jobRef,
+    title: job.title,
+    jobStatus: job.status,
+    currencyCode,
+    /** Total amount admin should eventually pay the trader for this job. */
+    totalPayable,
+    /** Sum of COMPLETED payout installments already recorded for this job. */
+    amountPaid,
+    /** totalPayable − amountPaid (0 when fully paid). */
+    remainingBalance,
+    /** Job-level: UNPAID | PARTIALLY_PAID | PAID */
+    payoutStatus,
+    /** true when customer has paid and remainingBalance > 0 — FE can enable “Send payout”. */
+    eligibleForPayout,
+    updatedAt: job.updatedAt,
+  };
+};
+
+const jobPayoutSelect = {
+  id: true,
+  jobRef: true,
+  title: true,
+  status: true,
+  updatedAt: true,
+  paymentRequests: {
+    select: {
+      status: true,
+      currencyCode: true,
+      serviceCharge: true,
+      materialsTotal: true,
+      siteVisitFee: true,
+    },
+  },
+  booking: {
+    select: {
+      invoice: {
+        select: {
+          status: true,
+          paymentRequestId: true,
+          currencyCode: true,
+          serviceCharge: true,
+          traderOfferDiscount: true,
+        },
+      },
+    },
+  },
+  payouts: {
+    select: { amount: true, status: true },
+  },
+} satisfies Prisma.JobSelect;
 
 export const getTraderEarningsSummary = async (traderId: string) => {
   const trader = await assertTraderExists(traderId);
 
-  const [invoiceAgg, payoutCompleted, payoutPending, payoutProcessing] = await Promise.all([
+  const [invoiceAgg, payoutCompleted, jobs] = await Promise.all([
     prisma.invoice.aggregate({
       _sum: {
         serviceCharge: true,
@@ -694,31 +832,32 @@ export const getTraderEarningsSummary = async (traderId: string) => {
       _sum: { amount: true },
       where: { traderId, status: PayoutStatus.COMPLETED },
     }),
-    prisma.payout.aggregate({
-      _sum: { amount: true },
-      where: { traderId, status: PayoutStatus.PENDING },
-    }),
-    prisma.payout.aggregate({
-      _sum: { amount: true },
-      where: { traderId, status: PayoutStatus.PROCESSING },
+    prisma.job.findMany({
+      where: { traderId },
+      select: jobPayoutSelect,
     }),
   ]);
+
+  const balances = jobs.map(buildJobPayoutBalance);
+  const pendingPayout = round2(
+    balances.filter((b) => b.eligibleForPayout).reduce((s, b) => s + b.remainingBalance, 0)
+  );
+  const eligibleJobsCount = balances.filter((b) => b.eligibleForPayout).length;
 
   const grossEarnings = round2(
     money(invoiceAgg._sum.serviceCharge) - money(invoiceAgg._sum.traderOfferDiscount)
   );
   const platformCommission = round2(money(invoiceAgg._sum.platformFee));
   const netPaidOut = round2(money(payoutCompleted._sum.amount));
-  const pendingPayout = round2(
-    money(payoutPending._sum.amount) + money(payoutProcessing._sum.amount)
-  );
 
   return {
     grossEarnings,
     platformCommission,
     platformCommissionPercent: 10,
     netPaidOut,
+    /** Sum of remainingBalance across jobs still eligible for payout. */
     pendingPayout,
+    eligibleJobsCount,
     currencyCode: 'EUR',
     bank: {
       bankName: trader.bankName,
@@ -738,7 +877,51 @@ const TRADER_PAYOUT_SORT_MAP: DetailSortMap<Prisma.PayoutOrderByWithRelationInpu
   stripeTransferId: (dir) => [{ stripeTransferId: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
   processedAt: (dir) => [{ processedAt: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }],
   createdAt: (dir) => ({ createdAt: dir }),
+  jobRef: (dir) => [{ job: { jobRef: { sort: dir, nulls: 'last' } } }, { createdAt: 'desc' }],
 };
+
+type BankTrader = Pick<
+  Awaited<ReturnType<typeof assertTraderExists>>,
+  'bankName' | 'bankHolderName' | 'accountNumber'
+>;
+
+const serializePayout = (
+  p: Payout & {
+    job?: { id: string; jobRef: string | null; title: string } | null;
+  },
+  trader: BankTrader,
+  jobBalance?: ReturnType<typeof buildJobPayoutBalance> | null
+) => ({
+  id: p.id,
+  payoutRef: `PO-${p.id.slice(0, 8).toUpperCase()}`,
+  jobId: p.jobId,
+  jobRef: p.job?.jobRef ?? null,
+  jobTitle: p.job?.title ?? null,
+  amount: money(p.amount),
+  currencyCode: p.currencyCode,
+  /** Installment row status (COMPLETED for recorded manual bank transfers). */
+  status: p.status,
+  note: p.note ?? null,
+  bankReference: p.bankReference ?? null,
+  stripeTransferId: p.stripeTransferId,
+  processedAt: p.processedAt,
+  createdAt: p.createdAt,
+  bank: {
+    bankName: trader.bankName,
+    bankHolderName: trader.bankHolderName,
+    accountNumberMasked: trader.accountNumber ? `****${trader.accountNumber.slice(-4)}` : null,
+  },
+  /** Present when payout is job-linked — FE balance after this installment context. */
+  jobPayout: jobBalance
+    ? {
+        totalPayable: jobBalance.totalPayable,
+        amountPaid: jobBalance.amountPaid,
+        remainingBalance: jobBalance.remainingBalance,
+        payoutStatus: jobBalance.payoutStatus,
+        eligibleForPayout: jobBalance.eligibleForPayout,
+      }
+    : null,
+});
 
 export const listTraderPayouts = async (
   traderId: string,
@@ -747,6 +930,7 @@ export const listTraderPayouts = async (
     limit?: string;
     search?: string;
     status?: PayoutStatus;
+    jobId?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     from?: string;
@@ -764,17 +948,27 @@ export const listTraderPayouts = async (
   };
 
   if (filters.status) where.status = filters.status;
+  if (filters.jobId) where.jobId = filters.jobId;
 
   if (filters.search?.trim()) {
     const q = filters.search.trim();
-    where.OR = [{ stripeTransferId: { contains: q, mode: 'insensitive' } }];
-    // Exact UUID match if search looks like an id
+    where.OR = [
+      { stripeTransferId: { contains: q, mode: 'insensitive' } },
+      { bankReference: { contains: q, mode: 'insensitive' } },
+      { note: { contains: q, mode: 'insensitive' } },
+      { job: { jobRef: { contains: q, mode: 'insensitive' } } },
+      { job: { title: { contains: q, mode: 'insensitive' } } },
+    ];
     if (/^[0-9a-f-]{36}$/i.test(q)) {
-      where.OR.push({ id: q });
+      where.OR.push({ id: q }, { jobId: q });
     }
   }
 
-  const orderBy = detailOrderBy<Prisma.PayoutOrderByWithRelationInput>(filters, TRADER_PAYOUT_SORT_MAP, 'createdAt');
+  const orderBy = detailOrderBy<Prisma.PayoutOrderByWithRelationInput>(
+    filters,
+    TRADER_PAYOUT_SORT_MAP,
+    'createdAt'
+  );
 
   const [total, rows] = await Promise.all([
     prisma.payout.count({ where }),
@@ -783,6 +977,7 @@ export const listTraderPayouts = async (
       skip,
       take: limit,
       orderBy,
+      include: { job: { select: { id: true, jobRef: true, title: true } } },
     }),
   ]);
 
@@ -792,26 +987,124 @@ export const listTraderPayouts = async (
   };
 };
 
-const serializePayout = (
-  p: Payout,
-  trader: Pick<Awaited<ReturnType<typeof assertTraderExists>>, 'bankName' | 'bankHolderName' | 'accountNumber'>
-) => ({
-  id: p.id,
-  payoutRef: `PO-${p.id.slice(0, 8).toUpperCase()}`,
-  amount: money(p.amount),
-  currencyCode: p.currencyCode,
-  status: p.status,
-  stripeTransferId: p.stripeTransferId,
-  processedAt: p.processedAt,
-  createdAt: p.createdAt,
-  bank: {
-    bankName: trader.bankName,
-    bankHolderName: trader.bankHolderName,
-    accountNumberMasked: trader.accountNumber ? `****${trader.accountNumber.slice(-4)}` : null,
-  },
-});
+/** Jobs with customer-paid amounts — balances for the admin payout UI. */
+export const listTraderPayoutJobs = async (
+  traderId: string,
+  filters: {
+    page?: string;
+    limit?: string;
+    search?: string;
+    payoutStatus?: JobPayoutBalanceStatus;
+    eligibleOnly?: boolean;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }
+) => {
+  await assertTraderExists(traderId);
 
-/** Admin sends money from the Brisk Stripe balance to the trader's connected account. */
+  const page = parsePage(filters.page);
+  const limit = parseLimit(filters.limit);
+  const skip = (page - 1) * limit;
+
+  const jobs = await prisma.job.findMany({
+    where: {
+      traderId,
+      ...(filters.search?.trim()
+        ? {
+            OR: [
+              { jobRef: { contains: filters.search.trim(), mode: 'insensitive' } },
+              { title: { contains: filters.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    select: jobPayoutSelect,
+  });
+
+  let rows = jobs.map(buildJobPayoutBalance).filter((b) => b.totalPayable > 0);
+
+  if (filters.eligibleOnly) {
+    rows = rows.filter((b) => b.eligibleForPayout);
+  }
+  if (filters.payoutStatus) {
+    rows = rows.filter((b) => b.payoutStatus === filters.payoutStatus);
+  }
+
+  const sortBy = filters.sortBy || 'updatedAt';
+  const dir = resolveSortDir(filters.sortOrder, 'desc');
+  const keyOf = (b: ReturnType<typeof buildJobPayoutBalance>): unknown => {
+    switch (sortBy) {
+      case 'jobRef':
+        return b.jobRef;
+      case 'title':
+        return b.title;
+      case 'totalPayable':
+        return b.totalPayable;
+      case 'amountPaid':
+        return b.amountPaid;
+      case 'remainingBalance':
+        return b.remainingBalance;
+      case 'payoutStatus':
+        return b.payoutStatus;
+      default:
+        return b.updatedAt.getTime();
+    }
+  };
+  rows.sort((a, b) => {
+    const av = keyOf(a);
+    const bv = keyOf(b);
+    const aNull = av === null || av === undefined || av === '';
+    const bNull = bv === null || bv === undefined || bv === '';
+    if (aNull || bNull) return aNull === bNull ? 0 : aNull ? 1 : -1;
+    const cmp =
+      typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), undefined, { sensitivity: 'base', numeric: true });
+    const primary = dir === 'asc' ? cmp : -cmp;
+    return primary || b.updatedAt.getTime() - a.updatedAt.getTime();
+  });
+
+  const total = rows.length;
+  const pageRows = rows.slice(skip, skip + limit);
+
+  return {
+    meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
+    jobs: pageRows,
+  };
+};
+
+/** Single-job payout balance + installment history (payout modal). */
+export const getTraderJobPayoutSummary = async (traderId: string, jobId: string) => {
+  const trader = await assertTraderExists(traderId);
+  const [job, installments] = await Promise.all([
+    prisma.job.findFirst({
+      where: { id: jobId, traderId },
+      select: jobPayoutSelect,
+    }),
+    prisma.payout.findMany({
+      where: { traderId, jobId },
+      orderBy: { createdAt: 'desc' },
+      include: { job: { select: { id: true, jobRef: true, title: true } } },
+    }),
+  ]);
+  if (!job) throw new NotFoundError('Job not found for this trader.');
+
+  const balance = buildJobPayoutBalance(job);
+  return {
+    ...balance,
+    bank: {
+      bankName: trader.bankName,
+      bankHolderName: trader.bankHolderName,
+      accountNumberMasked: trader.accountNumber ? `****${trader.accountNumber.slice(-4)}` : null,
+    },
+    installments: installments.map((p) => serializePayout(p, trader, balance)),
+  };
+};
+
+/**
+ * Record a manual bank payout installment for a job.
+ * Customer must already have paid; amount cannot exceed remainingBalance.
+ */
 export const createTraderPayout = async (
   adminId: string,
   adminLabel: string,
@@ -819,76 +1112,75 @@ export const createTraderPayout = async (
   input: CreateTraderPayoutInput
 ) => {
   const trader = await assertTraderExists(traderId);
-  if (!trader.stripeAccountId) {
-    throw new BadRequestError('Trader has not connected a Stripe payout account yet.', {
-      code: 'STRIPE_ACCOUNT_MISSING',
-    });
+
+  const job = await prisma.job.findFirst({
+    where: { id: input.jobId, traderId },
+    select: jobPayoutSelect,
+  });
+  if (!job) {
+    throw new NotFoundError('Job not found for this trader.');
   }
 
-  let account: Stripe.Account;
-  try {
-    account = await getStripe().accounts.retrieve(trader.stripeAccountId);
-  } catch (error) {
-    throw toPaymentError(error);
-  }
-  if (account.capabilities?.transfers !== 'active') {
-    throw new BadRequestError('Trader Stripe account cannot receive payouts yet (onboarding incomplete).', {
-      code: 'STRIPE_ACCOUNT_NOT_READY',
-      data: { requirementsDue: account.requirements?.currently_due ?? [] },
+  const balance = buildJobPayoutBalance(job);
+  if (balance.totalPayable <= 0) {
+    throw new BadRequestError('This job has no customer-paid amount eligible for trader payout yet.', {
+      code: 'JOB_NOT_ELIGIBLE_FOR_PAYOUT',
+      data: balance,
     });
   }
-  const currencyCode = input.currencyCode ?? account.default_currency?.toUpperCase();
-  if (!currencyCode) {
-    throw new BadRequestError('currencyCode is required.', { code: 'CURRENCY_REQUIRED' });
+  if (balance.remainingBalance <= 0) {
+    throw new BadRequestError('This job is already fully paid out to the trader.', {
+      code: 'JOB_PAYOUT_ALREADY_COMPLETE',
+      data: balance,
+    });
   }
+  if (input.amount - balance.remainingBalance > 0.001) {
+    throw new BadRequestError(
+      `Amount exceeds remaining balance (${balance.remainingBalance} ${balance.currencyCode}).`,
+      {
+        code: 'PAYOUT_EXCEEDS_REMAINING',
+        data: { ...balance, requestedAmount: input.amount },
+      }
+    );
+  }
+
+  const currencyCode = input.currencyCode ?? balance.currencyCode ?? 'EUR';
+  const now = new Date();
 
   const payout = await prisma.payout.create({
     data: {
       traderId,
+      jobId: job.id,
       amount: input.amount,
       currencyCode,
-      status: PayoutStatus.PROCESSING,
+      status: PayoutStatus.COMPLETED,
+      note: input.note ?? null,
+      bankReference: input.bankReference ?? null,
       processedById: adminId,
+      processedAt: now,
     },
+    include: { job: { select: { id: true, jobRef: true, title: true } } },
   });
 
-  let completed: Payout;
-  try {
-    const transfer = await getStripe().transfers.create(
-      {
-        amount: toMinorUnits(input.amount, currencyCode),
-        currency: currencyCode.toLowerCase(),
-        destination: trader.stripeAccountId,
-        description: input.note,
-        metadata: { payoutId: payout.id, traderId },
-      },
-      { idempotencyKey: `payout-${payout.id}` }
-    );
-    completed = await prisma.payout.update({
-      where: { id: payout.id },
-      data: { status: PayoutStatus.COMPLETED, stripeTransferId: transfer.id, processedAt: new Date() },
-    });
-  } catch (error) {
-    await prisma.payout.update({
-      where: { id: payout.id },
-      data: { status: PayoutStatus.FAILED, processedAt: new Date() },
-    });
-    throw toPaymentError(error);
-  }
+  const refreshed = await prisma.job.findFirst({
+    where: { id: job.id },
+    select: jobPayoutSelect,
+  });
+  const nextBalance = refreshed ? buildJobPayoutBalance(refreshed) : balance;
 
   await prisma.auditLog.create({
     data: {
-      eventType: 'TRADER_PAYOUT_SENT',
+      eventType: 'TRADER_JOB_PAYOUT_RECORDED',
       actorType: ActorType.ADMIN,
       actorId: adminId,
       actorLabel: adminLabel,
-      subjectType: 'Trader',
-      subjectId: traderId,
-      description: `Sent payout ${currencyCode} ${input.amount} to trader (Stripe ${completed.stripeTransferId})${input.note ? ` — ${input.note}` : ''}.`,
+      subjectType: 'Job',
+      subjectId: job.id,
+      description: `Recorded manual payout ${currencyCode} ${input.amount} for job ${job.jobRef ?? job.id} (remaining ${nextBalance.remainingBalance}; status ${nextBalance.payoutStatus})${input.bankReference ? ` — bank ref ${input.bankReference}` : ''}${input.note ? ` — ${input.note}` : ''}.`,
     },
   });
 
-  return serializePayout(completed, trader);
+  return serializePayout(payout, trader, nextBalance);
 };
 
 // ---------------------------------------------------------------------------
