@@ -838,12 +838,16 @@ const DISCOVER_SORTS: Record<string, (row: DiscoverRow) => unknown> = {
   siteVisitFee: (r) => r.item.siteVisitFee,
 };
 
-/** Nearest first (then newest) unless `sortBy` is given; ties fall back to newest, then id. */
+/** Newest first by default; pass `sortBy=distanceKm` for nearest-first. Ties → newest, then id. */
 const compareDiscoverRows =
   (sortBy: string | undefined, sortOrder: string | undefined) =>
   (a: DiscoverRow, b: DiscoverRow): number => {
-    const keyOf = DISCOVER_SORTS[sortBy ?? 'distanceKm'] ?? DISCOVER_SORTS.distanceKm;
-    const dir = sortBy ? resolveSortDir(sortOrder, 'asc') : 'asc';
+    const key = sortBy && DISCOVER_SORTS[sortBy] ? sortBy : 'createdAt';
+    const keyOf = DISCOVER_SORTS[key];
+    // Default: newest (createdAt desc). Explicit distanceKm defaults to nearest (asc).
+    const dir = sortBy
+      ? resolveSortDir(sortOrder, key === 'distanceKm' ? 'asc' : 'desc')
+      : 'desc';
     return (
       compareValues(keyOf(a), keyOf(b), dir) ||
       b.job.createdAt.getTime() - a.job.createdAt.getTime() ||

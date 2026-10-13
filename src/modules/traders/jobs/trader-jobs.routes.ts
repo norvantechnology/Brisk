@@ -23,9 +23,10 @@ const router = Router();
  *       Discover feed cards. `data` is the job array for this page (unchanged for mobile);
  *       top-level `meta` has pagination — use `meta.total` for "X jobs found".
  *       badge Site Visit | Reschedule | null. Format Posted ago from createdAt on app.
- *       Default order: nearest first (`distanceKm` asc), then newest. Empty values are always listed last.
+ *       Default order: newest first (`createdAt` desc). Use `sortBy=distanceKm` for nearest-first.
+ *       Empty values are always listed last.
  *
- *       Example: `GET /traders/jobs/discover?page=1&limit=10&search=solar&categoryId=3f0f23dd-1c2b-4a5e-9f10-6a7b8c9d0e1f&siteVisit=true&from=2026-09-01&to=2026-09-30&sortBy=createdAt&sortOrder=desc`
+ *       Example: `GET /traders/jobs/discover?page=1&limit=10&search=solar&categoryId=3f0f23dd-1c2b-4a5e-9f10-6a7b8c9d0e1f&siteVisit=true&from=2026-09-01&to=2026-09-30&sortBy=distanceKm&sortOrder=asc`
  *     parameters:
  *       - in: query
  *         name: search
@@ -39,12 +40,12 @@ const router = Router();
  *       - $ref: '#/components/parameters/TraderDateTo'
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [distanceKm, createdAt, updatedAt, scheduledDate, title, areaName, minBudget, maxBudget, serviceCharge, siteVisitFee], default: distanceKm }
- *         description: '`from`/`to` filter on `createdAt` (job posted date).'
+ *         schema: { type: string, enum: [distanceKm, createdAt, updatedAt, scheduledDate, title, areaName, minBudget, maxBudget, serviceCharge, siteVisitFee], default: createdAt }
+ *         description: Sort field. Default `createdAt` (newest first). Empty values sort last.
  *       - in: query
  *         name: sortOrder
- *         schema: { type: string, enum: [asc, desc], default: asc }
- *         description: Sort direction for `sortBy` (default asc).
+ *         schema: { type: string, enum: [asc, desc], default: desc }
+ *         description: Sort direction (default desc; use asc with `distanceKm` for nearest).
  *       - in: query
  *         name: radiusKm
  *         schema: { type: number, example: 10 }
