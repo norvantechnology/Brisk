@@ -112,6 +112,14 @@ export const buildQaFormAnswerList = (schema: unknown, answers: unknown) => {
       ? (answers as Record<string, unknown>)
       : {};
 
+  /** Option key → admin label; fall back to humanized key if schema option is missing. */
+  const labelForOption = (field: QaFormField, v: unknown) => {
+    const key = String(v);
+    const fromSchema = field.options?.find((o) => o.value === key)?.label;
+    if (fromSchema) return fromSchema;
+    return key.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
   const toItem = (field: QaFormField, raw: unknown) => {
     if (isEmptyAnswer(raw)) {
       return {
@@ -120,21 +128,37 @@ export const buildQaFormAnswerList = (schema: unknown, answers: unknown) => {
         type: field.type,
         required: Boolean(field.required),
         value: null as QaFormAnswerValue | null,
+        /** Stored option keys (snake_case) when value is displayed as labels. */
+        optionValue: null as QaFormAnswerValue | null,
         displayValue: null as string | null,
       };
     }
 
-    const value = raw as QaFormAnswerValue;
-    const labelFor = (v: unknown) =>
-      field.options?.find((o) => o.value === v)?.label ?? String(v);
-
+    const rawValue = raw as QaFormAnswerValue;
+    let value: QaFormAnswerValue = rawValue;
     let displayValue: string;
+
     if (CHOICE_TYPES.has(field.type)) {
-      displayValue = (Array.isArray(value) ? value : [value]).map(labelFor).join(', ');
-    } else if (field.type === 'boolean') {
-      displayValue = value === true || value === 'true' ? 'Yes' : 'No';
+      // Job Details UI: return readable labels in `value` (not option keys with underscores).
+      const keys = (Array.isArray(rawValue) ? rawValue : [rawValue]).map(String);
+      const labels = keys.map((k) => labelForOption(field, k));
+      value = Array.isArray(rawValue) ? labels : labels[0]!;
+      displayValue = labels.join(', ');
+      return {
+        fieldId: field.id,
+        label: field.label,
+        type: field.type,
+        required: Boolean(field.required),
+        value,
+        optionValue: rawValue,
+        displayValue,
+      };
+    }
+
+    if (field.type === 'boolean') {
+      displayValue = rawValue === true || rawValue === 'true' ? 'Yes' : 'No';
     } else {
-      displayValue = String(value);
+      displayValue = String(rawValue);
     }
 
     return {
@@ -142,7 +166,8 @@ export const buildQaFormAnswerList = (schema: unknown, answers: unknown) => {
       label: field.label,
       type: field.type,
       required: Boolean(field.required),
-      value,
+      value: rawValue,
+      optionValue: null as QaFormAnswerValue | null,
       displayValue,
     };
   };
@@ -155,13 +180,21 @@ export const buildQaFormAnswerList = (schema: unknown, answers: unknown) => {
   return Object.entries(input)
     .filter(([, raw]) => !isEmptyAnswer(raw))
     .map(([fieldId, raw]) => {
-      const value = raw as QaFormAnswerValue;
+      const rawValue = raw as QaFormAnswerValue;
+      const isChoice = Array.isArray(rawValue);
+      const humanize = (v: string) => v.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+      const value: QaFormAnswerValue = isChoice
+        ? (rawValue as string[]).map(humanize)
+        : typeof rawValue === 'string' && rawValue.includes('_')
+          ? humanize(rawValue)
+          : rawValue;
       return {
         fieldId,
-        label: fieldId.replace(/_/g, ' '),
-        type: Array.isArray(value) ? 'multi_choice' : typeof value === 'boolean' ? 'boolean' : 'text',
+        label: humanize(fieldId),
+        type: isChoice ? 'multi_choice' : typeof rawValue === 'boolean' ? 'boolean' : 'text',
         required: false,
         value,
+        optionValue: isChoice || (typeof rawValue === 'string' && rawValue.includes('_')) ? rawValue : null,
         displayValue: Array.isArray(value)
           ? value.map(String).join(', ')
           : typeof value === 'boolean'

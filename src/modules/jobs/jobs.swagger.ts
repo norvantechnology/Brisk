@@ -231,8 +231,13 @@
  *               label: { type: string, example: Where is the Boiler located }
  *               required: { type: boolean }
  *               type: { type: string, enum: [text, textarea, number, dropdown, single_choice, multi_choice, date, boolean] }
- *               value: { description: 'string | number | boolean | string[]' }
- *               displayValue: { type: string, example: Kitchen }
+ *               value:
+ *                 description: |
+ *                   Display value. For dropdown / single_choice / multi_choice this is the admin
+ *                   option **label**(s) (readable text), not the snake_case option key.
+ *               optionValue:
+ *                 description: Raw stored option key(s) for choice fields (snake_case); null otherwise.
+ *               displayValue: { type: string, example: Kitchen, description: Same labels joined for single-line UI }
  *         createdAt: { type: string, format: date-time }
  *         updatedAt: { type: string, format: date-time }
  *         photos:
