@@ -2127,7 +2127,7 @@ export const submitJobCompletion = async (
     flowStatus: (awaitingRequest ? 'PAYMENT_REQUEST_PENDING' : payload.flowStatus) as FlowStatus,
     statusLabel: awaitingRequest ? 'Payment Request Pending' : payload.statusLabel,
     proofPhotosAdded: photoUrls.length,
-    nextStep: awaitingRequest ? 'REQUEST_PAYMENT' : payload.nextStep,
+    nextStep: awaitingRequest ? 'REQUEST_PAYMENT' : null,
   };
 };
 
@@ -2146,36 +2146,36 @@ const buildPaymentRequestScreenPayload = async (
   const paymentDetails = buildPaymentSummaryDetails(paymentSummary, currency);
   const paymentStatus = resolvePaymentStatusLabel(job);
   const completedAt = job.booking?.finishedAt ?? job.updatedAt;
-  const invoice = job.booking?.invoice;
+  const bookingInvoice = job.booking?.invoice;
+  // Booking invoice number when issued; otherwise null until request-payment creates one.
+  const invoiceId = bookingInvoice?.invoiceNumber ?? bookingInvoice?.id ?? null;
   const finalRequested = hasFinalPaymentRequest(job);
   const paidInFull = isPaidUpfrontInFull(job) || job.status === JobStatus.COMPLETED;
   const awaitingRequest = Boolean(job.booking?.finishedAt) && !finalRequested && !paidInFull;
+  const flowStatus = (awaitingRequest
+    ? 'PAYMENT_REQUEST_PENDING'
+    : finalRequested
+      ? 'AWAITING_PAYMENT'
+      : 'COMPLETED') as FlowStatus;
 
+  // Flat shape for Payment Request UI — do not nest location / paymentSummary (breaks mobile parsers).
   return {
     id: job.id,
     jobRef: job.jobRef ?? null,
     title: job.title,
     status: job.status,
-    statusBadge: statusBadgeFor(
-      job.status,
-      job.booking?.status ?? null,
-      awaitingRequest ? 'PAYMENT_REQUEST_PENDING' : finalRequested ? 'AWAITING_PAYMENT' : 'COMPLETED'
-    ),
-    flowStatus: (awaitingRequest
-      ? 'PAYMENT_REQUEST_PENDING'
-      : finalRequested
-        ? 'AWAITING_PAYMENT'
-        : 'COMPLETED') as FlowStatus,
+    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
+    flowStatus,
     statusLabel: awaitingRequest
       ? 'Payment Request Pending'
       : finalRequested
         ? 'Awaiting Customer Payment'
         : 'Completed',
     completedAt,
-    location: {
-      fullAddress: formatFullAddress(job),
-    },
-    paymentSummary,
+    fullAddress: formatFullAddress(job),
+    totalAmount: paymentSummary.totalAmount,
+    currency_symbol: currency.currencySymbol,
+    currency_code: currency.currencyCode,
     paymentDetails,
     paymentStatus,
     isPartPayment: paymentStatus === 'PARTIALLY_PAID' || paymentStatus === 'PENDING',
@@ -2188,8 +2188,7 @@ const buildPaymentRequestScreenPayload = async (
       : finalRequested
         ? 'AWAITING_PAYOUT'
         : 'VIEW_DETAILS',
-    nextStep: awaitingRequest ? 'REQUEST_PAYMENT' : undefined,
-    invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
+    invoiceId,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
   };
 };
