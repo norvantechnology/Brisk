@@ -348,7 +348,7 @@
  *           type: number
  *           example: 2.4
  *           description: |
- *             DISTANCE card (km). Pass `lat`/`lng` on incoming GETs (same as Discover) so this
+ *             DISTANCE card (km). Prefer `lat`/`lng` (same as Discover); else last Discover GPS, then service centre.
  *             matches the Discover list. Without them, uses trader service centre.
  *         distanceMiles: { type: number, example: 1.5, description: distanceKm converted to miles }
  *         charges: { type: number, example: 120, description: 'Accepted quotation amount (CHARGES card → €120)' }

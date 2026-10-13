@@ -41,13 +41,15 @@ import {
 } from '../../jobs/job-payment-state';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import type { MyJobsListQuery } from './trader-my-jobs.validation';
+import {
+  rememberTraderDeviceOrigin,
+  resolveTraderOrigin,
+  type Origin,
+} from '../../../utils/trader-origin';
 
 const EARTH_RADIUS_KM = 6371;
-const DUBLIN_ORIGIN = { lat: 53.3498, lng: -6.2603 };
 const PLATFORM_FEE = JOB_PLATFORM_FEE;
 const VAT_RATE = JOB_VAT_RATE;
-
-type Origin = { lat: number; lng: number };
 type MyJobsTab = 'ACTIVE' | 'COMPLETED' | 'OTHER';
 
 const ACTIVE_JOB_STATUSES: JobStatus[] = [
@@ -148,6 +150,9 @@ const getTraderContext = async (userId: string) => {
       serviceRadiusKm: true,
       serviceCenterLat: true,
       serviceCenterLng: true,
+      lastDeviceLat: true,
+      lastDeviceLng: true,
+      lastDeviceAt: true,
       country: true,
       categories: { where: { isActive: true }, select: { categoryId: true } },
       user: { select: { preferredCurrency: true, country: true } },
@@ -161,34 +166,16 @@ const getTraderContext = async (userId: string) => {
 
 /**
  * Same origin rules as Discover:
- * 1) optional device `lat`/`lng` (preferred — matches Discover cards)
- * 2) trader service centre
- * 3) Dublin fallback
+ * 1) optional device `lat`/`lng`
+ * 2) last device GPS from recent Discover (fixes socket `job:accept` without query params)
+ * 3) trader service centre
+ * 4) Dublin fallback
  */
 const resolveOrigin = (
-  trader: {
-    serviceCenterLat: Prisma.Decimal | null;
-    serviceCenterLng: Prisma.Decimal | null;
-  },
+  trader: Parameters<typeof resolveTraderOrigin>[0],
   lat?: string | number | null,
   lng?: string | number | null
-): Origin => {
-  if (lat != null && lng != null && lat !== '' && lng !== '') {
-    const parsedLat = Number(lat);
-    const parsedLng = Number(lng);
-    if (Number.isFinite(parsedLat) && Number.isFinite(parsedLng)) {
-      return { lat: parsedLat, lng: parsedLng };
-    }
-    throw new BadRequestError('lat and lng must be valid numbers.');
-  }
-  if (trader.serviceCenterLat != null && trader.serviceCenterLng != null) {
-    return {
-      lat: Number(trader.serviceCenterLat),
-      lng: Number(trader.serviceCenterLng),
-    };
-  }
-  return DUBLIN_ORIGIN;
-};
+): Origin => resolveTraderOrigin(trader, lat, lng);
 
 type OriginQuery = { lat?: string | number | null; lng?: string | number | null };
 
@@ -3531,6 +3518,7 @@ const buildIncomingSheet = async (
   const { job } = quote;
   // Prefer device lat/lng (same as Discover) so DISTANCE matches the Discover card.
   const origin = resolveOrigin(trader, originQuery?.lat, originQuery?.lng);
+  void rememberTraderDeviceOrigin(trader.id, originQuery?.lat, originQuery?.lng);
   const coords = resolveJobCoords(
     {
       id: job.id,

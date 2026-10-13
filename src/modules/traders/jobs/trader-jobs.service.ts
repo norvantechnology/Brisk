@@ -17,11 +17,14 @@ import { requestJob } from './trader-my-jobs.service';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import { getPlatformSetting } from '../../settings/platform-settings.service';
 import { emitSiteVisitUpdate } from '../../../sockets/realtime';
+import {
+  rememberTraderDeviceOrigin,
+  resolveTraderOrigin,
+  type Origin,
+} from '../../../utils/trader-origin';
 
 const EARTH_RADIUS_KM = 6371;
 const URGENT_WINDOW_MS = 48 * 60 * 60 * 1000;
-/** Dublin city centre — used when trader has no service center / job missing coords (testing + demo). */
-const DUBLIN_ORIGIN: Origin = { lat: 53.3498, lng: -6.2603 };
 
 /** Figma Site Visit Date & Time bottom sheet — fixed windows. */
 export const SITE_VISIT_SLOT_DEFS: Record<
@@ -41,8 +44,6 @@ const SITE_VISIT_SLOT_ORDER: SiteVisitTimeSlot[] = [
   'ANYTIME',
 ];
 
-
-type Origin = { lat: number; lng: number };
 
 const money = (v: Prisma.Decimal | number | null | undefined): number | null => {
   if (v == null) return null;
@@ -675,6 +676,9 @@ const getTraderContext = async (userId: string) => {
       serviceRadiusKm: true,
       serviceCenterLat: true,
       serviceCenterLng: true,
+      lastDeviceLat: true,
+      lastDeviceLng: true,
+      lastDeviceAt: true,
       country: true,
       categories: { where: { isActive: true }, select: { categoryId: true } },
       user: { select: { preferredCurrency: true, country: true } },
@@ -687,29 +691,10 @@ const getTraderContext = async (userId: string) => {
 };
 
 const resolveOrigin = (
-  trader: {
-    serviceCenterLat: Prisma.Decimal | null;
-    serviceCenterLng: Prisma.Decimal | null;
-  },
+  trader: Parameters<typeof resolveTraderOrigin>[0],
   lat?: string,
   lng?: string
-): Origin => {
-  if (lat != null && lng != null && lat !== '' && lng !== '') {
-    const parsedLat = Number(lat);
-    const parsedLng = Number(lng);
-    if (Number.isFinite(parsedLat) && Number.isFinite(parsedLng)) {
-      return { lat: parsedLat, lng: parsedLng };
-    }
-    throw new BadRequestError('lat and lng must be valid numbers.');
-  }
-  if (trader.serviceCenterLat != null && trader.serviceCenterLng != null) {
-    return {
-      lat: Number(trader.serviceCenterLat),
-      lng: Number(trader.serviceCenterLng),
-    };
-  }
-  return DUBLIN_ORIGIN;
-};
+): Origin => resolveTraderOrigin(trader, lat, lng);
 
 const listCardSelect = {
   id: true,
@@ -877,6 +862,8 @@ export const listDiscoverJobs = async (
   const page = parsePage(query.page);
   const limit = parseLimit(query.limit);
   const origin = resolveOrigin(trader, query.lat, query.lng);
+  // Remember device GPS so incoming / `job:accept` distance matches Discover cards.
+  void rememberTraderDeviceOrigin(trader.id, query.lat, query.lng);
 
   const radiusKm = (() => {
     if (query.radiusKm != null && query.radiusKm !== '') {
@@ -1063,6 +1050,7 @@ export const listDiscoverJobs = async (
 export const getDiscoverJob = async (userId: string, jobId: string, query?: { lat?: string; lng?: string }) => {
   const trader = await getTraderContext(userId);
   const origin = resolveOrigin(trader, query?.lat, query?.lng);
+  void rememberTraderDeviceOrigin(trader.id, query?.lat, query?.lng);
 
   const job = await prisma.job.findFirst({
     where: {

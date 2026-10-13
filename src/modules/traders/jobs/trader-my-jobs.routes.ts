@@ -158,7 +158,8 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *       `customer{fullName, profileImage, isVerifiedCustomer}`, `actions`, `acceptedAt`.
  *
  *       **Distance:** pass the same `lat`/`lng` as Discover so `distanceKm` matches the Discover card.
- *       Without them, distance is from the trader service centre (can disagree with Discover).
+ *       If omitted, uses the trader's last Discover device GPS (48h), then service centre.
+ *       (Wrong service-centre pins — e.g. India while testing near the job — caused ~13000 km.)
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     parameters:

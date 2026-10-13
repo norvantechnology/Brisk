@@ -384,6 +384,10 @@ model Trader {
   serviceCenterLat   Decimal?           @map("service_center_lat") @db.Decimal(10, 7)
   serviceCenterLng   Decimal?           @map("service_center_lng") @db.Decimal(10, 7)
   serviceCenterLabel String?            @map("service_center_label")
+  /// Last device GPS from Discover / incoming (so socket `job:accept` distance matches Discover cards).
+  lastDeviceLat      Decimal?           @map("last_device_lat") @db.Decimal(10, 7)
+  lastDeviceLng      Decimal?           @map("last_device_lng") @db.Decimal(10, 7)
+  lastDeviceAt       DateTime?          @map("last_device_at")
   onboardingStatus   TraderOnboardingStatus @default(NOT_STARTED) @map("onboarding_status")
   onboardingSubmittedAt DateTime?       @map("onboarding_submitted_at")
   rejectionReason    String?            @map("rejection_reason") @db.Text
