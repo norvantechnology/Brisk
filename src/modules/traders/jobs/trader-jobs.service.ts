@@ -905,9 +905,12 @@ export const listDiscoverJobs = async (
       : undefined;
 
   const createdAt = dateRangeWhere(query.from, query.to);
+  // Jobs already in Jobs Queue (awaiting customer or trader accept) stay off Discover.
+  const excludedJobIds = await discoverQueueExcludedJobIds(trader.id);
   const where: Prisma.JobWhereInput = {
     status: JobStatus.PUBLISHED,
     traderId: null,
+    ...(excludedJobIds.length ? { id: { notIn: excludedJobIds } } : {}),
     ...(categoryFilter ? { categoryId: categoryFilter } : {}),
     ...(createdAt ? { createdAt } : {}),
   };
@@ -1721,13 +1724,13 @@ export const requestDiscoverJob = async (
 };
 
 /**
- * Jobs Queue — trader proposals still waiting on the customer (not My Jobs ACTIVE yet).
+ * Jobs Queue (clipboard icon).
  *
- * Includes:
- *  - PENDING quotation on an open marketplace job (quote sent / request job)
- *  - PENDING site-visit schedule or reschedule proposal awaiting customer confirm
+ * Shows:
+ *  1) Jobs waiting for **customer** approval — quote sent / site-visit or reschedule pending
+ *  2) Jobs waiting for **trader** accept — customer accepted quote (View & Accept)
  *
- * Excludes assigned jobs, confirmed visits, and CUSTOMER_ACCEPTED (Incoming sheet).
+ * These jobs are hidden from Discover so they only appear here (and Incoming sheet for accept).
  */
 export const listJobsQueue = async (
   userId: string,
@@ -1777,7 +1780,19 @@ export const listJobsQueue = async (
     },
   } satisfies Prisma.JobSelect;
 
-  const [quotes, visits] = await Promise.all([
+  const quoteSelect = {
+    id: true,
+    quotedAmount: true,
+    currencyCode: true,
+    status: true,
+    requestedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    job: { select: jobSelect },
+  } satisfies Prisma.QuoteSelect;
+
+  const [pendingQuotes, acceptedQuotes, visits] = await Promise.all([
+    // Waiting on customer (quote sent / request job)
     prisma.quote.findMany({
       where: {
         traderId: trader.id,
@@ -1785,15 +1800,17 @@ export const listJobsQueue = async (
         job: openJobWhere,
       },
       orderBy: [{ updatedAt: 'desc' }],
-      select: {
-        id: true,
-        quotedAmount: true,
-        currencyCode: true,
-        requestedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        job: { select: jobSelect },
+      select: quoteSelect,
+    }),
+    // Waiting on trader (customer accepted — View & Accept)
+    prisma.quote.findMany({
+      where: {
+        traderId: trader.id,
+        status: QuoteStatus.ACCEPTED,
+        job: openJobWhere,
       },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: quoteSelect,
     }),
     prisma.traderSiteVisitRequest.findMany({
       where: {
@@ -1821,20 +1838,35 @@ export const listJobsQueue = async (
   ]);
 
   type QueueAcc = {
-    job: (typeof quotes)[number]['job'];
-    quote: (typeof quotes)[number] | null;
+    job: (typeof pendingQuotes)[number]['job'];
+    quote: (typeof pendingQuotes)[number] | null;
     visit: (typeof visits)[number] | null;
     queuedAt: Date;
+    /** Customer accepted this trader's quote — trader must View & Accept. */
+    awaitingTraderAccept: boolean;
   };
 
   const byJob = new Map<string, QueueAcc>();
 
-  for (const q of quotes) {
+  for (const q of pendingQuotes) {
     byJob.set(q.job.id, {
       job: q.job,
       quote: q,
       visit: null,
       queuedAt: q.requestedAt ?? q.updatedAt,
+      awaitingTraderAccept: false,
+    });
+  }
+
+  for (const q of acceptedQuotes) {
+    const existing = byJob.get(q.job.id);
+    // Trader-accept waiting wins over an older pending row (should not both exist).
+    byJob.set(q.job.id, {
+      job: q.job,
+      quote: q,
+      visit: existing?.visit ?? null,
+      queuedAt: q.updatedAt,
+      awaitingTraderAccept: true,
     });
   }
 
@@ -1843,25 +1875,27 @@ export const listJobsQueue = async (
     const queuedAt = v.updatedAt;
     if (existing) {
       existing.visit = v;
-      if (queuedAt > existing.queuedAt) existing.queuedAt = queuedAt;
+      if (!existing.awaitingTraderAccept && queuedAt > existing.queuedAt) {
+        existing.queuedAt = queuedAt;
+      }
     } else {
       byJob.set(v.job.id, {
         job: v.job,
         quote: null,
         visit: v,
         queuedAt,
+        awaitingTraderAccept: false,
       });
     }
   }
 
-  // Prefer site-visit card when a PENDING visit exists; otherwise quote-sent card.
   const rows = [...byJob.values()].sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
   const total = rows.length;
   const pageRows = rows.slice((page - 1) * limit, page * limit);
 
   const items = await Promise.all(
     pageRows.map(async (row) => {
-      const { job, quote, visit } = row;
+      const { job, quote, visit, awaitingTraderAccept } = row;
       const coords = resolveJobCoords(
         {
           id: job.id,
@@ -1881,31 +1915,37 @@ export const listJobsQueue = async (
 
       const quoteAmount = quote ? money(quote.quotedAmount) : null;
       const visitPayload = visit ? toSiteVisitPayload(visit) : null;
-      const isSiteVisitQueue = Boolean(visit && visitPayload && visitPayload.status === 'PENDING');
-      // Reschedule proposals are also PENDING; treat updates after create as reschedule wait.
+      const isSiteVisitQueue =
+        !awaitingTraderAccept && Boolean(visit && visitPayload && visitPayload.status === 'PENDING');
       const isRescheduleRequest = Boolean(
         visit && visit.updatedAt.getTime() - visit.createdAt.getTime() > 60_000
       );
 
-      const queueKind = isSiteVisitQueue
-        ? isRescheduleRequest
-          ? ('SITE_VISIT_RESCHEDULED' as const)
-          : ('SITE_VISIT_REQUESTED' as const)
-        : ('QUOTE_SENT' as const);
+      const queueKind = awaitingTraderAccept
+        ? ('AWAITING_TRADER_ACCEPT' as const)
+        : isSiteVisitQueue
+          ? isRescheduleRequest
+            ? ('SITE_VISIT_RESCHEDULED' as const)
+            : ('SITE_VISIT_REQUESTED' as const)
+          : ('QUOTE_SENT' as const);
 
       const statusBadge =
-        queueKind === 'QUOTE_SENT'
-          ? 'Quote Sent'
-          : queueKind === 'SITE_VISIT_RESCHEDULED'
-            ? 'Reschedule Requested'
-            : 'Site Visit Requested';
+        queueKind === 'AWAITING_TRADER_ACCEPT'
+          ? 'Awaiting Your Acceptance'
+          : queueKind === 'QUOTE_SENT'
+            ? 'Quote Sent'
+            : queueKind === 'SITE_VISIT_RESCHEDULED'
+              ? 'Reschedule Requested'
+              : 'Site Visit Requested';
 
       const statusLabel =
-        queueKind === 'QUOTE_SENT'
-          ? quote?.requestedAt
-            ? 'Awaiting Customer Confirmation'
-            : 'Awaiting Customer Response'
-          : 'Site Visit Pending Confirmation';
+        queueKind === 'AWAITING_TRADER_ACCEPT'
+          ? 'Customer accepted — tap View & Accept'
+          : queueKind === 'QUOTE_SENT'
+            ? quote?.requestedAt
+              ? 'Awaiting Customer Confirmation'
+              : 'Awaiting Customer Response'
+            : 'Site Visit Pending Confirmation';
 
       const scheduled =
         isSiteVisitQueue && visitPayload && visitPayload.visitDate
@@ -1929,7 +1969,6 @@ export const listJobsQueue = async (
         queuedAt: row.queuedAt,
         distanceKm,
         areaName,
-        /** Convenience for list subtitle: `2.5 km • Dublin 4`. */
         locationLabel: `${distanceKm} km • ${areaName}`,
         yourQuote: quoteAmount,
         quoteAmount,
@@ -1939,16 +1978,18 @@ export const listJobsQueue = async (
         quoteId: quote?.id ?? null,
         siteVisitRequestId: visit?.id ?? null,
         isJobRequested: Boolean(quote?.requestedAt),
-        isWaitingForCustomerConfirmation: true,
+        isWaitingForCustomerConfirmation: !awaitingTraderAccept,
         isSiteVisit: isSiteVisitJob(job) || isSiteVisitQueue,
-        assignmentStatus: isSiteVisitQueue
-          ? 'WAITING_FOR_CUSTOMER'
-          : quote?.requestedAt
+        assignmentStatus: awaitingTraderAccept
+          ? 'CUSTOMER_ACCEPTED'
+          : isSiteVisitQueue
             ? 'WAITING_FOR_CUSTOMER'
-            : 'QUOTED',
+            : quote?.requestedAt
+              ? 'WAITING_FOR_CUSTOMER'
+              : 'QUOTED',
         customerName: job.customer.fullName,
-        primaryAction: 'VIEW_DETAILS' as const,
-        primaryActionLabel: 'View Details',
+        primaryAction: awaitingTraderAccept ? ('CONFIRM_JOB' as const) : ('VIEW_DETAILS' as const),
+        primaryActionLabel: awaitingTraderAccept ? 'View & Accept' : 'View Details',
       };
     })
   );
@@ -1957,6 +1998,29 @@ export const listJobsQueue = async (
     items,
     meta: buildPaginationMeta(total, page, limit),
   };
+};
+
+/** Job IDs this trader already has in Jobs Queue — hide from Discover Nearby list. */
+const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> => {
+  const [quotes, pendingVisits] = await Promise.all([
+    prisma.quote.findMany({
+      where: {
+        traderId,
+        status: { in: [QuoteStatus.PENDING, QuoteStatus.ACCEPTED] },
+        job: { status: JobStatus.PUBLISHED, traderId: null },
+      },
+      select: { jobId: true },
+    }),
+    prisma.traderSiteVisitRequest.findMany({
+      where: {
+        traderId,
+        status: TraderSiteVisitStatus.PENDING,
+        job: { status: JobStatus.PUBLISHED, traderId: null },
+      },
+      select: { jobId: true },
+    }),
+  ]);
+  return [...new Set([...quotes.map((q) => q.jobId), ...pendingVisits.map((v) => v.jobId)])];
 };
 
 /**

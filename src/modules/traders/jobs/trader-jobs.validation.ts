@@ -102,7 +102,7 @@ export const siteVisitRequestBodySchema = z.object({
     }),
 });
 
-/** Jobs Queue — quotes / site-visit / reschedule proposals awaiting customer approval. */
+/** Jobs Queue — customer-pending quotes/visits + trader-accept waiting. */
 export const jobsQueueQuerySchema = z.object({
   query: z.object({
     page: z.string().optional(),

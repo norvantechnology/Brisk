@@ -181,7 +181,7 @@ export const requestDiscoverJob = async (
   }
 };
 
-/** Jobs Queue — quotes / site-visit / reschedule awaiting customer approval. */
+/** Jobs Queue — customer-pending quotes/visits + trader-accept (CUSTOMER_ACCEPTED). */
 export const listJobsQueue = async (
   req: AuthenticatedRequest,
   res: Response,

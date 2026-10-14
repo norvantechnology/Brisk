@@ -27,6 +27,9 @@ const router = Router();
  *       Default order: newest first (`createdAt` desc). Use `sortBy=distanceKm` for nearest-first.
  *       Empty values are always listed last.
  *
+ *       Jobs already on **Jobs Queue** for this trader (PENDING/ACCEPTED quote or PENDING
+ *       site-visit) are omitted here — use `GET /traders/jobs/queue` for those.
+ *
  *       Example: `GET /traders/jobs/discover?page=1&limit=10&search=solar&categoryId=3f0f23dd-1c2b-4a5e-9f10-6a7b8c9d0e1f&siteVisit=true&from=2026-09-01&to=2026-09-30&sortBy=distanceKm&sortOrder=asc`
  *     parameters:
  *       - in: query
@@ -144,20 +147,22 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  * @swagger
  * /traders/jobs/queue:
  *   get:
- *     summary: Jobs Queue — awaiting customer approval
+ *     summary: Jobs Queue — customer pending + trader accept
  *     tags: ['Trader / Discover Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       **Jobs Queue** screen: jobs where this trader has submitted a quotation,
- *       site-visit schedule, or reschedule proposal and is still waiting for the customer.
+ *       **Jobs Queue** (clipboard icon): jobs in flight between quote/visit and assignment.
+ *       These jobs are **excluded from Discover** Nearby so they only appear here.
  *
  *       Included:
- *       - `QUOTE_SENT` — PENDING quote on open marketplace job
- *       - `SITE_VISIT_REQUESTED` — PENDING site-visit slots awaiting customer confirm
- *       - `SITE_VISIT_RESCHEDULED` — PENDING visit after a later slot update / reschedule
+ *       - `QUOTE_SENT` — PENDING quote awaiting customer
+ *       - `SITE_VISIT_REQUESTED` / `SITE_VISIT_RESCHEDULED` — PENDING visit awaiting customer
+ *       - `AWAITING_TRADER_ACCEPT` — customer accepted quote; trader must **View & Accept**
+ *         (`assignmentStatus: CUSTOMER_ACCEPTED`, `primaryAction: CONFIRM_JOB`)
  *
- *       Excluded: assigned My Jobs, confirmed visits, Incoming (`CUSTOMER_ACCEPTED`).
- *       Tap **View Details** → `GET /traders/jobs/discover/{id}`.
+ *       Excluded: assigned My Jobs, confirmed visits.
+ *       - Customer-pending → `primaryAction: VIEW_DETAILS` → `GET /traders/jobs/discover/{id}`
+ *       - Trader-accept → `primaryAction: CONFIRM_JOB` → accept flow
  *
  *       `distanceKm` uses trader service centre (or last Discover GPS). No `lat`/`lng` on this API.
  *     parameters:
@@ -215,7 +220,17 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *                       startTime: '08:00'
  *                       endTime: '12:00'
  *                     primaryAction: VIEW_DETAILS
- *                 meta: { total: 2, page: 1, limit: 20, totalPages: 1 }
+ *                   - id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+ *                     title: Kitchen Sink Repair
+ *                     queueKind: AWAITING_TRADER_ACCEPT
+ *                     statusBadge: Awaiting Your Acceptance
+ *                     statusLabel: Customer accepted — tap View & Accept
+ *                     assignmentStatus: CUSTOMER_ACCEPTED
+ *                     isWaitingForCustomerConfirmation: false
+ *                     yourQuote: 350
+ *                     primaryAction: CONFIRM_JOB
+ *                     primaryActionLabel: View & Accept
+ *                 meta: { total: 3, page: 1, limit: 20, totalPages: 1 }
  */
 router.get('/queue', validate(jobsQueueQuerySchema), controller.listJobsQueue);
 

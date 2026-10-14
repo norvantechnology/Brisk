@@ -172,7 +172,7 @@
  *         count: { type: integer, description: Waiting job count }
  *     TraderJobsQueueCard:
  *       type: object
- *       description: Jobs Queue list card (awaiting customer approval)
+ *       description: Jobs Queue card — customer pending or awaiting trader accept
  *       properties:
  *         id: { type: string, format: uuid }
  *         jobId: { type: string, format: uuid }
@@ -180,10 +180,10 @@
  *         title: { type: string }
  *         queueKind:
  *           type: string
- *           enum: [QUOTE_SENT, SITE_VISIT_REQUESTED, SITE_VISIT_RESCHEDULED]
+ *           enum: [QUOTE_SENT, SITE_VISIT_REQUESTED, SITE_VISIT_RESCHEDULED, AWAITING_TRADER_ACCEPT]
  *         statusBadge:
  *           type: string
- *           description: Chip text — Quote Sent | Site Visit Requested | Reschedule Requested
+ *           description: Quote Sent | Site Visit Requested | Reschedule Requested | Awaiting Your Acceptance
  *         statusLabel:
  *           type: string
  *           description: Footer progress text
@@ -207,12 +207,20 @@
  *         quoteId: { type: string, format: uuid, nullable: true }
  *         siteVisitRequestId: { type: string, format: uuid, nullable: true }
  *         isJobRequested: { type: boolean }
- *         isWaitingForCustomerConfirmation: { type: boolean }
+ *         isWaitingForCustomerConfirmation: { type: boolean, description: false when AWAITING_TRADER_ACCEPT }
  *         isSiteVisit: { type: boolean }
- *         assignmentStatus: { type: string }
+ *         assignmentStatus:
+ *           type: string
+ *           description: QUOTED | WAITING_FOR_CUSTOMER | CUSTOMER_ACCEPTED
  *         customerName: { type: string }
- *         primaryAction: { type: string, example: VIEW_DETAILS }
- *         primaryActionLabel: { type: string, example: View Details }
+ *         primaryAction:
+ *           type: string
+ *           enum: [VIEW_DETAILS, CONFIRM_JOB]
+ *           description: VIEW_DETAILS for customer-pending; CONFIRM_JOB when trader must accept
+ *         primaryActionLabel:
+ *           type: string
+ *           description: View Details | View & Accept
+ *           example: View Details
  *     TraderJobsQueueResponse:
  *       type: object
  *       properties:
