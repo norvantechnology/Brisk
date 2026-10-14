@@ -1954,7 +1954,6 @@ export const listJobsQueue = async (
   );
 
   return {
-    queuedCount: total,
     items,
     meta: buildPaginationMeta(total, page, limit),
   };

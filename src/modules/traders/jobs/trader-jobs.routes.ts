@@ -186,7 +186,6 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *               success: true
  *               message: Jobs queue retrieved successfully.
  *               data:
- *                 queuedCount: 2
  *                 items:
  *                   - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
  *                     title: Commercial Boiler Installation & Pipe Check

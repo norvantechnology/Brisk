@@ -216,7 +216,6 @@
  *     TraderJobsQueueResponse:
  *       type: object
  *       properties:
- *         queuedCount: { type: integer, description: Total queued jobs (badge e.g. 4 Queued) }
  *         items:
  *           type: array
  *           items: { $ref: '#/components/schemas/TraderJobsQueueCard' }
