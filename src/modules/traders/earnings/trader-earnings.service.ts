@@ -17,6 +17,12 @@ import type {
   EarningsDashboardQuery,
   PaymentTransactionsQuery,
 } from './trader-earnings.validation';
+import {
+  buildJobPayoutBalance,
+  jobPayoutSelect,
+  serializeJobPayoutBalance,
+  type JobPayoutBalance,
+} from '../../jobs/job-payout-balance';
 
 const DEFAULT_TIMEZONE = process.env.APP_TIMEZONE || 'Europe/Dublin';
 const DEFAULT_RECENT_LIMIT = 5;
@@ -112,16 +118,32 @@ const loadCurrencySymbols = async (codes: Iterable<string>) => {
   return symbolByCode;
 };
 
+const loadJobPayoutBalances = async (jobIds: string[]) => {
+  const unique = [...new Set(jobIds.filter(Boolean))];
+  const map = new Map<string, JobPayoutBalance>();
+  if (!unique.length) return map;
+  const jobs = await prisma.job.findMany({
+    where: { id: { in: unique } },
+    select: jobPayoutSelect,
+  });
+  for (const job of jobs) {
+    map.set(job.id, buildJobPayoutBalance(job));
+  }
+  return map;
+};
+
 /** Same row shape for dashboard recentTransactions and the full payment-transactions list. */
 const serializeTransaction = (
   row: TransactionRow,
   symbolByCode: Map<string, string>,
-  timeZone: string
+  timeZone: string,
+  jobPayoutById?: Map<string, JobPayoutBalance>
 ) => {
   const code = row.currencyCode || 'EUR';
   const isPaid = row.status === TraderPaymentRequestStatus.PAID;
   const symbol = symbolByCode.get(code) || code;
   const amount = money(row.totalAmount);
+  const jobPayout = jobPayoutById?.get(row.jobId);
   return {
     id: row.id,
     invoiceId: row.invoice?.id ?? null,
@@ -134,10 +156,13 @@ const serializeTransaction = (
     formattedAmount: formatSignedAmount(amount, symbol),
     currencyCode: code,
     currencySymbol: symbol,
+    /** Customer payment-request status (PAID | PENDING) — not admin bank payout. */
     payoutStatus: paymentStatusLabel(row.status),
     paymentStatus: traderPaymentStatus(row.status),
     paymentType: row.type,
     receiptUrl: traderReceiptUrl(row),
+    /** Job-wise admin bank payout balance for this job. */
+    traderPayout: jobPayout ? serializeJobPayoutBalance(jobPayout) : null,
   };
 };
 
@@ -264,6 +289,7 @@ export const getEarningsDashboard = async (userId: string, query: EarningsDashbo
     currencyCode,
     ...transactionRows.map((r) => r.currencyCode || 'EUR'),
   ]);
+  const jobPayoutById = await loadJobPayoutBalances(transactionRows.map((r) => r.jobId));
 
   return {
     revenue: {
@@ -284,7 +310,7 @@ export const getEarningsDashboard = async (userId: string, query: EarningsDashbo
       jobsInProgressCount,
     },
     recentTransactions: transactionRows.map((row) =>
-      serializeTransaction(row, symbolByCode, timeZone)
+      serializeTransaction(row, symbolByCode, timeZone, jobPayoutById)
     ),
     recentFeedbacks: feedbackRows.map((row) => ({
       id: row.id,
@@ -324,9 +350,10 @@ export const listPaymentTransactions = async (
   ]);
 
   const symbolByCode = await loadCurrencySymbols(rows.map((r) => r.currencyCode || 'EUR'));
+  const jobPayoutById = await loadJobPayoutBalances(rows.map((r) => r.jobId));
 
   return {
-    data: rows.map((row) => serializeTransaction(row, symbolByCode, timeZone)),
+    data: rows.map((row) => serializeTransaction(row, symbolByCode, timeZone, jobPayoutById)),
     meta: buildPaginationMeta(total, page, limit),
   };
 };

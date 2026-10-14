@@ -12,6 +12,11 @@ import {
 } from '../admin-customer-details/admin-customer-details.service';
 import { pushUserNotification } from '../../../sockets/realtime';
 import {
+  buildJobPayoutBalance,
+  jobPayoutListInclude,
+  serializeJobPayoutBalance,
+} from '../../jobs/job-payout-balance';
+import {
   ADMIN_DISPUTE_STATUSES,
   type AdminDisputesListQuery,
   type AdminJobFilters,
@@ -176,9 +181,20 @@ const JOB_LIST_INCLUDE = {
       id: true,
       bookingRef: true,
       status: true,
-      invoice: { select: { id: true, totalAmount: true, status: true, currencyCode: true } },
+      invoice: {
+        select: {
+          id: true,
+          totalAmount: true,
+          status: true,
+          currencyCode: true,
+          paymentRequestId: true,
+          serviceCharge: true,
+          traderOfferDiscount: true,
+        },
+      },
     },
   },
+  ...jobPayoutListInclude,
 } satisfies Prisma.JobInclude;
 
 const JOB_RANK_SELECT = {
@@ -240,6 +256,18 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
     jobs: rows.map((job) => {
       const invoice = job.booking?.invoice ?? null;
       const estimatedAmount = money(job.serviceCharge);
+      const traderPayout = serializeJobPayoutBalance(
+        buildJobPayoutBalance({
+          id: job.id,
+          jobRef: job.jobRef,
+          title: job.title,
+          status: job.status,
+          updatedAt: job.updatedAt,
+          paymentRequests: job.paymentRequests,
+          booking: job.booking,
+          payouts: job.payouts,
+        })
+      );
       return {
         id: job.id,
         jobRef: job.jobRef,
@@ -267,8 +295,15 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
         createdAt: job.createdAt,
         amount: invoice ? money(invoice.totalAmount) : estimatedAmount,
         estimatedAmount,
-        currencyCode: invoice?.currencyCode ?? 'EUR',
+        currencyCode: invoice?.currencyCode ?? traderPayout.currencyCode,
         paymentStatus: invoice?.status ?? 'NOT_INVOICED',
+        /** Job-wise trader bank payout balance (manual admin installments). */
+        traderPayout,
+        payoutStatus: traderPayout.payoutStatus,
+        totalPayable: traderPayout.totalPayable,
+        amountPaid: traderPayout.amountPaid,
+        remainingBalance: traderPayout.remainingBalance,
+        eligibleForPayout: traderPayout.eligibleForPayout,
         offerApplied: Boolean(job.offerId),
         offer: job.offer,
         quotesCount: job._count.quotes,

@@ -12,6 +12,10 @@ import { buildListOrderBy, resolveSortDir, type SortDir } from '../../../utils/l
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import { formatAddressLine } from '../../property/property.service';
+import {
+  buildJobPayoutBalance,
+  serializeJobPayoutBalance,
+} from '../../jobs/job-payout-balance';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -722,11 +726,48 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
         },
       },
       paymentRequests: { orderBy: { createdAt: 'asc' } },
+      payouts: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          amount: true,
+          currencyCode: true,
+          status: true,
+          note: true,
+          bankReference: true,
+          stripeTransferId: true,
+          processedAt: true,
+          createdAt: true,
+        },
+      },
       disputes: { orderBy: { createdAt: 'desc' } },
     },
   });
 
   if (!job) throw new NotFoundError(notFoundMessage);
+
+  const traderPayoutBalance = buildJobPayoutBalance({
+    id: job.id,
+    jobRef: job.jobRef,
+    title: job.title,
+    status: job.status,
+    updatedAt: job.updatedAt,
+    paymentRequests: job.paymentRequests,
+    booking: job.booking
+      ? {
+          invoice: job.booking.invoice
+            ? {
+                status: job.booking.invoice.status,
+                paymentRequestId: job.booking.invoice.paymentRequestId,
+                currencyCode: job.booking.invoice.currencyCode,
+                serviceCharge: job.booking.invoice.serviceCharge,
+                traderOfferDiscount: job.booking.invoice.traderOfferDiscount,
+              }
+            : null,
+        }
+      : null,
+    payouts: job.payouts,
+  });
 
   return {
     id: job.id,
@@ -854,6 +895,27 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
       paidAt: r.paidAt,
       createdAt: r.createdAt,
     })),
+    /** Job-wise trader bank payout (manual admin installments). */
+    traderPayout: {
+      ...serializeJobPayoutBalance(traderPayoutBalance),
+      installments: job.payouts.map((p) => ({
+        id: p.id,
+        payoutRef: `PO-${p.id.slice(0, 8).toUpperCase()}`,
+        amount: money(p.amount),
+        currencyCode: p.currencyCode,
+        status: p.status,
+        note: p.note ?? null,
+        bankReference: p.bankReference ?? null,
+        stripeTransferId: p.stripeTransferId,
+        processedAt: p.processedAt,
+        createdAt: p.createdAt,
+      })),
+    },
+    payoutStatus: traderPayoutBalance.payoutStatus,
+    totalPayable: traderPayoutBalance.totalPayable,
+    amountPaid: traderPayoutBalance.amountPaid,
+    remainingBalance: traderPayoutBalance.remainingBalance,
+    eligibleForPayout: traderPayoutBalance.eligibleForPayout,
     disputes: job.disputes.map((d) => ({
       id: d.id,
       disputeRef: d.disputeRef,
