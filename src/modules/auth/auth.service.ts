@@ -76,7 +76,9 @@ const toPublicUser = (
     | 'preferredCurrency'
     | 'profilePhotoUrl'
   >,
-  overrides?: { mobileVerified?: boolean; emailVerified?: boolean }
+  overrides?: { mobileVerified?: boolean; emailVerified?: boolean },
+  /** Trader entity type — `SOLO` | `COMPANY` for traders; `null` for customers. */
+  traderType: 'SOLO' | 'COMPANY' | null = null
 ) => ({
   id: user.id,
   fullName: user.fullName,
@@ -88,7 +90,17 @@ const toPublicUser = (
   country: user.country,
   preferredCurrency: user.preferredCurrency,
   profilePhotoUrl: user.profilePhotoUrl,
+  traderType,
 });
+
+const resolveTraderType = async (userId: string, role: UserRole) => {
+  if (role !== UserRole.TRADER) return null;
+  const trader = await prisma.trader.findUnique({
+    where: { userId },
+    select: { traderType: true },
+  });
+  return trader?.traderType ?? null;
+};
 
 const createAuthTokens = (user: { id: string; email: string; role: string; tokenVersion?: number }) => {
   const tokenVersion = user.tokenVersion ?? 0;
@@ -128,11 +140,14 @@ const buildSessionPayload = async (
   }
 ) => {
   const tokens = createAuthTokens(user);
-  const { nextStep, traderAccountActive, onboarding } = await resolveSessionExtras(user);
+  const [{ nextStep, traderAccountActive, onboarding }, traderType] = await Promise.all([
+    resolveSessionExtras(user),
+    resolveTraderType(user.id, user.role),
+  ]);
 
   return {
     requiresOtpVerification: false as const,
-    user: toPublicUser(user),
+    user: toPublicUser(user, undefined, traderType),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     ...buildTokenExpiry(tokens.accessToken, tokens.refreshToken),
@@ -735,7 +750,8 @@ export const getAuthenticatedUser = async (userId: string) => {
     throw new NotFoundError('User not found.');
   }
 
-  return user;
+  const traderType = await resolveTraderType(user.id, user.role);
+  return { ...user, traderType };
 };
 
 /** Session bootstrap for portal/app — includes navigation gates after refresh. */

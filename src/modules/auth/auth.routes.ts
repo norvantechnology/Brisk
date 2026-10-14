@@ -206,6 +206,8 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *           Success in two forms:
  *           1) Fully verified user — returns accessToken, refreshToken, user.
  *           2) Mobile not verified — **data.requiresOtpVerification=true** with mobileNumber for OTP screen (HTTP 200, not an error).
+ *
+ *           Trader `user.traderType` is `SOLO` or `COMPANY` (null for customers). Same field on `GET /auth/me`.
  *       401:
  *         description: Invalid email or password.
  *       403:
