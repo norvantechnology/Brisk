@@ -1731,11 +1731,11 @@ export const requestDiscoverJob = async (
  */
 export const listJobsQueue = async (
   userId: string,
-  query: { page?: string; limit?: string; search?: string; lat?: string; lng?: string } = {}
+  query: { page?: string; limit?: string; search?: string } = {}
 ) => {
   const trader = await getTraderContext(userId);
-  const origin = resolveOrigin(trader, query.lat, query.lng);
-  void rememberTraderDeviceOrigin(trader.id, query.lat, query.lng);
+  // Distance from trader service centre / last Discover GPS — no lat/lng query on this API.
+  const origin = resolveOrigin(trader);
 
   const page = parsePage(query.page);
   const limit = parseLimit(query.limit);

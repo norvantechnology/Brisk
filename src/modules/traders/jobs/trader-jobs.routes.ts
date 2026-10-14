@@ -159,7 +159,7 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *       Excluded: assigned My Jobs, confirmed visits, Incoming (`CUSTOMER_ACCEPTED`).
  *       Tap **View Details** → `GET /traders/jobs/discover/{id}`.
  *
- *       Pass `lat`/`lng` (same as Discover) for correct `distanceKm`.
+ *       `distanceKm` uses trader service centre (or last Discover GPS). No `lat`/`lng` on this API.
  *     parameters:
  *       - in: query
  *         name: page
@@ -171,12 +171,6 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *         name: search
  *         schema: { type: string }
  *         description: Filter by title / jobRef / city
- *       - in: query
- *         name: lat
- *         schema: { type: string }
- *       - in: query
- *         name: lng
- *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Queued job cards

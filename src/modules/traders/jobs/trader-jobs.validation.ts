@@ -108,8 +108,6 @@ export const jobsQueueQuerySchema = z.object({
     page: z.string().optional(),
     limit: z.string().optional(),
     search: z.string().trim().max(100).optional(),
-    lat: z.string().optional(),
-    lng: z.string().optional(),
   }),
 });
 
