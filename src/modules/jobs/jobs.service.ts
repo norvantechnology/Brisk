@@ -288,36 +288,73 @@ const formatSiteVisitDateKey = (d: Date): string => {
   return `${y}-${m}-${day}`;
 };
 
-const serializeSiteVisitProposal = (
-  v: Prisma.JobGetPayload<{ include: typeof jobInclude }>['siteVisitRequests'][number]
-) => {
-  const slots =
-    v.slots && v.slots.length > 0
-      ? v.slots.map((s) => {
-          const def = SITE_VISIT_SLOT_DEFS[s.timeSlot];
-          return {
-            id: s.id,
-            slotId: s.id,
-            date: formatSiteVisitDateKey(s.visitDate),
-            timeSlot: s.timeSlot,
-            startTime: s.startTime || def.startTime,
-            endTime: s.endTime || def.endTime,
-            isSelected: s.isSelected,
-          };
-        })
-      : v.visitDate && v.timeSlot
-        ? [
-            {
-              id: v.id,
-              slotId: v.id,
-              date: formatSiteVisitDateKey(v.visitDate),
-              timeSlot: v.timeSlot,
-              startTime: SITE_VISIT_SLOT_DEFS[v.timeSlot].startTime,
-              endTime: SITE_VISIT_SLOT_DEFS[v.timeSlot].endTime,
-              isSelected: true,
-            },
-          ]
-        : [];
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "08:00" → "08:00AM" */
+const formatSlotClock = (hhmm: string): string => {
+  const [hStr, mStr = '00'] = hhmm.split(':');
+  let h = Number(hStr);
+  if (!Number.isFinite(h)) return hhmm;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${mStr.padStart(2, '0')}${ampm}`;
+};
+
+/** Mobile slot label — e.g. "Jul 25, 08:00AM - 11:00AM". */
+const formatSiteVisitSlotLabel = (visitDate: Date, startTime: string, endTime: string): string => {
+  const mon = MONTH_SHORT[visitDate.getUTCMonth()] ?? '';
+  const day = visitDate.getUTCDate();
+  return `${mon} ${day}, ${formatSlotClock(startTime)} - ${formatSlotClock(endTime)}`;
+};
+
+type SiteVisitRequestRow = Prisma.JobGetPayload<{
+  include: typeof jobInclude;
+}>['siteVisitRequests'][number];
+
+const buildSiteVisitSlotRows = (v: SiteVisitRequestRow) => {
+  if (v.slots && v.slots.length > 0) {
+    return v.slots.map((s) => {
+      const def = SITE_VISIT_SLOT_DEFS[s.timeSlot];
+      const startTime = s.startTime || def.startTime;
+      const endTime = s.endTime || def.endTime;
+      return {
+        id: s.id,
+        visitDate: s.visitDate,
+        timeSlot: s.timeSlot,
+        startTime,
+        endTime,
+        isSelected: s.isSelected,
+      };
+    });
+  }
+  if (v.visitDate && v.timeSlot) {
+    const def = SITE_VISIT_SLOT_DEFS[v.timeSlot];
+    return [
+      {
+        id: v.id,
+        visitDate: v.visitDate,
+        timeSlot: v.timeSlot,
+        startTime: def.startTime,
+        endTime: def.endTime,
+        isSelected: true,
+      },
+    ];
+  }
+  return [];
+};
+
+/** Used on GET /jobs/{id} siteVisitProposals (structured slot fields). */
+const serializeSiteVisitProposal = (v: SiteVisitRequestRow) => {
+  const slotRows = buildSiteVisitSlotRows(v);
+  const slots = slotRows.map((s) => ({
+    id: s.id,
+    slotId: s.id,
+    date: formatSiteVisitDateKey(s.visitDate),
+    timeSlot: s.timeSlot,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    isSelected: s.isSelected,
+  }));
   const selected = slots.find((s) => s.isSelected) ?? slots[0] ?? null;
   const traderName = v.trader?.businessName || v.trader?.user?.fullName || null;
 
@@ -344,6 +381,40 @@ const serializeSiteVisitProposal = (
     endTime: selected?.endTime ?? null,
     slots,
     slotCount: slots.length,
+    updatedAt: v.updatedAt.toISOString(),
+    canConfirm: v.status === TraderSiteVisitStatus.PENDING,
+    canReject: v.status === TraderSiteVisitStatus.PENDING,
+  };
+};
+
+/**
+ * GET /jobs/site-visit-requests trader card — matches mobile home/bottom-sheet JSON.
+ * Slot `date` is a display label; use slot `id` as `slotId` on confirm.
+ */
+const serializeCustomerSiteVisitTrader = (v: SiteVisitRequestRow) => {
+  const slotRows = buildSiteVisitSlotRows(v);
+  const traderName = v.trader?.businessName || v.trader?.user?.fullName || null;
+
+  return {
+    requestId: v.id,
+    trader: v.trader
+      ? {
+          id: v.trader.id,
+          name: traderName,
+          profilePhotoUrl:
+            v.trader.profilePhotoUrl ?? v.trader.user?.profilePhotoUrl ?? null,
+          avgRating: Number(v.trader.avgRating ?? 0),
+          reviewsCount: v.trader._count.ratingsReceived,
+          isVerified: v.trader.verificationStatus === VerificationStatus.VERIFIED,
+          topRated: v.trader.topRated,
+        }
+      : null,
+    status: v.status,
+    slots: slotRows.map((s) => ({
+      id: s.id,
+      date: formatSiteVisitSlotLabel(s.visitDate, s.startTime, s.endTime),
+      isSelected: s.isSelected,
+    })),
     updatedAt: v.updatedAt.toISOString(),
     canConfirm: v.status === TraderSiteVisitStatus.PENDING,
     canReject: v.status === TraderSiteVisitStatus.PENDING,
@@ -2272,8 +2343,8 @@ const getOwnedPendingSiteVisitRequest = async (
 };
 
 /**
- * Customer home + bottom sheet in one response.
- * Jobs with ≥1 PENDING proposal; each item includes traders + slots for Accept/Decline.
+ * Customer home + bottom sheet — `data` is a job array (mobile JSON shape).
+ * Each job includes `traders[]` with display slots for Accept/Decline.
  */
 export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
   const jobs = await prisma.job.findMany({
@@ -2293,9 +2364,9 @@ export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
     },
   });
 
-  const items = jobs.map((job) => {
-    const proposals = (job.siteVisitRequests ?? []).map(serializeSiteVisitProposal);
-    const pendingCount = proposals.filter((p) => p.status === TraderSiteVisitStatus.PENDING).length;
+  return jobs.map((job) => {
+    const traders = (job.siteVisitRequests ?? []).map(serializeCustomerSiteVisitTrader);
+    const pendingCount = traders.filter((t) => t.status === TraderSiteVisitStatus.PENDING).length;
     const subtitle =
       job.description?.trim().split(/\n/)[0]?.trim().slice(0, 120) || null;
     return {
@@ -2305,17 +2376,11 @@ export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
       title: job.title,
       subtitle,
       requestCount: pendingCount,
-      requestCountLabel: `${pendingCount} Request${pendingCount === 1 ? '' : 's'}`,
-      totalApplicants: proposals.length,
       maxApplicants: MAX_SITE_VISIT_APPLICANTS,
       updatedAt: job.updatedAt.toISOString(),
-      /** Bottom sheet: traders who applied + proposed slots (Accept / Decline). */
-      traders: proposals,
-      siteVisitProposals: proposals,
+      traders,
     };
   });
-
-  return { items, count: items.length };
 };
 
 const notifyTraderSiteVisit = async (

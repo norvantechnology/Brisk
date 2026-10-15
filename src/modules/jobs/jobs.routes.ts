@@ -368,45 +368,49 @@ router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       Single API for home **Site Visit Request** and the per-job bottom sheet.
- *       Returns jobs with ≥1 **PENDING** trader proposal. Each item has card fields
- *       (`title`, `subtitle`, `requestCount` / `requestCountLabel`) plus nested
- *       `traders[]` / `siteVisitProposals[]` (photo, rating, `slots[]`, `canConfirm` / `canReject`).
+ *       `data` is a **job array**. Each job has card fields + nested `traders[]`
+ *       (photo, rating, `slots[]` with display `date` label, `canConfirm` / `canReject`).
  *
- *       Actions (unchanged):
- *       - **Accept** → `POST /jobs/{jobId}/site-visits/{requestId}/confirm` body `{ slotId }`
- *       - **Decline** → `POST /jobs/{jobId}/site-visits/{requestId}/reject`
+ *       Slot confirm: pass `slots[].id` as `slotId` on
+ *       `POST /jobs/{jobId}/site-visits/{requestId}/confirm`.
+ *       Decline: `POST /jobs/{jobId}/site-visits/{requestId}/reject`.
  *
  *       Max applicants per job: 3.
  *     responses:
  *       200:
- *         description: Jobs with nested traders + slots
+ *         description: Job array with nested traders + slots
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Site visit requests retrieved successfully.
  *               data:
- *                 items:
- *                   - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
- *                     jobId: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
- *                     title: Solar Panel Installation
- *                     subtitle: Residential Roof Project
- *                     requestCount: 3
- *                     requestCountLabel: 3 Requests
- *                     maxApplicants: 3
- *                     traders:
- *                       - requestId: uuid
- *                         traderName: David Murphy
- *                         canConfirm: true
- *                         canReject: true
- *                         slots:
- *                           - slotId: uuid
- *                             date: '2026-07-26'
- *                             timeSlot: MORNING
- *                             startTime: '08:00'
- *                             endTime: '12:00'
- *                             isSelected: true
- *                 count: 1
+ *                 - id: 438650c4-ba9c-44c6-b2d0-62074e6dad78
+ *                   jobId: 438650c4-ba9c-44c6-b2d0-62074e6dad78
+ *                   jobRef: JOB-8DF1
+ *                   title: sample solar
+ *                   subtitle: rest
+ *                   requestCount: 1
+ *                   maxApplicants: 3
+ *                   updatedAt: '2026-10-09T12:22:48.194Z'
+ *                   traders:
+ *                     - requestId: 8f43b8ce-51d2-4f39-a4fa-4ea3c1f38427
+ *                       trader:
+ *                         id: adabc55c-6d7d-4b12-8597-6d26366c26bf
+ *                         name: Brisk Trader
+ *                         profilePhotoUrl: https://api.brisk.ie/uploads/...
+ *                         avgRating: 4.75
+ *                         reviewsCount: 4
+ *                         isVerified: true
+ *                         topRated: false
+ *                       status: PENDING
+ *                       slots:
+ *                         - id: badc325f-a1f5-40bc-9cc2-ff44020b1d33
+ *                           date: 'Jul 25, 08:00AM - 11:00AM'
+ *                           isSelected: true
+ *                       updatedAt: '2026-10-09T12:52:50.176Z'
+ *                       canConfirm: true
+ *                       canReject: true
  */
 router.get(
   '/site-visit-requests',
