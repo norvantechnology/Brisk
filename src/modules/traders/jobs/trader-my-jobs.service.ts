@@ -192,8 +192,14 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
   if (tab === 'ACTIVE') {
     // In-progress + finished unpaid (Payment Request Pending / Awaiting Customer Payment).
     // Completed tab only after the customer pays (status COMPLETED).
+    // Site-visit RESCHEDULE_REQUIRED leaves Active → Discover Reschedule CTA.
     return {
       status: { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] },
+      NOT: {
+        siteVisitRequests: {
+          some: { traderId, status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
+        },
+      },
       OR: [
         {
           AND: [

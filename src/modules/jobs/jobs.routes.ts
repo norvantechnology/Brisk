@@ -1244,7 +1244,14 @@ router.get('/:id/progress', ...customerOnly, validate(jobIdParamSchema), control
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       Allowed while the job is PUBLISHED / QUOTED / ACCEPTED / SCHEDULED and the trader has not arrived.
- *       Updates the job and booking date and notifies the assigned trader (`JOB_RESCHEDULED`).
+ *
+ *       **Normal job:** updates date / timeSlot, notifies trader (`JOB_RESCHEDULED`).
+ *
+ *       **Site visit (PENDING / CONFIRMED):** sets visit to `RESCHEDULE_REQUIRED` (previous slot kept
+ *       for trader Discover Reschedule CTA), stores the customer's preferred `date` / `timeSlot` on
+ *       the job, sets booking `RESCHEDULED` when present, notifies `SITE_VISIT_RESCHEDULE_REQUESTED`.
+ *       Job leaves **Active** for customer + trader until the trader proposes new slots.
+ *
  *       `serviceCategoryId` / `serviceSubcategoryId` can change only before any quotation is received.
  *       Returns the same payload as `GET /jobs/{id}/progress`.
  *     parameters:

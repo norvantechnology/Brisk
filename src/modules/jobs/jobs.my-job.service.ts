@@ -1,9 +1,16 @@
-import { BookingStatus, JobStatus, Prisma, QuoteStatus } from '@prisma/client';
+import {
+  BookingStatus,
+  JobStatus,
+  Prisma,
+  QuoteStatus,
+  SiteVisitTimeSlot,
+  TraderSiteVisitStatus,
+} from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
 import { getCurrencyMeta } from '../../services/currency.service';
-import { pushUserNotification } from '../../sockets/realtime';
+import { emitSiteVisitUpdate, pushUserNotification } from '../../sockets/realtime';
 import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
 import {
   customerJobAmountSelect,
@@ -400,6 +407,14 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
 // Reschedule
 // ---------------------------------------------------------------------------
 
+const asSiteVisitTimeSlot = (value: string): SiteVisitTimeSlot | null => {
+  const key = value.trim().toUpperCase().replace(/\s+/g, '_');
+  if (key === 'MORNING' || key === 'AFTERNOON' || key === 'EVENING' || key === 'ANYTIME') {
+    return key;
+  }
+  return null;
+};
+
 export const rescheduleJob = async (
   customerId: string,
   jobId: string,
@@ -416,9 +431,29 @@ export const rescheduleJob = async (
       categoryId: true,
       subcategoryId: true,
       traderId: true,
+      siteVisitRequested: true,
       customer: { select: { fullName: true } },
-      trader: { select: { userId: true } },
+      trader: { select: { id: true, userId: true } },
       booking: { select: { id: true, status: true, arrivedAt: true, finishedAt: true } },
+      siteVisitRequests: {
+        where: {
+          status: {
+            in: [
+              TraderSiteVisitStatus.PENDING,
+              TraderSiteVisitStatus.CONFIRMED,
+              TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
+            ],
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          traderId: true,
+          status: true,
+          visitDate: true,
+          timeSlot: true,
+        },
+      },
       _count: { select: { quotes: true } },
     },
   });
@@ -439,9 +474,27 @@ export const rescheduleJob = async (
     (input.serviceCategoryId !== undefined && input.serviceCategoryId !== job.categoryId) ||
     (input.serviceSubcategoryId !== undefined && input.serviceSubcategoryId !== job.subcategoryId);
 
+  /** Prefer assigned trader's visit; else latest open visit on the job. */
+  const siteVisit =
+    (job.traderId
+      ? job.siteVisitRequests.find((v) => v.traderId === job.traderId)
+      : null) ?? job.siteVisitRequests[0] ?? null;
+
+  /**
+   * Site-visit path: customer picks a preferred date/time → visit becomes RESCHEDULE_REQUIRED.
+   * Trader sees Discover Reschedule (previous slot kept as context); job leaves Active for both sides.
+   */
+  const siteVisitReschedule =
+    Boolean(siteVisit) &&
+    (siteVisit!.status === TraderSiteVisitStatus.CONFIRMED ||
+      siteVisit!.status === TraderSiteVisitStatus.PENDING ||
+      siteVisit!.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED);
+
   if (categoryChanged) {
-    if (job.traderId || job._count.quotes > 0) {
-      throw new BadRequestError('The service cannot be changed after quotations are received. Only the date and time can be rescheduled.');
+    if (job.traderId || job._count.quotes > 0 || siteVisitReschedule) {
+      throw new BadRequestError(
+        'The service cannot be changed after quotations are received. Only the date and time can be rescheduled.'
+      );
     }
     const nextCategoryId = input.serviceCategoryId ?? job.categoryId;
     await updateJob(customerId, jobId, {
@@ -462,29 +515,68 @@ export const rescheduleJob = async (
         data: {
           scheduledDate,
           timeSlot: input.timeSlot,
-          ...(job.status === JobStatus.ACCEPTED && job.booking ? { status: JobStatus.SCHEDULED } : {}),
+          ...(job.status === JobStatus.ACCEPTED && job.booking && !siteVisitReschedule
+            ? { status: JobStatus.SCHEDULED }
+            : {}),
         },
       });
       if (job.booking) {
-        await tx.booking.update({ where: { id: job.booking.id }, data: { scheduledDate } });
+        await tx.booking.update({
+          where: { id: job.booking.id },
+          data: {
+            scheduledDate,
+            ...(siteVisitReschedule ? { status: BookingStatus.RESCHEDULED } : {}),
+          },
+        });
+      }
+      if (siteVisitReschedule && siteVisit) {
+        // Keep previous visitDate/timeSlot as Discover reschedule context; preferred date is on the job.
+        await tx.traderSiteVisitRequest.update({
+          where: { id: siteVisit.id },
+          data: { status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
+        });
       }
     });
   }
 
   const byLabel = actor === 'ADMIN' ? 'BRISK support' : job.customer.fullName || 'The customer';
-  const recipients = actor === 'ADMIN' ? [customerId, job.trader?.userId] : [job.trader?.userId];
-  await pushUserNotification(recipients, {
-    type: 'JOB_RESCHEDULED',
-    title: 'Job rescheduled',
-    message: `${byLabel} moved "${job.title}" to ${formatDisplayDay(scheduledDate)} (${input.timeSlot}).`,
-    data: {
-      jobId,
-      jobRef: job.jobRef,
-      bookingId: job.booking?.id ?? null,
-      scheduledDate: scheduledDate.toISOString(),
-      timeSlot: input.timeSlot,
-    },
-  });
+
+  if (siteVisitReschedule && siteVisit) {
+    const traderUserId =
+      job.trader?.userId ??
+      (
+        await prisma.trader.findUnique({
+          where: { id: siteVisit.traderId },
+          select: { userId: true },
+        })
+      )?.userId ??
+      null;
+    if (traderUserId) {
+      const slot = asSiteVisitTimeSlot(siteVisit.timeSlot ?? '') ?? asSiteVisitTimeSlot(input.timeSlot);
+      emitSiteVisitUpdate({
+        type: 'SITE_VISIT_RESCHEDULE_REQUESTED',
+        recipientUserId: traderUserId,
+        jobId,
+        requestId: siteVisit.id,
+        visitDate: siteVisit.visitDate,
+        timeSlot: slot,
+      });
+    }
+  } else {
+    const recipients = actor === 'ADMIN' ? [customerId, job.trader?.userId] : [job.trader?.userId];
+    await pushUserNotification(recipients, {
+      type: 'JOB_RESCHEDULED',
+      title: 'Job rescheduled',
+      message: `${byLabel} moved "${job.title}" to ${formatDisplayDay(scheduledDate)} (${input.timeSlot}).`,
+      data: {
+        jobId,
+        jobRef: job.jobRef,
+        bookingId: job.booking?.id ?? null,
+        scheduledDate: scheduledDate.toISOString(),
+        timeSlot: input.timeSlot,
+      },
+    });
+  }
 
   return getJobProgress(customerId, jobId);
 };

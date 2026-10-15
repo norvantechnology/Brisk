@@ -943,10 +943,19 @@ const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
       status: JobStatus.COMPLETED,
     };
   }
-  // ACTIVE: anything still open or awaiting payment (including finished + payment requested).
+  // ACTIVE: open / awaiting payment — exclude jobs waiting on trader to re-propose site-visit slots.
   return {
-    NOT: CUSTOMER_CANCELLED_WHERE,
-    status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] },
+    AND: [
+      { NOT: CUSTOMER_CANCELLED_WHERE },
+      { status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] } },
+      {
+        NOT: {
+          siteVisitRequests: {
+            some: { status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
+          },
+        },
+      },
+    ],
   };
 };
 
