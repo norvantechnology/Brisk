@@ -267,8 +267,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - `id` (uuid string), `jobRef`, `title`, `statusLabel`
  *       - `status` — job status as display text, underscores replaced by spaces (e.g. `IN PROGRESS`, `PAYMENT PENDING`, `PUBLISHED`)
  *       - `date` — "October 24, 2026" (ACTIVE: scheduled/posted day · COMPLETED: finished day · OTHER: cancelled day); `dateAt` ISO
- *       - `timeSlot` — current slot (`MORNING` | `AFTERNOON` | `EVENING` | `ANYTIME` or free text)
- *       - `category` / `subcategory` — `{ id, name }` for Reschedule Job bottom sheet (read-only)
+ *       - `categoryId` / `categoryName` · `subcategoryId` / `subcategoryName` — Reschedule sheet (read-only)
  *       - `canReschedule` — open Reschedule sheet when true; submit `POST /jobs/{id}/reschedule`
  *       - `provider` — assigned trader name (null until assigned)
  *       - `amount` (number or null) + `amountType`:
@@ -310,9 +309,10 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         statusLabel: Active
  *                         date: October 24, 2026
  *                         dateAt: '2026-10-24T00:00:00.000Z'
- *                         timeSlot: AFTERNOON
- *                         category: { id: uuid, name: Boiler }
- *                         subcategory: { id: uuid, name: Boiler Repair }
+ *                         categoryId: uuid
+ *                         categoryName: Boiler
+ *                         subcategoryId: uuid
+ *                         subcategoryName: Boiler Repair
  *                         canReschedule: true
  *                         provider: "Liam O'Connor Plumbing"
  *                         amount: 140

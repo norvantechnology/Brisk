@@ -1084,7 +1084,6 @@ export const listMyJobsByTab = async (
         jobRef: true,
         title: true,
         scheduledDate: true,
-        timeSlot: true,
         createdAt: true,
         updatedAt: true,
         category: { select: { id: true, name: true } },
@@ -1140,12 +1139,11 @@ export const listMyJobsByTab = async (
       ),
       date: formatDisplayDay(dateAt),
       dateAt,
-      timeSlot: job.timeSlot ?? null,
       /** Reschedule Job bottom sheet — Service Category / Sub-Category (read-only display). */
-      category: job.category ? { id: job.category.id, name: job.category.name } : null,
-      subcategory: job.subcategory
-        ? { id: job.subcategory.id, name: job.subcategory.name }
-        : null,
+      categoryId: job.category?.id ?? null,
+      categoryName: job.category?.name ?? null,
+      subcategoryId: job.subcategory?.id ?? null,
+      subcategoryName: job.subcategory?.name ?? null,
       /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule */
       canReschedule:
         !cancelled && !job.booking?.arrivedAt && reschedulableStatuses.includes(job.status),
