@@ -344,27 +344,6 @@ export const listCustomerSiteVisitRequestJobs = async (
   }
 };
 
-export const getCustomerSiteVisitRequestJob = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const data = await jobsService.getCustomerSiteVisitRequestJob(
-      req.user!.id,
-      req.params.id
-    );
-    sendResponse({
-      res,
-      statusCode: 200,
-      message: 'Site visit request details retrieved successfully.',
-      data,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const confirmSiteVisitProposal = async (
   req: AuthenticatedRequest,
   res: Response,

@@ -2272,8 +2272,8 @@ const getOwnedPendingSiteVisitRequest = async (
 };
 
 /**
- * Customer home — Site Visit Request list (jobs with ≥1 PENDING trader proposal).
- * Card: title, subtitle, "N Requests".
+ * Customer home + bottom sheet in one response.
+ * Jobs with ≥1 PENDING proposal; each item includes traders + slots for Accept/Decline.
  */
 export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
   const jobs = await prisma.job.findMany({
@@ -2289,22 +2289,13 @@ export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
       title: true,
       description: true,
       updatedAt: true,
-      siteVisitRequests: {
-        where: { status: TraderSiteVisitStatus.PENDING },
-        select: { id: true },
-      },
-      _count: {
-        select: {
-          siteVisitRequests: {
-            where: { status: { not: TraderSiteVisitStatus.CANCELLED } },
-          },
-        },
-      },
+      siteVisitRequests: jobInclude.siteVisitRequests,
     },
   });
 
   const items = jobs.map((job) => {
-    const pendingCount = job.siteVisitRequests.length;
+    const proposals = (job.siteVisitRequests ?? []).map(serializeSiteVisitProposal);
+    const pendingCount = proposals.filter((p) => p.status === TraderSiteVisitStatus.PENDING).length;
     const subtitle =
       job.description?.trim().split(/\n/)[0]?.trim().slice(0, 120) || null;
     return {
@@ -2315,38 +2306,16 @@ export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
       subtitle,
       requestCount: pendingCount,
       requestCountLabel: `${pendingCount} Request${pendingCount === 1 ? '' : 's'}`,
-      totalApplicants: job._count.siteVisitRequests,
+      totalApplicants: proposals.length,
       maxApplicants: MAX_SITE_VISIT_APPLICANTS,
       updatedAt: job.updatedAt.toISOString(),
+      /** Bottom sheet: traders who applied + proposed slots (Accept / Decline). */
+      traders: proposals,
+      siteVisitProposals: proposals,
     };
   });
 
   return { items, count: items.length };
-};
-
-/**
- * Customer bottom sheet — one job + all traders who applied (slots, Accept/Decline).
- */
-export const getCustomerSiteVisitRequestJob = async (customerId: string, jobId: string) => {
-  const job = await getOwnedJob(customerId, jobId);
-  const proposals = (job.siteVisitRequests ?? []).map(serializeSiteVisitProposal);
-  const pendingCount = proposals.filter((p) => p.status === TraderSiteVisitStatus.PENDING).length;
-  const subtitle =
-    job.description?.trim().split(/\n/)[0]?.trim().slice(0, 120) || null;
-
-  return {
-    id: job.id,
-    jobId: job.id,
-    jobRef: job.jobRef ?? null,
-    title: job.title,
-    subtitle,
-    requestCount: pendingCount,
-    requestCountLabel: `${pendingCount} Request${pendingCount === 1 ? '' : 's'}`,
-    totalApplicants: proposals.length,
-    maxApplicants: MAX_SITE_VISIT_APPLICANTS,
-    traders: proposals,
-    siteVisitProposals: proposals,
-  };
 };
 
 const notifyTraderSiteVisit = async (

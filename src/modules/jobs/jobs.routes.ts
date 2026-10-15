@@ -363,18 +363,23 @@ router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.
  * @swagger
  * /jobs/site-visit-requests:
  *   get:
- *     summary: Home — Site Visit Request list
+ *     summary: Site Visit Requests — home list + bottom-sheet traders/slots
  *     tags: ['Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Customer home section **Site Visit Request**.
- *       Returns jobs that have ≥1 **PENDING** trader site-visit proposal.
- *       Card fields: `title`, `subtitle`, `requestCount` / `requestCountLabel` (e.g. "3 Requests").
- *       Tap a row → `GET /jobs/{id}/site-visit-requests` (bottom sheet).
- *       Max applicants per job: 3 (also enforced on trader Discover apply).
+ *       Single API for home **Site Visit Request** and the per-job bottom sheet.
+ *       Returns jobs with ≥1 **PENDING** trader proposal. Each item has card fields
+ *       (`title`, `subtitle`, `requestCount` / `requestCountLabel`) plus nested
+ *       `traders[]` / `siteVisitProposals[]` (photo, rating, `slots[]`, `canConfirm` / `canReject`).
+ *
+ *       Actions (unchanged):
+ *       - **Accept** → `POST /jobs/{jobId}/site-visits/{requestId}/confirm` body `{ slotId }`
+ *       - **Decline** → `POST /jobs/{jobId}/site-visits/{requestId}/reject`
+ *
+ *       Max applicants per job: 3.
  *     responses:
  *       200:
- *         description: Site visit request job cards
+ *         description: Jobs with nested traders + slots
  *         content:
  *           application/json:
  *             example:
@@ -389,43 +394,24 @@ router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.
  *                     requestCount: 3
  *                     requestCountLabel: 3 Requests
  *                     maxApplicants: 3
+ *                     traders:
+ *                       - requestId: uuid
+ *                         traderName: David Murphy
+ *                         canConfirm: true
+ *                         canReject: true
+ *                         slots:
+ *                           - slotId: uuid
+ *                             date: '2026-07-26'
+ *                             timeSlot: MORNING
+ *                             startTime: '08:00'
+ *                             endTime: '12:00'
+ *                             isSelected: true
  *                 count: 1
  */
 router.get(
   '/site-visit-requests',
   ...customerOnly,
   controller.listCustomerSiteVisitRequestJobs
-);
-
-/**
- * @swagger
- * /jobs/{id}/site-visit-requests:
- *   get:
- *     summary: Site Visit Requests bottom sheet (traders + slots)
- *     tags: ['Customer / Jobs']
- *     security: [{ bearerAuth: [] }]
- *     description: |
- *       Bottom sheet for one job: all traders who applied with proposed time slots.
- *       Select a slot per trader, then:
- *       - **Accept** → `POST /jobs/{id}/site-visits/{requestId}/confirm` body `{ slotId }`
- *       - **Decline** → `POST /jobs/{id}/site-visits/{requestId}/reject`
- *         (PENDING → RESCHEDULE_REQUIRED — trader must propose a new time)
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200:
- *         description: Job header + traders with slots
- *       404:
- *         description: Job not found
- */
-router.get(
-  '/:id/site-visit-requests',
-  ...customerOnly,
-  validate(jobIdParamSchema),
-  controller.getCustomerSiteVisitRequestJob
 );
 
 /**
