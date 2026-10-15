@@ -144,6 +144,20 @@ export const createTraderPayoutSchema = z.object({
 
 export type CreateTraderPayoutInput = z.infer<typeof createTraderPayoutSchema>['body'];
 
+export const reviewTraderPayoutSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid trader ID format.'),
+    payoutId: z.string().uuid('Invalid payout ID format.'),
+  }),
+  body: z.object({
+    action: z.enum(['approve', 'reject']),
+    bankReference: z.string().trim().max(120).optional(),
+    note: z.string().trim().max(500).optional(),
+  }),
+});
+
+export type ReviewTraderPayoutInput = z.infer<typeof reviewTraderPayoutSchema>['body'];
+
 export const traderOffersQuerySchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid trader ID format.'),

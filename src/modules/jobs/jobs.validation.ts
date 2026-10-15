@@ -205,6 +205,20 @@ export const siteVisitProposalParamSchema = z.object({
   }),
 });
 
+/** Confirm site visit — optional `slotId` for the chosen proposed window. */
+export const confirmSiteVisitBodySchema = z.object({
+  params: z.object({
+    id: uuid,
+    requestId: uuid,
+  }),
+  body: z
+    .object({
+      slotId: uuid.optional(),
+    })
+    .optional()
+    .default({}),
+});
+
 export const jobQuoteDetailSchema = z.object({
   params: z.object({ id: uuid, quoteId: uuid }),
   query: z.object({

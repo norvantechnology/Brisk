@@ -229,6 +229,34 @@ export const createPayout = async (
   }
 };
 
+export const reviewPayout = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const data = await service.reviewTraderPayoutRequest(
+      req.adminUser!.id,
+      adminLabel,
+      req.params.id,
+      req.params.payoutId,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message:
+        req.body.action === 'approve'
+          ? 'Payout request approved successfully.'
+          : 'Payout request rejected successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getOffersStats = async (
   req: AuthenticatedAdminRequest,
   res: Response,

@@ -14,6 +14,7 @@ import {
   updateJobSchema,
   acceptJobQuoteSchema,
   siteVisitProposalParamSchema,
+  confirmSiteVisitBodySchema,
   cancelJobSchema,
   createJobDisputeSchema,
   jobQuoteDetailSchema,
@@ -357,6 +358,75 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
  */
 router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.listMyJobsByTab);
+
+/**
+ * @swagger
+ * /jobs/site-visit-requests:
+ *   get:
+ *     summary: Home — Site Visit Request list
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Customer home section **Site Visit Request**.
+ *       Returns jobs that have ≥1 **PENDING** trader site-visit proposal.
+ *       Card fields: `title`, `subtitle`, `requestCount` / `requestCountLabel` (e.g. "3 Requests").
+ *       Tap a row → `GET /jobs/{id}/site-visit-requests` (bottom sheet).
+ *       Max applicants per job: 3 (also enforced on trader Discover apply).
+ *     responses:
+ *       200:
+ *         description: Site visit request job cards
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Site visit requests retrieved successfully.
+ *               data:
+ *                 items:
+ *                   - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     jobId: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     title: Solar Panel Installation
+ *                     subtitle: Residential Roof Project
+ *                     requestCount: 3
+ *                     requestCountLabel: 3 Requests
+ *                     maxApplicants: 3
+ *                 count: 1
+ */
+router.get(
+  '/site-visit-requests',
+  ...customerOnly,
+  controller.listCustomerSiteVisitRequestJobs
+);
+
+/**
+ * @swagger
+ * /jobs/{id}/site-visit-requests:
+ *   get:
+ *     summary: Site Visit Requests bottom sheet (traders + slots)
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Bottom sheet for one job: all traders who applied with proposed time slots.
+ *       Select a slot per trader, then:
+ *       - **Accept** → `POST /jobs/{id}/site-visits/{requestId}/confirm` body `{ slotId }`
+ *       - **Decline** → `POST /jobs/{id}/site-visits/{requestId}/reject`
+ *         (PENDING → RESCHEDULE_REQUIRED — trader must propose a new time)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Job header + traders with slots
+ *       404:
+ *         description: Job not found
+ */
+router.get(
+  '/:id/site-visit-requests',
+  ...customerOnly,
+  validate(jobIdParamSchema),
+  controller.getCustomerSiteVisitRequestJob
+);
 
 /**
  * @swagger
@@ -1358,11 +1428,12 @@ router.get('/:id/disputes', ...customerOnly, validate(jobIdParamSchema), control
  * @swagger
  * /jobs/{id}/site-visits/{requestId}/confirm:
  *   post:
- *     summary: Confirm a trader site-visit proposal (customer)
+ *     summary: Accept a trader site-visit proposal (customer)
  *     tags: ['Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       PENDING → CONFIRMED. Keeps `visitDate` / `timeSlot` as the confirmed schedule.
+ *       PENDING → CONFIRMED. Pass `slotId` from the trader's `slots[]` to lock that window
+ *       (per-trader selection). If omitted, uses the slot marked `isSelected` (or first).
  *     parameters:
  *       - in: path
  *         name: id
@@ -1372,11 +1443,21 @@ router.get('/:id/disputes', ...customerOnly, validate(jobIdParamSchema), control
  *         name: requestId
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               slotId: { type: string, format: uuid }
+ *           example:
+ *             slotId: b2c3d4e5-f6a7-8901-bcde-f12345678901
  *     responses:
  *       200:
  *         description: Site visit confirmed
  *       400:
- *         description: Not pending / missing date
+ *         description: Not pending / missing date / invalid slotId
  *       404:
  *         description: Proposal not found
  *       409:
@@ -1385,7 +1466,7 @@ router.get('/:id/disputes', ...customerOnly, validate(jobIdParamSchema), control
 router.post(
   '/:id/site-visits/:requestId/confirm',
   ...customerOnly,
-  validate(siteVisitProposalParamSchema),
+  validate(confirmSiteVisitBodySchema),
   controller.confirmSiteVisitProposal
 );
 

@@ -10,10 +10,13 @@ import {
   BookingStatus,
   InvoiceStatus,
   TraderSiteVisitStatus,
+  VerificationStatus,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
+import { MAX_SITE_VISIT_APPLICANTS } from '../site-visits/site-visit-limits';
+import { SITE_VISIT_SLOT_DEFS } from '../traders/jobs/trader-jobs.service';
 import {
   buildJobFormConfig,
   buildNextJobPrefill,
@@ -250,16 +253,102 @@ const jobInclude = {
       visitDate: true,
       timeSlot: true,
       updatedAt: true,
+      slots: {
+        orderBy: { sortOrder: 'asc' as const },
+        select: {
+          id: true,
+          visitDate: true,
+          timeSlot: true,
+          startTime: true,
+          endTime: true,
+          sortOrder: true,
+          isSelected: true,
+        },
+      },
       trader: {
         select: {
           id: true,
           businessName: true,
-          user: { select: { fullName: true } },
+          profilePhotoUrl: true,
+          avgRating: true,
+          topRated: true,
+          verificationStatus: true,
+          user: { select: { fullName: true, profilePhotoUrl: true } },
+          _count: { select: { ratingsReceived: true } },
         },
       },
     },
   },
 } satisfies Prisma.JobInclude;
+
+const formatSiteVisitDateKey = (d: Date): string => {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const serializeSiteVisitProposal = (
+  v: Prisma.JobGetPayload<{ include: typeof jobInclude }>['siteVisitRequests'][number]
+) => {
+  const slots =
+    v.slots && v.slots.length > 0
+      ? v.slots.map((s) => {
+          const def = SITE_VISIT_SLOT_DEFS[s.timeSlot];
+          return {
+            id: s.id,
+            slotId: s.id,
+            date: formatSiteVisitDateKey(s.visitDate),
+            timeSlot: s.timeSlot,
+            startTime: s.startTime || def.startTime,
+            endTime: s.endTime || def.endTime,
+            isSelected: s.isSelected,
+          };
+        })
+      : v.visitDate && v.timeSlot
+        ? [
+            {
+              id: v.id,
+              slotId: v.id,
+              date: formatSiteVisitDateKey(v.visitDate),
+              timeSlot: v.timeSlot,
+              startTime: SITE_VISIT_SLOT_DEFS[v.timeSlot].startTime,
+              endTime: SITE_VISIT_SLOT_DEFS[v.timeSlot].endTime,
+              isSelected: true,
+            },
+          ]
+        : [];
+  const selected = slots.find((s) => s.isSelected) ?? slots[0] ?? null;
+  const traderName = v.trader?.businessName || v.trader?.user?.fullName || null;
+
+  return {
+    requestId: v.id,
+    traderId: v.traderId,
+    traderName,
+    trader: v.trader
+      ? {
+          id: v.trader.id,
+          name: traderName,
+          profilePhotoUrl:
+            v.trader.profilePhotoUrl ?? v.trader.user?.profilePhotoUrl ?? null,
+          avgRating: Number(v.trader.avgRating ?? 0),
+          reviewsCount: v.trader._count.ratingsReceived,
+          isVerified: v.trader.verificationStatus === VerificationStatus.VERIFIED,
+          topRated: v.trader.topRated,
+        }
+      : null,
+    status: v.status,
+    visitDate: selected?.date ?? (v.visitDate ? formatSiteVisitDateKey(v.visitDate) : null),
+    timeSlot: selected?.timeSlot ?? v.timeSlot,
+    startTime: selected?.startTime ?? null,
+    endTime: selected?.endTime ?? null,
+    slots,
+    slotCount: slots.length,
+    updatedAt: v.updatedAt.toISOString(),
+    canConfirm: v.status === TraderSiteVisitStatus.PENDING,
+    canReject: v.status === TraderSiteVisitStatus.PENDING,
+  };
+};
 
 const serializeJob = (
   job: Prisma.JobGetPayload<{ include: typeof jobInclude }>
@@ -468,23 +557,13 @@ const serializeJob = (
         }
       : { id: '', status: '', claimedAt: '' },
     /**
-     * Trader site-visit proposals for this job.
-     * Customer uses `requestId` with confirm/reject endpoints.
+     * Trader site-visit proposals for this job (bottom sheet).
+     * Customer uses `requestId` + optional `slotId` with confirm/reject endpoints.
      * On reject, visitDate is kept so trader Discover shows it as reschedule context.
      */
-    siteVisitProposals: (job.siteVisitRequests ?? []).map((v) => ({
-      requestId: v.id,
-      traderId: v.traderId,
-      traderName: v.trader?.businessName || v.trader?.user?.fullName || null,
-      status: v.status,
-      visitDate: v.visitDate
-        ? v.visitDate.toISOString().slice(0, 10)
-    : null,
-      timeSlot: v.timeSlot,
-      updatedAt: v.updatedAt.toISOString(),
-      canConfirm: v.status === TraderSiteVisitStatus.PENDING,
-      canReject: v.status === TraderSiteVisitStatus.PENDING,
-    })),
+    siteVisitProposals: (job.siteVisitRequests ?? []).map(serializeSiteVisitProposal),
+    siteVisitRequestCount: (job.siteVisitRequests ?? []).length,
+    maxSiteVisitApplicants: MAX_SITE_VISIT_APPLICANTS,
     bookingId: str(job.booking?.id),
     invoiceId: str(job.booking?.invoice?.id),
   booking: job.booking
@@ -2173,12 +2252,101 @@ const getOwnedPendingSiteVisitRequest = async (
       status: true,
       visitDate: true,
       timeSlot: true,
+      slots: {
+        orderBy: { sortOrder: 'asc' as const },
+        select: {
+          id: true,
+          visitDate: true,
+          timeSlot: true,
+          startTime: true,
+          endTime: true,
+          isSelected: true,
+        },
+      },
     },
   });
   if (!request) {
     throw new NotFoundError('Site visit proposal not found for this job.');
   }
   return { job, request };
+};
+
+/**
+ * Customer home — Site Visit Request list (jobs with ≥1 PENDING trader proposal).
+ * Card: title, subtitle, "N Requests".
+ */
+export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
+  const jobs = await prisma.job.findMany({
+    where: {
+      customerId,
+      status: { notIn: [JobStatus.CANCELLED, JobStatus.COMPLETED] },
+      siteVisitRequests: { some: { status: TraderSiteVisitStatus.PENDING } },
+    },
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      jobRef: true,
+      title: true,
+      description: true,
+      updatedAt: true,
+      siteVisitRequests: {
+        where: { status: TraderSiteVisitStatus.PENDING },
+        select: { id: true },
+      },
+      _count: {
+        select: {
+          siteVisitRequests: {
+            where: { status: { not: TraderSiteVisitStatus.CANCELLED } },
+          },
+        },
+      },
+    },
+  });
+
+  const items = jobs.map((job) => {
+    const pendingCount = job.siteVisitRequests.length;
+    const subtitle =
+      job.description?.trim().split(/\n/)[0]?.trim().slice(0, 120) || null;
+    return {
+      id: job.id,
+      jobId: job.id,
+      jobRef: job.jobRef ?? null,
+      title: job.title,
+      subtitle,
+      requestCount: pendingCount,
+      requestCountLabel: `${pendingCount} Request${pendingCount === 1 ? '' : 's'}`,
+      totalApplicants: job._count.siteVisitRequests,
+      maxApplicants: MAX_SITE_VISIT_APPLICANTS,
+      updatedAt: job.updatedAt.toISOString(),
+    };
+  });
+
+  return { items, count: items.length };
+};
+
+/**
+ * Customer bottom sheet — one job + all traders who applied (slots, Accept/Decline).
+ */
+export const getCustomerSiteVisitRequestJob = async (customerId: string, jobId: string) => {
+  const job = await getOwnedJob(customerId, jobId);
+  const proposals = (job.siteVisitRequests ?? []).map(serializeSiteVisitProposal);
+  const pendingCount = proposals.filter((p) => p.status === TraderSiteVisitStatus.PENDING).length;
+  const subtitle =
+    job.description?.trim().split(/\n/)[0]?.trim().slice(0, 120) || null;
+
+  return {
+    id: job.id,
+    jobId: job.id,
+    jobRef: job.jobRef ?? null,
+    title: job.title,
+    subtitle,
+    requestCount: pendingCount,
+    requestCountLabel: `${pendingCount} Request${pendingCount === 1 ? '' : 's'}`,
+    totalApplicants: proposals.length,
+    maxApplicants: MAX_SITE_VISIT_APPLICANTS,
+    traders: proposals,
+    siteVisitProposals: proposals,
+  };
 };
 
 const notifyTraderSiteVisit = async (
@@ -2208,13 +2376,15 @@ const notifyTraderSiteVisit = async (
 };
 
 /**
- * Customer confirms a trader's proposed site-visit slot(s).
- * PENDING → CONFIRMED. Keeps visitDate/timeSlot.
+ * Customer confirms a trader's proposed site-visit slot.
+ * Optional `slotId` selects which proposed window to lock; otherwise uses isSelected / primary.
+ * PENDING → CONFIRMED.
  */
 export const confirmSiteVisitProposal = async (
   customerId: string,
   jobId: string,
-  requestId: string
+  requestId: string,
+  body?: { slotId?: string }
 ) => {
   const { request } = await getOwnedPendingSiteVisitRequest(customerId, jobId, requestId);
   if (request.status === TraderSiteVisitStatus.CONFIRMED) {
@@ -2226,31 +2396,68 @@ export const confirmSiteVisitProposal = async (
   if (request.status !== TraderSiteVisitStatus.PENDING) {
     throw new BadRequestError('Only a pending site-visit proposal can be confirmed.');
   }
-  if (!request.visitDate || !request.timeSlot) {
+
+  const slots = request.slots ?? [];
+  let visitDate = request.visitDate;
+  let timeSlot = request.timeSlot;
+  let selectedSlotId: string | null = null;
+
+  if (body?.slotId) {
+    const slot = slots.find((s) => s.id === body.slotId);
+    if (!slot) {
+      throw new BadRequestError('Selected slot does not belong to this site-visit request.');
+    }
+    visitDate = slot.visitDate;
+    timeSlot = slot.timeSlot;
+    selectedSlotId = slot.id;
+  } else if (slots.length > 0) {
+    const slot = slots.find((s) => s.isSelected) ?? slots[0];
+    visitDate = slot.visitDate;
+    timeSlot = slot.timeSlot;
+    selectedSlotId = slot.id;
+  }
+
+  if (!visitDate || !timeSlot) {
     throw new BadRequestError('Site visit proposal has no date/time to confirm.');
   }
 
-  const updated = await prisma.traderSiteVisitRequest.update({
-    where: { id: request.id },
-    data: {
-      status: TraderSiteVisitStatus.CONFIRMED,
-      visitDate: request.visitDate,
-      timeSlot: request.timeSlot,
-    },
-    select: {
-      id: true,
-      jobId: true,
-      traderId: true,
-      status: true,
-      visitDate: true,
-      timeSlot: true,
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    if (selectedSlotId && slots.length > 0) {
+      await tx.traderSiteVisitSlot.updateMany({
+        where: { requestId: request.id },
+        data: { isSelected: false },
+      });
+      await tx.traderSiteVisitSlot.update({
+        where: { id: selectedSlotId },
+        data: { isSelected: true },
+      });
+    }
+
+    const row = await tx.traderSiteVisitRequest.update({
+      where: { id: request.id },
+      data: {
+        status: TraderSiteVisitStatus.CONFIRMED,
+        visitDate,
+        timeSlot,
+      },
+      select: {
+        id: true,
+        jobId: true,
+        traderId: true,
+        status: true,
+        visitDate: true,
+        timeSlot: true,
+      },
+    });
+
+    await tx.job.update({
+      where: { id: jobId },
+      data: { scheduledDate: visitDate },
+    });
+
+    return row;
   });
 
-  await prisma.job.update({
-    where: { id: jobId },
-    data: { scheduledDate: request.visitDate },
-  });
   await notifyTraderSiteVisit('SITE_VISIT_CONFIRMED', updated);
 
   return {
@@ -2258,8 +2465,11 @@ export const confirmSiteVisitProposal = async (
     jobId: updated.jobId,
     traderId: updated.traderId,
     status: updated.status,
-    visitDate: updated.visitDate,
+    visitDate: updated.visitDate
+      ? formatSiteVisitDateKey(updated.visitDate)
+      : null,
     timeSlot: updated.timeSlot,
+    slotId: selectedSlotId,
   };
 };
 

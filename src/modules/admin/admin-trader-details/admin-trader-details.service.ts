@@ -707,7 +707,7 @@ export const getTraderEarningsSummary = async (traderId: string) => {
 
   const balances = jobs.map(buildJobPayoutBalance);
   const pendingPayout = round2(
-    balances.filter((b) => b.eligibleForPayout).reduce((s, b) => s + b.remainingBalance, 0)
+    balances.filter((b) => b.eligibleForPayout).reduce((s, b) => s + b.availableToRequest, 0)
   );
   const eligibleJobsCount = balances.filter((b) => b.eligibleForPayout).length;
 
@@ -784,6 +784,8 @@ const serializePayout = (
         totalPayable: jobBalance.totalPayable,
         amountPaid: jobBalance.amountPaid,
         remainingBalance: jobBalance.remainingBalance,
+        pendingRequestAmount: jobBalance.pendingRequestAmount,
+        availableToRequest: jobBalance.availableToRequest,
         payoutStatus: jobBalance.payoutStatus,
         eligibleForPayout: jobBalance.eligibleForPayout,
       }
@@ -995,15 +997,23 @@ export const createTraderPayout = async (
       data: balance,
     });
   }
-  if (balance.remainingBalance <= 0) {
-    throw new BadRequestError('This job is already fully paid out to the trader.', {
-      code: 'JOB_PAYOUT_ALREADY_COMPLETE',
-      data: balance,
-    });
-  }
-  if (input.amount - balance.remainingBalance > 0.001) {
+  if (balance.availableToRequest <= 0) {
     throw new BadRequestError(
-      `Amount exceeds remaining balance (${balance.remainingBalance} ${balance.currencyCode}).`,
+      balance.remainingBalance <= 0
+        ? 'This job is already fully paid out to the trader.'
+        : 'This job has no available balance (open payout requests cover the remainder).',
+      {
+        code:
+          balance.remainingBalance <= 0
+            ? 'JOB_PAYOUT_ALREADY_COMPLETE'
+            : 'JOB_PAYOUT_BALANCE_RESERVED',
+        data: balance,
+      }
+    );
+  }
+  if (input.amount - balance.availableToRequest > 0.001) {
+    throw new BadRequestError(
+      `Amount exceeds available balance (${balance.availableToRequest} ${balance.currencyCode}).`,
       {
         code: 'PAYOUT_EXCEEDS_REMAINING',
         data: { ...balance, requestedAmount: input.amount },
@@ -1046,6 +1056,111 @@ export const createTraderPayout = async (
       description: `Recorded manual payout ${currencyCode} ${input.amount} for job ${job.jobRef ?? job.id} (remaining ${nextBalance.remainingBalance}; status ${nextBalance.payoutStatus})${input.bankReference ? ` — bank ref ${input.bankReference}` : ''}${input.note ? ` — ${input.note}` : ''}.`,
     },
   });
+
+  return serializePayout(payout, trader, nextBalance);
+};
+
+/**
+ * Approve or reject a trader-submitted PENDING payout request.
+ * approve → COMPLETED (manual bank transfer recorded); reject → FAILED (frees availableToRequest).
+ */
+export const reviewTraderPayoutRequest = async (
+  adminId: string,
+  adminLabel: string,
+  traderId: string,
+  payoutId: string,
+  input: { action: 'approve' | 'reject'; bankReference?: string; note?: string }
+) => {
+  const trader = await assertTraderExists(traderId);
+  const existing = await prisma.payout.findFirst({
+    where: { id: payoutId, traderId },
+    include: { job: { select: { id: true, jobRef: true, title: true } } },
+  });
+  if (!existing) throw new NotFoundError('Payout request not found.');
+  if (existing.status !== PayoutStatus.PENDING && existing.status !== PayoutStatus.PROCESSING) {
+    throw new BadRequestError('Only a pending payout request can be reviewed.', {
+      code: 'PAYOUT_NOT_PENDING',
+    });
+  }
+
+  const now = new Date();
+  const approved = input.action === 'approve';
+
+  if (approved && existing.jobId) {
+    const job = await prisma.job.findFirst({
+      where: { id: existing.jobId, traderId },
+      select: jobPayoutSelect,
+    });
+    if (job) {
+      // remainingBalance ignores PENDING — room left vs COMPLETED payouts only.
+      const room = buildJobPayoutBalance(job).remainingBalance;
+      if (money(existing.amount) - room > 0.001) {
+        throw new BadRequestError(
+          `Cannot approve — amount exceeds remaining balance after completed payouts (${room}).`,
+          { code: 'PAYOUT_EXCEEDS_REMAINING' }
+        );
+      }
+    }
+  }
+
+  const payout = await prisma.payout.update({
+    where: { id: existing.id },
+    data: {
+      status: approved ? PayoutStatus.COMPLETED : PayoutStatus.FAILED,
+      bankReference: approved
+        ? (input.bankReference ?? existing.bankReference)
+        : existing.bankReference,
+      note: input.note ?? existing.note,
+      processedById: adminId,
+      processedAt: now,
+    },
+    include: { job: { select: { id: true, jobRef: true, title: true } } },
+  });
+
+  let nextBalance: ReturnType<typeof buildJobPayoutBalance> | null = null;
+  if (payout.jobId) {
+    const refreshed = await prisma.job.findFirst({
+      where: { id: payout.jobId },
+      select: jobPayoutSelect,
+    });
+    if (refreshed) nextBalance = buildJobPayoutBalance(refreshed);
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: approved ? 'TRADER_JOB_PAYOUT_APPROVED' : 'TRADER_JOB_PAYOUT_REJECTED',
+      actorType: ActorType.ADMIN,
+      actorId: adminId,
+      actorLabel: adminLabel,
+      subjectType: 'Payout',
+      subjectId: payout.id,
+      description: `${approved ? 'Approved' : 'Rejected'} trader payout ${payout.currencyCode} ${money(payout.amount)} for job ${payout.job?.jobRef ?? payout.jobId ?? 'n/a'}${input.bankReference ? ` — bank ref ${input.bankReference}` : ''}${input.note ? ` — ${input.note}` : ''}.`,
+    },
+  });
+
+  const traderUser = await prisma.trader.findUnique({
+    where: { id: traderId },
+    select: { userId: true },
+  });
+  if (traderUser) {
+    const { pushUserNotification } = await import('../../../sockets/realtime');
+    const amountLabel = `${payout.currencyCode} ${money(payout.amount).toFixed(2)}`;
+    const jobTitle = payout.job?.title ?? 'your job';
+    await pushUserNotification([traderUser.userId], {
+      type: approved ? 'PAYOUT_APPROVED' : 'PAYOUT_REJECTED',
+      title: approved ? 'Payout approved' : 'Payout rejected',
+      message: approved
+        ? `Your payout request of ${amountLabel} for "${jobTitle}" was approved.`
+        : `Your payout request of ${amountLabel} for "${jobTitle}" was rejected.`,
+      data: {
+        payoutId: payout.id,
+        jobId: payout.jobId,
+        amount: money(payout.amount),
+        currencyCode: payout.currencyCode,
+        status: payout.status,
+      },
+    });
+  }
 
   return serializePayout(payout, trader, nextBalance);
 };

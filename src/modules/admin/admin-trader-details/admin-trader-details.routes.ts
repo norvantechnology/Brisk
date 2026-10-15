@@ -5,6 +5,7 @@ import * as controller from './admin-trader-details.controller';
 import { adminTraderSiteVisitsSchema } from '../../site-visits/site-visits.validation';
 import {
   createTraderPayoutSchema,
+  reviewTraderPayoutSchema,
   traderDetailsIdParamSchema,
   traderDocumentsQuerySchema,
   traderJobPayoutSummarySchema,
@@ -815,6 +816,55 @@ router.post(
   '/traders/:id/payouts',
   validate(createTraderPayoutSchema),
   controller.createPayout
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/payouts/{payoutId}:
+ *   patch:
+ *     summary: Approve or reject a trader payout request
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Reviews a trader-submitted `PENDING` payout from `POST /traders/payouts`.
+ *       - `approve` → `COMPLETED` (record bank transfer; optional `bankReference`)
+ *       - `reject` → `FAILED` (frees `availableToRequest` for the trader)
+ *       List pending via `GET .../payouts?status=PENDING`.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: payoutId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [action]
+ *             properties:
+ *               action: { type: string, enum: [approve, reject] }
+ *               bankReference: { type: string }
+ *               note: { type: string }
+ *           example:
+ *             action: approve
+ *             bankReference: TXN-99821
+ *     responses:
+ *       200:
+ *         description: Updated payout row + jobPayout balance
+ *       400:
+ *         description: Not pending / exceeds remaining
+ *       404:
+ *         description: Payout not found
+ */
+router.patch(
+  '/traders/:id/payouts/:payoutId',
+  validate(reviewTraderPayoutSchema),
+  controller.reviewPayout
 );
 
 /**

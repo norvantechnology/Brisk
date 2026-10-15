@@ -326,6 +326,45 @@ export const cancelJob = async (
   }
 };
 
+export const listCustomerSiteVisitRequestJobs = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.listCustomerSiteVisitRequestJobs(req.user!.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit requests retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCustomerSiteVisitRequestJob = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getCustomerSiteVisitRequestJob(
+      req.user!.id,
+      req.params.id
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit request details retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const confirmSiteVisitProposal = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -335,7 +374,8 @@ export const confirmSiteVisitProposal = async (
     const data = await jobsService.confirmSiteVisitProposal(
       req.user!.id,
       req.params.id,
-      req.params.requestId
+      req.params.requestId,
+      req.body as { slotId?: string } | undefined
     );
     sendResponse({
       res,

@@ -18,6 +18,11 @@ import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import { getPlatformSetting } from '../../settings/platform-settings.service';
 import { emitSiteVisitUpdate } from '../../../sockets/realtime';
 import {
+  countActiveSiteVisitApplicants,
+  listSiteVisitFullJobIds,
+  MAX_SITE_VISIT_APPLICANTS,
+} from '../../site-visits/site-visit-limits';
+import {
   rememberTraderDeviceOrigin,
   resolveTraderOrigin,
   type Origin,
@@ -905,8 +910,12 @@ export const listDiscoverJobs = async (
       : undefined;
 
   const createdAt = dateRangeWhere(query.from, query.to);
-  // Jobs already in Jobs Queue (awaiting customer or trader accept) stay off Discover.
-  const excludedJobIds = await discoverQueueExcludedJobIds(trader.id);
+  // Jobs already in Jobs Queue, or site-visit jobs at the 3-trader cap, stay off Discover.
+  const [queueExcludedIds, siteVisitFullIds] = await Promise.all([
+    discoverQueueExcludedJobIds(trader.id),
+    listSiteVisitFullJobIds(),
+  ]);
+  const excludedJobIds = [...new Set([...queueExcludedIds, ...siteVisitFullIds])];
   const where: Prisma.JobWhereInput = {
     status: JobStatus.PUBLISHED,
     traderId: null,
@@ -1579,6 +1588,18 @@ const upsertSiteVisit = async (
         : TraderSiteVisitStatus.PENDING;
 
   const row = await prisma.$transaction(async (tx) => {
+    const hasActiveOwn =
+      Boolean(existing) && existing!.status !== TraderSiteVisitStatus.CANCELLED;
+    // New applicant only — updates to own PENDING/CONFIRMED/etc. stay allowed.
+    if (!hasActiveOwn) {
+      const applicants = await countActiveSiteVisitApplicants(jobId, tx);
+      if (applicants >= MAX_SITE_VISIT_APPLICANTS) {
+        throw new ConflictError(
+          `This site visit job already has the maximum of ${MAX_SITE_VISIT_APPLICANTS} traders applied.`
+        );
+      }
+    }
+
     const request = await tx.traderSiteVisitRequest.upsert({
       where: { jobId_traderId: { jobId, traderId } },
       create: {

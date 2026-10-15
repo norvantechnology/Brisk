@@ -84,9 +84,16 @@ export const buildJobPayoutBalance = (job: JobPayoutSource) => {
       .filter((p) => p.status === PayoutStatus.COMPLETED)
       .reduce((s, p) => s + money(p.amount), 0)
   );
+  /** Open trader requests / in-flight payouts — reserves balance until completed or failed. */
+  const pendingRequestAmount = round2(
+    job.payouts
+      .filter((p) => p.status === PayoutStatus.PENDING || p.status === PayoutStatus.PROCESSING)
+      .reduce((s, p) => s + money(p.amount), 0)
+  );
   const remainingBalance = round2(Math.max(0, totalPayable - amountPaid));
+  const availableToRequest = round2(Math.max(0, remainingBalance - pendingRequestAmount));
   const payoutStatus = jobPayoutBalanceStatus(totalPayable, amountPaid);
-  const eligibleForPayout = totalPayable > 0 && remainingBalance > 0;
+  const eligibleForPayout = totalPayable > 0 && availableToRequest > 0;
 
   return {
     jobId: job.id,
@@ -98,11 +105,15 @@ export const buildJobPayoutBalance = (job: JobPayoutSource) => {
     totalPayable,
     /** Sum of COMPLETED payout installments already recorded for this job. */
     amountPaid,
-    /** totalPayable − amountPaid (0 when fully paid). */
+    /** totalPayable − amountPaid (still owed to trader before open requests). */
     remainingBalance,
-    /** Job-level: UNPAID | PARTIALLY_PAID | PAID */
+    /** Sum of PENDING + PROCESSING payout rows for this job. */
+    pendingRequestAmount,
+    /** remainingBalance − pendingRequestAmount — max the trader/admin can request/record now. */
+    availableToRequest,
+    /** Job-level vs completed payouts: UNPAID | PARTIALLY_PAID | PAID */
     payoutStatus,
-    /** true when customer has paid and remainingBalance > 0 — FE can enable “Send payout”. */
+    /** true when customer has paid and availableToRequest > 0. */
     eligibleForPayout,
     updatedAt: job.updatedAt,
   };
@@ -164,6 +175,8 @@ export const serializeJobPayoutBalance = (balance: JobPayoutBalance) => ({
   totalPayable: balance.totalPayable,
   amountPaid: balance.amountPaid,
   remainingBalance: balance.remainingBalance,
+  pendingRequestAmount: balance.pendingRequestAmount,
+  availableToRequest: balance.availableToRequest,
   payoutStatus: balance.payoutStatus,
   eligibleForPayout: balance.eligibleForPayout,
   currencyCode: balance.currencyCode,

@@ -56,6 +56,12 @@ export const ADMIN_NOTIFICATION_TYPE_CATALOG: NotificationTypeMeta[] = [
     description: 'Customer reported an issue on a job.',
   },
   {
+    type: 'TRADER_PAYOUT_REQUESTED',
+    label: 'Payout requested',
+    category: 'payouts',
+    description: 'Trader submitted a job-wise payout request (full or partial).',
+  },
+  {
     type: 'SYSTEM',
     label: 'System',
     category: 'system',
@@ -136,6 +142,8 @@ export const USER_NOTIFICATION_TYPE_CATALOG: UserNotificationTypeMeta[] = [
   userType('PAYMENT_FAILED', 'Payment failed', 'BOOKING_UPDATES', 'CUSTOMER', 'Your payment failed.'),
   userType('PAYMENT_RECEIVED', 'Payment received', 'BOOKING_UPDATES', 'TRADER', 'Customer paid (job completed & paid, partial or site visit fee).'),
   userType('REFUND_UPDATE', 'Refund update', 'BOOKING_UPDATES', 'CUSTOMER', 'Refund approved, completed or rejected.'),
+  userType('PAYOUT_APPROVED', 'Payout approved', 'BOOKING_UPDATES', 'TRADER', 'Admin approved your payout request and recorded the bank transfer.'),
+  userType('PAYOUT_REJECTED', 'Payout rejected', 'BOOKING_UPDATES', 'TRADER', 'Admin rejected your payout request.'),
   // Regular › Account Updates
   userType('TRADER_ONBOARDING_SUBMITTED', 'Application submitted', 'ACCOUNT_UPDATES', 'TRADER', 'Trader onboarding was submitted for admin review.', 'account'),
   userType('TRADER_PROFILE_APPROVED', 'Profile approved', 'ACCOUNT_UPDATES', 'TRADER', 'Trader profile was approved by admin.', 'account'),

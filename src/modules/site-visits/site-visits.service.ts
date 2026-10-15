@@ -3,6 +3,11 @@ import { prisma } from '../../config/database';
 import { buildPaginationMeta, parsePageLimit } from '../../utils/pagination';
 import { SITE_VISIT_SLOT_DEFS } from '../traders/jobs/trader-jobs.service';
 import type { SiteVisitSortField } from './site-visits.validation';
+export {
+  MAX_SITE_VISIT_APPLICANTS,
+  countActiveSiteVisitApplicants,
+  listSiteVisitFullJobIds,
+} from './site-visit-limits';
 
 /**
  * Shared site-visit list logic for Admin (customer + trader details) and the Trader Portal,
