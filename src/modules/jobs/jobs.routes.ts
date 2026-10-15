@@ -267,6 +267,9 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - `id` (uuid string), `jobRef`, `title`, `statusLabel`
  *       - `status` — job status as display text, underscores replaced by spaces (e.g. `IN PROGRESS`, `PAYMENT PENDING`, `PUBLISHED`)
  *       - `date` — "October 24, 2026" (ACTIVE: scheduled/posted day · COMPLETED: finished day · OTHER: cancelled day); `dateAt` ISO
+ *       - `timeSlot` — current slot (`MORNING` | `AFTERNOON` | `EVENING` | `ANYTIME` or free text)
+ *       - `category` / `subcategory` — `{ id, name }` for Reschedule Job bottom sheet (read-only)
+ *       - `canReschedule` — open Reschedule sheet when true; submit `POST /jobs/{id}/reschedule`
  *       - `provider` — assigned trader name (null until assigned)
  *       - `amount` (number or null) + `amountType`:
  *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
@@ -307,6 +310,10 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         statusLabel: Active
  *                         date: October 24, 2026
  *                         dateAt: '2026-10-24T00:00:00.000Z'
+ *                         timeSlot: AFTERNOON
+ *                         category: { id: uuid, name: Boiler }
+ *                         subcategory: { id: uuid, name: Boiler Repair }
+ *                         canReschedule: true
  *                         provider: "Liam O'Connor Plumbing"
  *                         amount: 140
  *                         amountType: Estimated
@@ -1251,8 +1258,11 @@ router.get('/:id/progress', ...customerOnly, validate(jobIdParamSchema), control
  *             required: [date, timeSlot]
  *             properties:
  *               date: { type: string, example: '2026-10-08', description: YYYY-MM-DD (today or later) }
- *               timeSlot: { type: string, example: MORNING, description: 'MORNING | AFTERNOON | EVENING or a time like 14:30' }
- *               serviceCategoryId: { type: string, format: uuid }
+ *               timeSlot:
+ *                 type: string
+ *                 example: AFTERNOON
+ *                 description: MORNING | AFTERNOON | EVENING | ANYTIME (Reschedule Job sheet pills)
+ *               serviceCategoryId: { type: string, format: uuid, description: Optional — display only on sheet; change blocked after quotes }
  *               serviceSubcategoryId: { type: string, format: uuid, nullable: true }
  *     responses:
  *       200:

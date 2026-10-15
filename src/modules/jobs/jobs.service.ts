@@ -1084,12 +1084,28 @@ export const listMyJobsByTab = async (
         jobRef: true,
         title: true,
         scheduledDate: true,
+        timeSlot: true,
         createdAt: true,
         updatedAt: true,
+        category: { select: { id: true, name: true } },
+        subcategory: { select: { id: true, name: true } },
         trader: { select: { businessName: true, user: { select: { fullName: true } } } },
+        booking: {
+          select: {
+            ...customerJobAmountSelect.booking.select,
+            arrivedAt: true,
+          },
+        },
       },
     }),
   ]);
+
+  const reschedulableStatuses: JobStatus[] = [
+    JobStatus.PUBLISHED,
+    JobStatus.QUOTED,
+    JobStatus.ACCEPTED,
+    JobStatus.SCHEDULED,
+  ];
 
   const currencyCodes = new Set<string>(['EUR']);
   const rows = jobs.map((job) => {
@@ -1124,6 +1140,15 @@ export const listMyJobsByTab = async (
       ),
       date: formatDisplayDay(dateAt),
       dateAt,
+      timeSlot: job.timeSlot ?? null,
+      /** Reschedule Job bottom sheet — Service Category / Sub-Category (read-only display). */
+      category: job.category ? { id: job.category.id, name: job.category.name } : null,
+      subcategory: job.subcategory
+        ? { id: job.subcategory.id, name: job.subcategory.name }
+        : null,
+      /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule */
+      canReschedule:
+        !cancelled && !job.booking?.arrivedAt && reschedulableStatuses.includes(job.status),
       provider: job.trader ? job.trader.businessName || job.trader.user.fullName : null,
       amount,
       amountType,
