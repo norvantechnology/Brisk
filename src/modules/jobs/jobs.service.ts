@@ -956,18 +956,11 @@ const customerTabWhere = (tab: CustomerJobsTab): Prisma.JobWhereInput => {
       status: JobStatus.COMPLETED,
     };
   }
-  // ACTIVE: open / awaiting payment — exclude jobs waiting on trader to re-propose site-visit slots.
+  // ACTIVE: open / awaiting payment — includes reschedule-requested site visits (stay on Active).
   return {
     AND: [
       { NOT: CUSTOMER_CANCELLED_WHERE },
       { status: { notIn: [JobStatus.DRAFT, JobStatus.COMPLETED, JobStatus.CANCELLED] } },
-      {
-        NOT: {
-          siteVisitRequests: {
-            some: { status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
-          },
-        },
-      },
     ],
   };
 };
@@ -1119,8 +1112,12 @@ export const listMyJobsByTab = async (
           },
         },
         siteVisitRequests: {
-          where: { status: TraderSiteVisitStatus.CONFIRMED },
-          select: { id: true },
+          where: {
+            status: {
+              in: [TraderSiteVisitStatus.CONFIRMED, TraderSiteVisitStatus.RESCHEDULE_REQUIRED],
+            },
+          },
+          select: { id: true, status: true },
           take: 1,
         },
       },
@@ -1151,7 +1148,11 @@ export const listMyJobsByTab = async (
     const canReschedule =
       !cancelled && !job.booking?.arrivedAt && reschedulableStatuses.includes(job.status);
 
-    /** Confirmed site visit / booking reschedule → badge RESCHEDULE (not Active / Scheduled). */
+    /**
+     * RESCHEDULE badge on Active:
+     * - CONFIRMED site visit (can open sheet), or
+     * - customer already requested reschedule (RESCHEDULE_REQUIRED / booking RESCHEDULED) — stays on Active.
+     */
     const showRescheduleStatus =
       canReschedule &&
       (job.siteVisitRequests.length > 0 || job.booking?.status === BookingStatus.RESCHEDULED);

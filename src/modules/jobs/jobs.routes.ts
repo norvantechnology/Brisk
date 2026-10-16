@@ -268,8 +268,9 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - `status` — job status as display text, underscores replaced by spaces (e.g. `IN PROGRESS`, `PAYMENT PENDING`, `PUBLISHED`)
  *       - `date` — "October 24, 2026" (ACTIVE: scheduled/posted day · COMPLETED: finished day · OTHER: cancelled day); `dateAt` ISO
  *       - `categoryId` / `categoryName` · `subcategoryId` / `subcategoryName` — Reschedule sheet (read-only)
- *       - Confirmed site-visit jobs: `status` / `statusLabel` = `RESCHEDULE`, `canReschedule` = true
- *         (open Reschedule sheet → `POST /jobs/{id}/reschedule`)
+ *       - Site-visit / reschedule jobs: `status` / `statusLabel` = `RESCHEDULE`, `canReschedule` = true
+ *         (before or after customer submits reschedule — job stays on Active)
+ *         Open sheet → `POST /jobs/{id}/reschedule`
  *       - `provider` — assigned trader name (null until assigned)
  *       - `amount` (number or null) + `amountType`:
  *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
@@ -1260,7 +1261,7 @@ router.get('/:id/progress', ...customerOnly, validate(jobIdParamSchema), control
  *       **Site visit (PENDING / CONFIRMED):** sets visit to `RESCHEDULE_REQUIRED` (previous slot kept
  *       for trader Discover Reschedule CTA), stores the customer's preferred `date` / `timeSlot` on
  *       the job, sets booking `RESCHEDULED` when present, notifies `SITE_VISIT_RESCHEDULE_REQUESTED`.
- *       Job leaves **Active** for customer + trader until the trader proposes new slots.
+ *       Job **stays on customer Active** with `statusLabel: RESCHEDULE` until trader proposes + customer confirms new slots.
  *
  *       `serviceCategoryId` / `serviceSubcategoryId` can change only before any quotation is received.
  *       Returns the same payload as `GET /jobs/{id}/progress`.

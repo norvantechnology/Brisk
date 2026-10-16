@@ -484,7 +484,8 @@ export const rescheduleJob = async (
 
   /**
    * Site-visit path: customer picks a preferred date/time → visit becomes RESCHEDULE_REQUIRED.
-   * Trader sees Discover Reschedule (previous slot kept as context); job leaves Active for both sides.
+   * Trader sees Discover Reschedule (previous slot kept as context).
+   * Customer job stays on Active with RESCHEDULE badge (Snehal).
    */
   const siteVisitReschedule =
     Boolean(siteVisit) &&
