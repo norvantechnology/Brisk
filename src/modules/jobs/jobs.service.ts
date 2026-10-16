@@ -1104,6 +1104,11 @@ export const listMyJobsByTab = async (
             arrivedAt: true,
           },
         },
+        siteVisitRequests: {
+          where: { status: TraderSiteVisitStatus.CONFIRMED },
+          select: { id: true },
+          take: 1,
+        },
       },
     }),
   ]);
@@ -1129,23 +1134,37 @@ export const listMyJobsByTab = async (
         ? (job.booking?.finishedAt ?? job.updatedAt)
         : (job.scheduledDate ?? job.createdAt);
 
+    const canReschedule =
+      !cancelled && !job.booking?.arrivedAt && reschedulableStatuses.includes(job.status);
+
+    /** Confirmed site visit / booking reschedule → badge RESCHEDULE (not Active / Scheduled). */
+    const showRescheduleStatus =
+      canReschedule &&
+      (job.siteVisitRequests.length > 0 || job.booking?.status === BookingStatus.RESCHEDULED);
+
     const displayStatus = cancelled
       ? JobStatus.CANCELLED
       : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
         ? 'WORK_COMPLETED'
-        : job.status;
+        : showRescheduleStatus
+          ? 'RESCHEDULE'
+          : job.status;
+
+    const statusLabel = showRescheduleStatus
+      ? 'RESCHEDULE'
+      : customerStatusBadgeFor(
+          job.status,
+          job.booking?.status ?? null,
+          job.booking?.finishedAt ?? null,
+          { paymentRequested }
+        );
 
     return {
       id: job.id,
       jobRef: job.jobRef,
       title: job.title,
       status: toDisplayStatus(displayStatus),
-      statusLabel: customerStatusBadgeFor(
-        job.status,
-        job.booking?.status ?? null,
-        job.booking?.finishedAt ?? null,
-        { paymentRequested }
-      ),
+      statusLabel,
       date: formatDisplayDay(dateAt),
       dateAt,
       /** Reschedule Job bottom sheet — Service Category / Sub-Category (read-only display). */
@@ -1154,8 +1173,7 @@ export const listMyJobsByTab = async (
       subcategoryId: job.subcategory?.id ?? null,
       subcategoryName: job.subcategory?.name ?? null,
       /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule */
-      canReschedule:
-        !cancelled && !job.booking?.arrivedAt && reschedulableStatuses.includes(job.status),
+      canReschedule,
       provider: job.trader ? job.trader.businessName || job.trader.user.fullName : null,
       amount,
       amountType,

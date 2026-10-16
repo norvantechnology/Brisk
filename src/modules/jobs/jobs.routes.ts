@@ -268,7 +268,8 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - `status` — job status as display text, underscores replaced by spaces (e.g. `IN PROGRESS`, `PAYMENT PENDING`, `PUBLISHED`)
  *       - `date` — "October 24, 2026" (ACTIVE: scheduled/posted day · COMPLETED: finished day · OTHER: cancelled day); `dateAt` ISO
  *       - `categoryId` / `categoryName` · `subcategoryId` / `subcategoryName` — Reschedule sheet (read-only)
- *       - `canReschedule` — open Reschedule sheet when true; submit `POST /jobs/{id}/reschedule`
+ *       - Confirmed site-visit jobs: `status` / `statusLabel` = `RESCHEDULE`, `canReschedule` = true
+ *         (open Reschedule sheet → `POST /jobs/{id}/reschedule`)
  *       - `provider` — assigned trader name (null until assigned)
  *       - `amount` (number or null) + `amountType`:
  *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
@@ -309,6 +310,8 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         statusLabel: Active
  *                         date: October 24, 2026
  *                         dateAt: '2026-10-24T00:00:00.000Z'
+ *                         status: RESCHEDULE
+ *                         statusLabel: RESCHEDULE
  *                         categoryId: uuid
  *                         categoryName: Boiler
  *                         subcategoryId: uuid
