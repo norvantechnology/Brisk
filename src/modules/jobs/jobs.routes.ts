@@ -1308,11 +1308,10 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  *     tags: ['Customer / My Job']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       `POST /jobs/{jobId}/review` — one rating per job after work is finished / paid.
- *       Body: `{ rating, tags?, comment? }` (`tags` + `comment` optional).
- *       Alias: `POST /jobs/{id}/rating` (same handler).
+ *       **Single rating API** (stars + optional tags/comment) — one submit per job after finish/pay.
+ *       Body: `{ rating, tags?, comment? }`.
  *       After payment success, receipt has `openRatingSheet: true` + `jobId`.
- *       Skip → Completed tab shows `statusLabel: Pending Rating` + Home `pendingRating.showBanner`.
+ *       Skip → Completed tab `statusLabel: Pending Rating` + Home `pendingRating.showBanner`.
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid }, description: jobId }
  *     requestBody:
@@ -1338,7 +1337,6 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  *       409: { description: Already reviewed }
  */
 router.post('/:id/review', ...customerOnly, validate(jobReviewSchema), controller.submitJobReview);
-router.post('/:id/rating', ...customerOnly, validate(jobReviewSchema), controller.submitJobReview);
 
 /**
  * @swagger
