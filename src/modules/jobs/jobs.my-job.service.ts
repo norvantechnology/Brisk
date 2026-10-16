@@ -226,7 +226,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
           finishedAt: true,
           customerConfirmedAt: true,
           createdAt: true,
-          ratingReview: { select: { stars: true, review: true, createdAt: true } },
+          ratingReview: { select: { stars: true, tags: true, review: true, createdAt: true } },
           invoice: {
             select: {
               id: true,
@@ -383,6 +383,8 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
     review: booking?.ratingReview
       ? {
           rating: booking.ratingReview.stars,
+          tags: booking.ratingReview.tags ?? [],
+          comment: booking.ratingReview.review,
           review: booking.ratingReview.review,
           createdAt: booking.ratingReview.createdAt,
         }
@@ -608,6 +610,8 @@ export const submitJobReview = async (customerId: string, jobId: string, input: 
 
   const traderId = job.trader.id;
   const bookingId = job.booking.id;
+  const comment = input.comment?.trim() || null;
+  const tags = (input.tags ?? []).map((t) => t.trim()).filter(Boolean);
   const { created, avgRating, reviewsCount } = await prisma.$transaction(async (tx) => {
     const created = await tx.ratingReview.create({
       data: {
@@ -615,7 +619,8 @@ export const submitJobReview = async (customerId: string, jobId: string, input: 
         customerId,
         traderId,
         stars: input.rating,
-        review: input.review?.trim() || null,
+        tags,
+        review: comment,
       },
     });
     const agg = await tx.ratingReview.aggregate({
@@ -639,6 +644,9 @@ export const submitJobReview = async (customerId: string, jobId: string, input: 
     reviewId: created.id,
     jobId,
     rating: created.stars,
+    tags: created.tags,
+    comment: created.review,
+    /** @deprecated Use `comment`. */
     review: created.review,
     createdAt: created.createdAt,
     trader: { id: traderId, avgRating, reviewsCount },

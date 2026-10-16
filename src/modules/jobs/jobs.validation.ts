@@ -205,7 +205,7 @@ export const siteVisitProposalParamSchema = z.object({
   }),
 });
 
-/** Confirm site visit — optional `slotId` for the chosen proposed window. */
+/** Confirm site visit — `slotId` required when the trader proposed slots. */
 export const confirmSiteVisitBodySchema = z.object({
   params: z.object({
     id: uuid,
@@ -246,12 +246,23 @@ export const rescheduleJobSchema = z.object({
 
 export const jobReviewSchema = z.object({
   params: z.object({ id: uuid }),
-  body: z.object({
-    /** Ignored — the reviewed trader is always the job's booked trader. */
-    traderId: uuid.optional(),
-    rating: z.coerce.number().int('rating must be a whole number from 1 to 5.').min(1).max(5),
-    review: z.string().trim().max(2000).optional(),
-  }),
+  body: z
+    .object({
+      /** Ignored — the reviewed trader is always the job's booked trader. */
+      traderId: uuid.optional(),
+      rating: z.coerce.number().int('rating must be a whole number from 1 to 5.').min(1).max(5),
+      /** Optional quick-select tags from the rating bottom sheet. */
+      tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+      /** Optional free-text review (preferred field name for mobile). */
+      comment: z.string().trim().max(2000).optional(),
+      /** Legacy alias for `comment`. */
+      review: z.string().trim().max(2000).optional(),
+    })
+    .transform((body) => ({
+      ...body,
+      tags: body.tags ?? [],
+      comment: (body.comment ?? body.review)?.trim() || undefined,
+    })),
 });
 
 export const DISPUTE_REASONS = [

@@ -231,7 +231,8 @@ export const getFeaturedTraders = async (
 ): Promise<void> => {
   try {
     const data = await tradersService.listFeaturedTraders(
-      req.query as { traderLimit?: number; categoryId?: string; trendingLimit?: number }
+      req.query as { traderLimit?: number; categoryId?: string; trendingLimit?: number },
+      req.user!.id
     );
     sendResponse({
       res,

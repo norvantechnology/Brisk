@@ -236,6 +236,7 @@ const jobInclude = {
       ratingReview: {
         select: {
           stars: true,
+          tags: true,
           review: true,
           createdAt: true,
         },
@@ -311,6 +312,18 @@ type SiteVisitRequestRow = Prisma.JobGetPayload<{
   include: typeof jobInclude;
 }>['siteVisitRequests'][number];
 
+/**
+ * Customer `isSelected` = customer locked this slot (confirm), not trader’s primary proposal.
+ * PENDING / RESCHEDULE_REQUIRED → all false so the app can let the customer pick.
+ */
+const customerSlotIsSelected = (
+  status: TraderSiteVisitStatus,
+  dbSelected: boolean
+): boolean =>
+  (status === TraderSiteVisitStatus.CONFIRMED ||
+    status === TraderSiteVisitStatus.COMPLETED) &&
+  dbSelected;
+
 const buildSiteVisitSlotRows = (v: SiteVisitRequestRow) => {
   if (v.slots && v.slots.length > 0) {
     return v.slots.map((s) => {
@@ -323,7 +336,7 @@ const buildSiteVisitSlotRows = (v: SiteVisitRequestRow) => {
         timeSlot: s.timeSlot,
         startTime,
         endTime,
-        isSelected: s.isSelected,
+        isSelected: customerSlotIsSelected(v.status, s.isSelected),
       };
     });
   }
@@ -336,7 +349,7 @@ const buildSiteVisitSlotRows = (v: SiteVisitRequestRow) => {
         timeSlot: v.timeSlot,
         startTime: def.startTime,
         endTime: def.endTime,
-        isSelected: true,
+        isSelected: customerSlotIsSelected(v.status, true),
       },
     ];
   }
@@ -1102,6 +1115,7 @@ export const listMyJobsByTab = async (
           select: {
             ...customerJobAmountSelect.booking.select,
             arrivedAt: true,
+            ratingReview: { select: { id: true } },
           },
         },
         siteVisitRequests: {
@@ -1142,22 +1156,34 @@ export const listMyJobsByTab = async (
       canReschedule &&
       (job.siteVisitRequests.length > 0 || job.booking?.status === BookingStatus.RESCHEDULED);
 
+    /** Paid + finished, no review yet → Completed tab shows Pending Rating. */
+    const canReview =
+      !cancelled &&
+      job.status === JobStatus.COMPLETED &&
+      Boolean(job.traderId) &&
+      !job.booking?.ratingReview;
+    const showPendingRating = canReview;
+
     const displayStatus = cancelled
       ? JobStatus.CANCELLED
-      : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
-        ? 'WORK_COMPLETED'
-        : showRescheduleStatus
-          ? 'RESCHEDULE'
-          : job.status;
+      : showPendingRating
+        ? 'PENDING_RATING'
+        : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+          ? 'WORK_COMPLETED'
+          : showRescheduleStatus
+            ? 'RESCHEDULE'
+            : job.status;
 
-    const statusLabel = showRescheduleStatus
-      ? 'RESCHEDULE'
-      : customerStatusBadgeFor(
-          job.status,
-          job.booking?.status ?? null,
-          job.booking?.finishedAt ?? null,
-          { paymentRequested }
-        );
+    const statusLabel = showPendingRating
+      ? 'Pending Rating'
+      : showRescheduleStatus
+        ? 'RESCHEDULE'
+        : customerStatusBadgeFor(
+            job.status,
+            job.booking?.status ?? null,
+            job.booking?.finishedAt ?? null,
+            { paymentRequested }
+          );
 
     return {
       id: job.id,
@@ -1174,6 +1200,8 @@ export const listMyJobsByTab = async (
       subcategoryName: job.subcategory?.name ?? null,
       /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule */
       canReschedule,
+      /** true → open rating bottom sheet; submit via POST /jobs/{id}/review */
+      canReview,
       provider: job.trader ? job.trader.businessName || job.trader.user.fullName : null,
       amount,
       amountType,
@@ -1439,6 +1467,9 @@ const buildCustomerJobView = async (
   const durationMinutes =
     startedAt && finishedAt ? Math.max(Math.round((finishedAt.getTime() - startedAt.getTime()) / 60000), 0) : null;
   const finished = Boolean(finishedAt) || job.status === JobStatus.COMPLETED;
+  const canReview =
+    kind === 'COMPLETED' && finished && Boolean(job.trader) && !review && !cancelled;
+  const showPendingRating = canReview;
 
   const categoryLabel = (
     job.subcategory?.name ||
@@ -1456,16 +1487,20 @@ const buildCustomerJobView = async (
     status: toDisplayStatus(
       cancelled
         ? JobStatus.CANCELLED
-        : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
-          ? 'WORK_COMPLETED'
-          : job.status
+        : showPendingRating
+          ? 'PENDING_RATING'
+          : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+            ? 'WORK_COMPLETED'
+            : job.status
     ),
-    statusBadge: customerStatusBadgeFor(
-      job.status,
-      job.booking?.status ?? null,
-      job.booking?.finishedAt ?? null,
-      { paymentRequested }
-    ),
+    statusBadge: showPendingRating
+      ? 'Pending Rating'
+      : customerStatusBadgeFor(
+          job.status,
+          job.booking?.status ?? null,
+          job.booking?.finishedAt ?? null,
+          { paymentRequested }
+        ),
     completedAt: kind === 'COMPLETED' ? eventAt : null,
     cancelledAt: kind === 'CANCELLED' ? eventAt : null,
     cancellationReason: kind === 'CANCELLED' ? job.cancellationReason : null,
@@ -1500,6 +1535,7 @@ const buildCustomerJobView = async (
     review: review
       ? {
           rating: review.stars,
+          tags: review.tags ?? [],
           comment: review.review,
           createdAt: review.createdAt,
         }
@@ -1529,7 +1565,7 @@ const buildCustomerJobView = async (
     downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     invoiceUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     receiptUrl: lastCardPayment ? `/payments/${lastCardPayment.id}/receipt` : null,
-    canReview: kind === 'COMPLETED' && finished && Boolean(job.trader) && !review,
+    canReview,
     completionConfirmedAt: job.booking?.customerConfirmedAt ?? null,
     canConfirmCompletion:
       kind === 'COMPLETED' && finished && Boolean(job.booking) && !job.booking?.customerConfirmedAt && activeDisputes === 0,
@@ -2461,8 +2497,8 @@ const notifyTraderSiteVisit = async (
 
 /**
  * Customer confirms a trader's proposed site-visit slot.
- * Optional `slotId` selects which proposed window to lock; otherwise uses isSelected / primary.
- * PENDING → CONFIRMED.
+ * Pass `slotId` from `slots[]` (required when the trader proposed slots).
+ * PENDING → CONFIRMED; that slot becomes `isSelected: true` for the customer.
  */
 export const confirmSiteVisitProposal = async (
   customerId: string,
@@ -2486,16 +2522,14 @@ export const confirmSiteVisitProposal = async (
   let timeSlot = request.timeSlot;
   let selectedSlotId: string | null = null;
 
-  if (body?.slotId) {
+  if (slots.length > 0) {
+    if (!body?.slotId) {
+      throw new BadRequestError('Please select a time slot (slotId) before confirming.');
+    }
     const slot = slots.find((s) => s.id === body.slotId);
     if (!slot) {
       throw new BadRequestError('Selected slot does not belong to this site-visit request.');
     }
-    visitDate = slot.visitDate;
-    timeSlot = slot.timeSlot;
-    selectedSlotId = slot.id;
-  } else if (slots.length > 0) {
-    const slot = slots.find((s) => s.isSelected) ?? slots[0];
     visitDate = slot.visitDate;
     timeSlot = slot.timeSlot;
     selectedSlotId = slot.id;

@@ -1223,6 +1223,9 @@ model RatingReview {
   customerId String   @map("customer_id") @db.Uuid
   traderId   String   @map("trader_id") @db.Uuid
   stars      Int
+  /// Optional quick-select tags from the rating bottom sheet.
+  tags       String[] @default([])
+  /// Optional free-text comment (`comment` in API body).
   review     String?  @db.Text
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")

@@ -451,12 +451,23 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
     .slice(0, limit);
 };
 
-/** Customer Home — "Featured Trader" (verified, active, ranked by real ratings/reviews) + "Trending Now". */
-export const listFeaturedTraders = async (query: {
-  traderLimit?: number;
-  categoryId?: string;
-  trendingLimit?: number;
-}) => {
+/** Paid completed jobs still waiting for the customer rating (Home banner + Completed tab). */
+const pendingRatingJobWhere = (customerId: string): Prisma.JobWhereInput => ({
+  customerId,
+  status: JobStatus.COMPLETED,
+  traderId: { not: null },
+  booking: { is: { ratingReview: { is: null } } },
+});
+
+/** Customer Home — "Featured Trader" + "Trending Now" + pending-rating banner. */
+export const listFeaturedTraders = async (
+  query: {
+    traderLimit?: number;
+    categoryId?: string;
+    trendingLimit?: number;
+  },
+  customerId?: string
+) => {
   const where = {
     verificationStatus: VerificationStatus.VERIFIED,
     status: 'active',
@@ -471,7 +482,7 @@ export const listFeaturedTraders = async (query: {
       : {}),
   };
 
-  const [rows, trendingJobs] = await Promise.all([
+  const [rows, trendingJobs, pendingRating] = await Promise.all([
     prisma.trader.findMany({
       where,
       orderBy: [
@@ -504,6 +515,21 @@ export const listFeaturedTraders = async (query: {
       },
     }),
     listTrendingJobs(query.trendingLimit ?? DEFAULT_TRENDING_LIMIT, query.categoryId),
+    customerId
+      ? Promise.all([
+          prisma.job.count({ where: pendingRatingJobWhere(customerId) }),
+          prisma.job.findFirst({
+            where: pendingRatingJobWhere(customerId),
+            orderBy: { updatedAt: 'desc' },
+            select: { id: true, title: true },
+          }),
+        ]).then(([count, first]) => ({
+          showBanner: count > 0,
+          count,
+          jobId: first?.id ?? null,
+          title: first?.title ?? null,
+        }))
+      : Promise.resolve({ showBanner: false, count: 0, jobId: null as string | null, title: null as string | null }),
   ]);
 
   const startOfToday = new Date();
@@ -533,6 +559,8 @@ export const listFeaturedTraders = async (query: {
       };
     }),
     trendingJobs,
+    /** Home top banner when ≥1 completed job still needs a rating. Tap → Completed / rating sheet. */
+    pendingRating,
   };
 };
 

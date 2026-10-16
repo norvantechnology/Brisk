@@ -55,6 +55,9 @@ router.use('/onboarding', onboardingRoutes);
  *       jobs in the last 30 days, then all-time, then admin-featured. Size = `trendingLimit`.
  *       Card mapping: image → `imageUrl` (category banner, may be null), title → `title`.
  *       Tap → Post a Job with `category.id` + `subcategoryId`. No customer job data is exposed.
+ *
+ *       **`data.pendingRating`** — Home top banner when the customer has ≥1 completed job without a rating:
+ *       `{ showBanner, count, jobId, title }`. Tap → Completed Jobs / rating sheet (`POST /jobs/{jobId}/review`).
  *     parameters:
  *       - in: query
  *         name: categoryId
@@ -109,6 +112,11 @@ router.use('/onboarding', onboardingRoutes);
  *                     recentJobsCount: 14
  *                     totalJobsCount: 52
  *                     featured: false
+ *                 pendingRating:
+ *                   showBanner: true
+ *                   count: 1
+ *                   jobId: b8499d07-e1c9-4009-b774-82d6690e015b
+ *                   title: Boiler Service
  */
 router.get(
   '/featured',

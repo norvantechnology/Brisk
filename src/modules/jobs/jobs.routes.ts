@@ -327,7 +327,7 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         downloadUrl: null
  *                   meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
  *               completed:
- *                 summary: tab=COMPLETED
+ *                 summary: tab=COMPLETED (unrated → Pending Rating)
  *                 value:
  *                   success: true
  *                   message: My jobs retrieved successfully.
@@ -335,8 +335,9 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                       - id: 7a2d4c6e-2b3c-4d5e-8f90-1a2b3c4d5e6f
  *                         jobRef: JOB-2B7C
  *                         title: Leakage & Sink Repair
- *                         status: COMPLETED
- *                         statusLabel: Completed
+ *                         status: PENDING RATING
+ *                         statusLabel: Pending Rating
+ *                         canReview: true
  *                         date: October 2, 2026
  *                         dateAt: '2026-10-02T15:15:00.000Z'
  *                         provider: Mark Wilson
@@ -381,8 +382,11 @@ router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.
  *       `data` is a **job array**. Each job has card fields + nested `traders[]`
  *       (photo, rating, `slots[]` with display `date` label, `canConfirm` / `canReject`).
  *
+ *       While status is PENDING, every slot has `isSelected: false` (customer has not picked yet).
+ *       After confirm, only the chosen slot is `isSelected: true`.
+ *
  *       Slot confirm: pass `slots[].id` as `slotId` on
- *       `POST /jobs/{jobId}/site-visits/{requestId}/confirm`.
+ *       `POST /jobs/{jobId}/site-visits/{requestId}/confirm` (required when slots exist).
  *       Decline: `POST /jobs/{jobId}/site-visits/{requestId}/reject`.
  *
  *       Max applicants per job: 3.
@@ -417,7 +421,10 @@ router.get('/mine', ...customerOnly, validate(myJobsTabQuerySchema), controller.
  *                       slots:
  *                         - id: badc325f-a1f5-40bc-9cc2-ff44020b1d33
  *                           date: 'Jul 25, 08:00AM - 11:00AM'
- *                           isSelected: true
+ *                           isSelected: false
+ *                         - id: c3d4e5f6-a7b8-9012-cdef-123456789012
+ *                           date: 'Jul 26, 12:00PM - 05:00PM'
+ *                           isSelected: false
  *                       updatedAt: '2026-10-09T12:52:50.176Z'
  *                       canConfirm: true
  *                       canReject: true
@@ -1297,14 +1304,17 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  * @swagger
  * /jobs/{id}/review:
  *   post:
- *     summary: Rate & review the trader for a finished job
+ *     summary: Rate the trader (rating bottom sheet after payment)
  *     tags: ['Customer / My Job']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       One review per job, after the trader marked the work finished. Updates the trader's `avgRating`
- *       and notifies the trader (`NEW_REVIEW`). `traderId` in the body is optional/ignored — the job's booked trader is used.
+ *       `POST /jobs/{jobId}/review` — one rating per job after work is finished / paid.
+ *       Body: `{ rating, tags?, comment? }` (`tags` + `comment` optional).
+ *       Alias: `POST /jobs/{id}/rating` (same handler).
+ *       After payment success, receipt has `openRatingSheet: true` + `jobId`.
+ *       Skip → Completed tab shows `statusLabel: Pending Rating` + Home `pendingRating.showBanner`.
  *     parameters:
- *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid }, description: jobId }
  *     requestBody:
  *       required: true
  *       content:
@@ -1314,7 +1324,8 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  *             required: [rating]
  *             properties:
  *               rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
- *               review: { type: string, example: Quick and tidy work, highly recommended. }
+ *               tags: { type: array, items: { type: string }, example: [Punctual, Professional] }
+ *               comment: { type: string, example: Quick and tidy work, highly recommended. }
  *     responses:
  *       201:
  *         content:
@@ -1322,11 +1333,12 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  *             example:
  *               success: true
  *               message: Thank you! Your review has been submitted.
- *               data: { reviewId: 0b1c2d3e-0000-4000-8000-000000000001, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, rating: 5, review: Quick and tidy work, createdAt: '2026-10-05T13:30:23.842Z', trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, avgRating: 4.67, reviewsCount: 3 } }
+ *               data: { reviewId: 0b1c2d3e-0000-4000-8000-000000000001, jobId: b8499d07-e1c9-4009-b774-82d6690e015b, rating: 5, tags: [Punctual], comment: Quick and tidy work, createdAt: '2026-10-05T13:30:23.842Z', trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, avgRating: 4.67, reviewsCount: 3 } }
  *       400: { description: Job not finished, cancelled, or no booked trader }
  *       409: { description: Already reviewed }
  */
 router.post('/:id/review', ...customerOnly, validate(jobReviewSchema), controller.submitJobReview);
+router.post('/:id/rating', ...customerOnly, validate(jobReviewSchema), controller.submitJobReview);
 
 /**
  * @swagger
@@ -1442,8 +1454,8 @@ router.get('/:id/disputes', ...customerOnly, validate(jobIdParamSchema), control
  *     tags: ['Customer / Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       PENDING → CONFIRMED. Pass `slotId` from the trader's `slots[]` to lock that window
- *       (per-trader selection). If omitted, uses the slot marked `isSelected` (or first).
+ *       PENDING → CONFIRMED. Pass `slotId` from the trader's `slots[]` (required when slots exist).
+ *       Until confirm, list API keeps every slot `isSelected: false` so the customer can pick.
  *     parameters:
  *       - in: path
  *         name: id

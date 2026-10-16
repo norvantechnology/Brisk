@@ -506,6 +506,19 @@ const buildReceipt = async (paymentId: string, userId: string) => {
   const isPaid = payment.status === PaymentStatus.COMPLETED;
   const purpose = invoicePurposeOf(invoice);
 
+  /** Final payment success → open rating bottom sheet when job is completed and unrated. */
+  let openRatingSheet = false;
+  if (isPaid && trader && job.status === JobStatus.COMPLETED) {
+    const bookingId = booking?.id;
+    const hasReview = bookingId
+      ? await prisma.ratingReview.findUnique({ where: { bookingId }, select: { id: true } })
+      : await prisma.ratingReview.findFirst({
+          where: { booking: { jobId: job.id } },
+          select: { id: true },
+        });
+    openRatingSheet = !hasReview;
+  }
+
   return {
     paymentId: payment.id,
     transactionId: payment.transactionRef,
@@ -522,6 +535,9 @@ const buildReceipt = async (paymentId: string, userId: string) => {
     billingType: payment.billingType,
     companyName: payment.companyName,
     purpose,
+    /** true → open rating bottom sheet; submit POST /jobs/{jobId}/review */
+    openRatingSheet,
+    jobId: job.id,
     /** Success screen steps — keys only; labels owned by mobile. */
     timeline: [
       { key: 'PAID', completed: isPaid, at: payment.paidAt },
@@ -542,6 +558,14 @@ const buildReceipt = async (paymentId: string, userId: string) => {
         method: 'GET',
         path: `/jobs/${job.id}`,
       },
+      ...(openRatingSheet
+        ? {
+            submitRating: {
+              method: 'POST',
+              path: `/jobs/${job.id}/review`,
+            },
+          }
+        : {}),
       backToHome: { path: '/' },
     },
     invoice: {
