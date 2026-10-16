@@ -447,6 +447,11 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *       Completed job history screen. Includes `previousPayments` — full installment
  *       list with the same item shape as GET .../part-payment-history (no server-side truncate).
  *       FE can show first N on screen; full list is already in `previousPayments`.
+ *
+ *       Rating (customer → trader): `canReview` is always `false` (trader does not rate).
+ *       `ratingStatus`: `PENDING` until customer rates, then `RATED`.
+ *       `review` is null while pending; after rate: `{ rating, tags, comment, createdAt }`.
+ *       `statusLabel` / `statusBadge`: `Pending Rating` or `Completed`.
  *     parameters:
  *       - in: path
  *         name: id

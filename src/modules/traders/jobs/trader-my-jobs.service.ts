@@ -937,6 +937,7 @@ const myJobCardSelect = (traderId: string) =>
             arrivedAt: true,
             finishedAt: true,
             scheduledDate: true,
+            ratingReview: { select: { id: true } },
             invoice: {
               select: {
                 serviceCharge: true,
@@ -1152,7 +1153,8 @@ const myJobCardMapper =
 
     const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
     const finalRequested = hasFinalPaymentRequest(job);
-    const { flowStatus, statusLabel } = resolveFlowStatus({
+    const hasCustomerReview = Boolean(job.booking?.ratingReview);
+    const { flowStatus, statusLabel: flowStatusLabel } = resolveFlowStatus({
       status: job.status,
       bookingStatus: job.booking?.status ?? null,
       arrivedAt: job.booking?.arrivedAt ?? null,
@@ -1167,6 +1169,15 @@ const myJobCardMapper =
       alreadyPaidAmount,
       jobAmount: jobAmountEstimate,
     });
+    /** Completed tab: show Pending Rating until the customer submits a review. */
+    const statusLabel =
+      cancelled
+        ? 'Cancelled'
+        : job.status === JobStatus.COMPLETED && !hasCustomerReview
+          ? 'Pending Rating'
+          : flowStatusLabel;
+    const ratingStatus =
+      job.status === JobStatus.COMPLETED ? (hasCustomerReview ? 'RATED' : 'PENDING') : null;
 
     // Prefer ARRIVE before site-visit CTAs when trader has not marked arrival yet
     // (matches detail resolvePrimaryAction / app "I have arrived" button).
@@ -1223,8 +1234,16 @@ const myJobCardMapper =
       title: job.title,
       status: job.status,
       // Cancelled always wins for status chip; site-visit type is separate field below.
-      statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
-      statusLabel: cancelled ? 'Cancelled' : statusLabel,
+      statusBadge:
+        job.status === JobStatus.COMPLETED && !hasCustomerReview
+          ? 'Pending Rating'
+          : statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
+      statusLabel,
+      /** PENDING = customer has not rated yet; RATED = review exists. null if not completed. */
+      ratingStatus,
+      hasReview: job.status === JobStatus.COMPLETED ? hasCustomerReview : false,
+      /** Trader does not rate the customer — always false. */
+      canReview: false,
       flowStatus,
       paymentStatus: resolvePartialPaymentStatus(
         jobAmountEstimate,
@@ -1252,7 +1271,7 @@ const myJobCardMapper =
       createdAt: job.createdAt,
       primaryAction,
     };
-};
+  };
 
 export const getMyJobDetail = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
@@ -1820,6 +1839,9 @@ export const getJobOutcomeDetail = async (
   const { items: previousPayments, total: previousPaymentsTotal } =
     await buildInstallmentPaymentList(userId, jobId);
 
+  const hasCustomerReview = Boolean(review);
+  const ratingStatus = hasCustomerReview ? 'RATED' : 'PENDING';
+
   return {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
@@ -1830,15 +1852,15 @@ export const getJobOutcomeDetail = async (
     subcategoryName: job.subcategory?.name ?? null,
     tags,
     status: job.status,
-    statusBadge: statusBadgeFor(
-      job.status,
-      job.booking?.status ?? null,
-      job.status === JobStatus.COMPLETED
-        ? 'COMPLETED'
-        : hasFinalPaymentRequest(job)
-          ? 'AWAITING_PAYMENT'
-          : 'PAYMENT_REQUEST_PENDING'
-    ),
+    statusBadge: hasCustomerReview
+      ? statusBadgeFor(job.status, job.booking?.status ?? null, 'COMPLETED')
+      : 'Pending Rating',
+    statusLabel: hasCustomerReview ? 'Completed' : 'Pending Rating',
+    /** PENDING until customer rates; RATED after POST /jobs/{id}/review. */
+    ratingStatus,
+    hasReview: hasCustomerReview,
+    /** Trader does not submit a rating — always false (customer rates via /jobs/{id}/review). */
+    canReview: false,
     siteVisit: isSiteVisitJob,
     siteVisitRequested: Boolean(job.siteVisitRequested),
     siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
@@ -1856,6 +1878,7 @@ export const getJobOutcomeDetail = async (
     review: review
       ? {
           rating: review.stars,
+          tags: review.tags ?? [],
           comment: review.review,
           createdAt: review.createdAt,
         }
