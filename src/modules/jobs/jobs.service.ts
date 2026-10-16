@@ -1145,17 +1145,21 @@ export const listMyJobsByTab = async (
         ? (job.booking?.finishedAt ?? job.updatedAt)
         : (job.scheduledDate ?? job.createdAt);
 
+    /** Site visit + non–site visit (Snehal) — date/time only via POST /jobs/{id}/reschedule. */
     const canReschedule =
       !cancelled && !job.booking?.arrivedAt && reschedulableStatuses.includes(job.status);
 
     /**
-     * RESCHEDULE badge on Active:
-     * - CONFIRMED site visit (can open sheet), or
-     * - customer already requested reschedule (RESCHEDULE_REQUIRED / booking RESCHEDULED) — stays on Active.
+     * RESCHEDULE badge when the customer can (or already did) move the appointment:
+     * site-visit confirmed/requested, booked/scheduled job, or booking already RESCHEDULED.
      */
     const showRescheduleStatus =
       canReschedule &&
-      (job.siteVisitRequests.length > 0 || job.booking?.status === BookingStatus.RESCHEDULED);
+      (job.siteVisitRequests.length > 0 ||
+        job.booking?.status === BookingStatus.RESCHEDULED ||
+        Boolean(job.booking) ||
+        job.status === JobStatus.SCHEDULED ||
+        job.status === JobStatus.ACCEPTED);
 
     /** Paid + finished, no review yet → Completed tab shows Pending Rating. */
     const canReview =

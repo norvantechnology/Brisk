@@ -22,7 +22,6 @@ import {
   resolveCustomerJobAmount,
   round2,
   toDisplayStatus,
-  updateJob,
 } from './jobs.service';
 import type {
   CreateJobDisputeInput,
@@ -472,9 +471,15 @@ export const rescheduleJob = async (
   const todayUtc = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
   if (scheduledDate < todayUtc) throw new BadRequestError('Please choose today or a future date.');
 
+  /** Reschedule = date + time only (site visit and non–site visit). Category is read-only. */
   const categoryChanged =
     (input.serviceCategoryId !== undefined && input.serviceCategoryId !== job.categoryId) ||
     (input.serviceSubcategoryId !== undefined && input.serviceSubcategoryId !== job.subcategoryId);
+  if (categoryChanged) {
+    throw new BadRequestError(
+      'Only the date and time can be rescheduled. The service category cannot be changed.'
+    );
+  }
 
   /** Prefer assigned trader's visit; else latest open visit on the job. */
   const siteVisit =
@@ -483,9 +488,9 @@ export const rescheduleJob = async (
       : null) ?? job.siteVisitRequests[0] ?? null;
 
   /**
-   * Site-visit path: customer picks a preferred date/time → visit becomes RESCHEDULE_REQUIRED.
-   * Trader sees Discover Reschedule (previous slot kept as context).
-   * Customer job stays on Active with RESCHEDULE badge (Snehal).
+   * Site-visit path: preferred date/time on job; visit → RESCHEDULE_REQUIRED for trader Discover.
+   * Non–site-visit path: update job/booking date/time; notify trader JOB_RESCHEDULED.
+   * Both stay on customer Active with RESCHEDULE badge.
    */
   const siteVisitReschedule =
     Boolean(siteVisit) &&
@@ -493,54 +498,34 @@ export const rescheduleJob = async (
       siteVisit!.status === TraderSiteVisitStatus.PENDING ||
       siteVisit!.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED);
 
-  if (categoryChanged) {
-    if (job.traderId || job._count.quotes > 0 || siteVisitReschedule) {
-      throw new BadRequestError(
-        'The service cannot be changed after quotations are received. Only the date and time can be rescheduled.'
-      );
-    }
-    const nextCategoryId = input.serviceCategoryId ?? job.categoryId;
-    await updateJob(customerId, jobId, {
-      categoryId: nextCategoryId,
-      subcategoryId:
-        input.serviceSubcategoryId !== undefined
-          ? input.serviceSubcategoryId
-          : nextCategoryId !== job.categoryId
-            ? null
-            : undefined,
-      scheduledDate,
-      timeSlot: input.timeSlot,
+  await prisma.$transaction(async (tx) => {
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        scheduledDate,
+        timeSlot: input.timeSlot,
+        ...(job.status === JobStatus.ACCEPTED && job.booking && !siteVisitReschedule
+          ? { status: JobStatus.SCHEDULED }
+          : {}),
+      },
     });
-  } else {
-    await prisma.$transaction(async (tx) => {
-      await tx.job.update({
-        where: { id: jobId },
+    if (job.booking) {
+      await tx.booking.update({
+        where: { id: job.booking.id },
         data: {
           scheduledDate,
-          timeSlot: input.timeSlot,
-          ...(job.status === JobStatus.ACCEPTED && job.booking && !siteVisitReschedule
-            ? { status: JobStatus.SCHEDULED }
-            : {}),
+          status: BookingStatus.RESCHEDULED,
         },
       });
-      if (job.booking) {
-        await tx.booking.update({
-          where: { id: job.booking.id },
-          data: {
-            scheduledDate,
-            ...(siteVisitReschedule ? { status: BookingStatus.RESCHEDULED } : {}),
-          },
-        });
-      }
-      if (siteVisitReschedule && siteVisit) {
-        // Keep previous visitDate/timeSlot as Discover reschedule context; preferred date is on the job.
-        await tx.traderSiteVisitRequest.update({
-          where: { id: siteVisit.id },
-          data: { status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
-        });
-      }
-    });
-  }
+    }
+    if (siteVisitReschedule && siteVisit) {
+      // Keep previous visitDate/timeSlot as Discover reschedule context; preferred date is on the job.
+      await tx.traderSiteVisitRequest.update({
+        where: { id: siteVisit.id },
+        data: { status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
+      });
+    }
+  });
 
   const byLabel = actor === 'ADMIN' ? 'BRISK support' : job.customer.fullName || 'The customer';
 
