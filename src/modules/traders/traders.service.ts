@@ -516,20 +516,13 @@ export const listFeaturedTraders = async (
     }),
     listTrendingJobs(query.trendingLimit ?? DEFAULT_TRENDING_LIMIT, query.categoryId),
     customerId
-      ? Promise.all([
-          prisma.job.count({ where: pendingRatingJobWhere(customerId) }),
-          prisma.job.findFirst({
-            where: pendingRatingJobWhere(customerId),
-            orderBy: { updatedAt: 'desc' },
-            select: { id: true, title: true },
-          }),
-        ]).then(([count, first]) => ({
+      ? prisma.job.count({ where: pendingRatingJobWhere(customerId) }).then((count) => ({
+          /** true when ≥1 completed job still needs a rating. */
           showBanner: count > 0,
+          /** Count of COMPLETED jobs with no customer rating yet. */
           count,
-          jobId: first?.id ?? null,
-          title: first?.title ?? null,
         }))
-      : Promise.resolve({ showBanner: false, count: 0, jobId: null as string | null, title: null as string | null }),
+      : Promise.resolve({ showBanner: false, count: 0 }),
   ]);
 
   const startOfToday = new Date();
