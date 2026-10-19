@@ -103,6 +103,11 @@ const router = Router();
  *                     siteVisitedBadge: false
  *                     customerName: John Murphy
  *                     customerProfilePhotoUrl: https://cdn.brisk.ie/avatars/john.jpg
+ *                     ratingStatus: null
+ *                     hasReview: false
+ *                     rating: null
+ *                     comment: null
+ *                     review: null
  *                     areaName: Dublin
  *                     distanceKm: 4.2
  *                     quotePrice: 120
@@ -450,8 +455,10 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *
  *       Rating (customer → trader): `canReview` is always `false` (trader does not rate).
  *       `ratingStatus`: `PENDING` until customer rates, then `RATED`.
- *       `review` is null while pending; after rate: `{ rating, tags, comment, createdAt }`.
+ *       `rating` / `comment` / `review` — populated when the customer has rated
+ *       (`review` = `{ rating, tags, comment, createdAt }`; null while pending).
  *       `statusLabel` / `statusBadge`: `Pending Rating` or `Completed`.
+ *       Same rating fields are also on `GET /traders/jobs/mine` and `GET /traders/jobs/mine/{id}`.
  *     parameters:
  *       - in: path
  *         name: id

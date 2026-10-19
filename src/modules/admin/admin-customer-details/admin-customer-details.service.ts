@@ -861,6 +861,10 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
                 payments: job.booking.invoice.payments.map((p) => ({
                   id: p.id,
                   transactionRef: p.transactionRef,
+                  /** Stripe PaymentIntent id (`pi_…`) — null until Pay Now creates an intent. */
+                  stripePaymentIntentId: p.stripePaymentIntentId,
+                  /** Alias for admin UI — same value as stripePaymentIntentId. */
+                  stripeTransactionId: p.stripePaymentIntentId,
                   amount: money(p.amount),
                   status: p.status,
                   method: p.method,
@@ -893,6 +897,10 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
       currencyCode: r.currencyCode,
       paymentMethod: r.paymentMethod?.replace(/_/g, ' ') ?? null,
       cardLast4: r.cardLast4,
+      /** Stripe PaymentIntent id (`pi_…`) set when the customer pays (incl. PARTIAL). */
+      stripePaymentIntentId: r.stripePaymentIntentId,
+      /** Alias for admin UI — same value as stripePaymentIntentId. */
+      stripeTransactionId: r.stripePaymentIntentId,
       paidAt: r.paidAt,
       createdAt: r.createdAt,
     })),

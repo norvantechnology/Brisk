@@ -209,7 +209,9 @@
  *                     type: object
  *                     properties:
  *                       id: { type: string, format: uuid, example: b1718293-0000-4000-8000-000000000070 }
- *                       transactionRef: { type: string, nullable: true, example: pi_3PqXyZ }
+ *                       transactionRef: { type: string, nullable: true, example: TXN-6FC74183, description: Internal BRISK transaction ref }
+ *                       stripePaymentIntentId: { type: string, nullable: true, example: pi_3UOtwLRpa2IWHYmQ1zyTvLvf, description: Stripe PaymentIntent id }
+ *                       stripeTransactionId: { type: string, nullable: true, example: pi_3UOtwLRpa2IWHYmQ1zyTvLvf, description: Alias of stripePaymentIntentId }
  *                       amount: { type: number, example: 1812 }
  *                       status: { type: string, enum: [PENDING, COMPLETED, FAILED], example: COMPLETED }
  *                       method: { type: string, nullable: true, enum: [CARD, APPLE_PAY, GOOGLE_PAY], example: CARD }
@@ -243,6 +245,8 @@
  *               currencyCode: { type: string, example: EUR }
  *               paymentMethod: { type: string, nullable: true, enum: [CARD, APPLE PAY, GOOGLE PAY], example: null }
  *               cardLast4: { type: string, nullable: true, example: null }
+ *               stripePaymentIntentId: { type: string, nullable: true, example: pi_3UOtwLRpa2IWHYmQ1zyTvLvf, description: Stripe id when customer paid (FULL JOB / SITE VISIT FEE / PARTIAL) }
+ *               stripeTransactionId: { type: string, nullable: true, example: pi_3UOtwLRpa2IWHYmQ1zyTvLvf, description: Alias of stripePaymentIntentId }
  *               paidAt: { type: string, format: date-time, nullable: true, example: null }
  *               createdAt: { type: string, format: date-time, example: '2026-07-29T12:45:00.000Z' }
  *         disputes:

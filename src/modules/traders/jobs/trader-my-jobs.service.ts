@@ -450,6 +450,27 @@ const formatFullAddress = (job: {
   return [job.addressLine, job.city, job.postcode].filter(Boolean).join(', ') || 'Address TBD';
 };
 
+/** Customer → trader rating on this job (POST /jobs/{id}/review). Shared by list + detail + completed. */
+const serializeCustomerJobReview = (
+  review:
+    | {
+        stars: number;
+        tags?: string[] | null;
+        review: string | null;
+        createdAt: Date;
+      }
+    | null
+    | undefined
+) =>
+  review
+    ? {
+        rating: review.stars,
+        tags: review.tags ?? [],
+        comment: review.review,
+        createdAt: review.createdAt,
+      }
+    : null;
+
 /** Ensure job is accessible to this trader (assigned, site visit, or quote). */
 const assertMyJob = async (traderId: string, jobId: string) => {
   const job = await prisma.job.findFirst({
@@ -938,7 +959,9 @@ const myJobCardSelect = (traderId: string) =>
             arrivedAt: true,
             finishedAt: true,
             scheduledDate: true,
-            ratingReview: { select: { id: true } },
+            ratingReview: {
+              select: { id: true, stars: true, tags: true, review: true, createdAt: true },
+            },
             invoice: {
               select: {
                 serviceCharge: true,
@@ -1154,7 +1177,8 @@ const myJobCardMapper =
 
     const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
     const finalRequested = hasFinalPaymentRequest(job);
-    const hasCustomerReview = Boolean(job.booking?.ratingReview);
+    const customerReview = serializeCustomerJobReview(job.booking?.ratingReview);
+    const hasCustomerReview = Boolean(customerReview);
     const { flowStatus, statusLabel: flowStatusLabel } = resolveFlowStatus({
       status: job.status,
       bookingStatus: job.booking?.status ?? null,
@@ -1245,6 +1269,12 @@ const myJobCardMapper =
       hasReview: job.status === JobStatus.COMPLETED ? hasCustomerReview : false,
       /** Trader does not rate the customer — always false. */
       canReview: false,
+      /** Customer star rating for this job (null until rated). */
+      rating: customerReview?.rating ?? null,
+      /** Customer free-text comment (null until rated / empty). */
+      comment: customerReview?.comment ?? null,
+      /** Full review object — same shape as GET .../mine/{id}/completed. */
+      review: customerReview,
       flowStatus,
       paymentStatus: resolvePartialPaymentStatus(
         jobAmountEstimate,
@@ -1401,7 +1431,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
   );
   const isPartialJob =
     !job.booking?.finishedAt && (hasAnyPartial || alreadyPaidAmount > 0);
-  const { flowStatus, statusLabel } = resolveFlowStatus({
+  const { flowStatus, statusLabel: flowStatusLabel } = resolveFlowStatus({
     status: job.status,
     bookingStatus: job.booking?.status ?? null,
     arrivedAt: job.booking?.arrivedAt ?? null,
@@ -1415,6 +1445,22 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     jobAmount: jobAmountEstimate,
   });
 
+  const customerReview = serializeCustomerJobReview(job.booking?.ratingReview);
+  const hasCustomerReview = Boolean(customerReview);
+  const ratingStatus =
+    job.status === JobStatus.COMPLETED ? (hasCustomerReview ? 'RATED' : 'PENDING') : null;
+  const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
+  const statusLabel =
+    cancelled
+      ? 'Cancelled'
+      : job.status === JobStatus.COMPLETED && !hasCustomerReview
+        ? 'Pending Rating'
+        : flowStatusLabel;
+  const statusBadge =
+    job.status === JobStatus.COMPLETED && !hasCustomerReview
+      ? 'Pending Rating'
+      : statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus);
+
   return {
     id: job.id,
     title: job.title,
@@ -1423,8 +1469,19 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     description: job.description,
     qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
     status: job.status,
-    statusBadge: statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus),
+    statusBadge,
     statusLabel,
+    /** PENDING until customer rates; RATED after POST /jobs/{id}/review. null if not completed. */
+    ratingStatus,
+    hasReview: job.status === JobStatus.COMPLETED ? hasCustomerReview : false,
+    /** Trader does not submit a rating — always false. */
+    canReview: false,
+    /** Customer star rating for this job (null until rated). */
+    rating: customerReview?.rating ?? null,
+    /** Customer free-text comment. */
+    comment: customerReview?.comment ?? null,
+    /** Same shape as GET .../mine/{id}/completed `review`. */
+    review: customerReview,
     flowStatus,
     paymentStatus,
     customerConfirmedAt: job.booking?.customerConfirmedAt ?? null,
@@ -1462,7 +1519,8 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
       location: job.city || job.address?.city || formatFullAddress(job),
       isVerified: customerVerified,
       phoneNumber: job.phoneNumber || job.customer.mobileNumber || null,
-      rating: null as number | null,
+      /** Stars the customer gave on this job (null until rated). */
+      rating: customerReview?.rating ?? null,
       jobsPosted: job.customer._count.jobs,
       conversationId: job.id,
     },
@@ -1761,7 +1819,7 @@ export const getJobOutcomeDetail = async (
       ? (job.booking?.finishedAt ?? job.updatedAt)
       : job.updatedAt;
   const proofPhotos = job.photos.filter((p) => p.kind === JobPhotoKind.PROOF);
-  const review = job.booking?.ratingReview ?? null;
+  const review = serializeCustomerJobReview(job.booking?.ratingReview);
   const invoice = job.booking?.invoice ?? null;
   const categoryLabel = job.subcategory?.name || job.category?.name || 'SERVICE';
 
@@ -1862,6 +1920,8 @@ export const getJobOutcomeDetail = async (
     hasReview: hasCustomerReview,
     /** Trader does not submit a rating — always false (customer rates via /jobs/{id}/review). */
     canReview: false,
+    rating: review?.rating ?? null,
+    comment: review?.comment ?? null,
     siteVisit: isSiteVisitJob,
     siteVisitRequested: Boolean(job.siteVisitRequested),
     siteVisitLabel: isSiteVisitJob ? 'Site Visit' : null,
@@ -1875,15 +1935,9 @@ export const getJobOutcomeDetail = async (
       location: job.city || job.address?.city || formatFullAddress(job),
       avatar: job.customer.profilePhotoUrl,
       conversationId: job.id,
+      rating: review?.rating ?? null,
     },
-    review: review
-      ? {
-          rating: review.stars,
-          tags: review.tags ?? [],
-          comment: review.review,
-          createdAt: review.createdAt,
-        }
-      : null,
+    review,
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
     paymentSummary: buildOutcomePaymentSummary(
       job,

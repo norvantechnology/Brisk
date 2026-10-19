@@ -171,6 +171,20 @@
  *           enum: [OPEN, READY_TO_ARRIVE, ARRIVED, WORK_PROOF_PENDING, READY_TO_FINISH, SITE_VISIT_IN_PROGRESS, SITE_VISIT_PAYMENT_PENDING, PARTIAL_PAYMENT_PENDING, PARTIALLY_PAID, PAYMENT_REQUEST_PENDING, AWAITING_PAYMENT, COMPLETED, CANCELLED]
  *           example: COMPLETED
  *         paymentStatus: { type: string, enum: [UNPAID, PENDING, PARTIALLY_PAID, PAID], example: UNPAID }
+ *         ratingStatus: { type: string, nullable: true, enum: [PENDING, RATED], example: RATED, description: null unless job is COMPLETED }
+ *         hasReview: { type: boolean, example: true }
+ *         canReview: { type: boolean, example: false, description: Always false — customer rates the trader }
+ *         rating: { type: number, nullable: true, example: 5, description: Customer stars on this job }
+ *         comment: { type: string, nullable: true, example: Test Ratting }
+ *         review:
+ *           type: object
+ *           nullable: true
+ *           description: Customer rating payload (same as GET .../mine/{id}/completed)
+ *           properties:
+ *             rating: { type: number, example: 5 }
+ *             tags: { type: array, items: { type: string }, example: [On Time, Great Value] }
+ *             comment: { type: string, nullable: true, example: Test Ratting }
+ *             createdAt: { type: string, format: date-time }
  *         customerConfirmedAt: { type: string, format: date-time, nullable: true, example: null }
  *         isSiteVisit: { type: boolean, example: true, description: This job is a site-visit job (visit may still be pending) }
  *         isSiteVisitDone: { type: boolean, example: true, description: true only when visit.status = COMPLETED }
@@ -232,7 +246,7 @@
  *             location: { type: string, example: Dublin }
  *             isVerified: { type: boolean, example: true }
  *             phoneNumber: { type: string, nullable: true, example: '+353871234567' }
- *             rating: { type: number, nullable: true, example: null, description: Not rated yet — always null for now }
+ *             rating: { type: number, nullable: true, example: 5, description: Stars the customer gave on this job (null until rated) }
  *             jobsPosted: { type: integer, example: 12 }
  *             conversationId: { type: string, format: uuid, example: 8a8fb0e5-a330-4c62-8e76-a358bd792b84, description: 'Use with GET /traders/jobs/mine/{id}/messages' }
  *         materials:

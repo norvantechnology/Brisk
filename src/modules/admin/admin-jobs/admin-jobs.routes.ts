@@ -233,7 +233,9 @@ router.get('/jobs', validate(adminJobsListQuerySchema), controller.listJobs);
  *       Lifecycle: `cancellationReason`, `cancelledAt`, `archivedAt`; `booking.arrivedAt` (trader on site),
  *       `booking.finishedAt` (trader submitted work), `booking.customerConfirmedAt` (customer confirmed completion).
  *       `paymentRequests[]` — trader payment requests (`type` FULL JOB / SITE VISIT FEE / PARTIAL,
- *       `status` PENDING / SENT / PAID / CANCELLED, amounts, `paidAt`). `disputes[]` — customer reported issues
+ *       `status` PENDING / SENT / PAID / CANCELLED, amounts, `paidAt`, `stripePaymentIntentId` /
+ *       `stripeTransactionId` when the customer paid). `booking.invoice.payments[]` also includes those
+ *       Stripe ids for upfront invoice payments. `disputes[]` — customer reported issues
  *       (`status` OPEN / IN REVIEW / RESOLVED / REJECTED); manage via `PATCH /admin/disputes/{id}`.
  *     tags: ['Admin / Jobs']
  *     security: [{ bearerAuth: [] }]
