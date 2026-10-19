@@ -47,6 +47,7 @@ import uploadsRoutes from './modules/uploads/uploads.routes';
 import { getUploadRoot } from './modules/uploads/storage/local.storage';
 import propertyRoutes from './modules/property/property.routes';
 import jobsRoutes from './modules/jobs/jobs.routes';
+import chatRoutes from './modules/chat/chat.routes';
 import checkoutRoutes from './modules/checkout/checkout.routes';
 import paymentRequestsRoutes from './modules/payment-requests/payment-requests.routes';
 import stripeWebhookRoutes from './modules/webhooks/stripe-webhook.routes';
@@ -144,6 +145,7 @@ app.use('/uploads', uploadsRoutes);
 app.use('/', propertyRoutes);
 app.use('/', paymentRequestsRoutes);
 app.use('/jobs', jobsRoutes);
+app.use('/chats', chatRoutes);
 app.use('/', checkoutRoutes);
 app.use('/realtime', realtimeRoutes);
 

@@ -9,6 +9,7 @@ import {
   TraderPaymentRequestStatus,
   TraderPaymentRequestType,
   TraderSiteVisitStatus,
+  UserRole,
   type TraderPaymentRequest,
 } from '@prisma/client';
 import { prisma } from '../../../config/database';
@@ -24,7 +25,6 @@ import {
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { resolveDiscoverCurrency } from '../../../services/currency.service';
 import {
-  emitChatMessage,
   emitJobAccept,
   emitJobAcceptCancelled,
   emitJobDeclined,
@@ -32,6 +32,7 @@ import {
   emitPaymentRequested,
   emitQuoteReceived,
 } from '../../../sockets/realtime';
+import * as chatService from '../../chat/chat.service';
 import {
   JOB_PLATFORM_FEE,
   JOB_VAT_RATE,
@@ -2862,62 +2863,24 @@ export const addProofPhoto = async (userId: string, jobId: string, photoUrl: str
   return { id: photo.id, photoUrl: photo.photoUrl, kind: photo.kind };
 };
 
+/** Prefer GET /chats/{jobId}/messages — kept for existing trader app paths. */
 export const listMessages = async (userId: string, jobId: string) => {
-  const trader = await getTraderContext(userId);
-  await assertMyJob(trader.id, jobId);
-
-  const messages = await prisma.chatMessage.findMany({
-    where: { jobId },
-    orderBy: { sentAt: 'asc' },
-    include: {
-      sender: { select: { id: true, fullName: true, role: true } },
-    },
+  const data = await chatService.listMessages(userId, UserRole.TRADER, jobId, {
+    page: 1,
+    limit: 100,
   });
-
-  return {
-    items: messages.map((m) => ({
-      id: m.id,
-      senderRole: m.sender.role,
-      senderName: m.sender.fullName,
-      message: m.message,
-      sentAt: m.sentAt,
-      isMine: m.senderId === trader.userId,
-    })),
-  };
+  return { items: data.items };
 };
 
+/** Prefer POST /chats/{jobId}/messages — kept for existing trader app paths. */
 export const sendMessage = async (userId: string, jobId: string, message: string) => {
-  const trader = await getTraderContext(userId);
-  const job = await assertMyJob(trader.id, jobId);
-
-  const created = await prisma.chatMessage.create({
-    data: {
-      jobId,
-      bookingId: job.booking?.id ?? null,
-      senderId: userId,
-      message,
-    },
-    include: {
-      sender: { select: { id: true, fullName: true, role: true, profilePhotoUrl: true } },
-    },
-  });
-
-  emitChatMessage({
-    recipientUserId: job.customerId,
-    jobId,
-    bookingId: created.bookingId,
-    messageId: created.id,
-    senderName: created.sender.fullName,
-    senderPhotoUrl: created.sender.profilePhotoUrl,
-    message: created.message,
-  });
-
+  const data = await chatService.sendMessage(userId, UserRole.TRADER, jobId, message);
   return {
-    id: created.id,
-    senderRole: created.sender.role,
-    senderName: created.sender.fullName,
-    message: created.message,
-    sentAt: created.sentAt,
+    id: data.id,
+    senderRole: data.senderRole,
+    senderName: data.senderName,
+    message: data.message,
+    sentAt: data.sentAt,
     isMine: true,
   };
 };
