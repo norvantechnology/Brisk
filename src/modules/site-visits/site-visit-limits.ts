@@ -28,3 +28,19 @@ export const listSiteVisitFullJobIds = async (): Promise<string[]> => {
   });
   return grouped.filter((g) => g._count._all >= MAX_SITE_VISIT_APPLICANTS).map((g) => g.jobId);
 };
+
+/**
+ * Customer already accepted a site-visit slot (CONFIRMED) or visit is done (COMPLETED).
+ * These are no longer "new Discover" jobs for any trader — use My Jobs / progress instead.
+ */
+export const listSiteVisitLockedJobIds = async (): Promise<string[]> => {
+  const rows = await prisma.traderSiteVisitRequest.findMany({
+    where: {
+      status: { in: [TraderSiteVisitStatus.CONFIRMED, TraderSiteVisitStatus.COMPLETED] },
+      job: { status: JobStatus.PUBLISHED, traderId: null },
+    },
+    select: { jobId: true },
+    distinct: ['jobId'],
+  });
+  return rows.map((r) => r.jobId);
+};

@@ -27,10 +27,12 @@ const router = Router();
  *       Default order: newest first (`createdAt` desc). Use `sortBy=distanceKm` for nearest-first.
  *       Empty values are always listed last.
  *
- *       Jobs already on **Jobs Queue** for this trader (PENDING/ACCEPTED quote or PENDING
- *       site-visit) are omitted here — use `GET /traders/jobs/queue` for those.
- *       Site-visit marketplace jobs that already have **3** non-cancelled trader applications
- *       are also omitted (cap) so other traders cannot apply.
+ *       Discover = **new** jobs only:
+ *       - Jobs on **Jobs Queue** for this trader (PENDING/ACCEPTED quote or PENDING site-visit) → Queue
+ *       - This trader's CONFIRMED / COMPLETED site-visit → My Jobs (not Discover)
+ *       - Any job with a CONFIRMED/COMPLETED site-visit (customer accepted) → hidden for all traders
+ *       - Site-visit jobs at the **3**-applicant cap → hidden for traders who have not applied
+ *       - RESCHEDULE_REQUIRED for this trader may still appear (Reschedule CTA)
  *
  *       Example: `GET /traders/jobs/discover?page=1&limit=10&search=solar&categoryId=3f0f23dd-1c2b-4a5e-9f10-6a7b8c9d0e1f&siteVisit=true&from=2026-09-01&to=2026-09-30&sortBy=distanceKm&sortOrder=asc`
  *     parameters:

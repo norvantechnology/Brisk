@@ -21,6 +21,7 @@ import {
   countActiveSiteVisitApplicants,
   listSiteVisitFullJobIds,
   MAX_SITE_VISIT_APPLICANTS,
+  listSiteVisitLockedJobIds,
 } from '../../site-visits/site-visit-limits';
 import {
   rememberTraderDeviceOrigin,
@@ -910,12 +911,20 @@ export const listDiscoverJobs = async (
       : undefined;
 
   const createdAt = dateRangeWhere(query.from, query.to);
-  // Jobs already in Jobs Queue, or site-visit jobs at the 3-trader cap, stay off Discover.
-  const [queueExcludedIds, siteVisitFullIds] = await Promise.all([
+  /**
+   * Discover = new opportunities only.
+   * Hide: this trader's Queue items, confirmed/completed site visits (locked),
+   * and site-visit jobs already at the 3-applicant cap.
+   * RESCHEDULE_REQUIRED for this trader is NOT hidden (Discover Reschedule CTA).
+   */
+  const [queueExcludedIds, siteVisitFullIds, siteVisitLockedIds] = await Promise.all([
     discoverQueueExcludedJobIds(trader.id),
     listSiteVisitFullJobIds(),
+    listSiteVisitLockedJobIds(),
   ]);
-  const excludedJobIds = [...new Set([...queueExcludedIds, ...siteVisitFullIds])];
+  const excludedJobIds = [
+    ...new Set([...queueExcludedIds, ...siteVisitFullIds, ...siteVisitLockedIds]),
+  ];
   const where: Prisma.JobWhereInput = {
     status: JobStatus.PUBLISHED,
     traderId: null,
@@ -2021,9 +2030,15 @@ export const listJobsQueue = async (
   };
 };
 
-/** Job IDs this trader already has in Jobs Queue — hide from Discover Nearby list. */
+/**
+ * Job IDs this trader must not see as "new" on Discover.
+ * - Quotes PENDING/ACCEPTED → Jobs Queue
+ * - Site visit PENDING → Jobs Queue (waiting on customer)
+ * - Site visit CONFIRMED / COMPLETED → My Jobs (not Discover)
+ * RESCHEDULE_REQUIRED stays on Discover for this trader's Reschedule CTA.
+ */
 const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> => {
-  const [quotes, pendingVisits] = await Promise.all([
+  const [quotes, siteVisits] = await Promise.all([
     prisma.quote.findMany({
       where: {
         traderId,
@@ -2035,13 +2050,19 @@ const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> 
     prisma.traderSiteVisitRequest.findMany({
       where: {
         traderId,
-        status: TraderSiteVisitStatus.PENDING,
+        status: {
+          in: [
+            TraderSiteVisitStatus.PENDING,
+            TraderSiteVisitStatus.CONFIRMED,
+            TraderSiteVisitStatus.COMPLETED,
+          ],
+        },
         job: { status: JobStatus.PUBLISHED, traderId: null },
       },
       select: { jobId: true },
     }),
   ]);
-  return [...new Set([...quotes.map((q) => q.jobId), ...pendingVisits.map((v) => v.jobId)])];
+  return [...new Set([...quotes.map((q) => q.jobId), ...siteVisits.map((v) => v.jobId)])];
 };
 
 /**
