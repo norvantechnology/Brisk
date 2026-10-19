@@ -28,8 +28,9 @@ const router = Router();
  *       Empty values are always listed last.
  *
  *       Discover = **new** jobs only:
- *       - Jobs on **Jobs Queue** for this trader (PENDING/ACCEPTED quote or PENDING site-visit) → Queue
- *       - This trader's CONFIRMED / COMPLETED site-visit → My Jobs (not Discover)
+ *       - Jobs on **Jobs Queue** for this trader (PENDING/ACCEPTED quote, PENDING or CONFIRMED site-visit) → Queue
+ *       - This trader's CONFIRMED site-visit → Queue + My Jobs ACTIVE (complete visit); not Discover
+ *       - This trader's COMPLETED site-visit → My Jobs (not Discover)
  *       - Any job with a CONFIRMED/COMPLETED site-visit (customer accepted) → hidden for all traders
  *       - Site-visit jobs at the **3**-applicant cap → hidden for traders who have not applied
  *       - RESCHEDULE_REQUIRED for this trader may still appear (Reschedule CTA)
@@ -161,13 +162,19 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *       Included:
  *       - `QUOTE_SENT` — PENDING quote awaiting customer
  *       - `SITE_VISIT_REQUESTED` / `SITE_VISIT_RESCHEDULED` — PENDING visit awaiting customer
+ *       - `SITE_VISIT_CONFIRMED` — customer accepted the trader's schedule (`visitStatus: CONFIRMED`);
+ *         open Site Visit Confirmation sheet → `POST /traders/jobs/mine/{id}/site-visit/complete`
+ *         (`assignmentStatus: SITE_VISIT_CONFIRMED`, `primaryAction: COMPLETE_SITE_VISIT`,
+ *         `canCompleteSiteVisit: true`)
  *       - `AWAITING_TRADER_ACCEPT` — customer accepted quote; trader must **View & Accept**
  *         (`assignmentStatus: CUSTOMER_ACCEPTED`, `primaryAction: CONFIRM_JOB`)
  *
- *       Excluded: assigned My Jobs, confirmed visits.
+ *       Excluded: assigned My Jobs (`traderId` set), completed visits.
  *       - Customer-pending → `primaryAction: VIEW_DETAILS` → `GET /traders/jobs/discover/{id}`
+ *       - Confirmed visit → `primaryAction: COMPLETE_SITE_VISIT` → My Job complete-visit API
  *       - Trader-accept → `primaryAction: CONFIRM_JOB` → accept flow
  *
+ *       Confirmed visits also appear on My Jobs ACTIVE with the same complete CTA.
  *       `distanceKm` uses trader service centre (or last Discover GPS). No `lat`/`lng` on this API.
  *     parameters:
  *       - in: query
@@ -215,6 +222,7 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *                     queueKind: SITE_VISIT_REQUESTED
  *                     statusBadge: Site Visit Requested
  *                     statusLabel: Site Visit Pending Confirmation
+ *                     visitStatus: PENDING
  *                     distanceKm: 3.8
  *                     areaName: Rathmines, Dublin
  *                     yourQuote: 220
@@ -224,6 +232,22 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *                       startTime: '08:00'
  *                       endTime: '12:00'
  *                     primaryAction: VIEW_DETAILS
+ *                   - id: f3c13eb1-8408-41f1-9418-a771046f321e
+ *                     title: Sample Site Visit job
+ *                     queueKind: SITE_VISIT_CONFIRMED
+ *                     statusBadge: Site Visit Confirmed
+ *                     statusLabel: Customer confirmed schedule — complete site visit
+ *                     visitStatus: CONFIRMED
+ *                     assignmentStatus: SITE_VISIT_CONFIRMED
+ *                     canCompleteSiteVisit: true
+ *                     isWaitingForCustomerConfirmation: false
+ *                     scheduled:
+ *                       visitDate: '2026-10-19'
+ *                       timeSlot: MORNING
+ *                       startTime: '08:00'
+ *                       endTime: '12:00'
+ *                     primaryAction: COMPLETE_SITE_VISIT
+ *                     primaryActionLabel: Complete Site Visit
  *                   - id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
  *                     title: Kitchen Sink Repair
  *                     queueKind: AWAITING_TRADER_ACCEPT
@@ -234,7 +258,7 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *                     yourQuote: 350
  *                     primaryAction: CONFIRM_JOB
  *                     primaryActionLabel: View & Accept
- *                 meta: { total: 3, page: 1, limit: 20, totalPages: 1 }
+ *                 meta: { total: 4, page: 1, limit: 20, totalPages: 1 }
  */
 router.get('/queue', validate(jobsQueueQuerySchema), controller.listJobsQueue);
 

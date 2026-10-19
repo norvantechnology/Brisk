@@ -3422,6 +3422,11 @@ export const completeSiteVisit = async (userId: string, jobId: string) => {
   if (visit.status === TraderSiteVisitStatus.CANCELLED) {
     throw new BadRequestError('Site visit was cancelled.');
   }
+  if (visit.status !== TraderSiteVisitStatus.CONFIRMED) {
+    throw new BadRequestError(
+      'Customer must confirm the site-visit schedule before you can complete it.'
+    );
+  }
 
   const now = new Date();
   const start = visit.arrivedAt ?? visit.createdAt;
