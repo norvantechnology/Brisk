@@ -36,13 +36,13 @@ export const adminTraderSiteVisitsSchema = z.object({
   }),
   query: z.object({
     ...siteVisitListQuery,
-    group: z.enum(['REQUESTED', 'VISITED', 'CLOSED']).optional(),
+    group: z.enum(['REQUESTED', 'UPCOMING', 'VISITED', 'CLOSED']).optional(),
   }),
 });
 
 export const traderSiteVisitsSchema = z.object({
   query: z.object({
     ...siteVisitListQuery,
-    tab: z.enum(['REQUESTED', 'VISITED']).default('REQUESTED'),
+    tab: z.enum(['REQUESTED', 'UPCOMING', 'VISITED']).default('REQUESTED'),
   }),
 });

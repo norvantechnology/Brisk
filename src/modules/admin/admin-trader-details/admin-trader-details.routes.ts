@@ -336,8 +336,10 @@ router.get(
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *       - in: query
  *         name: group
- *         schema: { type: string, enum: [REQUESTED, VISITED, CLOSED] }
- *         description: Tab filter. REQUESTED = PENDING/CONFIRMED/RESCHEDULE_REQUIRED, VISITED = COMPLETED, CLOSED = CANCELLED/CLOSED.
+ *         schema: { type: string, enum: [REQUESTED, UPCOMING, VISITED, CLOSED] }
+ *         description: |
+ *           Tab filter. REQUESTED = PENDING/RESCHEDULE_REQUIRED, UPCOMING = CONFIRMED,
+ *           VISITED = COMPLETED, CLOSED = CANCELLED/CLOSED.
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED, CANCELLED, CLOSED] }

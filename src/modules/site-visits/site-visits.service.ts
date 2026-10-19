@@ -15,15 +15,28 @@ export {
  *
  * `status` is the request status, except an open request (PENDING / CONFIRMED / RESCHEDULE_REQUIRED)
  * becomes CLOSED when its job was cancelled, completed, or awarded to another trader.
+ *
+ * Tab / group buckets (mutually exclusive open visits):
+ * - REQUESTED — waiting on customer (`PENDING`, `RESCHEDULE_REQUIRED`)
+ * - UPCOMING — customer confirmed, visit not done yet (`CONFIRMED`)
+ * - VISITED — trader completed the visit (`COMPLETED`)
+ * - CLOSED — cancelled request, or open request on a closed/reassigned job
  */
 export type SiteVisitStatus = TraderSiteVisitStatus | 'CLOSED';
-export type SiteVisitGroup = 'REQUESTED' | 'VISITED' | 'CLOSED';
+export type SiteVisitGroup = 'REQUESTED' | 'UPCOMING' | 'VISITED' | 'CLOSED';
+/** Trader Portal Site Visits menu tabs (no CLOSED tab). */
+export type TraderSiteVisitTab = 'REQUESTED' | 'UPCOMING' | 'VISITED';
 export type SiteVisitClosedReason = 'JOB_CANCELLED' | 'JOB_COMPLETED' | 'ASSIGNED_TO_OTHER_TRADER';
 type Audience = 'ADMIN' | 'TRADER';
 
 const OPEN_STATUSES: TraderSiteVisitStatus[] = [
   TraderSiteVisitStatus.PENDING,
   TraderSiteVisitStatus.CONFIRMED,
+  TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
+];
+/** Waiting on customer — Trader Portal "Requested" tab. */
+const REQUESTED_STATUSES: TraderSiteVisitStatus[] = [
+  TraderSiteVisitStatus.PENDING,
   TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
 ];
 const CLOSED_JOB_STATUSES: JobStatus[] = [JobStatus.CANCELLED, JobStatus.COMPLETED];
@@ -113,6 +126,7 @@ const closedReasonFor = (row: SiteVisitRow): SiteVisitClosedReason | null => {
 
 const groupFor = (status: SiteVisitStatus): SiteVisitGroup => {
   if (status === TraderSiteVisitStatus.COMPLETED) return 'VISITED';
+  if (status === TraderSiteVisitStatus.CONFIRMED) return 'UPCOMING';
   if (status === TraderSiteVisitStatus.CANCELLED || status === 'CLOSED') return 'CLOSED';
   return 'REQUESTED';
 };
@@ -135,7 +149,12 @@ export const siteVisitGroupWhere = (
   group: SiteVisitGroup
 ): Prisma.TraderSiteVisitRequestWhereInput => {
   if (group === 'VISITED') return { status: TraderSiteVisitStatus.COMPLETED };
-  if (group === 'REQUESTED') return { status: { in: OPEN_STATUSES }, job: jobOpenFor(traderId) };
+  if (group === 'UPCOMING') {
+    return { status: TraderSiteVisitStatus.CONFIRMED, job: jobOpenFor(traderId) };
+  }
+  if (group === 'REQUESTED') {
+    return { status: { in: REQUESTED_STATUSES }, job: jobOpenFor(traderId) };
+  }
   return {
     OR: [
       { status: TraderSiteVisitStatus.CANCELLED },
@@ -237,6 +256,7 @@ export const serializeSiteVisit = (row: SiteVisitRow, audience: Audience) => {
 const summarize = (items: Array<{ group: SiteVisitGroup }>) => ({
   total: items.length,
   requestedCount: items.filter((i) => i.group === 'REQUESTED').length,
+  upcomingCount: items.filter((i) => i.group === 'UPCOMING').length,
   visitedCount: items.filter((i) => i.group === 'VISITED').length,
   closedCount: items.filter((i) => i.group === 'CLOSED').length,
 });
@@ -389,19 +409,22 @@ export const listTraderSiteVisits = async (
       where: { AND: [baseWhere, siteVisitGroupWhere(traderId, group)] },
     });
 
-  const [total, rows, requestedCount, visitedCount, closedCount] = await Promise.all([
-    prisma.traderSiteVisitRequest.count({ where: listWhere }),
-    loadPage(),
-    countGroup('REQUESTED'),
-    countGroup('VISITED'),
-    countGroup('CLOSED'),
-  ]);
+  const [total, rows, requestedCount, upcomingCount, visitedCount, closedCount] =
+    await Promise.all([
+      prisma.traderSiteVisitRequest.count({ where: listWhere }),
+      loadPage(),
+      countGroup('REQUESTED'),
+      countGroup('UPCOMING'),
+      countGroup('VISITED'),
+      countGroup('CLOSED'),
+    ]);
 
   return {
     items: rows.map((row) => serializeSiteVisit(row, audience)),
     summary: {
-      total: requestedCount + visitedCount + closedCount,
+      total: requestedCount + upcomingCount + visitedCount + closedCount,
       requestedCount,
+      upcomingCount,
       visitedCount,
       closedCount,
     },

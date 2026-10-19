@@ -424,8 +424,8 @@ router.get(
  *       Same item shape and statuses as `GET /admin/traders/{id}/site-visits` and `GET /traders/site-visits`.
  *
  *       **status** (`statusLabel`):
- *       - `PENDING` (Waiting for Customer) · `CONFIRMED` (Visit Confirmed) · `RESCHEDULE_REQUIRED` (Reschedule Requested)
- *         → `group: REQUESTED`
+ *       - `PENDING` (Waiting for Customer) · `RESCHEDULE_REQUIRED` (Reschedule Requested) → `group: REQUESTED`
+ *       - `CONFIRMED` (Visit Confirmed) → `group: UPCOMING`
  *       - `COMPLETED` (Site Visited) → `group: VISITED`
  *       - `CANCELLED` (Cancelled) · `CLOSED` (Closed — job cancelled/completed or awarded to another trader,
  *         see `closedReason`) → `group: CLOSED`

@@ -12,8 +12,8 @@
  *         | status | statusLabel | group |
  *         |---|---|---|
  *         | PENDING | Waiting for Customer | REQUESTED |
- *         | CONFIRMED | Visit Confirmed | REQUESTED |
  *         | RESCHEDULE_REQUIRED | Reschedule Requested | REQUESTED |
+ *         | CONFIRMED | Visit Confirmed | UPCOMING |
  *         | COMPLETED | Site Visited | VISITED |
  *         | CANCELLED | Cancelled | CLOSED |
  *         | CLOSED | Closed | CLOSED |
@@ -26,7 +26,7 @@
  *         requestId: { type: string, format: uuid }
  *         status: { type: string, enum: [PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED, CANCELLED, CLOSED] }
  *         statusLabel: { type: string }
- *         group: { type: string, enum: [REQUESTED, VISITED, CLOSED] }
+ *         group: { type: string, enum: [REQUESTED, UPCOMING, VISITED, CLOSED] }
  *         requestStatus: { type: string, enum: [PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED, CANCELLED] }
  *         closedReason: { type: string, nullable: true, enum: [JOB_CANCELLED, JOB_COMPLETED, ASSIGNED_TO_OTHER_TRADER] }
  *         visitDate: { type: string, nullable: true, example: '2026-10-04' }
@@ -124,8 +124,9 @@
  *       type: object
  *       properties:
  *         total: { type: integer }
- *         requestedCount: { type: integer }
- *         visitedCount: { type: integer }
+ *         requestedCount: { type: integer, description: PENDING + RESCHEDULE_REQUIRED (open jobs) }
+ *         upcomingCount: { type: integer, description: CONFIRMED (open jobs) }
+ *         visitedCount: { type: integer, description: COMPLETED }
  *         closedCount: { type: integer }
  */
 export {};
