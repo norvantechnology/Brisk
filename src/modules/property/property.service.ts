@@ -534,6 +534,7 @@ const serializeSubscription = (
     id: string;
     serviceType: string;
     status: string;
+    expiryDate: Date | null;
     utilityProvider: {
       id: string;
       name: string;
@@ -558,6 +559,8 @@ const serializeSubscription = (
     logoUrl: sub.utilityProvider.logoUrl,
     iconUrl: sub.utilityProvider.iconUrl ?? sub.utilityProvider.logoUrl,
     status: sub.status,
+    /** ISO date-time (same shape as `createdAt`); null when unset. */
+    expiryDate: sub.expiryDate,
     mprnNumber: refs.mprnNumber,
     gprnNumber: refs.gprnNumber,
     referenceNumber: refs.referenceNumber,
@@ -687,6 +690,8 @@ export const listUtilityProviders = async () => {
     logoUrl: provider.logoUrl,
     iconUrl: provider.iconUrl ?? provider.logoUrl,
     displayOrder: provider.displayOrder,
+    /** ISO date-time (same shape as `createdAt`); null when unset. */
+    expiryDate: provider.expiryDate,
   }));
 };
 
@@ -744,6 +749,7 @@ export const savePropertySubscriptions = async (
           utilityProviderId: provider.id,
           serviceType: provider.serviceType,
           status: 'active',
+          expiryDate: provider.expiryDate,
         },
         update: {
           status: 'active',

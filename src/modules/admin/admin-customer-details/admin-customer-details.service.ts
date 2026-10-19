@@ -480,6 +480,7 @@ export const getCustomerProperty = async (customerId: string, propertyId: string
       serviceLabel: s.utilityProvider.serviceLabel ?? s.serviceType,
       status: s.status,
       accountNumber: s.accountNumber,
+      expiryDate: s.expiryDate,
       provider: {
         id: s.utilityProvider.id,
         name: s.utilityProvider.name,

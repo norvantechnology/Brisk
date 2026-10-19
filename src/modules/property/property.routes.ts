@@ -47,6 +47,7 @@ router.get('/property/help-tips', ...customerOnly, controller.getMeterHelpTips);
  *     description: |
  *       Returns Bins / Electricity / Gas / Home Insurance options with `iconUrl` / `logoUrl`.
  *       `data` is a **list** (not `{ items: [] }`).
+ *       Each item includes `expiryDate` as an ISO date-time (same shape as `createdAt`) or `null`.
  *     responses:
  *       200:
  *         description: Provider array in `data`.
@@ -222,6 +223,7 @@ router.get('/properties', ...customerOnly, controller.listProperties);
  *           - `mprnNumber` / `gprnNumber` (from address or meters)
  *           - `meters[]` with `referenceNumber` (MPRN/GPRN) + `referenceLabel`
  *           - `subscriptions[]` with `mprnNumber`/`gprnNumber` for electricity/gas rows
+ *           - `subscriptions[].expiryDate` (ISO date-time like `createdAt`, or null)
  */
 router.get('/properties/:id', ...customerOnly, validate(propertyIdParamSchema), controller.getPropertyDetail);
 

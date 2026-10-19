@@ -511,18 +511,20 @@ model MeterReading {
 }
 
 model UtilityProvider {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String    @id @default(uuid()) @db.Uuid
   name         String
   /// bins | electricity | gas | insurance
-  serviceType  String   @map("service_type")
-  serviceLabel String?  @map("service_label") // Bins, Electricity, GAS, Home Insurance
-  description  String?  // e.g. Building & Contents cover
-  logoUrl      String?  @map("logo_url")
-  iconUrl      String?  @map("icon_url")
-  contactPhone String?  @map("contact_phone")
-  displayOrder Int      @default(0) @map("display_order")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
+  serviceType  String    @map("service_type")
+  serviceLabel String?   @map("service_label") // Bins, Electricity, GAS, Home Insurance
+  description  String?   // e.g. Building & Contents cover
+  logoUrl      String?   @map("logo_url")
+  iconUrl      String?   @map("icon_url")
+  contactPhone String?   @map("contact_phone")
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  /// Plan / cover end — ISO datetime in API (same shape as createdAt). Null when N/A.
+  expiryDate   DateTime? @map("expiry_date")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   // Relationships
   subscriptions Subscription[]
@@ -531,14 +533,16 @@ model UtilityProvider {
 }
 
 model Subscription {
-  id                String   @id @default(uuid()) @db.Uuid
-  propertyId        String   @map("property_id") @db.Uuid
-  utilityProviderId String   @map("utility_provider_id") @db.Uuid
-  serviceType       String   @map("service_type")
-  accountNumber     String?  @map("account_number")
-  status            String   @default("active") // active | cancelled
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                String    @id @default(uuid()) @db.Uuid
+  propertyId        String    @map("property_id") @db.Uuid
+  utilityProviderId String    @map("utility_provider_id") @db.Uuid
+  serviceType       String    @map("service_type")
+  accountNumber     String?   @map("account_number")
+  status            String    @default("active") // active | cancelled
+  /// Copied from provider on create when set; ISO datetime in API (same shape as createdAt).
+  expiryDate        DateTime? @map("expiry_date")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   // Relationships
   property        Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
