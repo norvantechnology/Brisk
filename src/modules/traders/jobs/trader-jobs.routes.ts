@@ -29,9 +29,9 @@ const router = Router();
  *
  *       Discover = **new** jobs only:
  *       - Jobs on **Jobs Queue** for this trader (PENDING/ACCEPTED quote, PENDING or CONFIRMED site-visit) → Queue
- *       - This trader's CONFIRMED site-visit → Queue + My Jobs ACTIVE (complete visit); not Discover
- *       - This trader's COMPLETED site-visit → My Jobs (not Discover)
- *       - Any job with a CONFIRMED/COMPLETED site-visit (customer accepted) → hidden for all traders
+ *       - CONFIRMED site-visit → Queue only (complete visit); not Discover; **not** My Jobs ACTIVE
+ *       - After site-visit COMPLETED → Discover again so trader can submit a quotation
+ *       - My Jobs ACTIVE only after quotation accepted + trader assigned
  *       - Site-visit jobs at the **3**-applicant cap → hidden for traders who have not applied
  *       - RESCHEDULE_REQUIRED for this trader may still appear (Reschedule CTA)
  *
@@ -169,12 +169,12 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *       - `AWAITING_TRADER_ACCEPT` — customer accepted quote; trader must **View & Accept**
  *         (`assignmentStatus: CUSTOMER_ACCEPTED`, `primaryAction: CONFIRM_JOB`)
  *
- *       Excluded: assigned My Jobs (`traderId` set), completed visits.
+ *       Excluded: assigned My Jobs (`traderId` set), completed visits (back on Discover to quote).
  *       - Customer-pending → `primaryAction: VIEW_DETAILS` → `GET /traders/jobs/discover/{id}`
- *       - Confirmed visit → `primaryAction: COMPLETE_SITE_VISIT` → My Job complete-visit API
- *       - Trader-accept → `primaryAction: CONFIRM_JOB` → accept flow
+ *       - Confirmed visit → `primaryAction: COMPLETE_SITE_VISIT` →
+ *         `POST /traders/jobs/mine/{id}/site-visit/complete` (then quote on Discover)
+ *       - Trader-accept → `primaryAction: CONFIRM_JOB` → accept flow → My Jobs ACTIVE
  *
- *       Confirmed visits also appear on My Jobs ACTIVE with the same complete CTA.
  *       `distanceKm` uses trader service centre (or last Discover GPS). No `lat`/`lng` on this API.
  *     parameters:
  *       - in: query

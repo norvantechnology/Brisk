@@ -191,11 +191,12 @@ const traderJobAccessWhere = (traderId: string): Prisma.JobWhereInput => ({
 
 const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput => {
   if (tab === 'ACTIVE') {
-    // In-progress + finished unpaid (Payment Request Pending / Awaiting Customer Payment).
-    // Completed tab only after the customer pays (status COMPLETED).
+    // Assigned / in-progress only (traderId set after quote accepted + trader View & Accept).
+    // Site-visit CONFIRMED stays on Jobs Queue until visit complete → quote → customer accept.
     // Site-visit RESCHEDULE_REQUIRED leaves Active → Discover Reschedule CTA.
     return {
       status: { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] },
+      traderId,
       NOT: {
         siteVisitRequests: {
           some: { traderId, status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
@@ -207,25 +208,12 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
             { OR: [{ booking: null }, { booking: { finishedAt: null } }] },
             {
               OR: [
+                { status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] } },
                 {
-                  traderId,
-                  OR: [
-                    { status: { in: [...ACTIVE_JOB_STATUSES, JobStatus.PAYMENT_PENDING] } },
-                    {
-                      booking: {
-                        traderId,
-                        finishedAt: null,
-                        status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
-                      },
-                    },
-                  ],
-                },
-                {
-                  siteVisitRequests: {
-                    some: {
-                      traderId,
-                      status: TraderSiteVisitStatus.CONFIRMED,
-                    },
+                  booking: {
+                    traderId,
+                    finishedAt: null,
+                    status: { in: [BookingStatus.SCHEDULED, BookingStatus.IN_PROGRESS] },
                   },
                 },
               ],
@@ -234,7 +222,6 @@ const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput 
         },
         // Work finished — unpaid (request not sent yet, or awaiting customer payment).
         {
-          traderId,
           status: JobStatus.PAYMENT_PENDING,
           booking: { traderId, finishedAt: { not: null } },
         },

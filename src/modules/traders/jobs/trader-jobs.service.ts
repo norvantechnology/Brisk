@@ -470,7 +470,8 @@ const resolvePrimaryActions = (
     };
   }
 
-  if (siteVisit.status === 'CONFIRMED' || siteVisit.status === 'COMPLETED') {
+  // Customer confirmed schedule — complete visit from Jobs Queue (not Discover quote yet).
+  if (siteVisit.status === 'CONFIRMED') {
     return {
       canSelectDateTime: false,
       canRequestSiteVisit: false,
@@ -478,9 +479,33 @@ const resolvePrimaryActions = (
       canSubmitQuote: false,
       canUpdateQuote: quote.canUpdateQuote,
       canRequestJob: quote.canRequestJob,
-      primaryAction: quote.canRequestJob
-        ? ('REQUEST_JOB' as const)
-        : ('BACK_TO_JOB' as const),
+      primaryAction: 'BACK_TO_JOB' as const,
+    };
+  }
+
+  // Visit finished — trader submits quotation on Discover like a normal job.
+  if (siteVisit.status === 'COMPLETED') {
+    if (quote.hasSubmittedQuote) {
+      return {
+        canSelectDateTime: false,
+        canRequestSiteVisit: false,
+        canRequestReschedule: false,
+        canSubmitQuote: false,
+        canUpdateQuote: quote.canUpdateQuote,
+        canRequestJob: quote.canRequestJob,
+        primaryAction: quote.canRequestJob
+          ? ('REQUEST_JOB' as const)
+          : ('UPDATE_QUOTE' as const),
+      };
+    }
+    return {
+      canSelectDateTime: false,
+      canRequestSiteVisit: false,
+      canRequestReschedule: false,
+      canSubmitQuote: true,
+      canUpdateQuote: false,
+      canRequestJob: false,
+      primaryAction: 'SUBMIT_QUOTE' as const,
     };
   }
 
@@ -913,8 +938,10 @@ export const listDiscoverJobs = async (
   const createdAt = dateRangeWhere(query.from, query.to);
   /**
    * Discover = new opportunities only.
-   * Hide: this trader's Queue items, confirmed/completed site visits (locked),
+   * Hide: this trader's Queue items (quotes + PENDING/CONFIRMED visits),
+   * CONFIRMED visits for all traders (locked until visit complete),
    * and site-visit jobs already at the 3-applicant cap.
+   * After visit COMPLETED, job returns here for quotation.
    * RESCHEDULE_REQUIRED for this trader is NOT hidden (Discover Reschedule CTA).
    */
   const [queueExcludedIds, siteVisitFullIds, siteVisitLockedIds] = await Promise.all([
@@ -1762,7 +1789,8 @@ export const requestDiscoverJob = async (
  *  3) Jobs waiting for **trader** accept — customer accepted quote (View & Accept)
  *
  * These jobs are hidden from Discover so they only appear here (and Incoming sheet for accept).
- * Confirmed site visits also appear on My Jobs ACTIVE (`COMPLETE_SITE_VISIT`).
+ * After site-visit complete → Discover again to submit quotation.
+ * My Jobs ACTIVE only once the trader is assigned (quote accepted + View & Accept).
  */
 export const listJobsQueue = async (
   userId: string,
@@ -2062,10 +2090,10 @@ export const listJobsQueue = async (
 /**
  * Job IDs this trader must not see as "new" on Discover.
  * - Quotes PENDING/ACCEPTED → Jobs Queue
- * - Site visit PENDING → Jobs Queue (waiting on customer)
- * - Site visit CONFIRMED → Jobs Queue + My Jobs ACTIVE (complete visit); not Discover
- * - Site visit COMPLETED → My Jobs (not Discover)
+ * - Site visit PENDING / CONFIRMED → Jobs Queue (not Discover)
+ * - Site visit COMPLETED → Discover again so trader can submit a quotation
  * RESCHEDULE_REQUIRED stays on Discover for this trader's Reschedule CTA.
+ * My Jobs ACTIVE only after quote accepted + trader assigned (not for CONFIRMED visit alone).
  */
 const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> => {
   const [quotes, siteVisits] = await Promise.all([
@@ -2081,11 +2109,7 @@ const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> 
       where: {
         traderId,
         status: {
-          in: [
-            TraderSiteVisitStatus.PENDING,
-            TraderSiteVisitStatus.CONFIRMED,
-            TraderSiteVisitStatus.COMPLETED,
-          ],
+          in: [TraderSiteVisitStatus.PENDING, TraderSiteVisitStatus.CONFIRMED],
         },
         job: { status: JobStatus.PUBLISHED, traderId: null },
       },
