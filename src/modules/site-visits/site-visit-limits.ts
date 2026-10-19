@@ -30,15 +30,14 @@ export const listSiteVisitFullJobIds = async (): Promise<string[]> => {
 };
 
 /**
- * Customer accepted a site-visit slot (`CONFIRMED`) — visit not finished yet.
- * Hidden from Discover for everyone; the applying trader sees it on Jobs Queue
- * (`SITE_VISIT_CONFIRMED`) until they complete the visit and submit a quote.
- * `COMPLETED` visits are NOT locked — trader returns to Discover to quote as usual.
+ * Site-visit jobs that are no longer "new" on Discover for anyone:
+ * - `CONFIRMED` — customer accepted schedule (Queue: complete visit)
+ * - `COMPLETED` — visit done (Queue: submit quotation; Discover = new jobs only)
  */
 export const listSiteVisitLockedJobIds = async (): Promise<string[]> => {
   const rows = await prisma.traderSiteVisitRequest.findMany({
     where: {
-      status: TraderSiteVisitStatus.CONFIRMED,
+      status: { in: [TraderSiteVisitStatus.CONFIRMED, TraderSiteVisitStatus.COMPLETED] },
       job: { status: JobStatus.PUBLISHED, traderId: null },
     },
     select: { jobId: true },

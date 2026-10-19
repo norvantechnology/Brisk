@@ -180,24 +180,29 @@
  *         title: { type: string }
  *         queueKind:
  *           type: string
- *           enum: [QUOTE_SENT, SITE_VISIT_REQUESTED, SITE_VISIT_RESCHEDULED, SITE_VISIT_CONFIRMED, AWAITING_TRADER_ACCEPT]
+ *           enum: [QUOTE_SENT, SITE_VISIT_REQUESTED, SITE_VISIT_RESCHEDULED, SITE_VISIT_CONFIRMED, SITE_VISIT_COMPLETED, AWAITING_TRADER_ACCEPT]
  *           description: |
- *             Use `SITE_VISIT_CONFIRMED` to open the Site Visit Confirmation bottom sheet.
- *             Then call `POST /traders/jobs/mine/{jobId}/site-visit/complete`.
+ *             `SITE_VISIT_CONFIRMED` → Site Visit Confirmation sheet, then
+ *             `POST /traders/jobs/mine/{jobId}/site-visit/complete`.
+ *             `SITE_VISIT_COMPLETED` → submit quotation (job is NOT on Discover; Discover = new jobs only).
+ *             Open detail via `GET /traders/jobs/discover/{jobId}` then POST quote.
  *         statusBadge:
  *           type: string
- *           description: Quote Sent | Site Visit Requested | Reschedule Requested | Site Visit Confirmed | Awaiting Your Acceptance
+ *           description: Quote Sent | Site Visit Requested | Reschedule Requested | Site Visit Confirmed | Site Visit Completed | Awaiting Your Acceptance
  *         statusLabel:
  *           type: string
  *           description: Footer progress text
  *         visitStatus:
  *           type: string
  *           nullable: true
- *           enum: [PENDING, CONFIRMED]
+ *           enum: [PENDING, CONFIRMED, COMPLETED]
  *           description: Site-visit request status when the card is visit-driven; null for quote-only cards
  *         canCompleteSiteVisit:
  *           type: boolean
  *           description: true when queueKind=SITE_VISIT_CONFIRMED (customer accepted schedule)
+ *         canSubmitQuote:
+ *           type: boolean
+ *           description: true when queueKind=SITE_VISIT_COMPLETED (visit done, no quote yet)
  *         queuedAt: { type: string, format: date-time, description: For relative time (e.g. 2 hours ago) }
  *         distanceKm: { type: number }
  *         areaName: { type: string }
@@ -218,21 +223,22 @@
  *         quoteId: { type: string, format: uuid, nullable: true }
  *         siteVisitRequestId: { type: string, format: uuid, nullable: true }
  *         isJobRequested: { type: boolean }
- *         isWaitingForCustomerConfirmation: { type: boolean, description: false when AWAITING_TRADER_ACCEPT or SITE_VISIT_CONFIRMED }
+ *         isWaitingForCustomerConfirmation: { type: boolean, description: false when AWAITING_TRADER_ACCEPT, SITE_VISIT_CONFIRMED, or SITE_VISIT_COMPLETED }
  *         isSiteVisit: { type: boolean }
  *         assignmentStatus:
  *           type: string
- *           description: QUOTED | WAITING_FOR_CUSTOMER | SITE_VISIT_CONFIRMED | CUSTOMER_ACCEPTED
+ *           description: QUOTED | WAITING_FOR_CUSTOMER | SITE_VISIT_CONFIRMED | SITE_VISIT_COMPLETED | CUSTOMER_ACCEPTED
  *         customerName: { type: string }
  *         primaryAction:
  *           type: string
- *           enum: [VIEW_DETAILS, COMPLETE_SITE_VISIT, CONFIRM_JOB]
+ *           enum: [VIEW_DETAILS, COMPLETE_SITE_VISIT, SUBMIT_QUOTE, CONFIRM_JOB]
  *           description: |
  *             VIEW_DETAILS for customer-pending; COMPLETE_SITE_VISIT when schedule confirmed;
+ *             SUBMIT_QUOTE after site visit completed (not on Discover list);
  *             CONFIRM_JOB when trader must accept quote
  *         primaryActionLabel:
  *           type: string
- *           description: View Details | Complete Site Visit | View & Accept
+ *           description: View Details | Complete Site Visit | Submit Quotation | View & Accept
  *           example: View Details
  *     TraderJobsQueueResponse:
  *       type: object
