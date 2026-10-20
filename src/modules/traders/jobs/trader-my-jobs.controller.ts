@@ -80,6 +80,25 @@ export const getCompletedJobDetail = async (
   }
 };
 
+export const submitCustomerReview = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await service.submitCustomerReview(req.user!.id, req.params.id, req.body);
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: 'Thank you! Your review has been submitted.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getCancelledJobDetail = async (
   req: AuthenticatedRequest,
   res: Response,

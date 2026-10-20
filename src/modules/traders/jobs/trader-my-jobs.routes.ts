@@ -12,6 +12,7 @@ import {
   myJobProofPhotoBodySchema,
   myJobPartialPaymentBodySchema,
   myJobQuoteBodySchema,
+  myJobReviewBodySchema,
   myJobSubmitCompletionBodySchema,
   myJobsListQuerySchema,
 } from './trader-my-jobs.validation';
@@ -456,7 +457,10 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *       Do **not** call this endpoint yet — use `GET /traders/jobs/mine/{id}` instead.
  *
  *       Includes `previousPayments` — full installment list (same shape as part-payment-history).
- *       Rating fields: `ratingStatus` PENDING|RATED, `canReview` always false for trader.
+ *       Rating fields:
+ *       - `review` / `ratingStatus` / `hasReview` = **customer → trader** (what the customer rated you)
+ *       - `canReview` = true when you can still rate the customer (`POST .../review`)
+ *       - `myReview` = **trader → customer** (null until you submit)
  *     parameters:
  *       - in: path
  *         name: id
@@ -500,6 +504,55 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *           requested (`PAYMENT_PENDING`). Stay on Active; use GET /traders/jobs/mine/{id}.
  */
 router.get('/mine/:id/completed', validate(myJobIdParamSchema), controller.getCompletedJobDetail);
+
+/**
+ * @swagger
+ * /traders/jobs/mine/{id}/review:
+ *   post:
+ *     summary: Rate the customer (mutual reviews)
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Trader rates the customer after the job is finished (same body as customer
+ *       `POST /jobs/{id}/review`). One submit per job.
+ *       When `canReview` is true on list / detail / completed / payment-request, call this.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid }, description: jobId }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rating]
+ *             properties:
+ *               rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
+ *               tags: { type: array, items: { type: string }, example: [Friendly, Clear brief] }
+ *               comment: { type: string, example: Great customer, clear instructions. }
+ *     responses:
+ *       201:
+ *         description: Review saved
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Thank you! Your review has been submitted.
+ *               data:
+ *                 reviewId: 0b1c2d3e-0000-4000-8000-000000000002
+ *                 jobId: b8499d07-e1c9-4009-b774-82d6690e015b
+ *                 rating: 5
+ *                 tags: [Friendly]
+ *                 comment: Great customer
+ *                 customer: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, avgRating: 4.8, reviewsCount: 3 }
+ *                 myReview: { rating: 5, tags: [Friendly], comment: Great customer, createdAt: '2026-10-20T12:00:00.000Z' }
+ *       400: { description: Job not finished, cancelled, or no booking }
+ *       409: { description: Already reviewed }
+ */
+router.post(
+  '/mine/:id/review',
+  validate(myJobReviewBodySchema),
+  controller.submitCustomerReview
+);
 
 /**
  * @swagger
@@ -926,7 +979,7 @@ router.post('/mine/:id/messages', validate(myJobMessageBodySchema), controller.s
  *       After `POST .../request-payment` (or when a FULL_JOB request already exists):
  *       `paymentRequestSent=true`, `paymentRequestId`, `invoiceId`, amount breakdown,
  *       `message`, `flowStatus=AWAITING_PAYMENT`,
- *       `customerName`, `customerAvatar`, `canReview` (always false — trader does not rate).
+ *       `customerName`, `customerAvatar`, `canReview` (true when you can still rate the customer).
  *
  *       Before request: `paymentRequestSent=false`, `canRequestPayment=true`,
  *       `primaryAction=REQUEST_PAYMENT` (same customer fields).

@@ -162,6 +162,26 @@ export const myJobPartialPaymentBodySchema = z.object({
   }),
 });
 
+/** Trader rates the customer after the job is finished (mutual reviews). */
+export const myJobReviewBodySchema = z.object({
+  params: jobIdParam,
+  body: z
+    .object({
+      rating: z.coerce.number().int('rating must be a whole number from 1 to 5.').min(1).max(5),
+      tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+      comment: z.string().trim().max(2000).optional(),
+      /** Legacy alias for `comment`. */
+      review: z.string().trim().max(2000).optional(),
+    })
+    .transform((body) => ({
+      ...body,
+      tags: body.tags ?? [],
+      comment: (body.comment ?? body.review)?.trim() || undefined,
+    })),
+});
+
+export type MyJobReviewInput = z.infer<typeof myJobReviewBodySchema>['body'];
+
 /** Optional device location — same as Discover so incoming DISTANCE matches list cards. */
 const originQuerySchema = z.object({
   lat: z.string().optional(),

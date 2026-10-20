@@ -74,17 +74,27 @@ export const getUserProfile = async (userId: string) => {
 };
 
 export const getUserStats = async (userId: string) => {
-  const [jobsPosted, savedTradersCount, reviewsGivenCount] = await Promise.all([
+  const [jobsPosted, savedTradersCount, reviewsGivenCount, user] = await Promise.all([
     prisma.job.count({ where: { customerId: userId } }),
     prisma.savedTrader.count({ where: { userId } }),
     prisma.ratingReview.count({ where: { customerId: userId } }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { avgRating: true, _count: { select: { ratingsReceived: true } } },
+    }),
   ]);
+
+  const reviewsReceivedCount = user?._count.ratingsReceived ?? 0;
+  const avg =
+    user?.avgRating != null && reviewsReceivedCount > 0 ? Number(user.avgRating) : null;
 
   return {
     jobsPosted,
     savedTradersCount,
     reviewsGivenCount,
-    avgRating: null,
+    reviewsReceivedCount,
+    /** Average of trader→customer ratings; null until at least one review. */
+    avgRating: avg,
   };
 };
 

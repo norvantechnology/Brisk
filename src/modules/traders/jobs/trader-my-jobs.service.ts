@@ -31,6 +31,7 @@ import {
   emitJobStatusChanged,
   emitPaymentRequested,
   emitQuoteReceived,
+  pushUserNotification,
 } from '../../../sockets/realtime';
 import * as chatService from '../../chat/chat.service';
 import {
@@ -41,7 +42,7 @@ import {
   isAwaitingUpfrontPayment,
 } from '../../jobs/job-payment-state';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
-import type { MyJobsListQuery } from './trader-my-jobs.validation';
+import type { MyJobReviewInput, MyJobsListQuery } from './trader-my-jobs.validation';
 import {
   rememberTraderDeviceOrigin,
   resolveTraderOrigin,
@@ -147,6 +148,7 @@ const getTraderContext = async (userId: string) => {
     select: {
       id: true,
       userId: true,
+      businessName: true,
       categoryId: true,
       serviceRadiusKm: true,
       serviceCenterLat: true,
@@ -156,7 +158,7 @@ const getTraderContext = async (userId: string) => {
       lastDeviceAt: true,
       country: true,
       categories: { where: { isActive: true }, select: { categoryId: true } },
-      user: { select: { preferredCurrency: true, country: true } },
+      user: { select: { fullName: true, preferredCurrency: true, country: true } },
     },
   });
   if (!trader) {
@@ -439,8 +441,8 @@ const formatFullAddress = (job: {
   return [job.addressLine, job.city, job.postcode].filter(Boolean).join(', ') || 'Address TBD';
 };
 
-/** Customer → trader rating on this job (POST /jobs/{id}/review). Shared by list + detail + completed. */
-const serializeCustomerJobReview = (
+/** Shared shape for customer→trader and trader→customer ratings. */
+const serializeJobReview = (
   review:
     | {
         stars: number;
@@ -460,6 +462,17 @@ const serializeCustomerJobReview = (
       }
     : null;
 
+/** @deprecated Use serializeJobReview — kept name for call-site clarity (customer→trader). */
+const serializeCustomerJobReview = serializeJobReview;
+
+const REVIEW_SELECT = {
+  id: true,
+  stars: true,
+  tags: true,
+  review: true,
+  createdAt: true,
+} as const;
+
 /** Ensure job is accessible to this trader (assigned, site visit, or quote). */
 const assertMyJob = async (traderId: string, jobId: string) => {
   const job = await prisma.job.findFirst({
@@ -477,6 +490,7 @@ const assertMyJob = async (traderId: string, jobId: string) => {
             },
           },
           ratingReview: true,
+          traderCustomerReview: true,
         },
       },
       customer: {
@@ -484,6 +498,7 @@ const assertMyJob = async (traderId: string, jobId: string) => {
           id: true,
           fullName: true,
           profilePhotoUrl: true,
+          avgRating: true,
           mobileVerified: true,
           emailVerified: true,
           mobileNumber: true,
@@ -955,9 +970,8 @@ const myJobCardSelect = (traderId: string) =>
             arrivedAt: true,
             finishedAt: true,
             scheduledDate: true,
-            ratingReview: {
-              select: { id: true, stars: true, tags: true, review: true, createdAt: true },
-            },
+            ratingReview: { select: REVIEW_SELECT },
+            traderCustomerReview: { select: REVIEW_SELECT },
             invoice: {
               select: {
                 serviceCharge: true,
@@ -1192,6 +1206,13 @@ const myJobCardMapper =
       alreadyPaidAmount,
       jobAmount: jobAmountEstimate,
     });
+    const myReview = serializeJobReview(job.booking?.traderCustomerReview);
+    const hasMyReview = Boolean(myReview);
+    const jobFinished =
+      Boolean(job.booking?.finishedAt) || job.status === JobStatus.COMPLETED;
+    /** Trader can rate the customer once work is finished (same window as customer→trader). */
+    const canReview = !cancelled && jobFinished && !hasMyReview;
+
     /** Completed tab: show Pending Rating until the customer submits a review. */
     const statusLabel =
       cancelled
@@ -1263,14 +1284,16 @@ const myJobCardMapper =
       /** PENDING = customer has not rated yet; RATED = review exists. null if not completed. */
       ratingStatus,
       hasReview: job.status === JobStatus.COMPLETED ? hasCustomerReview : false,
-      /** Trader does not rate the customer — always false. */
-      canReview: false,
+      /** true → show Rate Customer (POST /traders/jobs/mine/{id}/review). */
+      canReview,
       /** Customer star rating for this job (null until rated). */
       rating: customerReview?.rating ?? null,
       /** Customer free-text comment (null until rated / empty). */
       comment: customerReview?.comment ?? null,
-      /** Full review object — same shape as GET .../mine/{id}/completed. */
+      /** Customer → trader review — same shape as GET .../mine/{id}/completed. */
       review: customerReview,
+      /** Trader → customer review (null until trader submits). */
+      myReview,
       flowStatus,
       paymentStatus: resolvePartialPaymentStatus(
         jobAmountEstimate,
@@ -1443,9 +1466,14 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
 
   const customerReview = serializeCustomerJobReview(job.booking?.ratingReview);
   const hasCustomerReview = Boolean(customerReview);
+  const myReview = serializeJobReview(job.booking?.traderCustomerReview);
+  const hasMyReview = Boolean(myReview);
   const ratingStatus =
     job.status === JobStatus.COMPLETED ? (hasCustomerReview ? 'RATED' : 'PENDING') : null;
   const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
+  const jobFinished =
+    Boolean(job.booking?.finishedAt) || job.status === JobStatus.COMPLETED;
+  const canReview = !cancelled && jobFinished && !hasMyReview;
   const statusLabel =
     cancelled
       ? 'Cancelled'
@@ -1470,14 +1498,16 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     /** PENDING until customer rates; RATED after POST /jobs/{id}/review. null if not completed. */
     ratingStatus,
     hasReview: job.status === JobStatus.COMPLETED ? hasCustomerReview : false,
-    /** Trader does not submit a rating — always false. */
-    canReview: false,
+    /** true → Rate Customer via POST /traders/jobs/mine/{id}/review. */
+    canReview,
     /** Customer star rating for this job (null until rated). */
     rating: customerReview?.rating ?? null,
     /** Customer free-text comment. */
     comment: customerReview?.comment ?? null,
-    /** Same shape as GET .../mine/{id}/completed `review`. */
+    /** Customer → trader review. */
     review: customerReview,
+    /** Trader → customer review (null until submitted). */
+    myReview,
     flowStatus,
     paymentStatus,
     customerConfirmedAt: job.booking?.customerConfirmedAt ?? null,
@@ -1914,7 +1944,10 @@ export const getJobOutcomeDetail = async (
     await buildInstallmentPaymentList(userId, jobId);
 
   const hasCustomerReview = Boolean(review);
+  const myReview = serializeJobReview(job.booking?.traderCustomerReview);
+  const hasMyReview = Boolean(myReview);
   const ratingStatus = hasCustomerReview ? 'RATED' : 'PENDING';
+  const canReview = !hasMyReview;
 
   return {
     id: job.id,
@@ -1933,8 +1966,8 @@ export const getJobOutcomeDetail = async (
     /** PENDING until customer rates; RATED after POST /jobs/{id}/review. */
     ratingStatus,
     hasReview: hasCustomerReview,
-    /** Trader does not submit a rating — always false (customer rates via /jobs/{id}/review). */
-    canReview: false,
+    /** true → Rate Customer via POST /traders/jobs/mine/{id}/review. */
+    canReview,
     rating: review?.rating ?? null,
     comment: review?.comment ?? null,
     siteVisit: isSiteVisitJob,
@@ -1950,9 +1983,14 @@ export const getJobOutcomeDetail = async (
       location: job.city || job.address?.city || formatFullAddress(job),
       avatar: job.customer.profilePhotoUrl,
       conversationId: job.id,
+      /** Customer → trader stars on this job (not the customer's overall avg). */
       rating: review?.rating ?? null,
+      avgRating: money(job.customer.avgRating),
     },
+    /** Customer → trader review. */
     review,
+    /** Trader → customer review (null until submitted). */
+    myReview,
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
     paymentSummary: buildOutcomePaymentSummary(
       job,
@@ -1968,6 +2006,77 @@ export const getJobOutcomeDetail = async (
     previousPaymentsTotal,
     invoiceId: invoice?.invoiceNumber ?? invoice?.id ?? null,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
+  };
+};
+
+/**
+ * Trader rates the customer after the job is finished.
+ * Body same as customer POST /jobs/{id}/review: `{ rating, tags?, comment? }`.
+ */
+export const submitCustomerReview = async (
+  userId: string,
+  jobId: string,
+  input: MyJobReviewInput
+) => {
+  const trader = await getTraderContext(userId);
+  const job = await assertMyJob(trader.id, jobId);
+
+  if (isJobCancelled(job.status, job.booking?.status ?? null)) {
+    throw new BadRequestError('Cancelled jobs cannot be reviewed.');
+  }
+  if (!job.booking || job.booking.traderId !== trader.id) {
+    throw new BadRequestError('No booking found for this job.');
+  }
+  if (!job.booking.finishedAt && job.status !== JobStatus.COMPLETED) {
+    throw new BadRequestError('You can rate the customer once the job is finished.');
+  }
+  if (job.booking.traderCustomerReview) {
+    throw new ConflictError('You have already reviewed this customer for this job.');
+  }
+
+  const customerId = job.customer.id;
+  const bookingId = job.booking.id;
+  const comment = input.comment?.trim() || null;
+  const tags = (input.tags ?? []).map((t) => t.trim()).filter(Boolean);
+
+  const { created, avgRating, reviewsCount } = await prisma.$transaction(async (tx) => {
+    const created = await tx.traderCustomerReview.create({
+      data: {
+        bookingId,
+        customerId,
+        traderId: trader.id,
+        stars: input.rating,
+        tags,
+        review: comment,
+      },
+    });
+    const agg = await tx.traderCustomerReview.aggregate({
+      where: { customerId },
+      _avg: { stars: true },
+      _count: { _all: true },
+    });
+    const avgRating = round2(agg._avg.stars ?? 0);
+    await tx.user.update({ where: { id: customerId }, data: { avgRating } });
+    return { created, avgRating, reviewsCount: agg._count._all };
+  });
+
+  await pushUserNotification([customerId], {
+    type: 'NEW_REVIEW',
+    title: 'New review',
+    message: `${trader.businessName || trader.user.fullName || 'A trader'} rated you ${input.rating}/5 on "${job.title}".`,
+    data: { jobId, jobRef: job.jobRef, reviewId: created.id, rating: input.rating },
+  });
+
+  return {
+    reviewId: created.id,
+    jobId,
+    rating: created.stars,
+    tags: created.tags,
+    comment: created.review,
+    review: created.review,
+    createdAt: created.createdAt,
+    customer: { id: customerId, avgRating, reviewsCount },
+    myReview: serializeJobReview(created),
   };
 };
 
@@ -2329,8 +2438,13 @@ const buildPaymentRequestScreenPayload = async (
     /** Success / Payment Request screen — customer card. */
     customerName: job.customer.fullName,
     customerAvatar: job.customer.profilePhotoUrl ?? null,
-    /** Trader does not rate the customer — always false (same as My Jobs / completed). */
-    canReview: false as const,
+    /**
+     * true when work is finished and trader has not rated the customer yet.
+     * Submit via POST /traders/jobs/mine/{id}/review.
+     */
+    canReview:
+      (Boolean(job.booking?.finishedAt) || job.status === JobStatus.COMPLETED) &&
+      !job.booking?.traderCustomerReview,
   };
 };
 

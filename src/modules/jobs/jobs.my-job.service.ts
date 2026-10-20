@@ -226,6 +226,9 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
           customerConfirmedAt: true,
           createdAt: true,
           ratingReview: { select: { stars: true, tags: true, review: true, createdAt: true } },
+          traderCustomerReview: {
+            select: { stars: true, tags: true, review: true, createdAt: true },
+          },
           invoice: {
             select: {
               id: true,
@@ -379,6 +382,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
       currencyCode: pricing.currencyCode,
       currencySymbol: currencyMeta.symbol,
     },
+    /** Customer → trader review (your rating of the trader). */
     review: booking?.ratingReview
       ? {
           rating: booking.ratingReview.stars,
@@ -386,6 +390,16 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
           comment: booking.ratingReview.review,
           review: booking.ratingReview.review,
           createdAt: booking.ratingReview.createdAt,
+        }
+      : null,
+    /** Trader → customer review (how the trader rated you). */
+    traderReview: booking?.traderCustomerReview
+      ? {
+          rating: booking.traderCustomerReview.stars,
+          tags: booking.traderCustomerReview.tags ?? [],
+          comment: booking.traderCustomerReview.review,
+          review: booking.traderCustomerReview.review,
+          createdAt: booking.traderCustomerReview.createdAt,
         }
       : null,
     completionConfirmedAt: booking?.customerConfirmedAt ?? null,
@@ -397,6 +411,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
       canCancel: !cancelled && !finished && pricing.totalPaid === 0,
       canReschedule:
         !cancelled && !booking?.arrivedAt && RESCHEDULABLE_STATUSES.includes(job.status),
+      /** true → rate the trader via POST /jobs/{id}/review */
       canReview: finished && !cancelled && Boolean(job.trader) && !booking?.ratingReview,
       canReportIssue: Boolean(job.traderId) && !hasActiveDispute,
       hasActiveDispute,

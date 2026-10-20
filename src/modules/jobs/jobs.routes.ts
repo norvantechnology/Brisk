@@ -625,9 +625,9 @@ router.get('/:id/details', ...customerOnly, validate(jobIdParamSchema), controll
  *         `baseRate` / `platformFee` / `offerApplied` / `netPayout` are legacy keys kept for older builds.
  *       - Invoice PDF: `downloadUrl` (= `GET /jobs/{id}/invoice/download`). Receipt JSON: `receiptUrl`
  *         (= `GET /payments/{paymentId}/receipt`, null until a card payment exists).
- *       - `canReview` = show the Rate & Review button (`POST /jobs/{id}/review`).
+ *       - `canReview` = Rate the trader (`POST /jobs/{id}/review`).
  *       - `canConfirmCompletion` / `completionConfirmedAt` = Confirm Completion button (`POST /jobs/{id}/confirm-completion`).
- *       - `review` = `{ rating, comment, createdAt }` once the customer rated the trader, else null.
+ *       - `review` = your rating of the trader; `traderReview` = trader's rating of you.
  *       Status values never contain underscores.
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -1304,12 +1304,13 @@ router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), c
  * @swagger
  * /jobs/{id}/review:
  *   post:
- *     summary: Rate the trader (rating bottom sheet after payment)
+ *     summary: Rate the trader (customer → trader)
  *     tags: ['Customer / My Job']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       **Single rating API** (stars + optional tags/comment) — one submit per job after finish/pay.
+ *       Customer rates the trader (stars + optional tags/comment) — one submit per job after finish/pay.
  *       Body: `{ rating, tags?, comment? }`.
+ *       Trader rates you separately via `POST /traders/jobs/mine/{id}/review` (see `traderReview` on job detail).
  *       After payment success, receipt has `openRatingSheet: true` + `jobId`.
  *       Skip → Completed tab `statusLabel: Pending Rating` + Home `pendingRating.showBanner`.
  *     parameters:
