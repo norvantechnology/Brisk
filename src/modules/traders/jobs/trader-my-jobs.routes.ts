@@ -449,16 +449,14 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Completed job history screen. Includes `previousPayments` — full installment
- *       list with the same item shape as GET .../part-payment-history (no server-side truncate).
- *       FE can show first N on screen; full list is already in `previousPayments`.
+ *       **Only after the customer has paid** (`job.status=COMPLETED`).
  *
- *       Rating (customer → trader): `canReview` is always `false` (trader does not rate).
- *       `ratingStatus`: `PENDING` until customer rates, then `RATED`.
- *       `rating` / `comment` / `review` — populated when the customer has rated
- *       (`review` = `{ rating, tags, comment, createdAt }`; null while pending).
- *       `statusLabel` / `statusBadge`: `Pending Rating` or `Completed`.
- *       Same rating fields are also on `GET /traders/jobs/mine` and `GET /traders/jobs/mine/{id}`.
+ *       After trader finishes work + requests payment, the job stays on **Active** as
+ *       `PAYMENT_PENDING` / `flowStatus=AWAITING_PAYMENT` until the customer pays.
+ *       Do **not** call this endpoint yet — use `GET /traders/jobs/mine/{id}` instead.
+ *
+ *       Includes `previousPayments` — full installment list (same shape as part-payment-history).
+ *       Rating fields: `ratingStatus` PENDING|RATED, `canReview` always false for trader.
  *     parameters:
  *       - in: path
  *         name: id
@@ -497,7 +495,9 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *                           transactionId: { type: string, example: TXN-A1B2C3 }
  *                     previousPaymentsTotal: { type: integer, example: 5 }
  *       400:
- *         description: Job is not completed
+ *         description: |
+ *           Not paid yet — `code=JOB_AWAITING_CUSTOMER_PAYMENT` when work finished and payment
+ *           requested (`PAYMENT_PENDING`). Stay on Active; use GET /traders/jobs/mine/{id}.
  */
 router.get('/mine/:id/completed', validate(myJobIdParamSchema), controller.getCompletedJobDetail);
 

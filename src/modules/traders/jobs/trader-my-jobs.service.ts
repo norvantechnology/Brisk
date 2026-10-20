@@ -1797,13 +1797,32 @@ export const getJobOutcomeDetail = async (
   const job = await assertMyJob(trader.id, jobId);
   const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
   // Completed screen only after the customer has paid (job status COMPLETED).
+  // Requesting payment (FULL_JOB SENT) keeps the job on Active as PAYMENT_PENDING /
+  // flowStatus AWAITING_PAYMENT until the customer pays — use GET /traders/jobs/mine/{id}.
   const completedLike = job.status === JobStatus.COMPLETED;
+  const awaitingCustomerPayment =
+    Boolean(job.booking?.finishedAt) &&
+    (job.status === JobStatus.PAYMENT_PENDING || hasFinalPaymentRequest(job)) &&
+    !completedLike;
 
   if (expected === 'COMPLETED' && !completedLike) {
     throw new BadRequestError(
-      job.booking?.finishedAt && job.status === JobStatus.PAYMENT_PENDING
-        ? 'Job stays Active until the customer pays.'
-        : 'Job is not completed.'
+      awaitingCustomerPayment
+        ? 'Job stays on Active until the customer pays. Use GET /traders/jobs/mine/{id} (flowStatus AWAITING_PAYMENT).'
+        : 'Job is not completed.',
+      awaitingCustomerPayment
+        ? {
+            code: 'JOB_AWAITING_CUSTOMER_PAYMENT',
+            data: {
+              jobId: job.id,
+              jobRef: job.jobRef,
+              status: job.status,
+              flowStatus: 'AWAITING_PAYMENT',
+              primaryAction: 'AWAITING_PAYOUT',
+              useEndpoint: `GET /traders/jobs/mine/${job.id}`,
+            },
+          }
+        : { code: 'JOB_NOT_COMPLETED' }
     );
   }
   if (expected === 'CANCELLED' && !cancelled) {
