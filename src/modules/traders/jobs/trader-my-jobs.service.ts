@@ -326,7 +326,7 @@ const resolveFlowStatus = (input: {
     finishedAt,
     proofCount = 0,
     siteVisitStatus = null,
-    hasSiteVisitPaymentRequest = false,
+    hasSiteVisitPaymentRequest: _hasSiteVisitPaymentRequest = false,
     hasOpenPartialPayment: _hasOpenPartialPayment = false,
     hasFinalPaymentRequest = false,
     alreadyPaidAmount = 0,
@@ -347,28 +347,18 @@ const resolveFlowStatus = (input: {
     siteVisitStatus != null &&
     siteVisitStatus !== TraderSiteVisitStatus.CANCELLED &&
     siteVisitStatus !== TraderSiteVisitStatus.COMPLETED;
-  const visitCompleted = siteVisitStatus === TraderSiteVisitStatus.COMPLETED;
 
   // Pre-assignment only: open visit (PENDING / CONFIRMED / RESCHEDULE_REQUIRED).
   // Once assigned, fall through to READY_TO_ARRIVE even if visit is still open/rescheduled.
   if (visitActive && !arrivedAt && !finishedAt && !inAssignedWorkPhase) {
     return { flowStatus: 'SITE_VISIT_IN_PROGRESS', statusLabel: 'Site Visit In Progress' };
   }
-  // Pre-assignment only: visit done, site-visit fee not requested yet.
-  // After quote accept + assignment (Active), job has not started → READY_TO_ARRIVE,
-  // not SITE_VISIT_PAYMENT_PENDING (even if visit stays COMPLETED after customer reschedule).
-  if (
-    visitCompleted &&
-    !hasSiteVisitPaymentRequest &&
-    !finishedAt &&
-    status !== JobStatus.COMPLETED &&
-    !inAssignedWorkPhase
-  ) {
-    return {
-      flowStatus: 'SITE_VISIT_PAYMENT_PENDING',
-      statusLabel: 'Site Visit Payment Pending',
-    };
-  }
+  /**
+   * Visit COMPLETED: do not force SITE_VISIT_PAYMENT_PENDING.
+   * Pre-assignment → quotation (OPEN / Queue SUBMIT_QUOTE).
+   * Assigned, not started → READY_TO_ARRIVE (incl. after customer reschedule).
+   * Optional fee: `canRequestSiteVisitPayment` when fee > 0 and not yet requested.
+   */
 
   // While job is still in progress, keep proof-screen statuses so app opens
   // Job Proof (not a separate awaiting-partial screen). Partial state is exposed
@@ -689,10 +679,16 @@ const buildActions = (job: MyJobRow, traderId: string) => {
   const canCompleteSiteVisit =
     Boolean(hasActiveVisit) &&
     !visitCompleted &&
+    !assignedToThis &&
     // PENDING = waiting customer confirm slot — not ready to "complete" site visit.
     visit?.status === TraderSiteVisitStatus.CONFIRMED;
+  /** Fee CTA only pre-assignment, when a fee exists and has not been requested yet. */
   const canRequestSiteVisitPayment =
     Boolean(visitCompleted) &&
+    !assignedToThis &&
+    !bookingArrived &&
+    !bookingFinished &&
+    money(job.siteVisitFee) > 0 &&
     !job.paymentRequests.some(
       (p) =>
         p.type === TraderPaymentRequestType.SITE_VISIT_FEE &&
@@ -739,10 +735,11 @@ const resolvePrimaryAction = (
   if (actions.canFinish) return { primaryAction: 'FINISH' };
   if (actions.canRequestPartialPayment) return { primaryAction: 'REQUEST_PARTIAL_PAYMENT' };
   if (actions.canCompleteSiteVisit) return { primaryAction: 'COMPLETE_SITE_VISIT' };
+  // After site visit complete: align with Jobs Queue — quotation first, fee optional.
+  if (actions.canSubmitQuote) return { primaryAction: 'SUBMIT_QUOTE' };
   if (actions.canRequestSiteVisitPayment) return { primaryAction: 'REQUEST_SITE_VISIT_PAYMENT' };
   if (actions.canRequestPayment) return { primaryAction: 'REQUEST_PAYMENT' };
   if (actions.canAcceptJob) return { primaryAction: 'ACCEPT_JOB' };
-  if (actions.canSubmitQuote) return { primaryAction: 'SUBMIT_QUOTE' };
   if (actions.canAddMaterials) return { primaryAction: 'ADD_MATERIALS' };
   if (job.status === JobStatus.PAYMENT_PENDING && !isAwaitingUpfrontPayment(job)) {
     return { primaryAction: 'AWAITING_PAYOUT' };
@@ -1220,8 +1217,6 @@ const myJobCardMapper =
     } else if (flowStatus === 'SITE_VISIT_IN_PROGRESS') {
       // PENDING / other open visit — open Job Details (Discover), not Progress/Arrive.
       primaryAction = 'VIEW_DETAILS';
-    } else if (flowStatus === 'SITE_VISIT_PAYMENT_PENDING') {
-      primaryAction = 'REQUEST_SITE_VISIT_PAYMENT';
     } else if (isPartialJob && job.booking?.arrivedAt && !job.booking?.finishedAt) {
       // Stay on Job Proof screen — only part-payment CTA until fully paid
       primaryAction = hasOpenPartial
@@ -3451,8 +3446,10 @@ export const completeSiteVisit = async (userId: string, jobId: string) => {
     completedAt: updated.completedAt,
     durationMinutes: updated.durationMinutes,
     siteVisitFee: fee,
-    canRequestSiteVisitPayment: true,
-    primaryAction: 'REQUEST_SITE_VISIT_PAYMENT',
+    /** Optional fee request; primary next step is quotation (Jobs Queue). */
+    canRequestSiteVisitPayment: fee > 0,
+    primaryAction: 'SUBMIT_QUOTE' as const,
+    primaryActionLabel: 'Submit Quotation',
   };
 };
 
