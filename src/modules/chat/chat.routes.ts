@@ -74,7 +74,9 @@ router.get('/', ...chatUsers, validate(chatListQuerySchema), controller.listConv
  *     description: |
  *       Open thread using `conversationId` / `jobId` from inbox or job detail.
  *       Oldest → newest. `isMine` marks the current user's messages.
- *       Each item includes `imageUrl` (string URL or `null` for text-only).
+ *       Each item includes `imageUrl` (URL or `null`) and `readAt` (ISO or `null`).
+ *       **Read receipts:** calling this GET marks all unread messages from the counterpart
+ *       as read (`readAt` = now). FE: `isMine` + `readAt=null` → single tick; `readAt` set → blue double tick.
  *     parameters:
  *       - in: path
  *         name: jobId

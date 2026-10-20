@@ -1275,6 +1275,8 @@ model ChatMessage {
   message   String   @db.Text
   /// Optional image from POST /uploads purpose=chat_photo
   imageUrl  String?  @map("image_url") @db.Text
+  /// Set when the counterpart opens the thread (GET /chats/{jobId}/messages). null = unread (single tick).
+  readAt    DateTime? @map("read_at")
   sentAt    DateTime @default(now()) @map("sent_at")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -1283,6 +1285,7 @@ model ChatMessage {
   job     Job?     @relation(fields: [jobId], references: [id], onDelete: Cascade)
   sender  User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
+  @@index([jobId, senderId, readAt])
   @@map("chat_messages")
 }
 

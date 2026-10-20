@@ -109,6 +109,7 @@ const serializeMessage = (
     id: string;
     message: string;
     imageUrl?: string | null;
+    readAt?: Date | null;
     sentAt: Date;
     senderId: string;
     sender: { id: string; fullName: string; role: UserRole; profilePhotoUrl: string | null };
@@ -122,9 +123,24 @@ const serializeMessage = (
   senderPhotoUrl: m.sender.profilePhotoUrl,
   message: m.message,
   imageUrl: m.imageUrl ?? null,
+  /** null = unread (single tick); set = counterpart opened chat (blue double tick on isMine). */
+  readAt: m.readAt ?? null,
   sentAt: m.sentAt,
   isMine: m.senderId === userId,
 });
+
+/** When viewer opens the thread, mark counterpart's unread messages as read. */
+const markCounterpartMessagesRead = async (jobId: string, viewerUserId: string) => {
+  const now = new Date();
+  await prisma.chatMessage.updateMany({
+    where: {
+      jobId,
+      senderId: { not: viewerUserId },
+      readAt: null,
+    },
+    data: { readAt: now },
+  });
+};
 
 /** Messages inbox — one row per job that has chat (or assigned counterpart). */
 export const listConversations = async (
@@ -183,6 +199,7 @@ export const listConversations = async (
           id: true,
           message: true,
           imageUrl: true,
+          readAt: true,
           sentAt: true,
           senderId: true,
           sender: { select: { id: true, fullName: true, role: true } },
@@ -211,6 +228,7 @@ export const listConversations = async (
               id: last.id,
               message: last.message,
               imageUrl: last.imageUrl ?? null,
+              readAt: last.readAt ?? null,
               preview,
               sentAt: last.sentAt,
               senderId: last.senderId,
@@ -247,6 +265,9 @@ export const listMessages = async (
   const job = await assertChatAccess(userId, role, jobId);
   const page = query.page;
   const limit = query.limit;
+
+  // Opening the thread = mark counterpart's unread messages as read (read receipts).
+  await markCounterpartMessagesRead(job.id, userId);
 
   const where: Prisma.ChatMessageWhereInput = { jobId: job.id };
   const [total, rows] = await Promise.all([
