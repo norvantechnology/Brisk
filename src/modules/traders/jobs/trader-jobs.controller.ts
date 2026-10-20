@@ -161,7 +161,7 @@ export const submitDiscoverQuote = async (
   }
 };
 
-/** Request / Accept Job — waiting for customer confirmation (stays on Discover). */
+/** Request / Accept Job — waiting for customer confirmation (Jobs Queue, not Discover). */
 export const requestDiscoverJob = async (
   req: AuthenticatedRequest,
   res: Response,

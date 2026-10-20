@@ -192,16 +192,11 @@ const traderJobAccessWhere = (traderId: string): Prisma.JobWhereInput => ({
 const tabStatusWhere = (tab: MyJobsTab, traderId: string): Prisma.JobWhereInput => {
   if (tab === 'ACTIVE') {
     // Assigned / in-progress only (traderId set after quote accepted + trader View & Accept).
-    // Site-visit CONFIRMED stays on Jobs Queue until visit complete → quote → customer accept.
-    // Site-visit RESCHEDULE_REQUIRED leaves Active → Discover Reschedule CTA.
+    // Pre-assignment site-visit CONFIRMED / RESCHEDULE_REQUIRED stay on Jobs Queue (not Discover).
+    // After assignment, customer reschedule keeps the job here on Active (not Discover).
     return {
       status: { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] },
       traderId,
-      NOT: {
-        siteVisitRequests: {
-          some: { traderId, status: TraderSiteVisitStatus.RESCHEDULE_REQUIRED },
-        },
-      },
       OR: [
         {
           AND: [

@@ -429,7 +429,7 @@
  *         notes: { type: string, description: Optional notes }
  *     TraderQuoteResponse:
  *       type: object
- *       description: Quote upsert — job stays on Discover
+ *       description: Quote upsert — job moves to Jobs Queue (hidden from Discover)
  *       properties:
  *         id: { type: string, format: uuid }
  *         jobId: { type: string, format: uuid }

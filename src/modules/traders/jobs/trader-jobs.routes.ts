@@ -490,7 +490,7 @@ router.post(
  *             notes: Includes parts and labour
  *     responses:
  *       200:
- *         description: Quote submitted (PENDING). Job stays on Discover.
+ *         description: Quote submitted (PENDING). Job moves to Jobs Queue (hidden from Discover).
  *         content:
  *           application/json:
  *             schema:
@@ -542,7 +542,7 @@ router.post(
  *     security: [{ bearerAuth: [] }]
  *     description: |
  *       After quotation (and site-visit slots if required), trader requests the job.
- *       Does NOT assign the trader. Job stays on Discover with
+ *       Does NOT assign the trader. Job moves to Jobs Queue with
  *       isJobRequested / isWaitingForCustomerConfirmation = true.
  *       App should return to Home and show blue Waiting card (GET /traders/jobs/waiting).
  *       Only customer confirm moves the job to My Jobs ACTIVE.

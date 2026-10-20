@@ -488,7 +488,7 @@ export const rescheduleJob = async (
       : null) ?? job.siteVisitRequests[0] ?? null;
 
   /**
-   * Site-visit path: preferred date/time on job; visit → RESCHEDULE_REQUIRED for trader Discover.
+   * Site-visit path: preferred date/time on job; visit → RESCHEDULE_REQUIRED (trader Jobs Queue).
    * Non–site-visit path: update job/booking date/time; notify trader JOB_RESCHEDULED.
    * Both stay on customer Active with RESCHEDULE badge.
    */

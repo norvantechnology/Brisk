@@ -1794,7 +1794,7 @@ export const unbookmarkDiscoverJob = async (userId: string, jobId: string) => {
 
 /**
  * Request / Accept Job from Discover Job Details.
- * Does NOT assign trader — sets waiting-for-customer flags. Job stays on Discover.
+ * Does NOT assign trader — sets waiting-for-customer flags. Job moves to Jobs Queue (not Discover).
  */
 export const requestDiscoverJob = async (
   userId: string,
