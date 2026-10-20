@@ -23,6 +23,11 @@ const chatUsers = [authMiddleware, roleMiddleware(['CUSTOMER', 'TRADER'] as cons
  *       Customer + Trader Messages tab.
  *       Each conversation is a **job** (`conversationId` = `jobId`).
  *       Sorted by latest message. Only jobs that already have chat messages.
+ *
+ *       **Unread badge:** use `unreadCount` (not `messagesCount`).
+ *       `unreadCount` = messages from the counterpart with `readAt=null` (your own messages never count).
+ *       Opening `GET /chats/{jobId}/messages` marks those as read → badge goes to 0.
+ *       `meta.totalUnreadCount` = sum across all conversations (tab badge).
  *     parameters:
  *       - in: query
  *         name: page
@@ -60,7 +65,8 @@ const chatUsers = [authMiddleware, roleMiddleware(['CUSTOMER', 'TRADER'] as cons
  *                     sentAt: '2026-10-19T10:00:00.000Z'
  *                     isMine: false
  *                   messagesCount: 4
- *               meta: { total: 1, page: 1, limit: 20, totalPages: 1 }
+ *                   unreadCount: 2
+ *               meta: { total: 1, page: 1, limit: 20, totalPages: 1, totalUnreadCount: 2 }
  */
 router.get('/', ...chatUsers, validate(chatListQuerySchema), controller.listConversations);
 

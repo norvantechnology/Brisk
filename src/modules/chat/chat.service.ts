@@ -209,6 +209,22 @@ export const listConversations = async (
     },
   });
 
+  // Unread = messages FROM the counterpart that this user has not opened yet (readAt null).
+  // Own messages never count toward the badge.
+  const unreadGrouped =
+    jobs.length === 0
+      ? []
+      : await prisma.chatMessage.groupBy({
+          by: ['jobId'],
+          where: {
+            jobId: { in: jobs.map((j) => j.id) },
+            senderId: { not: userId },
+            readAt: null,
+          },
+          _count: { _all: true },
+        });
+  const unreadByJobId = new Map(unreadGrouped.map((g) => [g.jobId, g._count._all]));
+
   const sorted = jobs
     .map((j) => {
       const last = j.chatMessages[0] ?? null;
@@ -216,6 +232,7 @@ export const listConversations = async (
       const preview =
         last?.message?.trim() ||
         (last?.imageUrl ? 'Photo' : null);
+      const unreadCount = unreadByJobId.get(j.id) ?? 0;
       return {
         conversationId: j.id,
         jobId: j.id,
@@ -237,7 +254,10 @@ export const listConversations = async (
               isMine: last.senderId === userId,
             }
           : null,
+        /** Total messages in the thread (not for the badge). */
         messagesCount: j._count.chatMessages,
+        /** Badge count — only counterpart messages not yet read by this user. */
+        unreadCount,
         updatedAt: last?.sentAt ?? null,
       };
     })
@@ -249,10 +269,15 @@ export const listConversations = async (
 
   const total = sorted.length;
   const items = sorted.slice((page - 1) * limit, page * limit);
+  const totalUnreadCount = sorted.reduce((sum, row) => sum + row.unreadCount, 0);
 
   return {
     items,
-    meta: buildPaginationMeta(total, page, limit),
+    meta: {
+      ...buildPaginationMeta(total, page, limit),
+      /** Sum of unread across all conversations (Messages tab badge). */
+      totalUnreadCount,
+    },
   };
 };
 
