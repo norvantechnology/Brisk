@@ -2326,6 +2326,11 @@ const buildPaymentRequestScreenPayload = async (
     platformFee: amountFromPr.platformFee,
     vatRate: amountFromPr.vatRate,
     vatAmount: amountFromPr.vatAmount,
+    /** Success / Payment Request screen — customer card. */
+    customerName: job.customer.fullName,
+    customerAvatar: job.customer.profilePhotoUrl ?? null,
+    /** Trader does not rate the customer — always false (same as My Jobs / completed). */
+    canReview: false as const,
   };
 };
 
@@ -3468,12 +3473,20 @@ export const requestPayment = async (userId: string, jobId: string) => {
 
   await notifyPaymentRequested(trader.id, paymentRequest);
 
+  // Fresh job so FULL_JOB request is on paymentRequests for Success screen fields.
+  const fresh = await assertMyJob(trader.id, jobId);
+  const screen = await buildPaymentRequestScreenPayload(fresh, {
+    preferredCurrency: trader.user.preferredCurrency,
+    country: trader.country,
+  });
   return {
+    ...screen,
     paymentRequestId: paymentRequest.id,
-    invoiceId: paymentRequest.invoiceId,
-    jobRef: job.jobRef,
+    invoiceId: paymentRequest.invoiceId ?? screen.invoiceId,
+    status: 'SENT' as const,
+    // Keep breakdown keys if screen amounts differ slightly before reload.
     ...breakdown,
-    status: 'SENT',
+    totalAmount: money(paymentRequest.totalAmount) ?? breakdown.totalAmount,
   };
 };
 

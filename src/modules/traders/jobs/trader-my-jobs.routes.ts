@@ -925,10 +925,11 @@ router.post('/mine/:id/messages', validate(myJobMessageBodySchema), controller.s
  *
  *       After `POST .../request-payment` (or when a FULL_JOB request already exists):
  *       `paymentRequestSent=true`, `paymentRequestId`, `invoiceId`, amount breakdown,
- *       `message`, `flowStatus=AWAITING_PAYMENT`.
+ *       `message`, `flowStatus=AWAITING_PAYMENT`,
+ *       `customerName`, `customerAvatar`, `canReview` (always false — trader does not rate).
  *
  *       Before request: `paymentRequestSent=false`, `canRequestPayment=true`,
- *       `primaryAction=REQUEST_PAYMENT`.
+ *       `primaryAction=REQUEST_PAYMENT` (same customer fields).
  *
  *       Alias: `GET /traders/jobs/mine/{id}/payment-summary`
  *     parameters:
