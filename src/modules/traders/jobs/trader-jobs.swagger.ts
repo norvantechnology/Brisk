@@ -284,8 +284,11 @@
  *             visitStatusBadge:
  *               type: string
  *               nullable: true
- *               enum: [WAITING, CONFIRMED, RESCHEDULE_REQUESTED, COMPLETED]
- *               description: Badge on visit card (Figma CONFIRMED / RESCHEDULE REQUESTED / Waiting)
+ *               enum: [WAITING, CONFIRMED, RESCHEDULE REQUESTED, COMPLETED]
+ *               description: |
+ *                 Display-ready badge (no underscores).
+ *                 CONFIRMED = customer confirmed date (not rescheduled) — show that date.
+ *                 RESCHEDULE REQUESTED = customer rescheduled — show updated preferred date.
  *             visitSectionLabel:
  *               type: string
  *               nullable: true

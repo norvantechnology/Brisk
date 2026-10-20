@@ -198,17 +198,17 @@ const normalizeSlotsInput = (body: {
   throw new BadRequestError('Provide slots: [{ date, timeSlot }] or date + timeSlot.');
 };
 
-/** UI badge on scheduled-visit card (Figma). */
+/** UI badge on scheduled-visit card — display-ready (no underscores). */
 const visitStatusBadgeFor = (
   status: string
-): 'WAITING' | 'CONFIRMED' | 'RESCHEDULE_REQUESTED' | 'COMPLETED' | null => {
+): 'WAITING' | 'CONFIRMED' | 'RESCHEDULE REQUESTED' | 'COMPLETED' | null => {
   switch (status) {
     case 'PENDING':
       return 'WAITING';
     case 'CONFIRMED':
       return 'CONFIRMED';
     case 'RESCHEDULE_REQUIRED':
-      return 'RESCHEDULE_REQUESTED';
+      return 'RESCHEDULE REQUESTED';
     case 'COMPLETED':
       return 'COMPLETED';
     default:
@@ -1283,12 +1283,16 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   /**
    * Visit schedule date for UI:
    * - Fresh site visit (NONE) → null (trader has not selected slots yet)
-   * - PENDING / CONFIRMED / COMPLETED → trader's proposed/confirmed visitDate
-   * - RESCHEDULE_REQUIRED → previous visitDate if any, else null
+   * - PENDING / CONFIRMED / COMPLETED → trader's proposed / customer-confirmed visitDate
+   * - RESCHEDULE_REQUIRED → customer's updated preferred date (`job.scheduledDate`), else prior visitDate
    * - Normal (non site-visit) jobs → customer preferred job.scheduledDate
    */
   const scheduledDate = (() => {
     if (!isSiteVisit) return job.scheduledDate;
+    // Consumer rescheduled → show updated preferred date with Reschedule badge.
+    if (siteVisit.status === 'RESCHEDULE_REQUIRED' && job.scheduledDate) {
+      return job.scheduledDate;
+    }
     if (
       (siteVisit.status === 'PENDING' ||
         siteVisit.status === 'CONFIRMED' ||
@@ -1300,6 +1304,22 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     }
     return null;
   })();
+  const displayTimeSlot =
+    siteVisit.status === 'RESCHEDULE_REQUIRED'
+      ? ((job.timeSlot as SiteVisitTimeSlot | null) ?? siteVisit.timeSlot)
+      : siteVisit.timeSlot;
+  const displaySlotDef = displayTimeSlot ? SITE_VISIT_SLOT_DEFS[displayTimeSlot] : null;
+  /** When reschedule requested, overlay visit card date/time with customer's updated preference. */
+  const siteVisitForDisplay =
+    siteVisit.status === 'RESCHEDULE_REQUIRED' && scheduledDate
+      ? {
+          ...siteVisit,
+          visitDate: formatVisitDateKey(scheduledDate),
+          timeSlot: displayTimeSlot,
+          startTime: displaySlotDef?.startTime ?? siteVisit.startTime,
+          endTime: displaySlotDef?.endTime ?? siteVisit.endTime,
+        }
+      : siteVisit;
   const coords = resolveJobCoords(
     {
       id: job.id,
@@ -1346,6 +1366,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
 
   const isSiteVisitDone = siteVisit.status === 'COMPLETED';
   const canCompleteSiteVisit = siteVisit.status === 'CONFIRMED';
+  /** CONFIRMED → "CONFIRMED"; consumer reschedule → "RESCHEDULE REQUESTED" (no underscore). */
   const visitStatusBadge = visitStatusBadgeFor(siteVisit.status);
   const visitSectionLabel =
     isReschedule || siteVisit.status === 'RESCHEDULE_REQUIRED'
@@ -1412,7 +1433,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     quoteNotes: quoteState.quoteNotes,
     quoteStatus: quoteState.quoteStatus,
     siteVisit: {
-      ...siteVisit,
+      ...siteVisitForDisplay,
       requested: Boolean(job.siteVisitRequested),
       isSiteVisit,
       isSiteVisitDone,
@@ -1421,7 +1442,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     isSiteVisitDone,
     /** true when visit is CONFIRMED — trader can complete site visit (My Jobs CTA). */
     canCompleteSiteVisit,
-    /** Figma badge on visit card: WAITING | CONFIRMED | RESCHEDULE_REQUESTED | COMPLETED */
+    /** Visit card badge: WAITING | CONFIRMED | RESCHEDULE REQUESTED | COMPLETED */
     visitStatusBadge,
     /** Figma section title: SCHEDULED_VISIT | RESCHEDULED_VISIT | null */
     visitSectionLabel,
@@ -1448,11 +1469,17 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     subcategoryName: job.subcategory?.name ?? null,
     tags,
     scheduledDate,
-    /** Visit time slot — only after trader proposed / confirmed; null on fresh site visit. */
-    timeSlot:
-      isSiteVisit && (siteVisit.status === 'NONE' || !siteVisit.timeSlot)
+    /**
+     * Visit time slot for the card:
+     * - CONFIRMED / PENDING / COMPLETED → confirmed or proposed slot
+     * - RESCHEDULE_REQUIRED → customer's updated preferred slot (`job.timeSlot`)
+     * - Fresh site visit (NONE) → null
+     */
+    timeSlot: !isSiteVisit
+      ? job.timeSlot
+      : siteVisit.status === 'NONE'
         ? null
-        : siteVisit.timeSlot ?? (isSiteVisit ? null : job.timeSlot),
+        : displayTimeSlot ?? null,
     durationLabel: job.durationLabel,
     location: {
       fullAddress: formatDiscoverFullAddress(job),
