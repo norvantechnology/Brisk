@@ -1273,6 +1273,8 @@ model ChatMessage {
   jobId     String?  @map("job_id") @db.Uuid
   senderId  String   @map("sender_id") @db.Uuid
   message   String   @db.Text
+  /// Optional image from POST /uploads purpose=chat_photo
+  imageUrl  String?  @map("image_url") @db.Text
   sentAt    DateTime @default(now()) @map("sent_at")
   createdAt DateTime @default(now()) @map("created_at")
 

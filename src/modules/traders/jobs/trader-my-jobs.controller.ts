@@ -296,7 +296,10 @@ export const sendMessage = async (
 ): Promise<void> => {
   try {
     await tradersService.ensureTraderProfile(req.user!.id);
-    const data = await service.sendMessage(req.user!.id, req.params.id, req.body.message);
+    const data = await service.sendMessage(req.user!.id, req.params.id, {
+      message: req.body.message,
+      imageUrl: req.body.imageUrl ?? null,
+    });
     sendResponse({
       res,
       statusCode: 201,

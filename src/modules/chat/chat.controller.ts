@@ -62,7 +62,10 @@ export const sendMessage = async (
       req.user!.id,
       req.user!.role as UserRole,
       req.params.jobId,
-      req.body.message
+      {
+        message: req.body.message,
+        imageUrl: req.body.imageUrl ?? null,
+      }
     );
     sendResponse({
       res,

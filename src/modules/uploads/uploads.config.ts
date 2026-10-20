@@ -63,6 +63,8 @@ export const PURPOSE_CONFIG: Record<UploadPurpose, PurposeConfig> = {
   },
   job_proof: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
   job_material: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
+  /** Chat thread images — customer + trader via POST /uploads then POST /chats/{jobId}/messages. */
+  chat_photo: { maxBytes: 10 * 1024 * 1024, allowedMime: /^image\//, visibility: 'private' },
 };
 
 const CUSTOMER_PURPOSES: UploadPurpose[] = [
@@ -70,6 +72,7 @@ const CUSTOMER_PURPOSES: UploadPurpose[] = [
   'address_map_snapshot',
   'meter_reading_photo',
   'job_photo',
+  'chat_photo',
 ];
 
 const TRADER_EXTRA: UploadPurpose[] = [
@@ -78,6 +81,7 @@ const TRADER_EXTRA: UploadPurpose[] = [
   'offer_banner',
   'job_proof',
   'job_material',
+  'chat_photo',
 ];
 
 export const isPurposeAllowed = (

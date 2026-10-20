@@ -126,9 +126,22 @@ export const myJobSubmitCompletionBodySchema = z.object({
 
 export const myJobMessageBodySchema = z.object({
   params: jobIdParam,
-  body: z.object({
-    message: z.string().min(1).max(4000),
-  }),
+  body: z
+    .object({
+      message: z.string().trim().max(4000).optional().default(''),
+      imageUrl: z.string().url().max(2048).optional().nullable(),
+    })
+    .superRefine((body, ctx) => {
+      const text = (body.message ?? '').trim();
+      const image = body.imageUrl?.trim() || null;
+      if (!text && !image) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Provide message and/or imageUrl.',
+          path: ['message'],
+        });
+      }
+    }),
 });
 
 export const myJobPartialPaymentBodySchema = z.object({

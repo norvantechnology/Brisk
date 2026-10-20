@@ -3003,13 +3003,18 @@ export const listMessages = async (userId: string, jobId: string) => {
 };
 
 /** Prefer POST /chats/{jobId}/messages — kept for existing trader app paths. */
-export const sendMessage = async (userId: string, jobId: string, message: string) => {
-  const data = await chatService.sendMessage(userId, UserRole.TRADER, jobId, message);
+export const sendMessage = async (
+  userId: string,
+  jobId: string,
+  input: { message?: string; imageUrl?: string | null }
+) => {
+  const data = await chatService.sendMessage(userId, UserRole.TRADER, jobId, input);
   return {
     id: data.id,
     senderRole: data.senderRole,
     senderName: data.senderName,
     message: data.message,
+    imageUrl: data.imageUrl,
     sentAt: data.sentAt,
     isMine: true,
   };

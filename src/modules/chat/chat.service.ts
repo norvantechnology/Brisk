@@ -104,6 +104,28 @@ const counterpartFor = (job: ChatJobAccess, _userId: string, role: UserRole) => 
   };
 };
 
+const serializeMessage = (
+  m: {
+    id: string;
+    message: string;
+    imageUrl?: string | null;
+    sentAt: Date;
+    senderId: string;
+    sender: { id: string; fullName: string; role: UserRole; profilePhotoUrl: string | null };
+  },
+  userId: string
+) => ({
+  id: m.id,
+  senderId: m.sender.id,
+  senderRole: m.sender.role,
+  senderName: m.sender.fullName,
+  senderPhotoUrl: m.sender.profilePhotoUrl,
+  message: m.message,
+  imageUrl: m.imageUrl ?? null,
+  sentAt: m.sentAt,
+  isMine: m.senderId === userId,
+});
+
 /** Messages inbox — one row per job that has chat (or assigned counterpart). */
 export const listConversations = async (
   userId: string,
@@ -160,6 +182,7 @@ export const listConversations = async (
         select: {
           id: true,
           message: true,
+          imageUrl: true,
           sentAt: true,
           senderId: true,
           sender: { select: { id: true, fullName: true, role: true } },
@@ -173,6 +196,9 @@ export const listConversations = async (
     .map((j) => {
       const last = j.chatMessages[0] ?? null;
       const access: ChatJobAccess = { ...j, bookingId: j.booking?.id ?? null };
+      const preview =
+        last?.message?.trim() ||
+        (last?.imageUrl ? 'Photo' : null);
       return {
         conversationId: j.id,
         jobId: j.id,
@@ -184,6 +210,8 @@ export const listConversations = async (
           ? {
               id: last.id,
               message: last.message,
+              imageUrl: last.imageUrl ?? null,
+              preview,
               sentAt: last.sentAt,
               senderId: last.senderId,
               senderName: last.sender.fullName,
@@ -240,16 +268,7 @@ export const listMessages = async (
     jobRef: job.jobRef,
     title: job.title,
     counterpart: counterpartFor(job, userId, role),
-    items: rows.map((m) => ({
-      id: m.id,
-      senderId: m.sender.id,
-      senderRole: m.sender.role,
-      senderName: m.sender.fullName,
-      senderPhotoUrl: m.sender.profilePhotoUrl,
-      message: m.message,
-      sentAt: m.sentAt,
-      isMine: m.senderId === userId,
-    })),
+    items: rows.map((m) => serializeMessage(m, userId)),
     meta: buildPaginationMeta(total, page, limit),
   };
 };
@@ -258,10 +277,16 @@ export const sendMessage = async (
   userId: string,
   role: UserRole,
   jobId: string,
-  message: string
+  input: { message?: string; imageUrl?: string | null }
 ) => {
-  const text = message.trim();
-  if (!text) throw new BadRequestError('message is required.');
+  const text = (input.message ?? '').trim();
+  const imageUrl = input.imageUrl?.trim() || null;
+  if (!text && !imageUrl) {
+    throw new BadRequestError('Provide message and/or imageUrl.');
+  }
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+    throw new BadRequestError('imageUrl must be a valid http(s) URL from POST /uploads.');
+  }
 
   const job = await assertChatAccess(userId, role, jobId);
 
@@ -280,11 +305,14 @@ export const sendMessage = async (
       bookingId: job.bookingId,
       senderId: userId,
       message: text,
+      imageUrl,
     },
     include: {
       sender: { select: { id: true, fullName: true, role: true, profilePhotoUrl: true } },
     },
   });
+
+  const pushText = text || (imageUrl ? 'Sent a photo' : '');
 
   emitChatMessage({
     recipientUserId,
@@ -293,19 +321,12 @@ export const sendMessage = async (
     messageId: created.id,
     senderName: created.sender.fullName,
     senderPhotoUrl: created.sender.profilePhotoUrl,
-    message: created.message,
+    message: pushText,
   });
 
   return {
     conversationId: job.id,
     jobId: job.id,
-    id: created.id,
-    senderId: created.sender.id,
-    senderRole: created.sender.role,
-    senderName: created.sender.fullName,
-    senderPhotoUrl: created.sender.profilePhotoUrl,
-    message: created.message,
-    sentAt: created.sentAt,
-    isMine: true,
+    ...serializeMessage(created, userId),
   };
 };

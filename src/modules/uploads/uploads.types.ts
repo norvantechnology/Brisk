@@ -24,6 +24,7 @@ export const UPLOAD_PURPOSES = [
   'job_photo',
   'job_proof',
   'job_material',
+  'chat_photo',
 ] as const;
 
 export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];

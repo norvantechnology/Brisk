@@ -74,6 +74,7 @@ router.get('/', ...chatUsers, validate(chatListQuerySchema), controller.listConv
  *     description: |
  *       Open thread using `conversationId` / `jobId` from inbox or job detail.
  *       Oldest → newest. `isMine` marks the current user's messages.
+ *       Each item includes `imageUrl` (string URL or `null` for text-only).
  *     parameters:
  *       - in: path
  *         name: jobId
@@ -93,7 +94,9 @@ router.get('/', ...chatUsers, validate(chatListQuerySchema), controller.listConv
  *     tags: ['Chat / Messages']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       Body: `{ "message": "..." }`.
+ *       Body: text and/or image (at least one required).
+ *       Upload image first: `POST /uploads` with `purpose=chat_photo` → use returned `url` as `imageUrl`.
+ *       Example: `{ "message": "Hello", "imageUrl": "https://api.brisk.ie/uploads/files/chat_photo/..." }`
  *       Recipient gets push `NEW_CHAT_MESSAGE` with `jobId`.
  *     parameters:
  *       - in: path
@@ -106,14 +109,18 @@ router.get('/', ...chatUsers, validate(chatListQuerySchema), controller.listConv
  *         application/json:
  *           schema:
  *             type: object
- *             required: [message]
  *             properties:
- *               message: { type: string, example: See you at 2pm }
+ *               message: { type: string, example: Hello, here is the photo }
+ *               imageUrl:
+ *                 type: string
+ *                 format: uri
+ *                 nullable: true
+ *                 example: https://api.brisk.ie/uploads/files/chat_photo/example.jpg
  *     responses:
  *       201:
- *         description: Message created
+ *         description: Message created (`imageUrl` null when text-only)
  *       400:
- *         description: No counterpart on job yet / empty message
+ *         description: No counterpart / missing message and imageUrl
  *       404:
  *         description: Conversation not found
  */
