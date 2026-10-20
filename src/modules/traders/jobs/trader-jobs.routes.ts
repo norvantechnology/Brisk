@@ -28,12 +28,12 @@ const router = Router();
  *       Empty values are always listed last.
  *
  *       Discover = **new** jobs only:
- *       - Jobs on **Jobs Queue** for this trader (PENDING/ACCEPTED quote, PENDING or CONFIRMED site-visit) → Queue
- *       - CONFIRMED site-visit → Queue only (complete visit); not Discover; **not** My Jobs ACTIVE
- *       - After site-visit COMPLETED → Discover again so trader can submit a quotation
- *       - My Jobs ACTIVE only after quotation accepted + trader assigned
+ *       - Once a job is on **Jobs Queue** for this trader (any quote / non-cancelled site visit),
+ *         it stays off Discover until the consumer removes or completes the job
+ *       - Includes PENDING / CONFIRMED / COMPLETED / RESCHEDULE_REQUIRED site visits + any quote status
+ *       - CONFIRMED/COMPLETED site-visit jobs locked for all traders (not new)
  *       - Site-visit jobs at the **3**-applicant cap → hidden for traders who have not applied
- *       - RESCHEDULE_REQUIRED for this trader may still appear (Reschedule CTA)
+ *       - My Jobs ACTIVE only after quotation accepted + trader assigned
  *
  *       Example: `GET /traders/jobs/discover?page=1&limit=10&search=solar&categoryId=3f0f23dd-1c2b-4a5e-9f10-6a7b8c9d0e1f&siteVisit=true&from=2026-09-01&to=2026-09-30&sortBy=distanceKm&sortOrder=asc`
  *     parameters:

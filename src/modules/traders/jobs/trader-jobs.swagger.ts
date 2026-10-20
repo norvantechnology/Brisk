@@ -195,7 +195,7 @@
  *         visitStatus:
  *           type: string
  *           nullable: true
- *           enum: [PENDING, CONFIRMED, COMPLETED]
+ *           enum: [PENDING, CONFIRMED, COMPLETED, RESCHEDULE_REQUIRED]
  *           description: Site-visit request status when the card is visit-driven; null for quote-only cards
  *         canCompleteSiteVisit:
  *           type: boolean
@@ -229,16 +229,19 @@
  *           type: string
  *           description: QUOTED | WAITING_FOR_CUSTOMER | SITE_VISIT_CONFIRMED | SITE_VISIT_COMPLETED | CUSTOMER_ACCEPTED
  *         customerName: { type: string }
+ *         canRequestReschedule:
+ *           type: boolean
+ *           description: true when queueKind=SITE_VISIT_RESCHEDULED (customer asked for new date)
  *         primaryAction:
  *           type: string
- *           enum: [VIEW_DETAILS, COMPLETE_SITE_VISIT, SUBMIT_QUOTE, CONFIRM_JOB]
+ *           enum: [VIEW_DETAILS, COMPLETE_SITE_VISIT, SUBMIT_QUOTE, REQUEST_RESCHEDULE, CONFIRM_JOB]
  *           description: |
  *             VIEW_DETAILS for customer-pending; COMPLETE_SITE_VISIT when schedule confirmed;
- *             SUBMIT_QUOTE after site visit completed (not on Discover list);
- *             CONFIRM_JOB when trader must accept quote
+ *             SUBMIT_QUOTE after site visit completed; REQUEST_RESCHEDULE when customer asked to reschedule;
+ *             CONFIRM_JOB when trader must accept quote. Engaged jobs never return to Discover list.
  *         primaryActionLabel:
  *           type: string
- *           description: View Details | Complete Site Visit | Submit Quotation | View & Accept
+ *           description: View Details | Complete Site Visit | Submit Quotation | Reschedule Visit | View & Accept
  *           example: View Details
  *     TraderJobsQueueResponse:
  *       type: object

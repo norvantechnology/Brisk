@@ -938,11 +938,9 @@ export const listDiscoverJobs = async (
   const createdAt = dateRangeWhere(query.from, query.to);
   /**
    * Discover = new opportunities only.
-   * Hide: this trader's Queue items (quotes + PENDING/CONFIRMED/COMPLETED visits),
-   * CONFIRMED/COMPLETED visits for all traders (locked — not new),
-   * and site-visit jobs already at the 3-applicant cap.
-   * After visit COMPLETED, quotation is from Jobs Queue (not Discover list).
-   * RESCHEDULE_REQUIRED for this trader is NOT hidden (Discover Reschedule CTA).
+   * Once a job is on this trader's Queue (any quote / non-cancelled site visit),
+   * it stays off Discover until the consumer removes or completes it (job leaves open marketplace).
+   * Also hide: CONFIRMED/COMPLETED visits for all traders; site-visit 3-applicant cap.
    */
   const [queueExcludedIds, siteVisitFullIds, siteVisitLockedIds] = await Promise.all([
     discoverQueueExcludedJobIds(trader.id),
@@ -1815,10 +1813,10 @@ export const requestDiscoverJob = async (
  *  2) Site visit **confirmed by customer** — trader completes visit (`SITE_VISIT_CONFIRMED`)
  *  3) Jobs waiting for **trader** accept — customer accepted quote (View & Accept)
  *
- * These jobs are hidden from Discover so they only appear here (and Incoming sheet for accept).
- * After site-visit complete → stays on Queue (`SITE_VISIT_COMPLETED`) to submit quotation
- * (not Discover — Discover is new jobs only). Detail: GET /traders/jobs/discover/{id}.
- * My Jobs ACTIVE only once the trader is assigned (quote accepted + View & Accept).
+ * These jobs are hidden from Discover for good (until consumer removes/completes the job).
+ * Includes RESCHEDULE_REQUIRED (`SITE_VISIT_RESCHEDULED` → Reschedule Visit) and
+ * visit COMPLETED (`SITE_VISIT_COMPLETED` → Submit Quotation).
+ * Detail deep-link: GET /traders/jobs/discover/{id}. My Jobs ACTIVE only after assignment.
  */
 export const listJobsQueue = async (
   userId: string,
@@ -1856,6 +1854,9 @@ export const listJobsQueue = async (
     longitude: true,
     siteVisitRequested: true,
     quoteType: true,
+    /** Customer's updated preferred schedule when visit is RESCHEDULE_REQUIRED. */
+    scheduledDate: true,
+    timeSlot: true,
     createdAt: true,
     updatedAt: true,
     address: { select: { city: true, county: true, country: true, latitude: true, longitude: true } },
@@ -1903,12 +1904,13 @@ export const listJobsQueue = async (
     prisma.traderSiteVisitRequest.findMany({
       where: {
         traderId: trader.id,
-        // PENDING → await customer; CONFIRMED → complete visit; COMPLETED → submit quote (not Discover).
+        // Any active engagement stays on Queue (never bounce back to Discover).
         status: {
           in: [
             TraderSiteVisitStatus.PENDING,
             TraderSiteVisitStatus.CONFIRMED,
             TraderSiteVisitStatus.COMPLETED,
+            TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
           ],
         },
         job: openJobWhere,
@@ -2018,10 +2020,19 @@ export const listJobsQueue = async (
       // Visit done, no quote yet — quote from Queue (Discover is new jobs only).
       const isCompletedSiteVisitAwaitingQuote =
         !awaitingTraderAccept && visitStatus === 'COMPLETED' && !quote;
+      // Customer asked to reschedule — stay on Queue (not Discover).
+      const isRescheduleRequiredSiteVisit =
+        !awaitingTraderAccept && visitStatus === 'RESCHEDULE_REQUIRED';
       const isSiteVisitQueue =
-        isPendingSiteVisit || isConfirmedSiteVisit || isCompletedSiteVisitAwaitingQuote;
+        isPendingSiteVisit ||
+        isConfirmedSiteVisit ||
+        isCompletedSiteVisitAwaitingQuote ||
+        isRescheduleRequiredSiteVisit;
       const isRescheduleRequest = Boolean(
-        isPendingSiteVisit && visit && visit.updatedAt.getTime() - visit.createdAt.getTime() > 60_000
+        isRescheduleRequiredSiteVisit ||
+          (isPendingSiteVisit &&
+            visit &&
+            visit.updatedAt.getTime() - visit.createdAt.getTime() > 60_000)
       );
 
       const queueKind = awaitingTraderAccept
@@ -2030,11 +2041,11 @@ export const listJobsQueue = async (
           ? ('SITE_VISIT_CONFIRMED' as const)
           : isCompletedSiteVisitAwaitingQuote
             ? ('SITE_VISIT_COMPLETED' as const)
-            : isPendingSiteVisit
-              ? isRescheduleRequest
-                ? ('SITE_VISIT_RESCHEDULED' as const)
-                : ('SITE_VISIT_REQUESTED' as const)
-              : ('QUOTE_SENT' as const);
+            : isRescheduleRequiredSiteVisit || (isPendingSiteVisit && isRescheduleRequest)
+              ? ('SITE_VISIT_RESCHEDULED' as const)
+              : isPendingSiteVisit
+                ? ('SITE_VISIT_REQUESTED' as const)
+                : ('QUOTE_SENT' as const);
 
       const statusBadge =
         queueKind === 'AWAITING_TRADER_ACCEPT'
@@ -2056,20 +2067,36 @@ export const listJobsQueue = async (
             ? 'Customer confirmed schedule — complete site visit'
             : queueKind === 'SITE_VISIT_COMPLETED'
               ? 'Site visit done — submit your quotation'
-              : queueKind === 'QUOTE_SENT'
-                ? quote?.requestedAt
-                  ? 'Awaiting Customer Confirmation'
-                  : 'Awaiting Customer Response'
-                : 'Site Visit Pending Confirmation';
+              : queueKind === 'SITE_VISIT_RESCHEDULED'
+                ? 'Customer requested a new date — propose slots'
+                : queueKind === 'QUOTE_SENT'
+                  ? quote?.requestedAt
+                    ? 'Awaiting Customer Confirmation'
+                    : 'Awaiting Customer Response'
+                  : 'Site Visit Pending Confirmation';
+
+      // Reschedule card: show customer's updated preferred date/time when present.
+      const rescheduleVisitDate =
+        isRescheduleRequiredSiteVisit && job.scheduledDate
+          ? formatVisitDateKey(job.scheduledDate)
+          : visitPayload?.visitDate ?? null;
+      const rescheduleTimeSlot =
+        isRescheduleRequiredSiteVisit
+          ? ((job.timeSlot as SiteVisitTimeSlot | null) ?? visitPayload?.timeSlot ?? null)
+          : visitPayload?.timeSlot ?? null;
+      const rescheduleSlotDef = rescheduleTimeSlot
+        ? SITE_VISIT_SLOT_DEFS[rescheduleTimeSlot]
+        : null;
 
       const scheduled =
-        isSiteVisitQueue && visitPayload && visitPayload.visitDate
+        isSiteVisitQueue && (rescheduleVisitDate || visitPayload?.visitDate)
           ? {
-              visitDate: visitPayload.visitDate,
-              timeSlot: visitPayload.timeSlot,
-              startTime: visitPayload.startTime,
-              endTime: visitPayload.endTime,
-              slots: visitPayload.slots,
+              visitDate: rescheduleVisitDate ?? visitPayload!.visitDate,
+              timeSlot: rescheduleTimeSlot ?? visitPayload?.timeSlot ?? null,
+              startTime:
+                rescheduleSlotDef?.startTime ?? visitPayload?.startTime ?? null,
+              endTime: rescheduleSlotDef?.endTime ?? visitPayload?.endTime ?? null,
+              slots: visitPayload?.slots ?? [],
             }
           : null;
 
@@ -2081,7 +2108,7 @@ export const listJobsQueue = async (
         queueKind,
         statusBadge,
         statusLabel,
-        /** Raw site-visit request status when visit-driven (`PENDING` | `CONFIRMED` | `COMPLETED`). */
+        /** Raw site-visit status when visit-driven (`PENDING` | `CONFIRMED` | `COMPLETED` | `RESCHEDULE_REQUIRED`). */
         visitStatus,
         queuedAt: row.queuedAt,
         distanceKm,
@@ -2100,23 +2127,27 @@ export const listJobsQueue = async (
           (!awaitingTraderAccept &&
             !isConfirmedSiteVisit &&
             !isCompletedSiteVisitAwaitingQuote &&
+            !isRescheduleRequiredSiteVisit &&
             Boolean(quote)),
         isSiteVisit: isSiteVisitJob(job) || isSiteVisitQueue,
         /** true when customer confirmed — open Site Visit Confirmation sheet / complete visit. */
         canCompleteSiteVisit: isConfirmedSiteVisit,
         /** true when visit done and no quote yet — open quote sheet from Queue. */
         canSubmitQuote: isCompletedSiteVisitAwaitingQuote,
+        canRequestReschedule: isRescheduleRequiredSiteVisit || Boolean(isPendingSiteVisit && isRescheduleRequest),
         assignmentStatus: awaitingTraderAccept
           ? 'CUSTOMER_ACCEPTED'
           : isConfirmedSiteVisit
             ? 'SITE_VISIT_CONFIRMED'
             : isCompletedSiteVisitAwaitingQuote
               ? 'SITE_VISIT_COMPLETED'
-              : isPendingSiteVisit
-                ? 'WAITING_FOR_CUSTOMER'
-                : quote?.requestedAt
+              : isRescheduleRequiredSiteVisit
+                ? 'RESCHEDULE_REQUIRED'
+                : isPendingSiteVisit
                   ? 'WAITING_FOR_CUSTOMER'
-                  : 'QUOTED',
+                  : quote?.requestedAt
+                    ? 'WAITING_FOR_CUSTOMER'
+                    : 'QUOTED',
         customerName: job.customer.fullName,
         primaryAction: awaitingTraderAccept
           ? ('CONFIRM_JOB' as const)
@@ -2124,14 +2155,18 @@ export const listJobsQueue = async (
             ? ('COMPLETE_SITE_VISIT' as const)
             : isCompletedSiteVisitAwaitingQuote
               ? ('SUBMIT_QUOTE' as const)
-              : ('VIEW_DETAILS' as const),
+              : isRescheduleRequiredSiteVisit
+                ? ('REQUEST_RESCHEDULE' as const)
+                : ('VIEW_DETAILS' as const),
         primaryActionLabel: awaitingTraderAccept
           ? 'View & Accept'
           : isConfirmedSiteVisit
             ? 'Complete Site Visit'
             : isCompletedSiteVisitAwaitingQuote
               ? 'Submit Quotation'
-              : 'View Details',
+              : isRescheduleRequiredSiteVisit
+                ? 'Reschedule Visit'
+                : 'View Details',
       };
     })
   );
@@ -2144,17 +2179,16 @@ export const listJobsQueue = async (
 
 /**
  * Job IDs this trader must not see as "new" on Discover.
- * - Quotes PENDING/ACCEPTED → Jobs Queue
- * - Site visit PENDING / CONFIRMED / COMPLETED → Jobs Queue (not Discover)
- * RESCHEDULE_REQUIRED stays on Discover for this trader's Reschedule CTA.
- * My Jobs ACTIVE only after quote accepted + trader assigned (not for site-visit alone).
+ * Rule: once engaged (any quote, or any non-cancelled site visit) → never back on Discover
+ * for this trader while the job is still an open marketplace listing.
+ * Consumer remove/complete (job not PUBLISHED / assigned) drops it from this filter naturally.
  */
 const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> => {
   const [quotes, siteVisits] = await Promise.all([
     prisma.quote.findMany({
       where: {
         traderId,
-        status: { in: [QuoteStatus.PENDING, QuoteStatus.ACCEPTED] },
+        // Any quote history (PENDING/ACCEPTED/REJECTED/EXPIRED) = already engaged.
         job: { status: JobStatus.PUBLISHED, traderId: null },
       },
       select: { jobId: true },
@@ -2162,13 +2196,7 @@ const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> 
     prisma.traderSiteVisitRequest.findMany({
       where: {
         traderId,
-        status: {
-          in: [
-            TraderSiteVisitStatus.PENDING,
-            TraderSiteVisitStatus.CONFIRMED,
-            TraderSiteVisitStatus.COMPLETED,
-          ],
-        },
+        status: { not: TraderSiteVisitStatus.CANCELLED },
         job: { status: JobStatus.PUBLISHED, traderId: null },
       },
       select: { jobId: true },
