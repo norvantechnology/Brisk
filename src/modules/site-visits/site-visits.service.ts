@@ -20,12 +20,12 @@ export {
  * - REQUESTED — waiting on customer (`PENDING`, `RESCHEDULE_REQUIRED`)
  * - UPCOMING — customer confirmed, visit not done yet (`CONFIRMED`)
  * - VISITED — trader completed the visit (`COMPLETED`)
- * - CLOSED — cancelled request, or open request on a closed/reassigned job
+ * - CLOSED / CANCELLED tab — cancelled request, or open request on a closed/reassigned job
  */
 export type SiteVisitStatus = TraderSiteVisitStatus | 'CLOSED';
 export type SiteVisitGroup = 'REQUESTED' | 'UPCOMING' | 'VISITED' | 'CLOSED';
-/** Trader Portal Site Visits menu tabs (no CLOSED tab). */
-export type TraderSiteVisitTab = 'REQUESTED' | 'UPCOMING' | 'VISITED';
+/** Trader Portal Site Visits menu tabs (`CANCELLED` maps to CLOSED group). */
+export type TraderSiteVisitTab = 'REQUESTED' | 'UPCOMING' | 'VISITED' | 'CANCELLED';
 export type SiteVisitClosedReason = 'JOB_CANCELLED' | 'JOB_COMPLETED' | 'ASSIGNED_TO_OTHER_TRADER';
 type Audience = 'ADMIN' | 'TRADER';
 
@@ -427,6 +427,8 @@ export const listTraderSiteVisits = async (
       upcomingCount,
       visitedCount,
       closedCount,
+      /** Same as closedCount — badge for Trader Portal CANCELLED tab. */
+      cancelledCount: closedCount,
     },
     meta: buildPaginationMeta(total, page, limit),
   };

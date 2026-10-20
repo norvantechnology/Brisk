@@ -16,7 +16,7 @@ const router = Router();
  * @swagger
  * /traders/site-visits:
  *   get:
- *     summary: Trader Portal — Site Visits menu (Requested / Upcoming / Visited)
+ *     summary: Trader Portal — Site Visits menu (Requested / Upcoming / Visited / Cancelled)
  *     description: |
  *       Tabs are mutually exclusive (same `tab` query param):
  *       - `tab=REQUESTED` (default) — **Site Visit Requested**: waiting on the customer
@@ -25,18 +25,20 @@ const router = Router();
  *       - `tab=UPCOMING` — **Upcoming**: customer confirmed the visit (`CONFIRMED` Visit Confirmed),
  *         not completed yet. Same open-job exclusion rules as REQUESTED.
  *       - `tab=VISITED` — **Site Visited**: visits marked completed (`COMPLETED`).
+ *       - `tab=CANCELLED` — **Cancelled / Closed**: request `CANCELLED`, or open request on a
+ *         cancelled/completed job / awarded to another trader (`status` may be `CLOSED` with
+ *         `closedReason`). Item `group` is `CLOSED`.
  *
- *       Badge counts: `summary.requestedCount` / `summary.upcomingCount` / `summary.visitedCount`
- *       (plus `closedCount` for closed/cancelled). Item `group` matches the tab bucket.
- *       Item shape matches `#/components/schemas/SiteVisitItem` without the Admin-only fields
- *       (`trader`, customer contact, `job.assignedTraderId`).
+ *       Badge counts: `summary.requestedCount` / `upcomingCount` / `visitedCount` /
+ *       `closedCount` (= `cancelledCount` for CANCELLED tab badge).
+ *       Item shape matches `#/components/schemas/SiteVisitItem` without Admin-only fields.
  *     tags: ['Trader / Site Visits']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - { in: query, name: tab, schema: { type: string, enum: [REQUESTED, UPCOMING, VISITED], default: REQUESTED } }
+ *       - { in: query, name: tab, schema: { type: string, enum: [REQUESTED, UPCOMING, VISITED, CANCELLED], default: REQUESTED } }
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED] }
+ *         schema: { type: string, enum: [PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED, CANCELLED, CLOSED] }
  *         description: Optional extra filter inside the tab.
  *       - { in: query, name: search, schema: { type: string }, description: Job ref, job title or customer name }
  *       - { in: query, name: categoryId, schema: { type: string, format: uuid } }
@@ -157,9 +159,11 @@ router.get(
       if (!trader) throw new NotFoundError('Trader profile not found.');
 
       const { tab, ...query } = req.query as TraderSiteVisitListQuery & {
-        tab: 'REQUESTED' | 'UPCOMING' | 'VISITED';
+        tab: 'REQUESTED' | 'UPCOMING' | 'VISITED' | 'CANCELLED';
       };
-      const result = await listTraderSiteVisits(trader.id, { ...query, group: tab }, 'TRADER');
+      // CANCELLED tab = closed/cancelled bucket (same filter as Admin CLOSED group).
+      const group = tab === 'CANCELLED' ? ('CLOSED' as const) : tab;
+      const result = await listTraderSiteVisits(trader.id, { ...query, group }, 'TRADER');
       sendResponse({
         res,
         statusCode: 200,

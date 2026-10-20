@@ -43,6 +43,8 @@ export const adminTraderSiteVisitsSchema = z.object({
 export const traderSiteVisitsSchema = z.object({
   query: z.object({
     ...siteVisitListQuery,
-    tab: z.enum(['REQUESTED', 'UPCOMING', 'VISITED']).default('REQUESTED'),
+    tab: z
+      .enum(['REQUESTED', 'UPCOMING', 'VISITED', 'CANCELLED'])
+      .default('REQUESTED'),
   }),
 });

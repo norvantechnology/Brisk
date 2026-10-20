@@ -127,6 +127,7 @@
  *         requestedCount: { type: integer, description: PENDING + RESCHEDULE_REQUIRED (open jobs) }
  *         upcomingCount: { type: integer, description: CONFIRMED (open jobs) }
  *         visitedCount: { type: integer, description: COMPLETED }
- *         closedCount: { type: integer }
+ *         closedCount: { type: integer, description: Cancelled/closed visits (same as cancelledCount) }
+ *         cancelledCount: { type: integer, description: Alias of closedCount for Trader Portal CANCELLED tab badge }
  */
 export {};
