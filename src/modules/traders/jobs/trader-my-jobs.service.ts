@@ -337,16 +337,33 @@ const resolveFlowStatus = (input: {
     return { flowStatus: 'CANCELLED', statusLabel: 'Cancelled' };
   }
 
+  /** Assigned main job — work phase (Arrive / proof). Not site-visit fee collection. */
+  const inAssignedWorkPhase =
+    status === JobStatus.ACCEPTED ||
+    status === JobStatus.SCHEDULED ||
+    status === JobStatus.IN_PROGRESS;
+
   const visitActive =
     siteVisitStatus != null &&
     siteVisitStatus !== TraderSiteVisitStatus.CANCELLED &&
     siteVisitStatus !== TraderSiteVisitStatus.COMPLETED;
   const visitCompleted = siteVisitStatus === TraderSiteVisitStatus.COMPLETED;
 
-  if (visitActive && !arrivedAt && !finishedAt) {
+  // Pre-assignment only: open visit (PENDING / CONFIRMED / RESCHEDULE_REQUIRED).
+  // Once assigned, fall through to READY_TO_ARRIVE even if visit is still open/rescheduled.
+  if (visitActive && !arrivedAt && !finishedAt && !inAssignedWorkPhase) {
     return { flowStatus: 'SITE_VISIT_IN_PROGRESS', statusLabel: 'Site Visit In Progress' };
   }
-  if (visitCompleted && !hasSiteVisitPaymentRequest && !finishedAt && status !== JobStatus.COMPLETED) {
+  // Pre-assignment only: visit done, site-visit fee not requested yet.
+  // After quote accept + assignment (Active), job has not started → READY_TO_ARRIVE,
+  // not SITE_VISIT_PAYMENT_PENDING (even if visit stays COMPLETED after customer reschedule).
+  if (
+    visitCompleted &&
+    !hasSiteVisitPaymentRequest &&
+    !finishedAt &&
+    status !== JobStatus.COMPLETED &&
+    !inAssignedWorkPhase
+  ) {
     return {
       flowStatus: 'SITE_VISIT_PAYMENT_PENDING',
       statusLabel: 'Site Visit Payment Pending',
@@ -1169,7 +1186,9 @@ const myJobCardMapper =
       proofCount: job.photos.length,
       siteVisitStatus: activeVisit?.status ?? null,
       hasSiteVisitPaymentRequest: job.paymentRequests.some(
-        (p) => p.type === TraderPaymentRequestType.SITE_VISIT_FEE
+        (p) =>
+          p.type === TraderPaymentRequestType.SITE_VISIT_FEE &&
+          p.status !== TraderPaymentRequestStatus.CANCELLED
       ),
       hasOpenPartialPayment: hasOpenPartial,
       hasFinalPaymentRequest: finalRequested,

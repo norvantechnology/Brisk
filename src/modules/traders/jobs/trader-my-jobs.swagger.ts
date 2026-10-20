@@ -169,6 +169,10 @@
  *         flowStatus:
  *           type: string
  *           enum: [OPEN, READY_TO_ARRIVE, ARRIVED, WORK_PROOF_PENDING, READY_TO_FINISH, SITE_VISIT_IN_PROGRESS, SITE_VISIT_PAYMENT_PENDING, PARTIAL_PAYMENT_PENDING, PARTIALLY_PAID, PAYMENT_REQUEST_PENDING, AWAITING_PAYMENT, COMPLETED, CANCELLED]
+ *           description: |
+ *             SITE_VISIT_PAYMENT_PENDING only pre-assignment (visit COMPLETED, fee not requested).
+ *             After trader assigned (ACCEPTED/SCHEDULED/IN_PROGRESS) and work not started → READY_TO_ARRIVE
+ *             (including after customer reschedule). Never SITE_VISIT_PAYMENT_PENDING on Active for unstarted jobs.
  *           example: COMPLETED
  *         paymentStatus: { type: string, enum: [UNPAID, PENDING, PARTIALLY_PAID, PAID], example: UNPAID }
  *         ratingStatus: { type: string, nullable: true, enum: [PENDING, RATED], example: RATED, description: null unless job is COMPLETED }
