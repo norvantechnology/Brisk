@@ -968,21 +968,23 @@ router.post('/mine/:id/messages', validate(myJobMessageBodySchema), controller.s
  * @swagger
  * /traders/jobs/mine/{id}/payment-request:
  *   get:
- *     summary: Payment Request + Success screen (idempotent, call repeatedly)
+ *     summary: Payment Request screen details (re-open after Submit / app relaunch)
  *     tags: ['Trader / My Jobs']
  *     security: [{ bearerAuth: [] }]
  *     description: |
- *       **Temporary FE support:** safe to call multiple times — always returns 200 with
- *       the data needed for the Payment Request screen **and** the Payment Request Success
- *       screen (no extra API calls).
+ *       Use when trader already submitted proof (`POST .../submit`), closed the app,
+ *       then opens the job again → Payment Request screen.
  *
- *       After `POST .../request-payment` (or when a FULL_JOB request already exists):
- *       `paymentRequestSent=true`, `paymentRequestId`, `invoiceId`, amount breakdown,
- *       `message`, `flowStatus=AWAITING_PAYMENT`,
- *       `customerName`, `customerAvatar`, `canReview` (true when you can still rate the customer).
+ *       Flat `data` shape for mobile (no nested `location` / `paymentSummary`):
+ *       `fullAddress`, `totalAmount`, `currency_symbol`, `currency_code`,
+ *       `paymentDetails[]` (`label`, `amount`, `currency_*`, optional `percentage`),
+ *       `paymentStatus`, `isPartPayment`, `canRequestPayment`, `primaryAction`,
+ *       `invoiceId`, `invoiceUrl`, plus job status fields.
  *
- *       Before request: `paymentRequestSent=false`, `canRequestPayment=true`,
- *       `primaryAction=REQUEST_PAYMENT` (same customer fields).
+ *       Same core shape as `POST /traders/jobs/mine/{id}/submit` (submit also adds
+ *       `proofPhotosAdded`, `nextStep`, `isPartialJob`).
+ *
+ *       Success screen data comes from `POST .../request-payment` (not this GET).
  *
  *       Alias: `GET /traders/jobs/mine/{id}/payment-summary`
  *     parameters:
@@ -992,7 +994,7 @@ router.post('/mine/:id/messages', validate(myJobMessageBodySchema), controller.s
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Flat Payment Request / Success payload (idempotent)
+ *         description: Flat Payment Request screen payload
  *       400:
  *         description: Job not finished / cancelled
  */

@@ -1,4 +1,4 @@
-import { ActorType, InvoiceStatus, JobStatus, Prisma } from '@prisma/client';
+import { ActorType, InvoiceStatus, JobStatus, Prisma, TraderSiteVisitStatus } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
 import { buildListOrderBy, pageIdsByComputedKey, resolveSortDir, type SortDir } from '../../../utils/list-sort';
@@ -41,6 +41,16 @@ const ACTIVE_STATUSES: JobStatus[] = [JobStatus.ACCEPTED, JobStatus.SCHEDULED, J
 const PENDING_STATUSES: JobStatus[] = [JobStatus.PUBLISHED, JobStatus.QUOTED];
 
 const money = (value: Prisma.Decimal | number | null | undefined) => (value == null ? null : Number(value));
+
+const SITE_VISIT_STATUS_LABELS: Record<TraderSiteVisitStatus, string> = {
+  PENDING: 'Waiting for Customer',
+  CONFIRMED: 'Visit Confirmed',
+  RESCHEDULE_REQUIRED: 'Reschedule Requested',
+  COMPLETED: 'Site Visited',
+  CANCELLED: 'Cancelled',
+};
+
+const dateKey = (d: Date | null | undefined): string | null => (d ? d.toISOString().slice(0, 10) : null);
 
 const NO_INVOICE: Prisma.JobWhereInput = {
   OR: [{ booking: { is: null } }, { booking: { is: { invoice: { is: null } } } }],
@@ -175,7 +185,34 @@ const JOB_LIST_INCLUDE = {
   },
   offer: { select: { id: true, title: true, offerCode: true } },
   photos: { take: 1, orderBy: { createdAt: 'asc' }, select: { photoUrl: true } },
-  _count: { select: { quotes: true } },
+  siteVisitRequests: {
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      status: true,
+      visitDate: true,
+      timeSlot: true,
+      arrivedAt: true,
+      completedAt: true,
+      durationMinutes: true,
+      createdAt: true,
+      updatedAt: true,
+      trader: {
+        select: {
+          id: true,
+          traderCode: true,
+          businessName: true,
+          user: { select: { fullName: true } },
+        },
+      },
+      slots: {
+        where: { isSelected: true },
+        take: 1,
+        select: { visitDate: true, timeSlot: true },
+      },
+    },
+  },
+  _count: { select: { quotes: true, siteVisitRequests: true } },
   booking: {
     select: {
       id: true,
@@ -235,6 +272,45 @@ const findPageByComputed = async (
   const rows = await prisma.job.findMany({ where: { id: { in: pageIds } }, include: JOB_LIST_INCLUDE });
   const byId = new Map(rows.map((r) => [r.id, r]));
   return pageIds.map((id) => byId.get(id)!).filter(Boolean);
+};
+
+type AdminJobListRow = Prisma.JobGetPayload<{ include: typeof JOB_LIST_INCLUDE }>;
+
+/** Latest site-visit requests on a jobs-table row (full real list; one row per trader). */
+const serializeListSiteVisits = (job: AdminJobListRow) => {
+  const siteVisits = job.siteVisitRequests.map((visit) => {
+    const selected = visit.slots[0] ?? null;
+    return {
+      id: visit.id,
+      status: visit.status,
+      statusLabel: SITE_VISIT_STATUS_LABELS[visit.status],
+      visitDate: dateKey(selected?.visitDate ?? visit.visitDate),
+      timeSlot: selected?.timeSlot ?? visit.timeSlot,
+      arrivedAt: visit.arrivedAt,
+      completedAt: visit.completedAt,
+      durationMinutes: visit.durationMinutes,
+      requestedAt: visit.createdAt,
+      updatedAt: visit.updatedAt,
+      trader: visit.trader
+        ? {
+            id: visit.trader.id,
+            traderCode: visit.trader.traderCode,
+            businessName: visit.trader.businessName,
+            fullName: visit.trader.user?.fullName ?? null,
+          }
+        : null,
+    };
+  });
+  return {
+    siteVisitRequested: job.siteVisitRequested,
+    siteVisitFee: money(job.siteVisitFee),
+    /** true when the customer asked for a visit or any trader request exists. */
+    hasSiteVisit: job.siteVisitRequested || siteVisits.length > 0,
+    siteVisitsCount: siteVisits.length,
+    /** Most recently updated request, or null. */
+    siteVisit: siteVisits[0] ?? null,
+    siteVisits,
+  };
 };
 
 export const listAdminJobs = async (query: AdminJobsListQuery) => {
@@ -308,6 +384,7 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
         offer: job.offer,
         quotesCount: job._count.quotes,
         coverPhotoUrl: job.photos[0]?.photoUrl ?? null,
+        ...serializeListSiteVisits(job),
         booking: job.booking
           ? {
               id: job.booking.id,

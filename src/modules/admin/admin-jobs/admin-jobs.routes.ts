@@ -149,6 +149,10 @@ router.get('/jobs/stats', validate(adminJobsStatsQuerySchema), controller.getSta
  *       `scheduledDate` / `createdAt`, `amount` (invoice total, else agreed service charge),
  *       `estimatedAmount` (agreed service charge, "Est."), `paymentStatus`, `status` / `statusLabel`.
  *
+ *       Site visit: `hasSiteVisit`, `siteVisitRequested`, `siteVisitFee`, `siteVisitsCount`,
+ *       `siteVisit` (latest request, or null) and `siteVisits[]` (one row per trader).
+ *       Full thread: `GET /admin/jobs/{id}/site-visits`.
+ *
  *       Row actions: details `GET /admin/jobs/{id}` · customer `GET /admin/customers/{customer.id}` ·
  *       trader `GET /admin/traders/{trader.id}` · chat `GET /admin/jobs/{id}/chat`.
  *     tags: ['Admin / Jobs']
@@ -214,6 +218,13 @@ router.get('/jobs/stats', validate(adminJobsStatsQuerySchema), controller.getSta
  *                   offer: { id: 5a1b2c3d-0000-4000-8000-000000000002, title: Summer Plumbing Offer, offerCode: OFF-10 }
  *                   quotesCount: 3
  *                   coverPhotoUrl: null
+ *                   siteVisitRequested: true
+ *                   siteVisitFee: 30
+ *                   hasSiteVisit: true
+ *                   siteVisitsCount: 1
+ *                   siteVisit: { id: 8d4e5f60-0000-4000-8000-000000000005, status: CONFIRMED, statusLabel: Visit Confirmed, visitDate: '2026-07-28', timeSlot: MORNING, arrivedAt: null, completedAt: null, durationMinutes: null, requestedAt: '2026-07-21T09:00:00.000Z', updatedAt: '2026-07-22T11:00:00.000Z', trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", fullName: "Liam O'Connor" } }
+ *                   siteVisits:
+ *                     - { id: 8d4e5f60-0000-4000-8000-000000000005, status: CONFIRMED, statusLabel: Visit Confirmed, visitDate: '2026-07-28', timeSlot: MORNING, trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", fullName: "Liam O'Connor" } }
  *                   booking: { id: 6b2c3d4e-0000-4000-8000-000000000003, bookingRef: BK-1042, status: COMPLETED, invoiceId: 7c3d4e5f-0000-4000-8000-000000000004 }
  *               meta: { total: 9, page: 1, limit: 10, totalPages: 1 }
  *       400: { $ref: '#/components/responses/AdminListValidationError' }

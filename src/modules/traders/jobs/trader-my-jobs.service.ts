@@ -2342,12 +2342,9 @@ const buildPaymentRequestScreenPayload = async (
   const paymentStatus = resolvePaymentStatusLabel(job);
   const completedAt = job.booking?.finishedAt ?? job.updatedAt;
   const bookingInvoice = job.booking?.invoice;
-  const finalPr = job.paymentRequests.find(
-    (p) =>
-      p.type === TraderPaymentRequestType.FULL_JOB &&
-      p.status !== TraderPaymentRequestStatus.CANCELLED
-  );
-  const finalRequested = Boolean(finalPr);
+  // Booking invoice number when issued; otherwise null until request-payment creates one.
+  const invoiceId = bookingInvoice?.invoiceNumber ?? bookingInvoice?.id ?? null;
+  const finalRequested = hasFinalPaymentRequest(job);
   const paidInFull = isPaidUpfrontInFull(job) || job.status === JobStatus.COMPLETED;
   const awaitingRequest = Boolean(job.booking?.finishedAt) && !finalRequested && !paidInFull;
   const flowStatus = (awaitingRequest
@@ -2356,39 +2353,7 @@ const buildPaymentRequestScreenPayload = async (
       ? 'AWAITING_PAYMENT'
       : 'COMPLETED') as FlowStatus;
 
-  // Prefer invoice linked to the FULL_JOB payment request (Success screen needs this).
-  let invoiceId: string | null =
-    bookingInvoice?.invoiceNumber ?? bookingInvoice?.id ?? null;
-  if (finalPr) {
-    const prInvoice = await prisma.invoice.findUnique({
-      where: { paymentRequestId: finalPr.id },
-      select: { id: true, invoiceNumber: true },
-    });
-    invoiceId = prInvoice?.id ?? prInvoice?.invoiceNumber ?? invoiceId;
-  }
-
-  const breakdown = computePaymentBreakdown(job);
-  const amountFromPr = finalPr
-    ? {
-        serviceCharge: money(finalPr.serviceCharge),
-        materialsTotal: money(finalPr.materialsTotal),
-        siteVisitFee: money(finalPr.siteVisitFee),
-        platformFee: money(finalPr.platformFee),
-        vatRate: money(finalPr.vatRate),
-        vatAmount: money(finalPr.vatAmount),
-        totalAmount: money(finalPr.totalAmount) ?? paymentSummary.totalAmount,
-      }
-    : {
-        serviceCharge: breakdown.serviceCharge,
-        materialsTotal: breakdown.materialsTotal,
-        siteVisitFee: breakdown.siteVisitFee,
-        platformFee: breakdown.platformFee,
-        vatRate: breakdown.vatRate,
-        vatAmount: breakdown.vatAmount,
-        totalAmount: paymentSummary.totalAmount,
-      };
-
-  // Flat shape for Payment Request + Success screens (idempotent; safe to call repeatedly).
+  // Flat shape for Payment Request UI — do not nest location / paymentSummary (breaks mobile parsers).
   return {
     id: job.id,
     jobRef: job.jobRef ?? null,
@@ -2403,7 +2368,7 @@ const buildPaymentRequestScreenPayload = async (
         : 'Completed',
     completedAt,
     fullAddress: formatFullAddress(job),
-    totalAmount: amountFromPr.totalAmount,
+    totalAmount: paymentSummary.totalAmount,
     currency_symbol: currency.currencySymbol,
     currency_code: currency.currencyCode,
     paymentDetails,
@@ -2420,38 +2385,12 @@ const buildPaymentRequestScreenPayload = async (
         : 'VIEW_DETAILS',
     invoiceId,
     invoiceUrl: `/traders/jobs/mine/${job.id}/invoice/download`,
-    /** Present after POST /request-payment — use for Payment Request Success screen (no extra call). */
-    paymentRequestId: finalPr?.id ?? null,
-    paymentRequestStatus: finalPr?.status ?? null,
-    /** true when FULL_JOB request already sent — Success screen can render from this GET alone. */
-    paymentRequestSent: finalRequested,
-    message: finalRequested
-      ? 'Payment request sent successfully.'
-      : 'Ready to request payment.',
-    // Same amount keys as POST /request-payment Success payload
-    serviceCharge: amountFromPr.serviceCharge,
-    materialsTotal: amountFromPr.materialsTotal,
-    siteVisitFee: amountFromPr.siteVisitFee,
-    platformFee: amountFromPr.platformFee,
-    vatRate: amountFromPr.vatRate,
-    vatAmount: amountFromPr.vatAmount,
-    /** Success / Payment Request screen — customer card. */
-    customerName: job.customer.fullName,
-    customerAvatar: job.customer.profilePhotoUrl ?? null,
-    /**
-     * true when work is finished and trader has not rated the customer yet.
-     * Submit via POST /traders/jobs/mine/{id}/review.
-     */
-    canReview:
-      (Boolean(job.booking?.finishedAt) || job.status === JobStatus.COMPLETED) &&
-      !job.booking?.traderCustomerReview,
   };
 };
 
 /**
- * Payment Request screen + Success screen payload.
- * Idempotent — call as many times as needed; always 200 with the same Success-ready data
- * once payment has been requested (no extra API calls required on FE).
+ * Re-open Payment Request screen after Submit (e.g. user closed app and comes back).
+ * Same shape as POST /submit response — no need to cache locally.
  */
 export const getPaymentRequestScreen = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
@@ -2460,7 +2399,6 @@ export const getPaymentRequestScreen = async (userId: string, jobId: string) => 
   if (isJobCancelled(job.status, job.booking?.status ?? null)) {
     throw new BadRequestError('This job was cancelled.');
   }
-  // Allow reopen while awaiting customer pay, after paid (COMPLETED), or before Request Payment.
   if (
     !job.booking?.finishedAt &&
     job.status !== JobStatus.COMPLETED &&
@@ -3569,14 +3507,16 @@ export const requestPayment = async (userId: string, jobId: string) => {
     throw new ConflictError('Payment already received for this job.');
   }
   if (existing) {
-    // Idempotent Success payload — same fields as GET .../payment-request (no duplicate charge).
-    const screen = await buildPaymentRequestScreenPayload(job, {
-      preferredCurrency: trader.user.preferredCurrency,
-      country: trader.country,
+    const invoice = await prisma.invoice.findUnique({
+      where: { paymentRequestId: existing.id },
+      select: { id: true },
     });
     return {
-      ...screen,
       paymentRequestId: existing.id,
+      invoiceId: invoice?.id ?? null,
+      jobRef: job.jobRef,
+      ...computePaymentBreakdown(job),
+      totalAmount: money(existing.totalAmount),
       status: existing.status,
     };
   }
@@ -3597,20 +3537,12 @@ export const requestPayment = async (userId: string, jobId: string) => {
 
   await notifyPaymentRequested(trader.id, paymentRequest);
 
-  // Fresh job so FULL_JOB request is on paymentRequests for Success screen fields.
-  const fresh = await assertMyJob(trader.id, jobId);
-  const screen = await buildPaymentRequestScreenPayload(fresh, {
-    preferredCurrency: trader.user.preferredCurrency,
-    country: trader.country,
-  });
   return {
-    ...screen,
     paymentRequestId: paymentRequest.id,
-    invoiceId: paymentRequest.invoiceId ?? screen.invoiceId,
-    status: 'SENT' as const,
-    // Keep breakdown keys if screen amounts differ slightly before reload.
+    invoiceId: paymentRequest.invoiceId,
+    jobRef: job.jobRef,
     ...breakdown,
-    totalAmount: money(paymentRequest.totalAmount) ?? breakdown.totalAmount,
+    status: 'SENT',
   };
 };
 

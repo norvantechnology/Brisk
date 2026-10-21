@@ -23,6 +23,28 @@
  *             - { type: 'null' }
  *           example: apartment
  *         displayValue: { type: string, nullable: true, example: Apartment, description: 'Human-readable answer; null if unanswered' }
+ *     AdminJobListSiteVisit:
+ *       type: object
+ *       description: One trader site-visit request on GET /admin/jobs.
+ *       properties:
+ *         id: { type: string, format: uuid }
+ *         status: { type: string, enum: [PENDING, CONFIRMED, RESCHEDULE_REQUIRED, COMPLETED, CANCELLED], example: CONFIRMED }
+ *         statusLabel: { type: string, example: Visit Confirmed }
+ *         visitDate: { type: string, format: date, nullable: true, example: '2026-07-28' }
+ *         timeSlot: { type: string, nullable: true, enum: [MORNING, AFTERNOON, EVENING, ANYTIME], example: MORNING }
+ *         arrivedAt: { type: string, format: date-time, nullable: true }
+ *         completedAt: { type: string, format: date-time, nullable: true }
+ *         durationMinutes: { type: integer, nullable: true }
+ *         requestedAt: { type: string, format: date-time }
+ *         updatedAt: { type: string, format: date-time }
+ *         trader:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             id: { type: string, format: uuid }
+ *             traderCode: { type: string, nullable: true, example: TRD-1001 }
+ *             businessName: { type: string, nullable: true }
+ *             fullName: { type: string, nullable: true }
  *     AdminJobDetail:
  *       type: object
  *       description: Admin job drawer payload (GET /admin/jobs/{id}). Nullable objects are null when not linked yet.
@@ -51,6 +73,16 @@
  *         quoteType: { type: string, nullable: true, enum: [REMOTE, ONSITE, FIXED, BUDGET_RANGE, OPEN_QUOTE], example: ONSITE }
  *         siteVisitRequested: { type: boolean, example: true }
  *         siteVisitFee: { type: number, nullable: true, example: 30 }
+ *         hasSiteVisit: { type: boolean, example: true, description: 'GET /admin/jobs only — customer asked for a visit or a trader request exists' }
+ *         siteVisitsCount: { type: integer, example: 1, description: 'GET /admin/jobs only' }
+ *         siteVisit:
+ *           nullable: true
+ *           description: 'GET /admin/jobs only — latest site-visit request (same item as siteVisits[0])'
+ *           $ref: '#/components/schemas/AdminJobListSiteVisit'
+ *         siteVisits:
+ *           type: array
+ *           description: 'GET /admin/jobs only — every trader site-visit request on the job'
+ *           items: { $ref: '#/components/schemas/AdminJobListSiteVisit' }
  *         serviceCharge: { type: number, nullable: true, example: 1500 }
  *         minBudget: { type: number, nullable: true, example: 1000 }
  *         maxBudget: { type: number, nullable: true, example: 2000 }
