@@ -20,3 +20,23 @@ export const listJobPaymentRequests = async (
     next(error);
   }
 };
+
+export const getJobPaymentHistory = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { page, limit } = req.query as any;
+    const result = await service.getJobPaymentHistory(req.user!.id, req.params.id, { page, limit });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Installment payment history retrieved successfully.',
+      data: result.data,
+      meta: result.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

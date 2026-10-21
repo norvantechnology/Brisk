@@ -3,7 +3,7 @@ import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import * as controller from './payment-requests.controller';
-import { jobIdParamSchema } from './payment-requests.validation';
+import { jobIdParamSchema, paymentHistoryQuerySchema } from './payment-requests.validation';
 
 const router = Router();
 const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
@@ -56,7 +56,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       - `paymentProgress[]` — Progress timeline items:
  *         - Completed items (`isCompleted: true`, `description: Confirmed on...`).
  *         - Pending installment (`isCompleted: false`, `formattedAmount`, `dueDate`).
- *       - `transactionHistory[]` — Completed transactions / receipts for the job.
+ *       - `transactionHistory[]` — Transaction history records for the job (full list for Installment Payments History screen; top 3 previewed on the Installments section).
  *       - `invoiceId` — Invoice ID to pass to `POST /payments/intent` when tapping "Pay Now".
  *     parameters:
  *       - in: path
@@ -103,10 +103,26 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                     formattedAmount: €100.00
  *                     dueDate: '2026-10-21T07:21:24.845Z'
  *                 transactionHistory:
- *                   - id: TXN-627341
+ *                   - id: TXN-827361
  *                     title: Initial Deposit
+ *                     date: '2026-07-14T11:20:00.000Z'
+ *                     formattedAmount: €481.50
+ *                     status: PAID
+ *                   - id: TXN-627341
+ *                     title: Site Visit Fee
+ *                     date: '2026-07-15T10:00:00.000Z'
+ *                     formattedAmount: €30.00
+ *                     status: PAID
+ *                   - id: TXN-719384
+ *                     title: Advance Payment
  *                     date: '2026-10-21T07:21:24.845Z'
  *                     formattedAmount: €100.00
+ *                     status: PAID
+ *                   - id: TXN-492015
+ *                     title: Final Installment
+ *                     date: '2026-07-28T09:00:00.000Z'
+ *                     formattedAmount: €420.00
+ *                     status: PENDING
  *       404:
  *         description: Job not found for this customer.
  */
@@ -115,6 +131,74 @@ router.get(
   ...customerOnly,
   validate(jobIdParamSchema),
   controller.listJobPaymentRequests
+);
+
+/**
+ * @swagger
+ * /jobs/{id}/payment-requests/history:
+ *   get:
+ *     summary: Get paginated installment payment history for a customer's job
+ *     tags: ['Customer / Checkout']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Customer Multiple Payment Flow – Installment Payments History screen.**
+ *       Dedicated paginated endpoint returning all transaction records with standard metadata (`meta: { total, page, limit, totalPages }`).
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *         description: Page number (1-based)
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *         description: Items per page (max 50)
+ *     responses:
+ *       200:
+ *         description: Installment payment history retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Installment payment history retrieved successfully.
+ *               data:
+ *                 - id: TXN-827361
+ *                   title: Initial Deposit
+ *                   date: '2026-07-14T11:20:00.000Z'
+ *                   formattedAmount: €481.50
+ *                   status: PAID
+ *                 - id: TXN-627341
+ *                   title: Site Visit Fee
+ *                   date: '2026-07-15T10:00:00.000Z'
+ *                   formattedAmount: €30.00
+ *                   status: PAID
+ *                 - id: TXN-719384
+ *                   title: Advance Payment
+ *                   date: '2026-10-21T07:21:24.845Z'
+ *                   formattedAmount: €100.00
+ *                   status: PAID
+ *                 - id: TXN-492015
+ *                   title: Final Installment
+ *                   date: '2026-07-28T09:00:00.000Z'
+ *                   formattedAmount: €420.00
+ *                   status: PENDING
+ *               meta:
+ *                 total: 4
+ *                 page: 1
+ *                 limit: 10
+ *                 totalPages: 1
+ *       404:
+ *         description: Job not found for this customer.
+ */
+router.get(
+  '/jobs/:id/payment-requests/history',
+  ...customerOnly,
+  validate(paymentHistoryQuerySchema),
+  controller.getJobPaymentHistory
 );
 
 export default router;
