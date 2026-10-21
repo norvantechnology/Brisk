@@ -10,7 +10,12 @@ export const listJobPaymentRequests = async (
 ): Promise<void> => {
   try {
     const data = await service.listJobPaymentRequests(req.user!.id, req.params.id);
-    sendResponse({ res, statusCode: 200, message: 'Payment requests fetched successfully.', data });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Installment payment details retrieved successfully.',
+      data,
+    });
   } catch (error) {
     next(error);
   }

@@ -76,65 +76,43 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *           application/json:
  *             example:
  *               success: true
- *               message: Payment requests fetched successfully.
+ *               message: Installment payment details retrieved successfully.
  *               data:
+ *                 invoiceId: 9f1e2d3c-0000-4000-8000-000000000003
+ *                 jobCategory: Solar Install
+ *                 totalJobAmount: 931.5
+ *                 amountPaid: 511.5
+ *                 dueBalance: 420
+ *                 currencyCode: EUR
+ *                 currencySymbol: €
+ *                 breakdown:
+ *                   quotePrice: 1000
+ *                   siteVisitFee: -30
+ *                   platformFee: 20
+ *                   offerDiscount: -48.5
+ *                   offerLabel: Offer Applied (5% OFF)
+ *                   totalPayment: 931.5
+ *                 paymentProgress:
+ *                   - title: Site Visit Fee
+ *                     description: Confirmed on July 15, 2026
+ *                     isCompleted: true
+ *                     formattedAmount: null
+ *                     dueDate: null
+ *                   - title: advance amount pay Pending
+ *                     description: i have a pay with advance amount
+ *                     isCompleted: false
+ *                     formattedAmount: €100.00
+ *                     dueDate: '2026-10-21T07:21:24.845Z'
+ *                 transactionHistory:
+ *                   - id: TXN-627341
+ *                     title: Initial Deposit
+ *                     date: '2026-10-21T07:21:24.845Z'
+ *                     formattedAmount: €100.00
  *                 jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
  *                 jobStatus: IN_PROGRESS
  *                 isPartPayment: true
  *                 hasPendingPartial: true
  *                 flowType: INSTALLMENT_PAYMENT
- *                 summary:
- *                   totalJobAmount: 1248
- *                   amountPaid: 517.2
- *                   dueBalance: 730.8
- *                   pendingAmount: 420
- *                   paymentStatus: PARTIALLY PAID
- *                   currencyCode: EUR
- *                   currencySymbol: €
- *                 breakdown:
- *                   quotePrice: 1000
- *                   materialsTotal: 0
- *                   siteVisitFee: 30
- *                   platformFee: 10
- *                   vatRate: 0.2
- *                   vatAmount: 208
- *                   totalAmount: 1248
- *                   currencyCode: EUR
- *                   currencySymbol: €
- *                 confirmedPayments:
- *                   - id: 2b3c4d5e-0000-4000-8000-000000000002
- *                     transactionId: TXN-82736A
- *                     type: PARTIAL
- *                     title: Initial Deposit
- *                     description: Initial deposit
- *                     amount: 481.2
- *                     currencyCode: EUR
- *                     currencySymbol: €
- *                     formattedAmount: €481.20
- *                     status: CONFIRMED
- *                     paidAt: '2026-07-14T11:20:00.000Z'
- *                     confirmedAt: '2026-07-14T11:20:00.000Z'
- *                     confirmedDateLabel: Confirmed on July 14, 2026
- *                     cardBrand: visa
- *                     cardLast4: '4242'
- *                 pendingPayments:
- *                   - id: 3c4d5e6f-0000-4000-8000-000000000003
- *                     invoiceId: 9f1e2d3c-0000-4000-8000-000000000003
- *                     type: PARTIAL
- *                     title: Final Installment Pending
- *                     rawTitle: Final Installment
- *                     description: Final balance due
- *                     amount: 420
- *                     currencyCode: EUR
- *                     currencySymbol: €
- *                     formattedAmount: €420.00
- *                     status: PENDING
- *                     dueDate: '2026-07-20T10:00:00.000Z'
- *                     dueDateLabel: 'Due: July 20, 2026'
- *                     canPay: true
- *                 paymentProgress:
- *                   confirmed: []
- *                   pending: []
  *                 paymentRequests:
  *                   - id: 3c4d5e6f-0000-4000-8000-000000000003
  *                     invoiceId: 9f1e2d3c-0000-4000-8000-000000000003
