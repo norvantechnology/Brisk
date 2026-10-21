@@ -276,7 +276,10 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
  *         `Charges` (paid total) · `Refunded` (completed refunds)
  *       - `currencyCode`, `currencySymbol`
- *       - `isPartPayment` — true when the trader billed in installments (open Installment Payments screen)
+ *       - `isPartPayment` — true when the trader billed in installments
+ *       - `hasPendingPartial` — true when a partial payment request is pending customer payment
+ *       - `flowType` — `INSTALLMENT_PAYMENT` when partial payment is requested (redirect customer to Installment Payments screen `GET /jobs/{id}/payment-requests`); null otherwise
+ *       - `status` / `statusLabel` — `PARTIAL PAYMENT` / `Partial Payment` when a partial payment is requested. Once paid, reverts back to `IN PROGRESS` / `Active`.
  *       - **Pay routing** — `invoiceId` set → `GET /invoices/{invoiceId}` + `POST /payments/intent` + `POST /payments/{paymentId}/confirm`.
  *         It is the unpaid upfront invoice, or the invoice auto-created when the trader sends a payment request
  *         (final payment, installment or site visit fee — no customer accept step). Paying a request invoice marks the

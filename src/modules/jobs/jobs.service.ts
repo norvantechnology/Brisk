@@ -61,10 +61,13 @@ export const customerStatusBadgeFor = (
   status: JobStatus,
   bookingStatus?: string | null,
   finishedAt?: Date | null,
-  opts?: { paymentRequested?: boolean }
+  opts?: { paymentRequested?: boolean; hasPendingPartial?: boolean }
 ): string => {
   if (status === JobStatus.CANCELLED || bookingStatus === BookingStatus.CANCELLED) {
     return 'Cancelled';
+  }
+  if (opts?.hasPendingPartial) {
+    return 'Partial Payment';
   }
   if (isAwaitingUpfrontPayment({ status, booking: { finishedAt } })) return 'Payment Pending';
   // Work finished, trader has not sent the payment request yet — not Payment Pending.
@@ -1005,10 +1008,15 @@ export const customerJobAmountSelect = {
     where: { status: { in: ['PAID', 'SENT'] } },
     orderBy: { createdAt: 'desc' as const },
     select: {
+      id: true,
       type: true,
+      title: true,
+      description: true,
       status: true,
       totalAmount: true,
       currencyCode: true,
+      paidAt: true,
+      createdAt: true,
       invoice: { select: { id: true, status: true } },
     },
   },
@@ -1058,6 +1066,9 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
 
   /** Trader billed in installments (sent or paid PARTIAL request) — customer opens the Installment Payments screen. */
   const isPartPayment = job.paymentRequests.some((p) => p.type === 'PARTIAL');
+  const hasPendingPartial = job.paymentRequests.some(
+    (p) => p.type === 'PARTIAL' && p.status === 'SENT'
+  );
 
   /** Invoice to pay: the unpaid upfront invoice, else the latest sent trader request's (auto-accepted) invoice. */
   const invoiceId = cancelled
@@ -1076,6 +1087,7 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
     totalPaid: charged,
     refunded,
     isPartPayment,
+    hasPendingPartial,
     invoiceId,
   };
 };
@@ -1169,26 +1181,34 @@ export const listMyJobsByTab = async (
       !job.booking?.ratingReview;
     const showPendingRating = canReview;
 
+    const hasPendingPartial = job.paymentRequests.some(
+      (p) => p.type === 'PARTIAL' && p.status === 'SENT'
+    );
+
     const displayStatus = cancelled
       ? JobStatus.CANCELLED
       : showPendingRating
         ? 'PENDING_RATING'
-        : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
-          ? 'WORK_COMPLETED'
-          : showRescheduleStatus
-            ? 'RESCHEDULE'
-            : job.status;
+        : hasPendingPartial
+          ? 'PARTIAL_PAYMENT'
+          : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+            ? 'WORK_COMPLETED'
+            : showRescheduleStatus
+              ? 'RESCHEDULE'
+              : job.status;
 
     const statusLabel = showPendingRating
       ? 'Pending Rating'
-      : showRescheduleStatus
-        ? 'RESCHEDULE'
-        : customerStatusBadgeFor(
-            job.status,
-            job.booking?.status ?? null,
-            job.booking?.finishedAt ?? null,
-            { paymentRequested }
-          );
+      : hasPendingPartial
+        ? 'Partial Payment'
+        : showRescheduleStatus
+          ? 'RESCHEDULE'
+          : customerStatusBadgeFor(
+              job.status,
+              job.booking?.status ?? null,
+              job.booking?.finishedAt ?? null,
+              { paymentRequested, hasPendingPartial }
+            );
 
     return {
       id: job.id,
@@ -1212,6 +1232,8 @@ export const listMyJobsByTab = async (
       amountType,
       currencyCode,
       isPartPayment,
+      hasPendingPartial,
+      flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : null,
       invoiceId,
       downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     };
@@ -1384,7 +1406,10 @@ const buildCustomerJobView = async (
     prisma.traderPaymentRequest.findMany({
       where: { jobId, status: { in: ['SENT', 'PAID'] } },
       select: {
+        id: true,
         type: true,
+        title: true,
+        description: true,
         status: true,
         serviceCharge: true,
         materialsTotal: true,
@@ -1396,6 +1421,8 @@ const buildCustomerJobView = async (
         cardBrand: true,
         cardLast4: true,
         paidAt: true,
+        createdAt: true,
+        invoice: { select: { id: true, invoiceNumber: true, status: true } },
       },
     }),
     invoice
@@ -1482,6 +1509,33 @@ const buildCustomerJobView = async (
     'SERVICE'
   ).toUpperCase();
 
+  const hasPendingPartial = requests.some(
+    (r) => r.type === 'PARTIAL' && r.status === 'SENT'
+  );
+  const pendingPartialRequest = requests.find((r) => r.type === 'PARTIAL' && r.status === 'SENT');
+
+  const confirmedPayments = paidRequests.map((r) => {
+    const amt = money(r.totalAmount);
+    const paidDate = r.paidAt ?? r.createdAt;
+    return {
+      id: r.id,
+      transactionId: `TXN-${r.id.replace(/-/g, '').slice(-6).toUpperCase()}`,
+      type: r.type,
+      title: r.title?.trim() || r.description?.trim() || (r.type === 'PARTIAL' ? 'Installment Payment' : 'Payment'),
+      description: r.description,
+      amount: amt,
+      currencyCode: r.currencyCode,
+      currencySymbol,
+      formattedAmount: `${currencySymbol}${amt.toFixed(2)}`,
+      status: 'CONFIRMED',
+      paidAt: paidDate,
+      confirmedAt: paidDate,
+      confirmedDateLabel: paidDate ? `Confirmed on ${formatDisplayDay(paidDate)}` : null,
+      cardBrand: r.cardBrand,
+      cardLast4: r.cardLast4,
+    };
+  });
+
   const view = {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
@@ -1494,9 +1548,11 @@ const buildCustomerJobView = async (
         ? JobStatus.CANCELLED
         : showPendingRating
           ? 'PENDING_RATING'
-          : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
-            ? 'WORK_COMPLETED'
-            : job.status
+          : hasPendingPartial
+            ? 'PARTIAL_PAYMENT'
+            : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+              ? 'WORK_COMPLETED'
+              : job.status
     ),
     statusBadge: showPendingRating
       ? 'Pending Rating'
@@ -1504,8 +1560,11 @@ const buildCustomerJobView = async (
           job.status,
           job.booking?.status ?? null,
           job.booking?.finishedAt ?? null,
-          { paymentRequested }
+          { paymentRequested, hasPendingPartial }
         ),
+    hasPendingPartial,
+    isPartPayment: requests.some((r) => r.type === 'PARTIAL'),
+    flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : null,
     completedAt: kind === 'COMPLETED' ? eventAt : null,
     cancelledAt: kind === 'CANCELLED' ? eventAt : null,
     cancellationReason: kind === 'CANCELLED' ? job.cancellationReason : null,
@@ -1564,9 +1623,11 @@ const buildCustomerJobView = async (
       platformFee: processingFee,
       offerApplied: discount > 0 ? -discount : 0,
       netPayout: round2(totalPaid + amountDue),
+      confirmedPayments,
     },
-    invoiceId: invoice?.id ?? null,
-    invoiceNumber: invoice?.invoiceNumber ?? null,
+    confirmedPayments,
+    invoiceId: pendingPartialRequest?.invoice?.id ?? invoice?.id ?? null,
+    invoiceNumber: pendingPartialRequest?.invoice?.invoiceNumber ?? invoice?.invoiceNumber ?? null,
     downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     invoiceUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     receiptUrl: lastCardPayment ? `/payments/${lastCardPayment.id}/receipt` : null,
@@ -1637,6 +1698,10 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
       paymentStatus: pay.paymentStatus,
       paymentMethod: pay.cardLast4 ? `${brand} ending in •••• ${pay.cardLast4}` : null,
     },
+    isPartPayment: view.isPartPayment,
+    hasPendingPartial: view.hasPendingPartial,
+    flowType: view.flowType,
+    confirmedPayments: view.confirmedPayments,
     downloadUrl: view.downloadUrl,
     receiptUrl: view.receiptUrl,
     canReview: view.canReview,

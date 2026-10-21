@@ -329,6 +329,54 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
   const currencyMeta = await getCurrencyMeta(pricing.currencyCode);
   const scheduledDate = booking?.scheduledDate ?? job.scheduledDate;
   const hasActiveDispute = job.disputes.length > 0;
+  const hasPendingPartial = job.paymentRequests.some(
+    (p) => p.type === 'PARTIAL' && p.status === 'SENT'
+  );
+
+  const confirmedPayments = job.paymentRequests
+    .filter((p) => p.status === 'PAID')
+    .map((p) => {
+      const amt = money(p.totalAmount);
+      const paidDate = p.paidAt ?? p.createdAt;
+      return {
+        id: p.id,
+        transactionId: `TXN-${p.id.replace(/-/g, '').slice(-6).toUpperCase()}`,
+        type: p.type,
+        title: p.title?.trim() || p.description?.trim() || (p.type === 'PARTIAL' ? 'Installment Payment' : 'Payment'),
+        description: p.description,
+        amount: amt,
+        currencyCode: p.currencyCode,
+        currencySymbol: currencyMeta.symbol,
+        formattedAmount: `${currencyMeta.symbol}${amt.toFixed(2)}`,
+        status: 'CONFIRMED',
+        paidAt: paidDate,
+        confirmedAt: paidDate,
+        confirmedDateLabel: paidDate ? `Confirmed on ${formatDisplayDay(paidDate)}` : null,
+      };
+    });
+
+  const pendingPayments = job.paymentRequests
+    .filter((p) => p.status === 'SENT')
+    .map((p) => {
+      const amt = money(p.totalAmount);
+      const title = p.title?.trim() || p.description?.trim() || (p.type === 'PARTIAL' ? 'Installment Payment' : 'Payment');
+      return {
+        id: p.id,
+        invoiceId: p.invoice?.id ?? null,
+        type: p.type,
+        title: `${title} Pending`,
+        rawTitle: title,
+        description: p.description,
+        amount: amt,
+        currencyCode: p.currencyCode,
+        currencySymbol: currencyMeta.symbol,
+        formattedAmount: `${currencyMeta.symbol}${amt.toFixed(2)}`,
+        status: 'PENDING',
+        dueDate: p.createdAt,
+        dueDateLabel: `Due: ${formatDisplayDay(p.createdAt)}`,
+        canPay: amt > 0 && Boolean(p.invoice?.id),
+      };
+    });
 
   return {
     jobId: job.id,
@@ -340,13 +388,18 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
     status: toDisplayStatus(
       cancelled
         ? JobStatus.CANCELLED
-        : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
-          ? 'WORK_COMPLETED'
-          : job.status
+        : hasPendingPartial
+          ? 'PARTIAL_PAYMENT'
+          : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
+            ? 'WORK_COMPLETED'
+            : job.status
     ),
-    statusLabel: customerStatusBadgeFor(job.status, booking?.status ?? null, booking?.finishedAt ?? null, {
-      paymentRequested,
-    }),
+    statusLabel: hasPendingPartial
+      ? 'Partial Payment'
+      : customerStatusBadgeFor(job.status, booking?.status ?? null, booking?.finishedAt ?? null, {
+          paymentRequested,
+          hasPendingPartial,
+        }),
     category: job.category,
     subcategory: job.subcategory,
     scheduledDate,
@@ -372,6 +425,14 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
       : null,
     milestones,
     isPartPayment: pricing.isPartPayment,
+    hasPendingPartial,
+    flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : null,
+    confirmedPayments,
+    pendingPayments,
+    paymentProgress: {
+      confirmed: confirmedPayments,
+      pending: pendingPayments,
+    },
     pricing: {
       amount: pricing.amount,
       amountType: pricing.amountType,

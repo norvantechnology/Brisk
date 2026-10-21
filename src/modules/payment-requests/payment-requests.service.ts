@@ -14,6 +14,7 @@ import { getCurrencyMeta } from '../../services/currency.service';
 import { type ChargeDetails, getChargeDetails, paymentMethodFromCharge } from '../../services/stripe.service';
 import { emitPaymentRequestPaid } from '../../sockets/realtime';
 import { buildJobPaymentBreakdown } from '../jobs/job-payment-state';
+import { formatDisplayDay } from '../jobs/jobs.service';
 import { NotFoundError } from '../../utils/errors';
 
 const PAYABLE_STATUSES: TraderPaymentRequestStatus[] = [
@@ -62,6 +63,8 @@ const serialize = (r: RequestWithInvoice, currencySymbol: string) => {
     cardBrand: r.cardBrand,
     cardLast4: r.cardLast4,
     paidAt: r.paidAt,
+    confirmedAt: r.paidAt,
+    confirmedDateLabel: r.paidAt ? `Confirmed on ${formatDisplayDay(r.paidAt)}` : null,
     createdAt: r.createdAt,
     canPay: isPayable(r) && totalAmount > 0 && Boolean(r.invoice),
   };
@@ -127,11 +130,66 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
   );
   const pendingAmount = round2(requests.filter(isPayable).reduce((s, r) => s + money(r.totalAmount), 0));
   const totalJobAmount = breakdown?.totalAmount ?? 0;
+  const hasPendingPartial = requests.some(
+    (r) => r.type === TraderPaymentRequestType.PARTIAL && isPayable(r)
+  );
+
+  const confirmedPayments = requests
+    .filter((r) => r.status === TraderPaymentRequestStatus.PAID)
+    .map((r) => {
+      const sym = symbols.get(r.currencyCode) ?? r.currencyCode;
+      const amt = money(r.totalAmount);
+      const paidDate = r.paidAt ?? r.updatedAt;
+      return {
+        id: r.id,
+        transactionId: `TXN-${r.id.replace(/-/g, '').slice(-6).toUpperCase()}`,
+        type: r.type,
+        title: r.title?.trim() || r.description?.trim() || TYPE_TITLES[r.type],
+        description: r.description,
+        amount: amt,
+        currencyCode: r.currencyCode,
+        currencySymbol: sym,
+        formattedAmount: `${sym}${amt.toFixed(2)}`,
+        status: 'CONFIRMED',
+        paidAt: paidDate,
+        confirmedAt: paidDate,
+        confirmedDateLabel: paidDate ? `Confirmed on ${formatDisplayDay(paidDate)}` : null,
+        paymentMethod: r.paymentMethod,
+        cardBrand: r.cardBrand,
+        cardLast4: r.cardLast4,
+      };
+    });
+
+  const pendingPayments = requests
+    .filter(isPayable)
+    .map((r) => {
+      const sym = symbols.get(r.currencyCode) ?? r.currencyCode;
+      const amt = money(r.totalAmount);
+      const title = r.title?.trim() || r.description?.trim() || TYPE_TITLES[r.type];
+      return {
+        id: r.id,
+        invoiceId: r.invoice?.id ?? null,
+        type: r.type,
+        title: `${title} Pending`,
+        rawTitle: title,
+        description: r.description,
+        amount: amt,
+        currencyCode: r.currencyCode,
+        currencySymbol: sym,
+        formattedAmount: `${sym}${amt.toFixed(2)}`,
+        status: 'PENDING',
+        dueDate: r.createdAt,
+        dueDateLabel: `Due: ${formatDisplayDay(r.createdAt)}`,
+        canPay: isPayable(r) && amt > 0 && Boolean(r.invoice),
+      };
+    });
 
   return {
     jobId: job.id,
     jobStatus: job.status,
     isPartPayment: requests.some((r) => r.type === TraderPaymentRequestType.PARTIAL),
+    hasPendingPartial,
+    flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : null,
     summary: {
       totalJobAmount,
       amountPaid,
@@ -154,6 +212,12 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
           currencySymbol,
         }
       : null,
+    confirmedPayments,
+    pendingPayments,
+    paymentProgress: {
+      confirmed: confirmedPayments,
+      pending: pendingPayments,
+    },
     paymentRequests: requests.map((r) => serialize(r, symbols.get(r.currencyCode) ?? r.currencyCode)),
   };
 };
@@ -196,6 +260,23 @@ export const markPaymentRequestPaid = async (
       data: { status: JobStatus.COMPLETED },
     });
     if (moved.count > 0) jobStatus = JobStatus.COMPLETED;
+  } else if (request.type === TraderPaymentRequestType.PARTIAL) {
+    const job = await tx.job.findUnique({
+      where: { id: request.jobId },
+      select: { status: true },
+    });
+    if (
+      job &&
+      job.status !== JobStatus.IN_PROGRESS &&
+      job.status !== JobStatus.COMPLETED &&
+      job.status !== JobStatus.CANCELLED
+    ) {
+      await tx.job.update({
+        where: { id: request.jobId },
+        data: { status: JobStatus.IN_PROGRESS },
+      });
+    }
+    jobStatus = JobStatus.IN_PROGRESS;
   }
   await tx.invoice.updateMany({
     where: { paymentRequestId: id, status: InvoiceStatus.UNPAID },

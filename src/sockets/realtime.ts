@@ -822,6 +822,21 @@ export const emitPaymentRequested = (input: {
   currencyCode: string;
   traderName?: string | null;
 }) => {
+  const at = new Date().toISOString();
+  const rooms = [roomUser(input.customerId), roomJob(input.jobId)];
+  emit(RealtimeEvents.JOB_STATUS_CHANGED, rooms, {
+    jobId: input.jobId,
+    status: input.type === 'PARTIAL' ? 'PARTIAL_PAYMENT' : 'PAYMENT_PENDING',
+    customerId: input.customerId,
+    at,
+  });
+  emitJobUpdated({
+    jobId: input.jobId,
+    customerId: input.customerId,
+    status: input.type === 'PARTIAL' ? 'PARTIAL_PAYMENT' : 'PAYMENT_PENDING',
+    at,
+  });
+
   void (async () => {
     const [jobTitle, amount] = await Promise.all([
       jobTitleOf(input.jobId),
