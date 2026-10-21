@@ -33,51 +33,7 @@ const money = (value: Prisma.Decimal | number | null | undefined): number =>
 
 const isPayable = (r: Pick<TraderPaymentRequest, 'status'>) => PAYABLE_STATUSES.includes(r.status);
 
-type RequestWithInvoice = TraderPaymentRequest & { invoice: { id: string } | null };
-
-const serialize = (r: RequestWithInvoice, currencySymbol: string) => {
-  const totalAmount = money(r.totalAmount);
-  return {
-    id: r.id,
-    /** Same display ID as the trader app installment history. */
-    transactionId: `TXN-${r.id.replace(/-/g, '').slice(-6).toUpperCase()}`,
-    /** Pay via POST /payments/intent { invoiceId }. */
-    invoiceId: r.invoice?.id ?? null,
-    jobId: r.jobId,
-    traderId: r.traderId,
-    type: r.type,
-    title: r.title?.trim() || r.description?.trim() || TYPE_TITLES[r.type],
-    description: r.description,
-    status: r.status,
-    serviceCharge: money(r.serviceCharge),
-    materialsTotal: money(r.materialsTotal),
-    siteVisitFee: money(r.siteVisitFee),
-    platformFee: money(r.platformFee),
-    vatRate: money(r.vatRate),
-    vatAmount: money(r.vatAmount),
-    totalAmount,
-    currencyCode: r.currencyCode,
-    currencySymbol,
-    formattedAmount: `${currencySymbol}${totalAmount.toFixed(2)}`,
-    paymentMethod: r.paymentMethod,
-    cardBrand: r.cardBrand,
-    cardLast4: r.cardLast4,
-    paidAt: r.paidAt,
-    confirmedAt: r.paidAt,
-    confirmedDateLabel: r.paidAt ? `Confirmed on ${formatDisplayDay(r.paidAt)}` : null,
-    createdAt: r.createdAt,
-    canPay: isPayable(r) && totalAmount > 0 && Boolean(r.invoice),
-  };
-};
-
 const round2 = (n: number) => Math.round(n * 100) / 100;
-
-const resolveInstallmentStatus = (jobAmount: number, paid: number, pending: number) => {
-  if (jobAmount > 0 && paid >= jobAmount) return 'PAID';
-  if (paid > 0) return 'PARTIALLY PAID';
-  if (pending > 0) return 'PENDING';
-  return 'UNPAID';
-};
 
 /**
  * Installment Payments screen — one call: job breakdown, totals (paid / due), every request
@@ -88,6 +44,7 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
     where: { id: jobId, customerId },
     select: {
       id: true,
+      title: true,
       status: true,
       traderId: true,
       serviceCharge: true,
@@ -187,77 +144,40 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
   const amountPaid = round2(
     requests.filter((r) => r.status === TraderPaymentRequestStatus.PAID).reduce((s, r) => s + money(r.totalAmount), 0)
   );
-  const pendingAmount = round2(requests.filter(isPayable).reduce((s, r) => s + money(r.totalAmount), 0));
   const dueBalance = round2(Math.max(0, totalJobAmount - amountPaid));
-  const hasPendingPartial = requests.some(
-    (r) => r.type === TraderPaymentRequestType.PARTIAL && isPayable(r)
-  );
 
-  const breakdownData = {
-    quotePrice: quotePrice ?? 0,
-    siteVisitFee: breakdownSiteVisitFee,
-    platformFee,
-    offerDiscount,
-    offerLabel,
-    totalPayment,
-    materialsTotal,
-    vatRate: breakdown?.vatRate ?? 0.2,
-    vatAmount: breakdown?.vatAmount ?? 0,
-    totalAmount: totalPayment,
-    serviceCharge: quotePrice ?? 0,
-    currencyCode,
-    currencySymbol,
+  const formatAmountString = (val: number, symbol: string) => {
+    if (val < 0) return `-${symbol} ${Math.abs(val)}`;
+    return `${symbol} ${val}`;
   };
 
-  const confirmedPayments = requests
-    .filter((r) => r.status === TraderPaymentRequestStatus.PAID)
-    .map((r) => {
-      const sym = symbols.get(r.currencyCode) ?? r.currencyCode;
-      const amt = money(r.totalAmount);
-      const paidDate = r.paidAt ?? r.updatedAt;
-      return {
-        id: r.id,
-        transactionId: `TXN-${r.id.replace(/-/g, '').slice(-6).toUpperCase()}`,
-        type: r.type,
-        title: r.title?.trim() || r.description?.trim() || TYPE_TITLES[r.type],
-        description: r.description,
-        amount: amt,
-        currencyCode: r.currencyCode,
-        currencySymbol: sym,
-        formattedAmount: `${sym}${amt.toFixed(2)}`,
-        status: 'CONFIRMED',
-        paidAt: paidDate,
-        confirmedAt: paidDate,
-        confirmedDateLabel: paidDate ? `Confirmed on ${formatDisplayDay(paidDate)}` : null,
-        paymentMethod: r.paymentMethod,
-        cardBrand: r.cardBrand,
-        cardLast4: r.cardLast4,
-      };
-    });
-
-  const pendingPayments = requests
-    .filter(isPayable)
-    .map((r) => {
-      const sym = symbols.get(r.currencyCode) ?? r.currencyCode;
-      const amt = money(r.totalAmount);
-      const title = r.title?.trim() || r.description?.trim() || TYPE_TITLES[r.type];
-      return {
-        id: r.id,
-        invoiceId: r.invoice?.id ?? null,
-        type: r.type,
-        title: `${title} Pending`,
-        rawTitle: title,
-        description: r.description,
-        amount: amt,
-        currencyCode: r.currencyCode,
-        currencySymbol: sym,
-        formattedAmount: `${sym}${amt.toFixed(2)}`,
-        status: 'PENDING',
-        dueDate: r.createdAt,
-        dueDateLabel: `Due: ${formatDisplayDay(r.createdAt)}`,
-        canPay: isPayable(r) && amt > 0 && Boolean(r.invoice),
-      };
-    });
+  const breakdownList: Array<{ title: string; amount: string | number; label?: string }> = [
+    {
+      title: 'Quote Price',
+      amount: `${currencySymbol} ${quotePrice ?? 0}`,
+    },
+    {
+      title: 'Site Visit Fee',
+      amount: breakdownSiteVisitFee !== 0
+        ? formatAmountString(breakdownSiteVisitFee, currencySymbol)
+        : `${currencySymbol} 0`,
+    },
+    {
+      title: 'Platform Fee',
+      amount: `${currencySymbol} ${platformFee}`,
+    },
+    {
+      title: 'Offer Discount',
+      amount: offerDiscount !== 0
+        ? formatAmountString(offerDiscount, currencySymbol)
+        : `${currencySymbol} 0`,
+      ...(offerLabel ? { label: offerLabel } : {}),
+    },
+    {
+      title: 'Total Payment',
+      amount: totalPayment,
+    },
+  ];
 
   // paymentProgress array as specified by Dipen
   const paidProgress = requests
@@ -295,7 +215,7 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
       const titleWithPending = rawTitle.toLowerCase().endsWith('pending') ? rawTitle : `${rawTitle} Pending`;
       return {
         title: titleWithPending,
-        description: r.description?.trim() || 'Payment pending',
+        description: r.description?.trim() || 'Advance payment is pending.',
         isCompleted: false,
         formattedAmount: `${sym}${money(r.totalAmount).toFixed(2)}`,
         dueDate: r.createdAt.toISOString(),
@@ -329,6 +249,8 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
   }
 
   return {
+    jobId: job.id,
+    title: job.title,
     invoiceId,
     jobCategory,
     totalJobAmount,
@@ -336,26 +258,9 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
     dueBalance,
     currencyCode,
     currencySymbol,
-    breakdown: breakdownData,
+    breakdown: breakdownList,
     paymentProgress,
     transactionHistory,
-    jobId: job.id,
-    jobStatus: job.status,
-    isPartPayment: requests.some((r) => r.type === TraderPaymentRequestType.PARTIAL),
-    hasPendingPartial,
-    flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : null,
-    summary: {
-      totalJobAmount,
-      amountPaid,
-      dueBalance,
-      pendingAmount,
-      paymentStatus: resolveInstallmentStatus(totalJobAmount, amountPaid, pendingAmount),
-      currencyCode,
-      currencySymbol,
-    },
-    confirmedPayments,
-    pendingPayments,
-    paymentRequests: requests.map((r) => serialize(r, symbols.get(r.currencyCode) ?? r.currencyCode)),
   };
 };
 

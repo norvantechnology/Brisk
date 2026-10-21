@@ -46,24 +46,18 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  * @swagger
  * /jobs/{id}/payment-requests:
  *   get:
- *     summary: Trader payment requests for my job (final payment, installments, site visit fee)
+ *     summary: Retrieve installment payment details and payment progress for a customer's job
  *     tags: ['Customer / Checkout']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Installment Payments screen + Installment Payment History — single API.**
- *       - `breakdown` — job amount the trader bills: `quotePrice` + `materialsTotal` + `siteVisitFee` +
- *         `platformFee` + `vatAmount` = `totalAmount` (same calculation as the trader app). null before a trader is booked.
- *       - `summary` — `totalJobAmount`, `amountPaid` (sum of PAID requests), `dueBalance` (total − paid),
- *         `pendingAmount` (requests waiting for payment), `paymentStatus` (UNPAID / PENDING / PARTIALLY PAID / PAID).
- *       - `paymentRequests[]` — all non-cancelled requests, newest first:
- *         **Payment Progress** = all rows (`status` PAID = done, SENT = pending);
- *         **Pay Now** = row with `canPay: true` → `GET /invoices/{invoiceId}` + `POST /payments/intent { invoiceId }`
- *         (requests are auto-accepted: every sent request already has its invoice);
- *         **Installment Payments History** screen = all rows (full list, no limit; PAID + pending `SENT`);
- *         the Installment Payments screen preview shows the latest 3 on the app side (`paymentRequests.slice(0, 3)`).
- *         Row fields: `title`, `totalAmount`, `status`, `paidAt`, `transactionId`, `cardBrand`, `cardLast4`.
- *       - `isPartPayment` — true when the trader sent any installment (PARTIAL) request.
+ *       **Customer Multiple Payment Flow – Installment Payments screen.**
+ *       - `breakdown[]` — Job billing breakdown items (`Quote Price`, `Site Visit Fee`, `Platform Fee`, `Offer Discount`, `Total Payment`).
+ *       - `paymentProgress[]` — Progress timeline items:
+ *         - Completed items (`isCompleted: true`, `description: Confirmed on...`).
+ *         - Pending installment (`isCompleted: false`, `formattedAmount`, `dueDate`).
+ *       - `transactionHistory[]` — Completed transactions / receipts for the job.
+ *       - `invoiceId` — Invoice ID to pass to `POST /payments/intent` when tapping "Pay Now".
  *     parameters:
  *       - in: path
  *         name: id
@@ -78,7 +72,9 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *               success: true
  *               message: Installment payment details retrieved successfully.
  *               data:
- *                 invoiceId: 9f1e2d3c-0000-4000-8000-000000000003
+ *                 jobId: e324db43-e115-42d4-bb30-88cbeed82e34
+ *                 title: TEst Cat
+ *                 invoiceId: inv_123456
  *                 jobCategory: Solar Install
  *                 totalJobAmount: 931.5
  *                 amountPaid: 511.5
@@ -86,20 +82,25 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                 currencyCode: EUR
  *                 currencySymbol: €
  *                 breakdown:
- *                   quotePrice: 1000
- *                   siteVisitFee: -30
- *                   platformFee: 20
- *                   offerDiscount: -48.5
- *                   offerLabel: Offer Applied (5% OFF)
- *                   totalPayment: 931.5
+ *                   - title: Quote Price
+ *                     amount: "€ 1000"
+ *                   - title: Site Visit Fee
+ *                     amount: "€ 0"
+ *                   - title: Platform Fee
+ *                     amount: "€ 20"
+ *                   - title: Offer Discount
+ *                     amount: "-€ 48.5"
+ *                     label: Offer Applied (5% OFF)
+ *                   - title: Total Payment
+ *                     amount: 931.5
  *                 paymentProgress:
  *                   - title: Site Visit Fee
  *                     description: Confirmed on July 15, 2026
  *                     isCompleted: true
  *                     formattedAmount: null
  *                     dueDate: null
- *                   - title: advance amount pay Pending
- *                     description: i have a pay with advance amount
+ *                   - title: Advance Payment Pending
+ *                     description: Advance payment is pending.
  *                     isCompleted: false
  *                     formattedAmount: €100.00
  *                     dueDate: '2026-10-21T07:21:24.845Z'
@@ -108,46 +109,6 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                     title: Initial Deposit
  *                     date: '2026-10-21T07:21:24.845Z'
  *                     formattedAmount: €100.00
- *                 jobId: 89d85512-3ff7-4fc7-a44a-2e594130d71c
- *                 jobStatus: IN_PROGRESS
- *                 isPartPayment: true
- *                 hasPendingPartial: true
- *                 flowType: INSTALLMENT_PAYMENT
- *                 paymentRequests:
- *                   - id: 3c4d5e6f-0000-4000-8000-000000000003
- *                     invoiceId: 9f1e2d3c-0000-4000-8000-000000000003
- *                     type: PARTIAL
- *                     title: Final Installment
- *                     status: SENT
- *                     totalAmount: 420
- *                     formattedAmount: €420.00
- *                     paidAt: null
- *                     createdAt: '2026-07-20T10:00:00.000Z'
- *                     canPay: true
- *                   - id: 2b3c4d5e-0000-4000-8000-000000000002
- *                     invoiceId: 8e0d1c2b-0000-4000-8000-000000000002
- *                     type: PARTIAL
- *                     title: Initial Deposit
- *                     transactionId: TXN-82736A
- *                     status: PAID
- *                     totalAmount: 481.2
- *                     formattedAmount: €481.20
- *                     paymentMethod: CARD
- *                     cardBrand: visa
- *                     cardLast4: '4242'
- *                     paidAt: '2026-07-14T11:20:00.000Z'
- *                     createdAt: '2026-07-10T09:00:00.000Z'
- *                     canPay: false
- *                   - id: 1a2b3c4d-0000-4000-8000-000000000001
- *                     invoiceId: 7d9c0b1a-0000-4000-8000-000000000001
- *                     type: SITE_VISIT_FEE
- *                     title: Site Visit Fee
- *                     status: PAID
- *                     totalAmount: 36
- *                     formattedAmount: €36.00
- *                     paidAt: '2026-07-05T15:00:00.000Z'
- *                     createdAt: '2026-07-05T12:00:00.000Z'
- *                     canPay: false
  *       404:
  *         description: Job not found for this customer.
  */
