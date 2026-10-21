@@ -45,7 +45,7 @@ const serialize = (r: RequestWithInvoice, currencySymbol: string) => {
     jobId: r.jobId,
     traderId: r.traderId,
     type: r.type,
-    title: r.description?.trim() || TYPE_TITLES[r.type],
+    title: r.title?.trim() || r.description?.trim() || TYPE_TITLES[r.type],
     description: r.description,
     status: r.status,
     serviceCharge: money(r.serviceCharge),

@@ -1199,6 +1199,8 @@ model TraderPaymentRequest {
   customerId      String                     @map("customer_id") @db.Uuid
   type            TraderPaymentRequestType   @default(FULL_JOB)
   status          TraderPaymentRequestStatus @default(SENT)
+  /// Title for PARTIAL installment requests (Payment Request screen).
+  title           String?                    @db.VarChar(255)
   /// Installment / milestone label for PARTIAL requests (Payment Request screen).
   description     String?                    @db.Text
   serviceCharge   Decimal                    @default(0) @map("service_charge") @db.Decimal(10, 2)

@@ -148,6 +148,12 @@ export const myJobPartialPaymentBodySchema = z.object({
   params: jobIdParam,
   body: z.object({
     amount: z.number().positive('Installment amount must be greater than 0.'),
+    title: z
+      .string()
+      .trim()
+      .min(1, 'Title for this installment is required.')
+      .max(255)
+      .optional(),
     description: z
       .string()
       .trim()

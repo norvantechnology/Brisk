@@ -3331,6 +3331,7 @@ const buildInstallmentPaymentList = async (userId: string, jobId: string) => {
     const txnSuffix = r.id.replace(/-/g, '').slice(-6).toUpperCase();
     const transactionId = `TXN-${txnSuffix}`;
     const title =
+      r.title?.trim() ||
       r.description?.trim() ||
       (index === 0
         ? 'Initial Deposit'
@@ -3391,6 +3392,7 @@ export const requestPartialPayment = async (
   jobId: string,
   input: {
     amount: number;
+    title?: string;
     description: string;
     photoUrl?: string;
     photoUrls?: string[];
@@ -3419,6 +3421,7 @@ export const requestPartialPayment = async (
     throw new BadRequestError('Installment amount must be greater than 0.');
   }
 
+  const title = input.title?.trim() || null;
   const description = input.description.trim();
   if (!description) {
     throw new BadRequestError('Description for this installment is required.');
@@ -3479,6 +3482,7 @@ export const requestPartialPayment = async (
       customerId: job.customerId,
       type: TraderPaymentRequestType.PARTIAL,
       status: TraderPaymentRequestStatus.SENT,
+      title,
       description,
       serviceCharge: amount,
       materialsTotal: 0,
@@ -3528,6 +3532,7 @@ export const requestPartialPayment = async (
     currencyCode: currency.currencyCode,
     currencySymbol: currency.currencySymbol,
     installment: {
+      title: title || description,
       amount,
       amountLabel: formatAmountLabel(amount),
       description,

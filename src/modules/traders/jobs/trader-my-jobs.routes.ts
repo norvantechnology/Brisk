@@ -1118,7 +1118,7 @@ router.get(
  *       Separate from full-job `POST .../request-payment`.
  *
  *       Allowed while job is in progress (arrived, not finished).
- *       Body: `amount` (installment) + `description`.
+ *       Body: `amount` (installment), `title`, and `description`.
  *       Optional: `photoUrls` / `photoUrl` — proof images (upload via `POST /uploads` first).
  *       Job stays `IN_PROGRESS` (does not move to PAYMENT_PENDING).
  *     parameters:
@@ -1132,9 +1132,12 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [amount, description]
+ *             required: [amount, title, description]
  *             properties:
  *               amount: { type: number, example: 420 }
+ *               title:
+ *                 type: string
+ *                 example: First Installment
  *               description:
  *                 type: string
  *                 example: Electrical wiring and mounting hardware completed.
@@ -1144,9 +1147,8 @@ router.get(
  *                 items: { type: string, format: uri }
  *           example:
  *             amount: 420
+ *             title: First Installment
  *             description: Electrical wiring and mounting hardware completed.
- *             photoUrls:
- *               - https://api.brisk.ie/uploads/files/job_proof/example.jpg
  *     responses:
  *       200:
  *         description: Partial payment request sent
@@ -1161,6 +1163,7 @@ router.get(
  *                 paymentStatus: PENDING
  *                 installment:
  *                   amount: 420
+ *                   title: First Installment
  *                   description: Electrical wiring and mounting hardware completed.
  *                   netDue: 420
  *                 jobAmount: 931.5
