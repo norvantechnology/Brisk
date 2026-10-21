@@ -66,7 +66,45 @@ const buildJobWhere = (filters: AdminJobFilters, includeStatus = true): Prisma.J
   if (filters.customerId) and.push({ customerId: filters.customerId });
   if (filters.traderId) and.push({ traderId: filters.traderId });
   if (filters.categoryId) and.push({ categoryId: filters.categoryId });
-  if (includeStatus && filters.status?.length) and.push({ status: { in: filters.status } });
+  if (includeStatus && filters.status?.length) {
+    const hasQuoted = filters.status.includes(JobStatus.QUOTED);
+    const hasPublished = filters.status.includes(JobStatus.PUBLISHED);
+    const otherStatuses = filters.status.filter(
+      (s) => s !== JobStatus.QUOTED && s !== JobStatus.PUBLISHED
+    );
+
+    const statusConditions: Prisma.JobWhereInput[] = [];
+
+    if (otherStatuses.length) {
+      statusConditions.push({ status: { in: otherStatuses } });
+    }
+
+    if (hasQuoted && hasPublished) {
+      statusConditions.push({
+        status: { in: [JobStatus.PUBLISHED, JobStatus.QUOTED] },
+      });
+    } else if (hasQuoted) {
+      statusConditions.push(
+        { status: JobStatus.QUOTED },
+        {
+          status: JobStatus.PUBLISHED,
+          traderId: null,
+          quotes: { some: {} },
+        }
+      );
+    } else if (hasPublished) {
+      statusConditions.push({
+        status: JobStatus.PUBLISHED,
+        quotes: { none: {} },
+      });
+    }
+
+    if (statusConditions.length === 1) {
+      and.push(statusConditions[0]);
+    } else if (statusConditions.length > 1) {
+      and.push({ OR: statusConditions });
+    }
+  }
 
   if (filters.archived === 'true') and.push({ archivedAt: { not: null } });
   else if (filters.archived === 'false' || (includeStatus && filters.archived !== 'all')) {
@@ -144,12 +182,38 @@ const buildOrderBy = (query: AdminJobsListQuery): Prisma.JobOrderByWithRelationI
   );
 
 export const getAdminJobsStats = async (filters: AdminJobFilters) => {
-  const grouped = await prisma.job.groupBy({
-    by: ['status'],
-    where: buildJobWhere(filters, false),
-    _count: { _all: true },
-  });
-  const counts = new Map(grouped.map((g) => [g.status, g._count._all]));
+  const baseWhere = buildJobWhere(filters, false);
+  const [grouped, quotedCount] = await Promise.all([
+    prisma.job.groupBy({
+      by: ['status'],
+      where: baseWhere,
+      _count: { _all: true },
+    }),
+    prisma.job.count({
+      where: {
+        AND: [
+          baseWhere,
+          {
+            OR: [
+              { status: JobStatus.QUOTED },
+              { status: JobStatus.PUBLISHED, traderId: null, quotes: { some: {} } },
+            ],
+          },
+        ],
+      },
+    }),
+  ]);
+
+  const rawCounts = new Map(grouped.map((g) => [g.status, g._count._all]));
+  const explicitQuoted = rawCounts.get(JobStatus.QUOTED) ?? 0;
+  const rawPublished = rawCounts.get(JobStatus.PUBLISHED) ?? 0;
+  const publishedWithQuotes = Math.max(0, quotedCount - explicitQuoted);
+  const publishedAwaitingTrader = Math.max(0, rawPublished - publishedWithQuotes);
+
+  const counts = new Map(rawCounts);
+  counts.set(JobStatus.QUOTED, quotedCount);
+  counts.set(JobStatus.PUBLISHED, publishedAwaitingTrader);
+
   const count = (statuses: JobStatus[]) => statuses.reduce((sum, s) => sum + (counts.get(s) ?? 0), 0);
 
   return {
@@ -332,6 +396,10 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
     jobs: rows.map((job) => {
       const invoice = job.booking?.invoice ?? null;
       const estimatedAmount = money(job.serviceCharge);
+      const isQuoted =
+        job.status === JobStatus.QUOTED ||
+        (job.status === JobStatus.PUBLISHED && job._count.quotes > 0 && !job.traderId);
+      const displayStatus = isQuoted ? JobStatus.QUOTED : job.status;
       const traderPayout = serializeJobPayoutBalance(
         buildJobPayoutBalance({
           id: job.id,
@@ -348,8 +416,8 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
         id: job.id,
         jobRef: job.jobRef,
         title: job.title,
-        status: job.status,
-        statusLabel: ADMIN_JOB_STATUS_LABELS[job.status],
+        status: displayStatus,
+        statusLabel: ADMIN_JOB_STATUS_LABELS[displayStatus] ?? displayStatus,
         archivedAt: job.archivedAt,
         category: job.category,
         subcategory: job.subcategory,
@@ -400,7 +468,11 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
 
 export const getAdminJob = async (jobId: string) => {
   const job = await getAdminJobDetail({ id: jobId });
-  return { ...job, statusLabel: ADMIN_JOB_STATUS_LABELS[job.status] };
+  const isQuoted =
+    job.status === JobStatus.QUOTED ||
+    (job.status === JobStatus.PUBLISHED && job.quotes.length > 0 && !job.trader);
+  const displayStatus = isQuoted ? JobStatus.QUOTED : job.status;
+  return { ...job, status: displayStatus, statusLabel: ADMIN_JOB_STATUS_LABELS[displayStatus] ?? displayStatus };
 };
 
 type AdminActor = { id: string; label: string };
