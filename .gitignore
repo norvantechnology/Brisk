@@ -42,3 +42,5 @@ brisk-trader-web/
 # Local one-off scripts
 *.tmp.ts
 *.tmp.js
+
+PROJECT_OVERVIEW.md
