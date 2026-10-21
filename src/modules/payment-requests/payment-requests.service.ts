@@ -151,7 +151,7 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
     return `${symbol} ${val}`;
   };
 
-  const breakdownList: Array<{ title: string; amount: string | number; label?: string }> = [
+  const breakdownList: Array<{ title: string; amount: string; label?: string }> = [
     {
       title: 'Quote Price',
       amount: `${currencySymbol} ${quotePrice ?? 0}`,
@@ -172,10 +172,6 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
         ? formatAmountString(offerDiscount, currencySymbol)
         : `${currencySymbol} 0`,
       ...(offerLabel ? { label: offerLabel } : {}),
-    },
-    {
-      title: 'Total Payment',
-      amount: totalPayment,
     },
   ];
 

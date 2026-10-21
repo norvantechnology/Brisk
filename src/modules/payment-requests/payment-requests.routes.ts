@@ -52,7 +52,7 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *       - bearerAuth: []
  *     description: |
  *       **Customer Multiple Payment Flow – Installment Payments screen.**
- *       - `breakdown[]` — Job billing breakdown items (`Quote Price`, `Site Visit Fee`, `Platform Fee`, `Offer Discount`, `Total Payment`).
+ *       - `breakdown[]` — Job billing breakdown items (`Quote Price`, `Site Visit Fee`, `Platform Fee`, `Offer Discount`). Total is handled via top-level `totalJobAmount`.
  *       - `paymentProgress[]` — Progress timeline items:
  *         - Completed items (`isCompleted: true`, `description: Confirmed on...`).
  *         - Pending installment (`isCompleted: false`, `formattedAmount`, `dueDate`).
@@ -91,8 +91,6 @@ const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
  *                   - title: Offer Discount
  *                     amount: "-€ 48.5"
  *                     label: Offer Applied (5% OFF)
- *                   - title: Total Payment
- *                     amount: 931.5
  *                 paymentProgress:
  *                   - title: Site Visit Fee
  *                     description: Confirmed on July 15, 2026
