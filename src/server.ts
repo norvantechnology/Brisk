@@ -7,11 +7,11 @@ import { ensureUploadRoot } from './modules/uploads/storage/local.storage';
 import { initSocketServer } from './sockets/socket-server';
 import { startDocumentExpiryReminderScheduler } from './services/document-expiry-reminder.service';
 import { startPlatformSettingsSync } from './modules/settings/platform-settings.service';
+import { seedAdmin } from './database/seeders/admin.seed';
 
 const startServer = async () => {
   await connectDatabase();
   try {
-    const { seedAdmin } = await import('./database/seeders/admin.seed');
     await seedAdmin(prisma);
   } catch (err) {
     logger.warn('Initial admin seed check skipped/failed', { err });
