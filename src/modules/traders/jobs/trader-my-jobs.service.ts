@@ -3448,19 +3448,26 @@ export const requestPartialPayment = async (
       Number.isInteger(round2(value)) ? String(round2(value)) : round2(value).toFixed(2);
     return `${currency.currencySymbol} ${amountDisplay}`;
   };
+  const customerName = job.customer.fullName || 'Customer';
 
   return {
     paymentRequestId: paymentRequest.id,
     invoiceId: paymentRequest.invoiceId,
-    id: job.id,
     jobRef: job.jobRef,
+    serviceCharge: breakdown.serviceCharge,
+    materialsTotal: breakdown.materialsTotal,
+    siteVisitFee: breakdown.siteVisitFee,
+    platformFee: breakdown.platformFee,
+    vatRate: breakdown.vatRate,
+    vatAmount: breakdown.vatAmount,
+    totalAmount: breakdown.totalAmount,
+    status: 'SENT',
+    customerName,
+    id: job.id,
     title: job.title,
-    status: job.status,
     paymentStatus,
     isPartPayment: true,
     isPartialJob: true,
-    // Stay on Job Proof screen — do not use PARTIAL_PAYMENT_PENDING for navigation
-    // Do NOT call GET .../completed — job remains IN_PROGRESS until fully finished.
     flowStatus,
     statusLabel: proofCount > 0 ? 'Ready to Finish' : 'Work Proof Pending',
     proofPhotosAdded: photoUrls.length,
@@ -3496,6 +3503,7 @@ export const requestPartialPayment = async (
 export const requestPayment = async (userId: string, jobId: string) => {
   const trader = await getTraderContext(userId);
   const job = await assertMyJob(trader.id, jobId);
+  const customerName = job.customer.fullName || 'Customer';
 
   // Idempotent: if FULL_JOB request already exists, return it (finish no longer auto-creates).
   const existing = job.paymentRequests.find(
@@ -3518,6 +3526,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
       ...computePaymentBreakdown(job),
       totalAmount: money(existing.totalAmount),
       status: existing.status,
+      customerName,
     };
   }
   if (job.status !== JobStatus.COMPLETED && !job.booking?.finishedAt) {
@@ -3543,6 +3552,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
     jobRef: job.jobRef,
     ...breakdown,
     status: 'SENT',
+    customerName,
   };
 };
 

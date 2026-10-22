@@ -1044,6 +1044,24 @@ router.get(
  *         description: |
  *           Creates the FULL_JOB payment request + invoice (customer then sees Payment Pending / Completed tab).
  *           Idempotent if a non-cancelled FULL_JOB request already exists.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Payment request sent successfully.
+ *               data:
+ *                 paymentRequestId: 8219c2d6-063f-41a7-95fc-24e68b26bc85
+ *                 invoiceId: 559955d3-bf76-441e-a837-abae8e5dd0cd
+ *                 jobRef: JOB-E1CF
+ *                 serviceCharge: 1500
+ *                 materialsTotal: 500
+ *                 siteVisitFee: 30
+ *                 platformFee: 10
+ *                 vatRate: 0.2
+ *                 vatAmount: 408
+ *                 totalAmount: 2448
+ *                 status: SENT
+ *                 customerName: John Doe
  *       409:
  *         description: The full-job payment was already received
  */
@@ -1160,8 +1178,18 @@ router.get(
  *               success: true
  *               message: Partial payment request sent successfully.
  *               data:
- *                 paymentRequestId: uuid
- *                 invoiceId: uuid
+ *                 paymentRequestId: 8219c2d6-063f-41a7-95fc-24e68b26bc85
+ *                 invoiceId: 559955d3-bf76-441e-a837-abae8e5dd0cd
+ *                 jobRef: JOB-E1CF
+ *                 serviceCharge: 1500
+ *                 materialsTotal: 500
+ *                 siteVisitFee: 30
+ *                 platformFee: 10
+ *                 vatRate: 0.2
+ *                 vatAmount: 408
+ *                 totalAmount: 2448
+ *                 status: SENT
+ *                 customerName: John Doe
  *                 paymentStatus: PENDING
  *                 installment:
  *                   amount: 420
