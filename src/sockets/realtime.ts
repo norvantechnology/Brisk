@@ -872,3 +872,27 @@ export const realtimeRooms = {
   roomTradersDiscover,
   roomTraderCategory,
 };
+
+/**
+ * Emits auth:force_logout to all connected sockets in user:${userId} and forcefully disconnects them.
+ * Used for single-device login enforcement when logging in on another device or logging out.
+ */
+export const notifySessionTerminated = (
+  userId: string,
+  reason: string = 'LOGGED_IN_ON_ANOTHER_DEVICE'
+) => {
+  if (!io) return;
+  try {
+    const userRoom = roomUser(userId);
+    io.to(userRoom).emit(RealtimeEvents.AUTH_FORCE_LOGOUT, {
+      reason,
+      message: 'You have been logged out because your account was logged in on another device.',
+      at: new Date().toISOString(),
+    });
+    // Forcefully disconnect all active sockets in that room
+    io.in(userRoom).disconnectSockets(true);
+  } catch (err) {
+    logger.warn('Failed to emit force logout socket event', { userId, err });
+  }
+};
+

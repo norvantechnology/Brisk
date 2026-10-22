@@ -111,7 +111,7 @@ export const logout = async (
   try {
     const deviceToken = typeof req.body?.deviceToken === 'string' ? req.body.deviceToken.trim() : '';
     if (deviceToken) await removeDeviceToken(req.user!.id, deviceToken);
-    const result = await authService.logoutUser();
+    const result = await authService.logoutUser(req.user?.id);
     sendResponse({
       res,
       statusCode: 200,

@@ -18,6 +18,7 @@ export const RealtimeEvents = {
   REFUND_UPDATED: 'refund:updated',
   INVOICE_UPDATED: 'invoice:updated',
   NOTIFICATION_NEW: 'notification:new',
+  AUTH_FORCE_LOGOUT: 'auth:force_logout',
 } as const;
 
 export type RealtimeEventName = (typeof RealtimeEvents)[keyof typeof RealtimeEvents];

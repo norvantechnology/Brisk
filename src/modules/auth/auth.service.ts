@@ -24,6 +24,8 @@ import {
 import { APP_NEXT_STEP, resolveSessionExtras } from '../navigation/app-next-step';
 import { buildTokenExpiry } from '../../utils/token-expiry';
 import { logger } from '../../utils/logger';
+import { removeAllUserDeviceTokens } from '../../services/push.service';
+import { notifySessionTerminated } from '../../sockets/realtime';
 import type {
   RegisterInput,
   VerifyOtpInput,
@@ -139,15 +141,30 @@ const buildSessionPayload = async (
     tokenVersion?: number;
   }
 ) => {
-  const tokens = createAuthTokens(user);
+  // Single-device login enforcement:
+  // 1) Terminate and disconnect any previous socket connections for this user
+  notifySessionTerminated(user.id, 'LOGGED_IN_ON_ANOTHER_DEVICE');
+
+  // 2) Delete previous device push tokens so previous devices stop receiving push notifications
+  await removeAllUserDeviceTokens(user.id);
+
+  // 3) Increment tokenVersion in the database so all previous JWT access & refresh tokens are invalidated
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { tokenVersion: { increment: 1 } },
+    select: { tokenVersion: true },
+  });
+
+  const activeUser = { ...user, tokenVersion: updated.tokenVersion };
+  const tokens = createAuthTokens(activeUser);
   const [{ nextStep, traderAccountActive, onboarding }, traderType] = await Promise.all([
-    resolveSessionExtras(user),
-    resolveTraderType(user.id, user.role),
+    resolveSessionExtras(activeUser),
+    resolveTraderType(activeUser.id, activeUser.role),
   ]);
 
   return {
     requiresOtpVerification: false as const,
-    user: toPublicUser(user, undefined, traderType),
+    user: toPublicUser(activeUser, undefined, traderType),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     ...buildTokenExpiry(tokens.accessToken, tokens.refreshToken),
@@ -761,9 +778,21 @@ export const getAuthenticatedSession = async (userId: string) => {
   return { user, nextStep, traderAccountActive, onboarding };
 };
 
-export const logoutUser = async () => ({
-  message: 'Logged out successfully.',
-});
+export const logoutUser = async (userId?: string) => {
+  if (userId) {
+    notifySessionTerminated(userId, 'USER_LOGGED_OUT');
+    await Promise.all([
+      prisma.user.update({
+        where: { id: userId },
+        data: { tokenVersion: { increment: 1 } },
+      }),
+      removeAllUserDeviceTokens(userId),
+    ]);
+  }
+  return {
+    message: 'Logged out successfully.',
+  };
+};
 
 const RESET_TOKEN_EXPIRES_IN = '15m';
 

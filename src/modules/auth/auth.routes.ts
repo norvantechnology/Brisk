@@ -139,7 +139,9 @@ router.post(
  *               emailCode: { type: string, example: "482913", description: Dynamic 6-digit code from the verification email }
  *     responses:
  *       200:
- *         description: Verified. Returns user profile plus access and refresh tokens.
+ *         description: |
+ *           Verified. Returns user profile plus access and refresh tokens.
+ *           Enforces single-device login: terminates previous sessions on other devices and clears their push tokens.
  *       400:
  *         description: Invalid or expired OTP, or already verified.
  *       404:
@@ -177,6 +179,10 @@ router.post('/resend-otp', validate(resendOtpSchema), authController.resendOtp);
  *   post:
  *     summary: Authenticate Customer or Trader via email and password
  *     tags: ['Mobile / Auth']
+ *     description: |
+ *       Authenticates the user and returns access + refresh tokens.
+ *       **Single-device login:** Logging in terminates any session on another device (invalidates older JWTs with
+ *       `SESSION_INVALIDATED`, emits `auth:force_logout` on socket, and stops push notifications on old devices).
  *     requestBody:
  *       required: true
  *       content:
@@ -463,7 +469,7 @@ router.post('/resend-email-otp', validate(resendEmailOtpSchema), authController.
  *                 refreshTokenExpiresAt: '2026-10-05T10:00:00.000Z'
  *       401:
  *         description: |
- *           Invalid, expired, or revoked token. After admin approves a trader,
+ *           Invalid, expired, or revoked token. If the user logged in on another device or was approved by admin,
  *           existing tokens return `data.code = SESSION_INVALIDATED` — send the user to login.
  */
 router.post('/refresh', validate(refreshSchema), authController.refresh);
@@ -495,7 +501,7 @@ router.get('/me', authMiddleware, authController.getMe);
  * @swagger
  * /auth/logout:
  *   post:
- *     summary: Log out the current Customer or Trader session (client should discard tokens)
+ *     summary: Log out the current Customer or Trader session (invalidates tokens and device notifications)
  *     tags: ['Mobile / Auth']
  *     security:
  *       - bearerAuth: []
@@ -509,7 +515,7 @@ router.get('/me', authMiddleware, authController.getMe);
  *               deviceToken: { type: string, description: 'Optional FCM token of this device — stops push notifications on it.' }
  *     responses:
  *       200:
- *         description: Logged out successfully.
+ *         description: Logged out successfully. Access & refresh tokens revoked on server, device tokens removed.
  *       401:
  *         description: Missing or invalid access token.
  */

@@ -146,15 +146,29 @@ export const sendTestPush = async (userId: string) => {
   return { pushEnabled: true, devicesCount: devices.length, sentCount: result.successCount, results };
 };
 
-export const registerDeviceToken = async (userId: string, token: string, platform: string) =>
-  prisma.deviceToken.upsert({
+export const registerDeviceToken = async (userId: string, token: string, platform: string) => {
+  // Ensure single device token per user for push notifications
+  await prisma.deviceToken.deleteMany({
+    where: {
+      userId,
+      token: { not: token },
+    },
+  });
+
+  return prisma.deviceToken.upsert({
     where: { token },
     create: { userId, token, platform },
     update: { userId, platform },
     select: { token: true, platform: true, updatedAt: true },
   });
+};
 
 export const removeDeviceToken = async (userId: string, token: string) => {
   const { count } = await prisma.deviceToken.deleteMany({ where: { userId, token } });
   return { removed: count > 0 };
+};
+
+export const removeAllUserDeviceTokens = async (userId: string) => {
+  const { count } = await prisma.deviceToken.deleteMany({ where: { userId } });
+  return { removed: count > 0, count };
 };
