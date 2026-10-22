@@ -234,6 +234,7 @@ router.post(
  *
  *       Returns receipt: `title`, `message` (site-visit copy when purpose=SITE_VISIT_FEE),
  *       `receiptSummary` (transactionId, date, amountPaid), timeline Paid→Confirmed→Service,
+ *       `canRate` (boolean: false for partial/installment payments; becomes true only after the job is fully completed and final payment made),
  *       `actions.viewJob` → GET /jobs/{jobId}.
  *
  *       Idempotent if already COMPLETED. No body — the server verifies the PaymentIntent with

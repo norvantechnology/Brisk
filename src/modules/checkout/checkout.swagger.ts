@@ -281,6 +281,12 @@
  *         billingType: { $ref: '#/components/schemas/BillingType' }
  *         companyName: { type: string, nullable: true }
  *         purpose: { type: string, enum: [SERVICE, SITE_VISIT_FEE], description: Mobile picks success copy from purpose }
+ *         canRate:
+ *           type: boolean
+ *           description: True only after the job is fully completed, final payment has been made, and unrated. False during partial/installment payments.
+ *         openRatingSheet:
+ *           type: boolean
+ *           description: True when rating bottom sheet should open (alias of canRate).
  *         timeline:
  *           type: array
  *           description: Keys PAID / CONFIRMED / SERVICE — app owns step labels

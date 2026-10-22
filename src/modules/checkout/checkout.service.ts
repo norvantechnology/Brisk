@@ -510,17 +510,28 @@ const buildReceipt = async (paymentId: string, userId: string) => {
   const isPaid = payment.status === PaymentStatus.COMPLETED;
   const purpose = invoicePurposeOf(invoice);
 
-  /** Final payment success → open rating bottom sheet when job is completed and unrated. */
-  let openRatingSheet = false;
-  if (isPaid && trader && job.status === JobStatus.COMPLETED) {
-    const bookingId = booking?.id;
-    const hasReview = bookingId
-      ? await prisma.ratingReview.findUnique({ where: { bookingId }, select: { id: true } })
-      : await prisma.ratingReview.findFirst({
-          where: { booking: { jobId: job.id } },
-          select: { id: true },
-        });
-    openRatingSheet = !hasReview;
+  const isPartialPayment = invoice.paymentRequest?.type === TraderPaymentRequestType.PARTIAL;
+
+  /** Final payment success → allow rating trader when full job is completed, final payment made, and unrated. */
+  let canRate = false;
+  if (isPaid && trader && job.status === JobStatus.COMPLETED && !isPartialPayment) {
+    const hasPendingRequests = await prisma.traderPaymentRequest.count({
+      where: {
+        jobId: job.id,
+        status: { in: [TraderPaymentRequestStatus.SENT, TraderPaymentRequestStatus.PENDING] },
+      },
+    });
+
+    if (hasPendingRequests === 0) {
+      const bookingId = booking?.id;
+      const hasReview = bookingId
+        ? await prisma.ratingReview.findUnique({ where: { bookingId }, select: { id: true } })
+        : await prisma.ratingReview.findFirst({
+            where: { booking: { jobId: job.id } },
+            select: { id: true },
+          });
+      canRate = !hasReview;
+    }
   }
 
   return {
@@ -539,8 +550,10 @@ const buildReceipt = async (paymentId: string, userId: string) => {
     billingType: payment.billingType,
     companyName: payment.companyName,
     purpose,
+    /** true → user can rate trader; false during partial payments until full completion & final payment */
+    canRate,
     /** true → open rating bottom sheet; submit POST /jobs/{jobId}/review */
-    openRatingSheet,
+    openRatingSheet: canRate,
     jobId: job.id,
     /** Success screen steps — keys only; labels owned by mobile. */
     timeline: [
@@ -562,7 +575,7 @@ const buildReceipt = async (paymentId: string, userId: string) => {
         method: 'GET',
         path: `/jobs/${job.id}`,
       },
-      ...(openRatingSheet
+      ...(canRate
         ? {
             submitRating: {
               method: 'POST',
@@ -587,6 +600,7 @@ const buildReceipt = async (paymentId: string, userId: string) => {
       jobRef: job.jobRef,
       title: job.title,
       status: job.status,
+      canRate,
       quoteType: job.quoteType,
       siteVisitRequested: job.siteVisitRequested,
       scheduledDate: job.scheduledDate,
