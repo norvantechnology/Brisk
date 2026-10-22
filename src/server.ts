@@ -10,6 +10,12 @@ import { startPlatformSettingsSync } from './modules/settings/platform-settings.
 
 const startServer = async () => {
   await connectDatabase();
+  try {
+    const { seedAdmin } = await import('./database/seeders/admin.seed');
+    await seedAdmin(prisma);
+  } catch (err) {
+    logger.warn('Initial admin seed check skipped/failed', { err });
+  }
   await startPlatformSettingsSync();
 
   await ensureUploadRoot();
