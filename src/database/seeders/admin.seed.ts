@@ -3,27 +3,47 @@ import bcrypt from 'bcryptjs';
 import { logger } from '../../utils/logger';
 
 export async function seedAdmin(prisma: PrismaClient): Promise<void> {
-  const adminEmail = 'admin@brisk.com';
-  const existingAdmin = await prisma.adminUser.findUnique({
-    where: { email: adminEmail },
-  });
+  const admins = [
+    {
+      fullName: 'System Super Admin',
+      email: 'admin@brisk.com',
+      mobileNumber: '+353870000000',
+      address: 'Dublin, Ireland',
+      role: AdminRole.SUPER_ADMIN,
+      password: 'Password1!',
+    },
+    {
+      fullName: 'Manmeet',
+      email: 'manmeet@brisk.ie',
+      mobileNumber: '+353870000001',
+      address: 'Dublin, Ireland',
+      role: AdminRole.SUPER_ADMIN,
+      password: 'Password1!',
+    },
+  ];
 
-  if (!existingAdmin) {
-    const passwordHash = await bcrypt.hash('Password1!', 10);
-    const superAdmin = await prisma.adminUser.create({
-      data: {
-        fullName: 'System Super Admin',
-        email: adminEmail,
-        mobileNumber: '+353870000000',
-        address: 'Dublin, Ireland',
-        passwordHash,
-        role: AdminRole.SUPER_ADMIN,
-        status: AdminStatus.ACTIVE,
-      },
+  for (const admin of admins) {
+    const existing = await prisma.adminUser.findUnique({
+      where: { email: admin.email },
     });
 
-    logger.info(`✅ Initial Super Admin seeded: ${superAdmin.email}`);
-  } else {
-    logger.info(`ℹ️ Super Admin (${adminEmail}) already exists. Skipping.`);
+    if (!existing) {
+      const passwordHash = await bcrypt.hash(admin.password, 10);
+      const created = await prisma.adminUser.create({
+        data: {
+          fullName: admin.fullName,
+          email: admin.email,
+          mobileNumber: admin.mobileNumber,
+          address: admin.address,
+          passwordHash,
+          role: admin.role,
+          status: AdminStatus.ACTIVE,
+        },
+      });
+
+      logger.info(`✅ Admin seeded: ${created.email} (${created.role})`);
+    } else {
+      logger.info(`ℹ️ Admin (${admin.email}) already exists. Skipping.`);
+    }
   }
 }
