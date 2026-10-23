@@ -239,11 +239,17 @@ const contentBlockSchema = z.preprocess(
   })
 );
 
+const optionalUuidNullable = z.preprocess((val) => {
+  if (val === '' || val === null) return null;
+  if (val === undefined) return undefined;
+  return val;
+}, uuid.nullable().optional());
+
 const sectionBodyBase = {
   section_title: z.string().min(1).max(255),
   slug: z.string().min(1).max(255),
-  category_id: uuid.optional().nullable(),
-  subcategory_id: uuid.optional().nullable(),
+  category_id: uuid,
+  subcategory_id: optionalUuidNullable,
   short_description: z.string().min(1),
   detailed_content: z.string().optional().nullable(),
   graphic_image_url: optionalImageUrlNullable,

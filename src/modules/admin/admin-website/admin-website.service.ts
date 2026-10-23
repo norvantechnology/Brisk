@@ -943,7 +943,7 @@ export type BlockInput = {
 export type SectionInput = {
   section_title: string;
   slug: string;
-  category_id?: string | null;
+  category_id: string;
   subcategory_id?: string | null;
   short_description: string;
   detailed_content?: string | null;
@@ -1053,6 +1053,25 @@ export const createSection = async (
     );
   }
 
+  const category = await prisma.cmsKnowledgeCategory.findUnique({
+    where: { id: input.category_id },
+  });
+  if (!category) {
+    throw new NotFoundError('Knowledge category not found.');
+  }
+
+  if (input.subcategory_id) {
+    const subcategory = await prisma.cmsKnowledgeSubcategory.findUnique({
+      where: { id: input.subcategory_id },
+    });
+    if (!subcategory) {
+      throw new NotFoundError('Knowledge subcategory not found.');
+    }
+    if (subcategory.categoryId !== input.category_id) {
+      throw new BadRequestError('The selected subcategory does not belong to the selected category.');
+    }
+  }
+
   const status = fromApiPublishStatus(input.publishing_status);
 
   let guide;
@@ -1061,7 +1080,7 @@ export const createSection = async (
       data: {
         title: input.section_title,
         slug: input.slug,
-        categoryId: input.category_id ?? null,
+        categoryId: input.category_id,
         subcategoryId: input.subcategory_id ?? null,
         description: input.short_description,
         detailedContent: input.detailed_content ?? null,
@@ -1127,6 +1146,33 @@ export const updateSection = async (
     }
   }
 
+  const targetCategoryId = input.category_id ?? existing.categoryId;
+  if (!targetCategoryId) {
+    throw new BadRequestError('category_id is required.');
+  }
+
+  const category = await prisma.cmsKnowledgeCategory.findUnique({
+    where: { id: targetCategoryId },
+  });
+  if (!category) {
+    throw new NotFoundError('Knowledge category not found.');
+  }
+
+  const targetSubcategoryId =
+    input.subcategory_id !== undefined ? input.subcategory_id : existing.subcategoryId;
+
+  if (targetSubcategoryId) {
+    const subcategory = await prisma.cmsKnowledgeSubcategory.findUnique({
+      where: { id: targetSubcategoryId },
+    });
+    if (!subcategory) {
+      throw new NotFoundError('Knowledge subcategory not found.');
+    }
+    if (subcategory.categoryId !== targetCategoryId) {
+      throw new BadRequestError('The selected subcategory does not belong to the selected category.');
+    }
+  }
+
   const status = fromApiPublishStatus(input.publishing_status);
 
   const guide = await prisma.$transaction(async (tx) => {
@@ -1147,8 +1193,8 @@ export const updateSection = async (
       data: {
         title: input.section_title,
         slug: input.slug,
-        ...(input.category_id !== undefined ? { categoryId: input.category_id ?? null } : {}),
-        ...(input.subcategory_id !== undefined ? { subcategoryId: input.subcategory_id ?? null } : {}),
+        categoryId: targetCategoryId,
+        subcategoryId: input.subcategory_id !== undefined ? (input.subcategory_id ?? null) : existing.subcategoryId,
         description: input.short_description,
         detailedContent: input.detailed_content ?? null,
         ...(input.graphic_image_url !== undefined
