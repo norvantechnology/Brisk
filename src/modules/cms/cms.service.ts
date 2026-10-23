@@ -333,7 +333,7 @@ export const listPublishedKnowledgeHub = async (filters: PublicKnowledgeHubFilte
     },
   });
 
-  return { items: guides.map((g) => serializePublicSectionCard(g as never)) };
+  return guides.map((g) => serializePublicSectionCard(g as never));
 };
 
 export const getPublishedKnowledgeBySlug = async (slug: string) => {

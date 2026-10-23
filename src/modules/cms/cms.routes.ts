@@ -174,28 +174,27 @@ router.get('/knowledge-hub/categories', cmsController.getKnowledgeCategories);
  *               success: true
  *               message: "Knowledge hub retrieved successfully."
  *               data:
- *                 items:
- *                   - id: "4f9d2b80-1a23-4c56-b789-0123456789ab"
- *                     category_id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
- *                     subcategory_id: "a1111111-1111-1111-1111-111111111111"
- *                     category:
- *                       id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
- *                       name: "Customer Guides"
- *                       slug: "customer-guides"
- *                     subcategory:
- *                       id: "a1111111-1111-1111-1111-111111111111"
- *                       name: "Booking & Payments"
- *                       slug: "booking-payments"
- *                     title: "How to Book a Trader"
- *                     slug: "how-to-book-a-trader"
- *                     description: "Step-by-step instructions on finding and booking verified traders."
- *                     graphic_image_url: "https://cdn.example.com/images/booking-guide.png"
- *                     icon: "calendar-check"
- *                     sort_order: 1
- *                     cta_button_text: "Find a Trader"
- *                     cta_url: "https://brisk.com/traders"
- *                     blocks_count: 3
- *                     updated_at: "2026-10-23T10:30:00.000Z"
+ *                 - id: "4f9d2b80-1a23-4c56-b789-0123456789ab"
+ *                   category_id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                   subcategory_id: "a1111111-1111-1111-1111-111111111111"
+ *                   category:
+ *                     id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                     name: "Customer Guides"
+ *                     slug: "customer-guides"
+ *                   subcategory:
+ *                     id: "a1111111-1111-1111-1111-111111111111"
+ *                     name: "Booking & Payments"
+ *                     slug: "booking-payments"
+ *                   title: "How to Book a Trader"
+ *                   slug: "how-to-book-a-trader"
+ *                   description: "Step-by-step instructions on finding and booking verified traders."
+ *                   graphic_image_url: "https://cdn.example.com/images/booking-guide.png"
+ *                   icon: "calendar-check"
+ *                   sort_order: 1
+ *                   cta_button_text: "Find a Trader"
+ *                   cta_url: "https://brisk.com/traders"
+ *                   blocks_count: 3
+ *                   updated_at: "2026-10-23T10:30:00.000Z"
  */
 router.get('/knowledge-hub', cmsController.getKnowledgeHub);
 
