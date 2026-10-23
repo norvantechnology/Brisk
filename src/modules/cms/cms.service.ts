@@ -272,27 +272,25 @@ export const listPublishedKnowledgeCategories = async () => {
     },
   });
 
-  return {
-    items: categories.map((cat) => ({
-      id: cat.id,
-      name: cat.name,
-      slug: cat.slug,
-      description: cat.description,
-      icon: cat.iconName,
-      sort_order: cat.sortOrder,
-      guides_count: cat._count.guides,
-      subcategories: cat.subcategories.map((sub) => ({
-        id: sub.id,
-        category_id: sub.categoryId,
-        name: sub.name,
-        slug: sub.slug,
-        description: sub.description,
-        icon: sub.iconName,
-        sort_order: sub.sortOrder,
-        guides_count: sub._count.guides,
-      })),
+  return categories.map((cat) => ({
+    id: cat.id,
+    name: cat.name,
+    slug: cat.slug,
+    description: cat.description,
+    icon: cat.iconName,
+    sort_order: cat.sortOrder,
+    guides_count: cat._count.guides,
+    subcategories: cat.subcategories.map((sub) => ({
+      id: sub.id,
+      category_id: sub.categoryId,
+      name: sub.name,
+      slug: sub.slug,
+      description: sub.description,
+      icon: sub.iconName,
+      sort_order: sub.sortOrder,
+      guides_count: sub._count.guides,
     })),
-  };
+  }));
 };
 
 export const listPublishedKnowledgeHub = async (filters: PublicKnowledgeHubFilters = {}) => {

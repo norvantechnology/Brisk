@@ -126,22 +126,21 @@ router.get('/social-links', cmsController.getSocialLinks);
  *               success: true
  *               message: "Knowledge categories retrieved successfully."
  *               data:
- *                 items:
- *                   - id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
- *                     name: "Customer Guides"
- *                     slug: "customer-guides"
- *                     description: "Guides and FAQs for customers using Brisk"
- *                     icon: "user"
- *                     sort_order: 1
- *                     guides_count: 5
- *                     subcategories:
- *                       - id: "a1111111-1111-1111-1111-111111111111"
- *                         name: "Booking & Payments"
- *                         slug: "booking-payments"
- *                         description: "Help with booking trades and making payments"
- *                         icon: "credit-card"
- *                         sort_order: 1
- *                         guides_count: 3
+ *                 - id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                   name: "Customer Guides"
+ *                   slug: "customer-guides"
+ *                   description: "Guides and FAQs for customers using Brisk"
+ *                   icon: "user"
+ *                   sort_order: 1
+ *                   guides_count: 5
+ *                   subcategories:
+ *                     - id: "a1111111-1111-1111-1111-111111111111"
+ *                       name: "Booking & Payments"
+ *                       slug: "booking-payments"
+ *                       description: "Help with booking trades and making payments"
+ *                       icon: "credit-card"
+ *                       sort_order: 1
+ *                       guides_count: 3
  */
 router.get('/knowledge-hub/categories', cmsController.getKnowledgeCategories);
 
