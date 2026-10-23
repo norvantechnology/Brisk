@@ -3,16 +3,20 @@ import { authMiddleware } from '../../middlewares/auth.middleware';
 import { roleMiddleware } from '../../middlewares/role.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import * as controller from './loyalty.controller';
-import { loyaltyOfferIdParamSchema } from './loyalty.validation';
+import {
+  claimLoyaltyOfferBodySchema,
+  loyaltyOfferIdParamSchema,
+} from './loyalty.validation';
 
 const router = Router();
+const loyaltyUsers = [authMiddleware, roleMiddleware(['CUSTOMER', 'TRADER'])];
 
 /**
  * @swagger
  * /loyalty/account:
  *   get:
- *     summary: Get customer BRP points balance
- *     tags: ['Customer / Loyalty']
+ *     summary: Get user BRP points balance
+ *     tags: ['Loyalty']
  *     security:
  *       - bearerAuth: []
  *     description: |
@@ -21,48 +25,38 @@ const router = Router();
  *       200:
  *         description: "pointsBalance and accountId"
  */
-router.get(
-  '/account',
-  authMiddleware,
-  roleMiddleware(['CUSTOMER']),
-  controller.getAccount
-);
+router.get('/account', ...loyaltyUsers, controller.getAccount);
 
 /**
  * @swagger
  * /loyalty/offers:
  *   get:
  *     summary: List BRP-redeemable loyalty offers
- *     tags: ['Customer / Loyalty']
+ *     tags: ['Loyalty']
  *     security:
  *       - bearerAuth: []
  *     description: |
  *       **Mobile screen:** Offers → Loyalty tab list.
- *       Returns **active** offers created by Admin (`POST /admin/loyalty/offers`).
+ *       Returns **active** offers created by Admin.
  *       Each offer includes `status`: `available` | `claimed` | `insufficient_points`, and `canRedeem`.
  *       Claimed offers cannot be redeemed again (`canRedeem: false`, `status: claimed`).
  *     responses:
  *       200:
  *         description: "pointsBalance and offers array"
  */
-router.get(
-  '/offers',
-  authMiddleware,
-  roleMiddleware(['CUSTOMER']),
-  controller.listOffers
-);
+router.get('/offers', ...loyaltyUsers, controller.listOffers);
 
 /**
  * @swagger
- * /loyalty/offers/{id}/redeem:
+ * /loyalty/offers/{id}/claim:
  *   post:
- *     summary: Redeem a loyalty offer for BRP points
- *     tags: ['Customer / Loyalty']
+ *     summary: Claim loyalty points for an offer (by offer ID in path)
+ *     tags: ['Loyalty']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       Deducts points, generates a unique `redeemCode` (valid 30 days).
- *       Response includes `validityLabel` (e.g. `"30 days"`) and `validForDays: 30`.
+ *       **Mobile screen:** Offers → Loyalty tab → "Claim now" button.
+ *       Deducts the required BRP points from the user's balance and creates a redemption with a unique `redeemCode`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -70,26 +64,58 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Redemption created with code and updated balance.
+ *         description: Loyalty offer claimed successfully with redeemCode and updated balance.
  *       400:
- *         description: Insufficient points.
+ *         description: Insufficient points or offer not active.
  *       409:
- *         description: Already redeemed.
+ *         description: Already claimed.
  */
 router.post(
-  '/offers/:id/redeem',
-  authMiddleware,
-  roleMiddleware(['CUSTOMER']),
+  ['/offers/:id/claim', '/offers/:id/redeem'],
+  ...loyaltyUsers,
   validate(loyaltyOfferIdParamSchema),
-  controller.redeemOffer
+  controller.claimOffer
+);
+
+/**
+ * @swagger
+ * /loyalty/offers/claim:
+ *   post:
+ *     summary: Claim loyalty points for an offer (JSON body)
+ *     tags: ['Loyalty']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - offerId
+ *             properties:
+ *               offerId: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Loyalty offer claimed successfully.
+ *       400:
+ *         description: Insufficient points or offer not active.
+ *       409:
+ *         description: Already claimed.
+ */
+router.post(
+  '/offers/claim',
+  ...loyaltyUsers,
+  validate(claimLoyaltyOfferBodySchema),
+  controller.claimOffer
 );
 
 /**
  * @swagger
  * /loyalty/redemptions:
  *   get:
- *     summary: List customer's loyalty redemptions
- *     tags: ['Customer / Loyalty']
+ *     summary: List user's loyalty redemptions
+ *     tags: ['Loyalty']
  *     security:
  *       - bearerAuth: []
  *     description: Claimed loyalty rewards with redeem codes for the wallet / claimed badge UI.
@@ -97,11 +123,6 @@ router.post(
  *       200:
  *         description: "pointsBalance and redemptions array"
  */
-router.get(
-  '/redemptions',
-  authMiddleware,
-  roleMiddleware(['CUSTOMER']),
-  controller.listRedemptions
-);
+router.get('/redemptions', ...loyaltyUsers, controller.listRedemptions);
 
 export default router;

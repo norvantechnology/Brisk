@@ -57,6 +57,25 @@ export const redeemOffer = async (
   }
 };
 
+export const claimOffer = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const offerId = req.params.id || req.body?.offerId || req.body?.id;
+    const data = await loyaltyService.redeemLoyaltyOffer(req.user!.id, offerId);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Loyalty offer claimed successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const listRedemptions = async (
   req: AuthenticatedRequest,
   res: Response,
