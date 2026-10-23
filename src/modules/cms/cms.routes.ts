@@ -112,11 +112,36 @@ router.get('/social-links', cmsController.getSocialLinks);
  * @swagger
  * /cms/knowledge-hub/categories:
  *   get:
- *     summary: List published Knowledge Hub categories with nested subcategories
- *     tags: ['Website / Content']
+ *     summary: List Knowledge Hub categories with subcategories
+ *     tags: ['Mobile Knowledge Hub']
+ *     description: |
+ *       **Used on mobile:** Category filter tabs / pills at the top of the Knowledge Hub screen.
+ *       Returns all active categories and their nested subcategories with guide counts.
  *     responses:
  *       200:
- *         description: Active knowledge categories and subcategories with guide counts.
+ *         description: Active knowledge categories and subcategories fetched successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Knowledge categories retrieved successfully."
+ *               data:
+ *                 items:
+ *                   - id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                     name: "Customer Guides"
+ *                     slug: "customer-guides"
+ *                     description: "Guides and FAQs for customers using Brisk"
+ *                     icon: "user"
+ *                     sort_order: 1
+ *                     guides_count: 5
+ *                     subcategories:
+ *                       - id: "a1111111-1111-1111-1111-111111111111"
+ *                         name: "Booking & Payments"
+ *                         slug: "booking-payments"
+ *                         description: "Help with booking trades and making payments"
+ *                         icon: "credit-card"
+ *                         sort_order: 1
+ *                         guides_count: 3
  */
 router.get('/knowledge-hub/categories', cmsController.getKnowledgeCategories);
 
@@ -124,43 +149,120 @@ router.get('/knowledge-hub/categories', cmsController.getKnowledgeCategories);
  * @swagger
  * /cms/knowledge-hub:
  *   get:
- *     summary: List published Knowledge Hub sections (cards — no blocks)
- *     tags: ['Website / Content']
+ *     summary: List Knowledge Hub guide cards
+ *     tags: ['Mobile Knowledge Hub']
+ *     description: |
+ *       **Used on mobile:** Main Knowledge Hub cards list.
+ *       Supports optional filtering by `categoryId` and `subcategoryId`.
  *     parameters:
  *       - in: query
  *         name: categoryId
  *         schema: { type: string, format: uuid }
- *         description: Filter by Knowledge category ID.
+ *         description: Filter guides by category UUID (alias category_id accepted)
+ *         example: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
  *       - in: query
  *         name: subcategoryId
  *         schema: { type: string, format: uuid }
- *         description: Filter by Knowledge subcategory ID.
+ *         description: Filter guides by subcategory UUID (alias subcategory_id accepted)
+ *         example: "a1111111-1111-1111-1111-111111111111"
  *     responses:
  *       200:
- *         description: Published guide cards.
+ *         description: Published guide cards retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Knowledge hub retrieved successfully."
+ *               data:
+ *                 items:
+ *                   - id: "4f9d2b80-1a23-4c56-b789-0123456789ab"
+ *                     category_id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                     subcategory_id: "a1111111-1111-1111-1111-111111111111"
+ *                     category:
+ *                       id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                       name: "Customer Guides"
+ *                       slug: "customer-guides"
+ *                     subcategory:
+ *                       id: "a1111111-1111-1111-1111-111111111111"
+ *                       name: "Booking & Payments"
+ *                       slug: "booking-payments"
+ *                     title: "How to Book a Trader"
+ *                     slug: "how-to-book-a-trader"
+ *                     description: "Step-by-step instructions on finding and booking verified traders."
+ *                     graphic_image_url: "https://cdn.example.com/images/booking-guide.png"
+ *                     icon: "calendar-check"
+ *                     sort_order: 1
+ *                     cta_button_text: "Find a Trader"
+ *                     cta_url: "https://brisk.com/traders"
+ *                     blocks_count: 3
+ *                     updated_at: "2026-10-23T10:30:00.000Z"
  */
 router.get('/knowledge-hub', cmsController.getKnowledgeHub);
-
 
 /**
  * @swagger
  * /cms/knowledge-hub/{slug}:
  *   get:
- *     summary: Get published Knowledge Hub section detail with content blocks
- *     tags: ['Website / Content']
+ *     summary: Get Knowledge Hub guide detail (with content blocks)
+ *     tags: ['Mobile Knowledge Hub']
+ *     description: |
+ *       **Used on mobile:** Detail screen opened after user taps a guide card.
+ *       Pass the card's `slug` from `GET /cms/knowledge-hub`.
  *     parameters:
  *       - in: path
  *         name: slug
  *         required: true
  *         schema: { type: string }
- *         description: |
- *           **Purpose:** Load full guide/article after user clicks a Knowledge Hub card.
- *           **How to use:** Pass `slug` from `GET /cms/knowledge-hub` list response.
+ *         description: Unique slug of the guide
+ *         example: "how-to-book-a-trader"
  *     responses:
  *       200:
- *         description: Section detail with `content_blocks` array.
+ *         description: Guide detail with content blocks retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Knowledge Hub section retrieved successfully."
+ *               data:
+ *                 section:
+ *                   id: "4f9d2b80-1a23-4c56-b789-0123456789ab"
+ *                   category_id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                   subcategory_id: "a1111111-1111-1111-1111-111111111111"
+ *                   category:
+ *                     id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                     name: "Customer Guides"
+ *                     slug: "customer-guides"
+ *                   subcategory:
+ *                     id: "a1111111-1111-1111-1111-111111111111"
+ *                     name: "Booking & Payments"
+ *                     slug: "booking-payments"
+ *                   title: "How to Book a Trader"
+ *                   slug: "how-to-book-a-trader"
+ *                   description: "Step-by-step instructions on finding and booking verified traders."
+ *                   detailed_content: "Learn how to search by category, compare quotes, and confirm site visits."
+ *                   graphic_image_url: "https://cdn.example.com/images/booking-guide.png"
+ *                   icon: "calendar-check"
+ *                   cta_button_text: "Find a Trader"
+ *                   cta_url: "https://brisk.com/traders"
+ *                   sort_order: 1
+ *                   content_blocks:
+ *                     - id: "b1c2d3e4-f5a6-7b8c-9d0e-1f2a3b4c5d6e"
+ *                       type: "step_card"
+ *                       title: "Step 1: Choose a Service"
+ *                       description: "Select your desired trade category and describe your needs."
+ *                       content: "Detailed steps on selecting categories..."
+ *                       icon: "search"
+ *                       image: "https://cdn.example.com/images/step1.png"
+ *                       button_text: "Browse Categories"
+ *                       button_url: "https://brisk.com/services"
+ *                       sort_order: 1
  *       404:
- *         description: Section not found or not published.
+ *         description: Guide not found.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Knowledge Hub section not found."
  */
 router.get('/knowledge-hub/:slug', cmsController.getKnowledgeBySlug);
 
