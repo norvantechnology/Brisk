@@ -115,6 +115,50 @@ router.get(
 
 /**
  * @swagger
+ * /jobs/form-config-v2:
+ *   get:
+ *     summary: Post a New Job — simplified form config (single-id flow)
+ *     tags: ['Customer / Jobs']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **When to call:** Opening **Post a New Job** on new mobile app screens.
+ *       Returns a clean, flat 11-field response matching mobile requirements.
+ *
+ *       **Auth:** Customer Bearer token required.
+ *
+ *       **Single-ID Flow:**
+ *       - Pass only `subcategoryId` (recommended) — parent `categoryId` and `categoryName` are auto-resolved.
+ *       - Or pass only `offerId` — auto-resolves category, subcategory, traderId, and discount badge.
+ *     parameters:
+ *       - in: query
+ *         name: subcategoryId
+ *         schema: { type: string, format: uuid }
+ *         description: Subcategory UUID (parent category is auto-resolved).
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string, format: uuid }
+ *         description: Category UUID (optional).
+ *       - in: query
+ *         name: offerId
+ *         schema: { type: string, format: uuid }
+ *         description: Offer UUID (optional).
+ *     responses:
+ *       200:
+ *         description: Simplified job form config fetched successfully.
+ *       404:
+ *         description: Subcategory, category, or offer not found.
+ */
+router.get(
+  ['/form-config-v2', '/simple-form-config', '/form-config/simple'],
+  ...customerOnly,
+  validate(jobFormConfigSchema),
+  controller.getSimpleJobFormConfig
+);
+
+
+/**
+ * @swagger
  * /jobs:
  *   post:
  *     summary: Create a job draft (Post a New Job — all entry points)

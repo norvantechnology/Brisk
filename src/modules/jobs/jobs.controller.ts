@@ -269,6 +269,29 @@ export const getJobFormConfig = async (
   }
 };
 
+export const getSimpleJobFormConfig = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getSimpleJobFormConfig(req.user!.id, req.query as {
+      categoryId?: string;
+      subcategoryId?: string;
+      offerId?: string;
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job form config fetched successfully',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 export const listJobQuotes = async (
   req: AuthenticatedRequest,
   res: Response,

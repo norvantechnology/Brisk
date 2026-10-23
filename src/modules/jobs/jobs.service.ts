@@ -2905,3 +2905,93 @@ export const getJobFormConfig = async (
     },
   };
 };
+
+/**
+ * Simplified Post a New Job form config API for new screen designs.
+ * Returns a flat, lightweight payload with only the 11 required fields.
+ */
+export const getSimpleJobFormConfig = async (
+  customerId: string,
+  query: {
+    categoryId?: string;
+    subcategoryId?: string;
+    offerId?: string;
+  }
+) => {
+  let offerApplied = false;
+  let categoryId = query.categoryId ?? null;
+  let subcategoryId = query.subcategoryId ?? null;
+  let traderId: string | null = null;
+  let offerId = '';
+  let offerDiscount = '';
+
+  if (query.offerId) {
+    const offer = await prisma.offer.findUnique({
+      where: { id: query.offerId },
+      include: {
+        categories: { select: { categoryId: true }, take: 1 },
+        subcategories: { select: { subcategoryId: true }, take: 1 },
+      },
+    });
+    if (!offer) throw new NotFoundError('Offer not found.');
+
+    const claim = await prisma.offerClaim.findUnique({
+      where: { offerId_userId: { offerId: offer.id, userId: customerId } },
+    });
+    if (claim?.status === OfferClaimStatus.USED) {
+      throw new ConflictError('You have already used this offer.');
+    }
+
+    offerApplied = true;
+    offerId = offer.id;
+    traderId = offer.traderId;
+    categoryId = categoryId ?? offer.categories[0]?.categoryId ?? null;
+    subcategoryId = subcategoryId ?? offer.subcategories[0]?.subcategoryId ?? null;
+
+    const offerBanner = buildOfferAppliedBanner({
+      discountType: offer.discountType,
+      discountValue: offer.discountValue ? Number(offer.discountValue) : null,
+      discountLabel: offer.discountLabel,
+      currencyCode: offer.currencyCode,
+    });
+    offerDiscount = offerBanner.discountLabel || (offer.discountLabel ? str(offer.discountLabel) : '');
+  }
+
+  let subcategoryFlags = null;
+  if (subcategoryId) {
+    const subcategory = await prisma.subcategory.findUnique({ where: { id: subcategoryId } });
+    if (!subcategory) throw new NotFoundError('Subcategory not found.');
+    if (categoryId && subcategory.categoryId !== categoryId) {
+      throw new BadRequestError('Subcategory does not belong to the category.');
+    }
+    categoryId = categoryId ?? subcategory.categoryId;
+    subcategoryFlags = subcategory;
+  }
+
+  let category = null;
+  if (categoryId) {
+    category = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (!category) throw new NotFoundError('Category not found.');
+  }
+
+  const siteVisitEnabled = Boolean(subcategoryFlags?.siteVisitEnabled);
+  const siteVisitFeeAmount = subcategoryFlags ? resolveSiteVisitFee(subcategoryFlags) : 0;
+  const siteVisitFee = siteVisitFeeAmount > 0 ? `€${siteVisitFeeAmount.toFixed(2)}` : '';
+  const qaFormSchema = Array.isArray(subcategoryFlags?.qaFormSchema) ? subcategoryFlags!.qaFormSchema : [];
+
+  return {
+    categoryId: str(categoryId),
+    categoryName: str(category?.name),
+    subcategoryId: str(subcategoryId),
+    subcategoryName: str(subcategoryFlags?.name),
+    traderId: str(traderId),
+    offerApplied,
+    offerId: str(offerId),
+    offerDiscount: str(offerDiscount),
+    siteVisitEnabled,
+    siteVisitFee,
+    qaFormSchema,
+    quoteType: 'REMOTE',
+  };
+};
+
