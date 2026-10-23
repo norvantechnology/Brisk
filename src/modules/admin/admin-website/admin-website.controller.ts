@@ -810,3 +810,228 @@ export const bulkSectionDelete = async (
     next(error);
   }
 };
+
+// ==========================================
+// KNOWLEDGE HUB CATEGORIES & SUBCATEGORIES
+// ==========================================
+
+export const listKnowledgeCategories = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await websiteService.listKnowledgeCategories(req.query);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge categories fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getKnowledgeCategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const category = await websiteService.getKnowledgeCategoryById(req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge category fetched successfully.',
+      data: category,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createKnowledgeCategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { adminId, adminLabel } = adminContext(req);
+    const category = await websiteService.createKnowledgeCategory(
+      adminId,
+      adminLabel,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: 'Knowledge category created successfully.',
+      data: category,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateKnowledgeCategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { adminId, adminLabel } = adminContext(req);
+    const category = await websiteService.updateKnowledgeCategory(
+      adminId,
+      adminLabel,
+      req.params.id,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge category updated successfully.',
+      data: category,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteKnowledgeCategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { adminId, adminLabel } = adminContext(req);
+    const result = await websiteService.deleteKnowledgeCategory(
+      adminId,
+      adminLabel,
+      req.params.id
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge category deleted successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listKnowledgeSubcategories = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const query = {
+      ...req.query,
+      ...(req.params.categoryId ? { category_id: req.params.categoryId } : {}),
+    };
+    const data = await websiteService.listKnowledgeSubcategories(query);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge subcategories fetched successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getKnowledgeSubcategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const subcategory = await websiteService.getKnowledgeSubcategoryById(req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge subcategory fetched successfully.',
+      data: subcategory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createKnowledgeSubcategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { adminId, adminLabel } = adminContext(req);
+    const body = {
+      ...req.body,
+      ...(req.params.categoryId ? { category_id: req.params.categoryId } : {}),
+    };
+    const subcategory = await websiteService.createKnowledgeSubcategory(
+      adminId,
+      adminLabel,
+      body
+    );
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: 'Knowledge subcategory created successfully.',
+      data: subcategory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateKnowledgeSubcategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { adminId, adminLabel } = adminContext(req);
+    const subcategory = await websiteService.updateKnowledgeSubcategory(
+      adminId,
+      adminLabel,
+      req.params.id,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge subcategory updated successfully.',
+      data: subcategory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteKnowledgeSubcategory = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { adminId, adminLabel } = adminContext(req);
+    const result = await websiteService.deleteKnowledgeSubcategory(
+      adminId,
+      adminLabel,
+      req.params.id
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge subcategory deleted successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

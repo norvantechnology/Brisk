@@ -4,7 +4,9 @@ import {
   CmsBlogPost,
   CmsKnowledgeBlock,
   CmsKnowledgeBlockType,
+  CmsKnowledgeCategory,
   CmsKnowledgeGuide,
+  CmsKnowledgeSubcategory,
   CmsPublishStatus,
 } from '@prisma/client';
 import { BadRequestError } from '../../../utils/errors';
@@ -170,8 +172,56 @@ export const serializeBlock = (block: CmsKnowledgeBlock) => ({
   updated_at: block.updatedAt,
 });
 
+export const serializeKnowledgeCategory = (
+  category: CmsKnowledgeCategory & {
+    subcategories?: CmsKnowledgeSubcategory[];
+    _count?: { subcategories?: number; guides?: number };
+  }
+) => ({
+  id: category.id,
+  name: category.name,
+  slug: category.slug,
+  description: category.description,
+  icon: category.iconName,
+  status: toApiActiveStatus(category.status),
+  sort_order: category.sortOrder,
+  subcategories_count: category._count?.subcategories ?? category.subcategories?.length ?? 0,
+  guides_count: category._count?.guides ?? 0,
+  subcategories: category.subcategories?.map(serializeKnowledgeSubcategory),
+  created_at: category.createdAt,
+  updated_at: category.updatedAt,
+});
+
+export const serializeKnowledgeSubcategory = (
+  subcategory: CmsKnowledgeSubcategory & {
+    category?: Pick<CmsKnowledgeCategory, 'id' | 'name' | 'slug'> | null;
+    _count?: { guides?: number };
+  }
+) => ({
+  id: subcategory.id,
+  category_id: subcategory.categoryId,
+  category: subcategory.category
+    ? {
+        id: subcategory.category.id,
+        name: subcategory.category.name,
+        slug: subcategory.category.slug,
+      }
+    : null,
+  name: subcategory.name,
+  slug: subcategory.slug,
+  description: subcategory.description,
+  icon: subcategory.iconName,
+  status: toApiActiveStatus(subcategory.status),
+  sort_order: subcategory.sortOrder,
+  guides_count: subcategory._count?.guides ?? 0,
+  created_at: subcategory.createdAt,
+  updated_at: subcategory.updatedAt,
+});
+
 export const serializeSection = (
   guide: CmsKnowledgeGuide & {
+    category?: Pick<CmsKnowledgeCategory, 'id' | 'name' | 'slug'> | null;
+    subcategory?: Pick<CmsKnowledgeSubcategory, 'id' | 'name' | 'slug'> | null;
     blocks?: CmsKnowledgeBlock[];
     _count?: { blocks: number };
   },
@@ -179,6 +229,22 @@ export const serializeSection = (
 ) => {
   const base = {
     id: guide.id,
+    category_id: guide.categoryId ?? null,
+    subcategory_id: guide.subcategoryId ?? null,
+    category: guide.category
+      ? {
+          id: guide.category.id,
+          name: guide.category.name,
+          slug: guide.category.slug,
+        }
+      : null,
+    subcategory: guide.subcategory
+      ? {
+          id: guide.subcategory.id,
+          name: guide.subcategory.name,
+          slug: guide.subcategory.slug,
+        }
+      : null,
     section_title: guide.title,
     slug: guide.slug,
     short_description: guide.description,
@@ -205,3 +271,4 @@ export const serializeSection = (
 
   return base;
 };
+

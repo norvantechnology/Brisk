@@ -110,15 +110,37 @@ router.get('/social-links', cmsController.getSocialLinks);
 
 /**
  * @swagger
+ * /cms/knowledge-hub/categories:
+ *   get:
+ *     summary: List published Knowledge Hub categories with nested subcategories
+ *     tags: ['Website / Content']
+ *     responses:
+ *       200:
+ *         description: Active knowledge categories and subcategories with guide counts.
+ */
+router.get('/knowledge-hub/categories', cmsController.getKnowledgeCategories);
+
+/**
+ * @swagger
  * /cms/knowledge-hub:
  *   get:
  *     summary: List published Knowledge Hub sections (cards — no blocks)
  *     tags: ['Website / Content']
+ *     parameters:
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter by Knowledge category ID.
+ *       - in: query
+ *         name: subcategoryId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter by Knowledge subcategory ID.
  *     responses:
  *       200:
  *         description: Published guide cards.
  */
 router.get('/knowledge-hub', cmsController.getKnowledgeHub);
+
 
 /**
  * @swagger

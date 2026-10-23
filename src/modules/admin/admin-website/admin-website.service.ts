@@ -9,6 +9,8 @@ import {
   serializeArticle,
   serializeBlock,
   serializeCategory,
+  serializeKnowledgeCategory,
+  serializeKnowledgeSubcategory,
   serializeSection,
 } from './admin-website.mappers';
 
@@ -23,6 +25,7 @@ export type WebsiteListFilters = {
   search?: string;
   status?: string;
   category_id?: string;
+  subcategory_id?: string;
   featured?: string | boolean;
   sort_by?: string;
   sort_direction?: string;
@@ -940,6 +943,8 @@ export type BlockInput = {
 export type SectionInput = {
   section_title: string;
   slug: string;
+  category_id?: string | null;
+  subcategory_id?: string | null;
   short_description: string;
   detailed_content?: string | null;
   graphic_image_url?: string | null;
@@ -982,6 +987,14 @@ export const listSections = async (filters: WebsiteListFilters = {}) => {
     where.status = fromApiPublishStatus(filters.status);
   }
 
+  if (filters.category_id) {
+    where.categoryId = filters.category_id;
+  }
+
+  if (filters.subcategory_id) {
+    where.subcategoryId = filters.subcategory_id;
+  }
+
   const orderBy = resolveOrderBy(filters.sort_by, filters.sort_direction, sectionSortMap, {
     sortOrder: 'asc',
   });
@@ -994,6 +1007,8 @@ export const listSections = async (filters: WebsiteListFilters = {}) => {
       take: perPage,
       orderBy,
       include: {
+        category: { select: { id: true, name: true, slug: true } },
+        subcategory: { select: { id: true, name: true, slug: true } },
         _count: { select: { blocks: true } },
       },
     }),
@@ -1009,6 +1024,8 @@ export const getSectionById = async (id: string) => {
   const guide = await prisma.cmsKnowledgeGuide.findFirst({
     where: { id, ...notDeletedGuides },
     include: {
+      category: { select: { id: true, name: true, slug: true } },
+      subcategory: { select: { id: true, name: true, slug: true } },
       blocks: { orderBy: { sortOrder: 'asc' } },
       _count: { select: { blocks: true } },
     },
@@ -1044,6 +1061,8 @@ export const createSection = async (
       data: {
         title: input.section_title,
         slug: input.slug,
+        categoryId: input.category_id ?? null,
+        subcategoryId: input.subcategory_id ?? null,
         description: input.short_description,
         detailedContent: input.detailed_content ?? null,
         graphicImageUrl: input.graphic_image_url ?? null,
@@ -1061,6 +1080,8 @@ export const createSection = async (
           : undefined,
       },
       include: {
+        category: { select: { id: true, name: true, slug: true } },
+        subcategory: { select: { id: true, name: true, slug: true } },
         blocks: { orderBy: { sortOrder: 'asc' } },
         _count: { select: { blocks: true } },
       },
@@ -1126,6 +1147,8 @@ export const updateSection = async (
       data: {
         title: input.section_title,
         slug: input.slug,
+        ...(input.category_id !== undefined ? { categoryId: input.category_id ?? null } : {}),
+        ...(input.subcategory_id !== undefined ? { subcategoryId: input.subcategory_id ?? null } : {}),
         description: input.short_description,
         detailedContent: input.detailed_content ?? null,
         ...(input.graphic_image_url !== undefined
@@ -1140,6 +1163,8 @@ export const updateSection = async (
         seoDescription: input.meta_description ?? null,
       },
       include: {
+        category: { select: { id: true, name: true, slug: true } },
+        subcategory: { select: { id: true, name: true, slug: true } },
         blocks: { orderBy: { sortOrder: 'asc' } },
         _count: { select: { blocks: true } },
       },
@@ -1515,3 +1540,339 @@ export const bulkSoftDeleteSections = async (
 
   return { deleted: result.count };
 };
+
+// ==========================================
+// KNOWLEDGE HUB CATEGORIES & SUBCATEGORIES
+// ==========================================
+
+export type KnowledgeCategoryInput = {
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  status?: string;
+  sort_order?: number;
+};
+
+export const listKnowledgeCategories = async (filters: WebsiteListFilters = {}) => {
+  const { page, perPage, skip } = parsePagination(filters);
+  const where: Prisma.CmsKnowledgeCategoryWhereInput = {};
+
+  if (filters.search) {
+    const search = filters.search.trim();
+    where.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { slug: { contains: search, mode: 'insensitive' } },
+      { description: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+
+  if (filters.status) {
+    where.status = fromApiActiveStatus(filters.status);
+  }
+
+  const [total, categories] = await Promise.all([
+    prisma.cmsKnowledgeCategory.count({ where }),
+    prisma.cmsKnowledgeCategory.findMany({
+      where,
+      skip,
+      take: perPage,
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        subcategories: { orderBy: { sortOrder: 'asc' } },
+        _count: { select: { subcategories: true, guides: true } },
+      },
+    }),
+  ]);
+
+  return {
+    items: categories.map((c) => serializeKnowledgeCategory(c)),
+    pagination: buildPagination(page, perPage, total),
+  };
+};
+
+export const getKnowledgeCategoryById = async (id: string) => {
+  const category = await prisma.cmsKnowledgeCategory.findUnique({
+    where: { id },
+    include: {
+      subcategories: { orderBy: { sortOrder: 'asc' } },
+      _count: { select: { subcategories: true, guides: true } },
+    },
+  });
+  if (!category) throw new NotFoundError('Knowledge category not found.');
+  return serializeKnowledgeCategory(category);
+};
+
+export const createKnowledgeCategory = async (
+  adminId: string,
+  adminLabel: string,
+  input: KnowledgeCategoryInput
+) => {
+  const existing = await prisma.cmsKnowledgeCategory.findUnique({ where: { slug: input.slug } });
+  if (existing) throw new ConflictError('Knowledge category slug already in use.');
+
+  const category = await prisma.cmsKnowledgeCategory.create({
+    data: {
+      name: input.name,
+      slug: input.slug,
+      description: input.description ?? null,
+      iconName: input.icon ?? null,
+      status: input.status ? fromApiActiveStatus(input.status) : 'ACTIVE',
+      sortOrder: input.sort_order ?? 0,
+    },
+    include: {
+      subcategories: true,
+      _count: { select: { subcategories: true, guides: true } },
+    },
+  });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_CATEGORY_CREATED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeCategory',
+    category.id,
+    `Created Knowledge category "${category.name}".`
+  );
+
+  return serializeKnowledgeCategory(category);
+};
+
+export const updateKnowledgeCategory = async (
+  adminId: string,
+  adminLabel: string,
+  id: string,
+  input: Partial<KnowledgeCategoryInput>
+) => {
+  const existing = await prisma.cmsKnowledgeCategory.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('Knowledge category not found.');
+
+  if (input.slug && input.slug !== existing.slug) {
+    const slugConflict = await prisma.cmsKnowledgeCategory.findUnique({ where: { slug: input.slug } });
+    if (slugConflict) throw new ConflictError('Knowledge category slug already in use.');
+  }
+
+  const category = await prisma.cmsKnowledgeCategory.update({
+    where: { id },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.slug !== undefined ? { slug: input.slug } : {}),
+      ...(input.description !== undefined ? { description: input.description ?? null } : {}),
+      ...(input.icon !== undefined ? { iconName: input.icon ?? null } : {}),
+      ...(input.status !== undefined ? { status: fromApiActiveStatus(input.status) } : {}),
+      ...(input.sort_order !== undefined ? { sortOrder: input.sort_order } : {}),
+    },
+    include: {
+      subcategories: true,
+      _count: { select: { subcategories: true, guides: true } },
+    },
+  });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_CATEGORY_UPDATED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeCategory',
+    category.id,
+    `Updated Knowledge category "${category.name}".`
+  );
+
+  return serializeKnowledgeCategory(category);
+};
+
+export const deleteKnowledgeCategory = async (
+  adminId: string,
+  adminLabel: string,
+  id: string
+) => {
+  const existing = await prisma.cmsKnowledgeCategory.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('Knowledge category not found.');
+
+  await prisma.cmsKnowledgeCategory.delete({ where: { id } });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_CATEGORY_DELETED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeCategory',
+    id,
+    `Deleted Knowledge category "${existing.name}".`
+  );
+
+  return { success: true };
+};
+
+export type KnowledgeSubcategoryInput = {
+  category_id?: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  status?: string;
+  sort_order?: number;
+};
+
+export const listKnowledgeSubcategories = async (filters: WebsiteListFilters = {}) => {
+  const { page, perPage, skip } = parsePagination(filters);
+  const where: Prisma.CmsKnowledgeSubcategoryWhereInput = {};
+
+  if (filters.category_id) {
+    where.categoryId = filters.category_id;
+  }
+  if (filters.search) {
+    const search = filters.search.trim();
+    where.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { slug: { contains: search, mode: 'insensitive' } },
+      { description: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+  if (filters.status) {
+    where.status = fromApiActiveStatus(filters.status);
+  }
+
+  const [total, subcategories] = await Promise.all([
+    prisma.cmsKnowledgeSubcategory.count({ where }),
+    prisma.cmsKnowledgeSubcategory.findMany({
+      where,
+      skip,
+      take: perPage,
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        _count: { select: { guides: true } },
+      },
+    }),
+  ]);
+
+  return {
+    items: subcategories.map((s) => serializeKnowledgeSubcategory(s)),
+    pagination: buildPagination(page, perPage, total),
+  };
+};
+
+export const getKnowledgeSubcategoryById = async (id: string) => {
+  const subcategory = await prisma.cmsKnowledgeSubcategory.findUnique({
+    where: { id },
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      _count: { select: { guides: true } },
+    },
+  });
+  if (!subcategory) throw new NotFoundError('Knowledge subcategory not found.');
+  return serializeKnowledgeSubcategory(subcategory);
+};
+
+export const createKnowledgeSubcategory = async (
+  adminId: string,
+  adminLabel: string,
+  input: KnowledgeSubcategoryInput & { category_id: string }
+) => {
+  const parentCategory = await prisma.cmsKnowledgeCategory.findUnique({
+    where: { id: input.category_id },
+  });
+  if (!parentCategory) throw new NotFoundError('Parent Knowledge category not found.');
+
+  const existing = await prisma.cmsKnowledgeSubcategory.findUnique({ where: { slug: input.slug } });
+  if (existing) throw new ConflictError('Knowledge subcategory slug already in use.');
+
+  const subcategory = await prisma.cmsKnowledgeSubcategory.create({
+    data: {
+      categoryId: input.category_id,
+      name: input.name,
+      slug: input.slug,
+      description: input.description ?? null,
+      iconName: input.icon ?? null,
+      status: input.status ? fromApiActiveStatus(input.status) : 'ACTIVE',
+      sortOrder: input.sort_order ?? 0,
+    },
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      _count: { select: { guides: true } },
+    },
+  });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_SUBCATEGORY_CREATED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeSubcategory',
+    subcategory.id,
+    `Created Knowledge subcategory "${subcategory.name}".`
+  );
+
+  return serializeKnowledgeSubcategory(subcategory);
+};
+
+export const updateKnowledgeSubcategory = async (
+  adminId: string,
+  adminLabel: string,
+  id: string,
+  input: Partial<KnowledgeSubcategoryInput>
+) => {
+  const existing = await prisma.cmsKnowledgeSubcategory.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('Knowledge subcategory not found.');
+
+  if (input.category_id && input.category_id !== existing.categoryId) {
+    const parentCategory = await prisma.cmsKnowledgeCategory.findUnique({
+      where: { id: input.category_id },
+    });
+    if (!parentCategory) throw new NotFoundError('Parent Knowledge category not found.');
+  }
+
+  if (input.slug && input.slug !== existing.slug) {
+    const slugConflict = await prisma.cmsKnowledgeSubcategory.findUnique({ where: { slug: input.slug } });
+    if (slugConflict) throw new ConflictError('Knowledge subcategory slug already in use.');
+  }
+
+  const subcategory = await prisma.cmsKnowledgeSubcategory.update({
+    where: { id },
+    data: {
+      ...(input.category_id !== undefined ? { categoryId: input.category_id } : {}),
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.slug !== undefined ? { slug: input.slug } : {}),
+      ...(input.description !== undefined ? { description: input.description ?? null } : {}),
+      ...(input.icon !== undefined ? { iconName: input.icon ?? null } : {}),
+      ...(input.status !== undefined ? { status: fromApiActiveStatus(input.status) } : {}),
+      ...(input.sort_order !== undefined ? { sortOrder: input.sort_order } : {}),
+    },
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      _count: { select: { guides: true } },
+    },
+  });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_SUBCATEGORY_UPDATED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeSubcategory',
+    subcategory.id,
+    `Updated Knowledge subcategory "${subcategory.name}".`
+  );
+
+  return serializeKnowledgeSubcategory(subcategory);
+};
+
+export const deleteKnowledgeSubcategory = async (
+  adminId: string,
+  adminLabel: string,
+  id: string
+) => {
+  const existing = await prisma.cmsKnowledgeSubcategory.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('Knowledge subcategory not found.');
+
+  await prisma.cmsKnowledgeSubcategory.delete({ where: { id } });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_SUBCATEGORY_DELETED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeSubcategory',
+    id,
+    `Deleted Knowledge subcategory "${existing.name}".`
+  );
+
+  return { success: true };
+};
+

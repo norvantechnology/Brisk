@@ -77,13 +77,31 @@ export const getSocialLinks = async (
   }
 };
 
-export const getKnowledgeHub = async (
+export const getKnowledgeCategories = async (
   _req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await cmsService.listPublishedKnowledgeHub();
+    const data = await cmsService.listPublishedKnowledgeCategories();
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Knowledge categories retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getKnowledgeHub = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await cmsService.listPublishedKnowledgeHub(req.query);
     sendResponse({
       res,
       statusCode: 200,

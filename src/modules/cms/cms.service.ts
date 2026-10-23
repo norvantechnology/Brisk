@@ -237,12 +237,83 @@ export const listActiveSocialLinks = async () => {
 // KNOWLEDGE HUB
 // ==========================================
 
-export const listPublishedKnowledgeHub = async () => {
+export type PublicKnowledgeHubFilters = {
+  categoryId?: string;
+  category_id?: string;
+  subcategoryId?: string;
+  subcategory_id?: string;
+};
+
+export const listPublishedKnowledgeCategories = async () => {
+  const categories = await prisma.cmsKnowledgeCategory.findMany({
+    where: { status: CmsActiveStatus.ACTIVE },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    include: {
+      subcategories: {
+        where: { status: CmsActiveStatus.ACTIVE },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        include: {
+          _count: {
+            select: {
+              guides: {
+                where: liveGuideWhere(),
+              },
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          guides: {
+            where: liveGuideWhere(),
+          },
+        },
+      },
+    },
+  });
+
+  return {
+    items: categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description,
+      icon: cat.iconName,
+      sort_order: cat.sortOrder,
+      guides_count: cat._count.guides,
+      subcategories: cat.subcategories.map((sub) => ({
+        id: sub.id,
+        category_id: sub.categoryId,
+        name: sub.name,
+        slug: sub.slug,
+        description: sub.description,
+        icon: sub.iconName,
+        sort_order: sub.sortOrder,
+        guides_count: sub._count.guides,
+      })),
+    })),
+  };
+};
+
+export const listPublishedKnowledgeHub = async (filters: PublicKnowledgeHubFilters = {}) => {
+  const categoryId = filters.categoryId || filters.category_id;
+  const subcategoryId = filters.subcategoryId || filters.subcategory_id;
+
+  const where: Prisma.CmsKnowledgeGuideWhereInput = {
+    ...liveGuideWhere(),
+    ...(categoryId ? { categoryId } : {}),
+    ...(subcategoryId ? { subcategoryId } : {}),
+  };
+
   const guides = await prisma.cmsKnowledgeGuide.findMany({
-    where: liveGuideWhere(),
+    where,
     orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
     select: {
       id: true,
+      categoryId: true,
+      subcategoryId: true,
+      category: { select: { id: true, name: true, slug: true } },
+      subcategory: { select: { id: true, name: true, slug: true } },
       title: true,
       slug: true,
       description: true,
@@ -269,6 +340,8 @@ export const getPublishedKnowledgeBySlug = async (slug: string) => {
   const guide = await prisma.cmsKnowledgeGuide.findFirst({
     where: { ...liveGuideWhere(), slug },
     include: {
+      category: { select: { id: true, name: true, slug: true } },
+      subcategory: { select: { id: true, name: true, slug: true } },
       blocks: { orderBy: { sortOrder: 'asc' } },
     },
   });
@@ -277,7 +350,7 @@ export const getPublishedKnowledgeBySlug = async (slug: string) => {
     throw new NotFoundError('Knowledge Hub section not found.');
   }
 
-  return serializePublicSectionDetail(guide);
+  return serializePublicSectionDetail(guide as never);
 };
 
 // ==========================================

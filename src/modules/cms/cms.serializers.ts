@@ -65,9 +65,29 @@ export const serializePublicBlock = (block: CmsKnowledgeBlock) => ({
 });
 
 export const serializePublicSectionCard = (
-  guide: CmsKnowledgeGuide & { _count?: { blocks: number } }
+  guide: CmsKnowledgeGuide & {
+    category?: { id: string; name: string; slug: string } | null;
+    subcategory?: { id: string; name: string; slug: string } | null;
+    _count?: { blocks: number };
+  }
 ) => ({
   id: guide.id,
+  category_id: guide.categoryId ?? null,
+  subcategory_id: guide.subcategoryId ?? null,
+  category: guide.category
+    ? {
+        id: guide.category.id,
+        name: guide.category.name,
+        slug: guide.category.slug,
+      }
+    : null,
+  subcategory: guide.subcategory
+    ? {
+        id: guide.subcategory.id,
+        name: guide.subcategory.name,
+        slug: guide.subcategory.slug,
+      }
+    : null,
   section_title: guide.title,
   slug: guide.slug,
   short_description: guide.description,

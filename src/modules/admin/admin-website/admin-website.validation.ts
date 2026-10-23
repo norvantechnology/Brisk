@@ -41,7 +41,10 @@ const aliasSectionIcon = aliasField('icon', 'section_icon');
 /** Uploaded media URL or short icon name — must fit full CDN/upload URLs. */
 const mediaIconOrUrl = z.string().max(2000).optional().nullable();
 
-const aliasSectionBody = (raw: unknown) => aliasSectionIcon(aliasGraphicImage(raw));
+const aliasCategoryId = aliasField('category_id', 'categoryId');
+const aliasSubcategoryId = aliasField('subcategory_id', 'subcategoryId');
+const aliasSectionBody = (raw: unknown) =>
+  aliasSubcategoryId(aliasCategoryId(aliasSectionIcon(aliasGraphicImage(raw))));
 
 const paginationQuery = {
   page: z.string().optional(),
@@ -213,6 +216,8 @@ export const listSectionsQuerySchema = z.object({
   query: z.object({
     ...paginationQuery,
     search: z.string().optional(),
+    category_id: uuid.optional(),
+    subcategory_id: uuid.optional(),
     status: publishStatusEnum.optional(),
     sort_by: z.string().optional(),
     sort_direction: sortDirectionEnum.optional(),
@@ -237,6 +242,8 @@ const contentBlockSchema = z.preprocess(
 const sectionBodyBase = {
   section_title: z.string().min(1).max(255),
   slug: z.string().min(1).max(255),
+  category_id: uuid.optional().nullable(),
+  subcategory_id: uuid.optional().nullable(),
   short_description: z.string().min(1),
   detailed_content: z.string().optional().nullable(),
   graphic_image_url: optionalImageUrlNullable,
@@ -323,3 +330,77 @@ export const bulkSectionDeleteSchema = z.object({
     ids: z.array(uuid).min(1),
   }),
 });
+
+// ==========================================
+// KNOWLEDGE HUB CATEGORIES & SUBCATEGORIES
+// ==========================================
+
+export const listKnowledgeCategoriesQuerySchema = z.object({
+  query: z.object({
+    ...paginationQuery,
+    search: z.string().optional(),
+    status: activeStatusEnum.optional(),
+    sort_by: z.string().optional(),
+    sort_direction: sortDirectionEnum.optional(),
+  }),
+});
+
+export const createKnowledgeCategorySchema = z.object({
+  body: z.object({
+    name: z.string().min(1).max(100),
+    slug: z.string().min(1).max(150),
+    description: z.string().max(500).optional().nullable(),
+    icon: mediaIconOrUrl,
+    status: activeStatusEnum.optional().default('active'),
+    sort_order: z.number().int().min(0).optional().default(0),
+  }),
+});
+
+export const updateKnowledgeCategorySchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    name: z.string().min(1).max(100),
+    slug: z.string().min(1).max(150),
+    description: z.string().max(500).optional().nullable(),
+    icon: mediaIconOrUrl,
+    status: activeStatusEnum.optional(),
+    sort_order: z.number().int().min(0).optional(),
+  }),
+});
+
+export const listKnowledgeSubcategoriesQuerySchema = z.object({
+  query: z.object({
+    ...paginationQuery,
+    category_id: uuid.optional(),
+    search: z.string().optional(),
+    status: activeStatusEnum.optional(),
+    sort_by: z.string().optional(),
+    sort_direction: sortDirectionEnum.optional(),
+  }),
+});
+
+export const createKnowledgeSubcategorySchema = z.object({
+  body: z.object({
+    category_id: uuid,
+    name: z.string().min(1).max(100),
+    slug: z.string().min(1).max(150),
+    description: z.string().max(500).optional().nullable(),
+    icon: mediaIconOrUrl,
+    status: activeStatusEnum.optional().default('active'),
+    sort_order: z.number().int().min(0).optional().default(0),
+  }),
+});
+
+export const updateKnowledgeSubcategorySchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    category_id: uuid.optional(),
+    name: z.string().min(1).max(100),
+    slug: z.string().min(1).max(150),
+    description: z.string().max(500).optional().nullable(),
+    icon: mediaIconOrUrl,
+    status: activeStatusEnum.optional(),
+    sort_order: z.number().int().min(0).optional(),
+  }),
+});
+

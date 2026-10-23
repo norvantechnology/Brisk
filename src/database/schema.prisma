@@ -1576,8 +1576,45 @@ model CmsSocialLink {
   @@map("cms_social_links")
 }
 
+model CmsKnowledgeCategory {
+  id          String                    @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String                    @unique
+  description String?                   @db.Text
+  iconName    String?                   @map("icon_name")
+  sortOrder   Int                       @default(0) @map("sort_order")
+  status      CmsActiveStatus           @default(ACTIVE)
+  createdAt   DateTime                  @default(now()) @map("created_at")
+  updatedAt   DateTime                  @updatedAt @map("updated_at")
+
+  subcategories CmsKnowledgeSubcategory[]
+  guides        CmsKnowledgeGuide[]
+
+  @@map("cms_knowledge_categories")
+}
+
+model CmsKnowledgeSubcategory {
+  id          String               @id @default(uuid()) @db.Uuid
+  categoryId  String               @map("category_id") @db.Uuid
+  name        String
+  slug        String               @unique
+  description String?              @db.Text
+  iconName    String?              @map("icon_name")
+  sortOrder   Int                  @default(0) @map("sort_order")
+  status      CmsActiveStatus      @default(ACTIVE)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  category CmsKnowledgeCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  guides   CmsKnowledgeGuide[]
+
+  @@map("cms_knowledge_subcategories")
+}
+
 model CmsKnowledgeGuide {
   id              String           @id @default(uuid()) @db.Uuid
+  categoryId      String?          @map("category_id") @db.Uuid
+  subcategoryId   String?          @map("subcategory_id") @db.Uuid
   title           String
   slug            String           @unique
   description     String?          @db.Text
@@ -1594,7 +1631,9 @@ model CmsKnowledgeGuide {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  blocks CmsKnowledgeBlock[]
+  category    CmsKnowledgeCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategory CmsKnowledgeSubcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  blocks      CmsKnowledgeBlock[]
 
   @@map("cms_knowledge_guides")
 }

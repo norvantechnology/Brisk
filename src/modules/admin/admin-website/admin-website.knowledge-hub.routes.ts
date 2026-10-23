@@ -16,6 +16,12 @@ import {
   reorderBlocksSchema,
   bulkSectionStatusSchema,
   bulkSectionDeleteSchema,
+  listKnowledgeCategoriesQuerySchema,
+  createKnowledgeCategorySchema,
+  updateKnowledgeCategorySchema,
+  listKnowledgeSubcategoriesQuerySchema,
+  createKnowledgeSubcategorySchema,
+  updateKnowledgeSubcategorySchema,
 } from './admin-website.validation';
 
 const router = Router();
@@ -547,4 +553,309 @@ router.delete(
   controller.deleteBlock
 );
 
+// ==========================================
+// KNOWLEDGE HUB CATEGORIES & SUBCATEGORIES
+// ==========================================
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/categories:
+ *   get:
+ *     summary: List Knowledge Hub categories
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: per_page
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [active, inactive] }
+ *     responses:
+ *       200:
+ *         description: Knowledge categories fetched successfully.
+ */
+router.get(
+  '/categories',
+  validate(listKnowledgeCategoriesQuerySchema),
+  controller.listKnowledgeCategories
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/categories:
+ *   post:
+ *     summary: Create a Knowledge Hub category
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - slug
+ *             properties:
+ *               name: { type: string }
+ *               slug: { type: string }
+ *               description: { type: string }
+ *               icon: { type: string }
+ *               status: { type: string, enum: [active, inactive] }
+ *               sort_order: { type: integer, default: 0 }
+ *     responses:
+ *       201:
+ *         description: Knowledge category created successfully.
+ */
+router.post(
+  '/categories',
+  validate(createKnowledgeCategorySchema),
+  controller.createKnowledgeCategory
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/categories/{id}:
+ *   get:
+ *     summary: Get Knowledge Hub category by ID
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Knowledge category fetched successfully.
+ */
+router.get(
+  '/categories/:id',
+  validate(idParamSchema),
+  controller.getKnowledgeCategory
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/categories/{id}:
+ *   put:
+ *     summary: Update Knowledge Hub category
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               slug: { type: string }
+ *               description: { type: string }
+ *               icon: { type: string }
+ *               status: { type: string, enum: [active, inactive] }
+ *               sort_order: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Knowledge category updated successfully.
+ */
+router.put(
+  '/categories/:id',
+  validate(updateKnowledgeCategorySchema),
+  controller.updateKnowledgeCategory
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/categories/{id}:
+ *   delete:
+ *     summary: Delete Knowledge Hub category
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Knowledge category deleted successfully.
+ */
+router.delete(
+  '/categories/:id',
+  validate(idParamSchema),
+  controller.deleteKnowledgeCategory
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/subcategories:
+ *   get:
+ *     summary: List Knowledge Hub subcategories
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: category_id
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: per_page
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [active, inactive] }
+ *     responses:
+ *       200:
+ *         description: Knowledge subcategories fetched successfully.
+ */
+router.get(
+  ['/subcategories', '/categories/:categoryId/subcategories'],
+  validate(listKnowledgeSubcategoriesQuerySchema),
+  controller.listKnowledgeSubcategories
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/subcategories:
+ *   post:
+ *     summary: Create Knowledge Hub subcategory
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - category_id
+ *               - name
+ *               - slug
+ *             properties:
+ *               category_id: { type: string, format: uuid }
+ *               name: { type: string }
+ *               slug: { type: string }
+ *               description: { type: string }
+ *               icon: { type: string }
+ *               status: { type: string, enum: [active, inactive] }
+ *               sort_order: { type: integer, default: 0 }
+ *     responses:
+ *       201:
+ *         description: Knowledge subcategory created successfully.
+ */
+router.post(
+  ['/subcategories', '/categories/:categoryId/subcategories'],
+  validate(createKnowledgeSubcategorySchema),
+  controller.createKnowledgeSubcategory
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/subcategories/{id}:
+ *   get:
+ *     summary: Get Knowledge Hub subcategory by ID
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Knowledge subcategory fetched successfully.
+ */
+router.get(
+  '/subcategories/:id',
+  validate(idParamSchema),
+  controller.getKnowledgeSubcategory
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/subcategories/{id}:
+ *   put:
+ *     summary: Update Knowledge Hub subcategory
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               category_id: { type: string, format: uuid }
+ *               name: { type: string }
+ *               slug: { type: string }
+ *               description: { type: string }
+ *               icon: { type: string }
+ *               status: { type: string, enum: [active, inactive] }
+ *               sort_order: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Knowledge subcategory updated successfully.
+ */
+router.put(
+  '/subcategories/:id',
+  validate(updateKnowledgeSubcategorySchema),
+  controller.updateKnowledgeSubcategory
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/subcategories/{id}:
+ *   delete:
+ *     summary: Delete Knowledge Hub subcategory
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Knowledge subcategory deleted successfully.
+ */
+router.delete(
+  '/subcategories/:id',
+  validate(idParamSchema),
+  controller.deleteKnowledgeSubcategory
+);
+
 export default router;
+
