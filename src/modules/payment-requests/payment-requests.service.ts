@@ -13,7 +13,6 @@ import { prisma } from '../../config/database';
 import { getCurrencyMeta } from '../../services/currency.service';
 import { type ChargeDetails, getChargeDetails, paymentMethodFromCharge } from '../../services/stripe.service';
 import { emitPaymentRequestPaid } from '../../sockets/realtime';
-import { buildJobPaymentBreakdown } from '../jobs/job-payment-state';
 import { formatDisplayDay } from '../jobs/jobs.service';
 import { NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta, parsePageLimit, type PaginationQuery } from '../../utils/pagination';
@@ -85,7 +84,7 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
   });
   if (!job) throw new NotFoundError('Job not found.');
 
-  const [requests, quote, materials] = await Promise.all([
+  const [requests, quote] = await Promise.all([
     prisma.traderPaymentRequest.findMany({
       where: { jobId, customerId, status: { not: TraderPaymentRequestStatus.CANCELLED } },
       orderBy: { createdAt: 'desc' },
@@ -98,9 +97,6 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
           select: { quotedAmount: true, currencyCode: true },
         })
       : null,
-    job.traderId
-      ? prisma.jobMaterial.findMany({ where: { jobId, traderId: job.traderId }, select: { price: true } })
-      : [],
   ]);
 
   const currencyCode = requests[0]?.currencyCode ?? quote?.currencyCode ?? 'EUR';
@@ -115,7 +111,6 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
   const jobCategory = job.subcategory?.name || job.category?.name || 'Service';
 
   const quotePrice = quote ? money(quote.quotedAmount) : job.serviceCharge != null ? money(job.serviceCharge) : null;
-  const materialsTotal = materials.reduce((s, m) => s + money(m.price), 0);
   const rawSiteVisitFee = money(job.siteVisitFee);
   const invoice = job.booking?.invoice;
   const platformFee = invoice?.platformFee != null ? money(invoice.platformFee) : 20;
@@ -127,19 +122,10 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
         : `Offer Applied (${currencySymbol}${money(job.offer.discountValue)} OFF)`)
     : (offerDiscountVal > 0 ? 'Offer Applied' : null);
 
-  const breakdown =
-    job.traderId && quotePrice != null
-      ? buildJobPaymentBreakdown({
-          quotePrice,
-          materialsTotal,
-          siteVisitFee: rawSiteVisitFee,
-        })
-      : null;
-
   const breakdownSiteVisitFee = rawSiteVisitFee > 0 ? -rawSiteVisitFee : 0;
-  const totalPayment = breakdown
-    ? breakdown.totalAmount
-    : round2((quotePrice ?? 0) + breakdownSiteVisitFee + platformFee + offerDiscount);
+  const totalPayment = round2(
+    Math.max(0, (quotePrice ?? 0) + breakdownSiteVisitFee + platformFee + offerDiscount)
+  );
   const totalJobAmount = totalPayment;
 
   const amountPaid = round2(
@@ -253,48 +239,7 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
     });
   }
 
-  // Provide records for job e324db43-e115-42d4-bb30-88cbeed82e34 / empty history so mobile displays full list in History and top 3 in Installments
-  if (job.id === 'e324db43-e115-42d4-bb30-88cbeed82e34' || transactionHistory.length === 0) {
-    const sampleRecords = [
-      {
-        id: 'TXN-827361',
-        title: 'Initial Deposit',
-        date: '2026-07-14T11:20:00.000Z',
-        formattedAmount: `${currencySymbol}481.50`,
-        status: 'PAID',
-      },
-      {
-        id: 'TXN-627341',
-        title: 'Site Visit Fee',
-        date: '2026-07-15T10:00:00.000Z',
-        formattedAmount: `${currencySymbol}30.00`,
-        status: 'PAID',
-      },
-      {
-        id: 'TXN-719384',
-        title: 'Advance Payment',
-        date: '2026-10-21T07:21:24.845Z',
-        formattedAmount: `${currencySymbol}100.00`,
-        status: 'PAID',
-      },
-      {
-        id: 'TXN-492015',
-        title: 'Final Installment',
-        date: '2026-07-28T09:00:00.000Z',
-        formattedAmount: `${currencySymbol}420.00`,
-        status: 'PENDING',
-      },
-    ];
-    if (transactionHistory.length === 0) {
-      transactionHistory.push(...sampleRecords);
-    } else {
-      for (const rec of sampleRecords) {
-        if (!transactionHistory.some((t) => t.id === rec.id) && transactionHistory.length < 4) {
-          transactionHistory.push(rec);
-        }
-      }
-    }
-  }
+
 
   return {
     jobId: job.id,
@@ -380,48 +325,7 @@ export const getJobPaymentHistory = async (
     });
   }
 
-  // Provide records for job e324db43-e115-42d4-bb30-88cbeed82e34 / empty history so mobile displays full list
-  if (job.id === 'e324db43-e115-42d4-bb30-88cbeed82e34' || history.length === 0) {
-    const sampleRecords = [
-      {
-        id: 'TXN-827361',
-        title: 'Initial Deposit',
-        date: '2026-07-14T11:20:00.000Z',
-        formattedAmount: `${currencySymbol}481.50`,
-        status: 'PAID',
-      },
-      {
-        id: 'TXN-627341',
-        title: 'Site Visit Fee',
-        date: '2026-07-15T10:00:00.000Z',
-        formattedAmount: `${currencySymbol}30.00`,
-        status: 'PAID',
-      },
-      {
-        id: 'TXN-719384',
-        title: 'Advance Payment',
-        date: '2026-10-21T07:21:24.845Z',
-        formattedAmount: `${currencySymbol}100.00`,
-        status: 'PAID',
-      },
-      {
-        id: 'TXN-492015',
-        title: 'Final Installment',
-        date: '2026-07-28T09:00:00.000Z',
-        formattedAmount: `${currencySymbol}420.00`,
-        status: 'PENDING',
-      },
-    ];
-    if (history.length === 0) {
-      history.push(...sampleRecords);
-    } else {
-      for (const rec of sampleRecords) {
-        if (!history.some((t) => t.id === rec.id) && history.length < 4) {
-          history.push(rec);
-        }
-      }
-    }
-  }
+
 
   const { page, limit, skip } = parsePageLimit(query, { defaultLimit: 10, maxLimit: 50 });
   const total = history.length;
