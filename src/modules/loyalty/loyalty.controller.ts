@@ -93,3 +93,26 @@ export const listRedemptions = async (
     next(error);
   }
 };
+
+export const addTestPoints = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const points = typeof req.body?.points === 'number' ? req.body.points : 500;
+    const account = await loyaltyService.addTestPoints(req.user!.id, points);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: `${points} test loyalty points added successfully.`,
+      data: {
+        pointsBalance: account.pointsBalance,
+        accountId: account.id,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

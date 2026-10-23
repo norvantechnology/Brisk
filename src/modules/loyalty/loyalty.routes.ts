@@ -125,4 +125,26 @@ router.post(
  */
 router.get('/redemptions', ...loyaltyUsers, controller.listRedemptions);
 
+/**
+ * @swagger
+ * /loyalty/test-add-points:
+ *   post:
+ *     summary: Add test BRP points to user balance (Development & testing)
+ *     tags: ['Loyalty']
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               points: { type: integer, default: 500 }
+ *     responses:
+ *       200:
+ *         description: Points added successfully.
+ */
+router.post('/test-add-points', ...loyaltyUsers, controller.addTestPoints);
+
 export default router;
+

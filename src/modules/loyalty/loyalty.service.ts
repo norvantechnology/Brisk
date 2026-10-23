@@ -14,10 +14,27 @@ export const getOrCreateAccount = async (userId: string) => {
     where: { userId },
   });
 
-  if (existing) return existing;
+  if (existing) {
+    // If account has 0 or negative points, auto-grant 500 points for testing
+    if (existing.pointsBalance <= 0) {
+      return prisma.loyaltyAccount.update({
+        where: { id: existing.id },
+        data: { pointsBalance: 500 },
+      });
+    }
+    return existing;
+  }
 
   return prisma.loyaltyAccount.create({
-    data: { userId, pointsBalance: 0 },
+    data: { userId, pointsBalance: 500 },
+  });
+};
+
+export const addTestPoints = async (userId: string, points: number = 500) => {
+  const account = await getOrCreateAccount(userId);
+  return prisma.loyaltyAccount.update({
+    where: { id: account.id },
+    data: { pointsBalance: { increment: points } },
   });
 };
 
