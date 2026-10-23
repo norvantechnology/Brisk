@@ -334,9 +334,17 @@ export const listPublishedKnowledgeHub = async (filters: PublicKnowledgeHubFilte
   return guides.map((g) => serializePublicSectionCard(g as never));
 };
 
-export const getPublishedKnowledgeBySlug = async (slug: string) => {
+export const getPublishedKnowledgeBySlug = async (identifier: string) => {
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+
   const guide = await prisma.cmsKnowledgeGuide.findFirst({
-    where: { ...liveGuideWhere(), slug },
+    where: {
+      ...liveGuideWhere(),
+      ...(isUuid
+        ? { OR: [{ id: identifier }, { slug: identifier }] }
+        : { slug: identifier }),
+    },
     include: {
       category: { select: { id: true, name: true, slug: true } },
       subcategory: { select: { id: true, name: true, slug: true } },

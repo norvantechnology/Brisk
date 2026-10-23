@@ -205,13 +205,13 @@ router.get('/knowledge-hub', cmsController.getKnowledgeHub);
  *     tags: ['Mobile Knowledge Hub']
  *     description: |
  *       **Used on mobile:** Detail screen opened after user taps a guide card.
- *       Pass the card's `slug` from `GET /cms/knowledge-hub`.
+ *       You can pass either the card's `id` (UUID) or its `slug` (e.g. `how-to-book-a-trader`).
  *     parameters:
  *       - in: path
  *         name: slug
  *         required: true
  *         schema: { type: string }
- *         description: Unique slug of the guide
+ *         description: Pass either the card's `id` (UUID) or its `slug` from `GET /cms/knowledge-hub`
  *         example: "how-to-book-a-trader"
  *     responses:
  *       200:
