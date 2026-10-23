@@ -4,7 +4,7 @@ import { roleMiddleware } from '../../middlewares/role.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import * as controller from './loyalty.controller';
 import {
-  claimLoyaltyOfferBodySchema,
+  redeemLoyaltyOfferBodySchema,
   loyaltyOfferIdParamSchema,
 } from './loyalty.validation';
 
@@ -48,40 +48,82 @@ router.get('/offers', ...loyaltyUsers, controller.listOffers);
 
 /**
  * @swagger
- * /loyalty/offers/{id}/claim:
+ * /loyalty/offers/{id}/redeem:
  *   post:
- *     summary: Claim loyalty points for an offer (by offer ID in path)
+ *     summary: Redeem loyalty points for an offer (by offer ID in path)
  *     tags: ['Loyalty']
  *     security:
  *       - bearerAuth: []
  *     description: |
- *       **Mobile screen:** Offers → Loyalty tab → "Claim now" button.
+ *       **Mobile screen:** Offers → Loyalty tab → "Redeem" button.
  *       Deducts the required BRP points from the user's balance and creates a redemption with a unique `redeemCode`.
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *         description: Loyalty offer UUID
+ *         example: "65b2f1a8-c9e1-4234-8789-0abc12345678"
  *     responses:
  *       200:
- *         description: Loyalty offer claimed successfully with redeemCode and updated balance.
+ *         description: Loyalty offer redeemed successfully with redeemCode and updated balance.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Loyalty offer redeemed successfully."
+ *               data:
+ *                 redeemCode: "BRC-M1XY2Z-9ABC"
+ *                 validForDays: 30
+ *                 validityLabel: "30 days"
+ *                 pointsRedeemed: 50
+ *                 pointsBalance: 450
+ *                 offer:
+ *                   id: "65b2f1a8-c9e1-4234-8789-0abc12345678"
+ *                   title: "10% Off Plumbing Services"
+ *                   description: "Redeem 50 BRP points for 10% off your next booking."
+ *                   pointsRequired: 50
+ *                   imageUrl: "https://cdn.example.com/images/offer.png"
  *       400:
  *         description: Insufficient points or offer not active.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Insufficient BRP points for this redemption."
+ *               error:
+ *                 code: "INSUFFICIENT_BRP"
+ *                 data:
+ *                   pointsBalance: 0
+ *                   pointsRequired: 50
+ *                   offerId: "65b2f1a8-c9e1-4234-8789-0abc12345678"
+ *       404:
+ *         description: Offer not found.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Loyalty offer not found."
  *       409:
- *         description: Already claimed.
+ *         description: Already redeemed.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "You have already redeemed this loyalty offer."
  */
 router.post(
-  ['/offers/:id/claim', '/offers/:id/redeem'],
+  '/offers/:id/redeem',
   ...loyaltyUsers,
   validate(loyaltyOfferIdParamSchema),
-  controller.claimOffer
+  controller.redeemOffer
 );
 
 /**
  * @swagger
- * /loyalty/offers/claim:
+ * /loyalty/offers/redeem:
  *   post:
- *     summary: Claim loyalty points for an offer (JSON body)
+ *     summary: Redeem loyalty points for an offer (JSON body)
  *     tags: ['Loyalty']
  *     security:
  *       - bearerAuth: []
@@ -94,20 +136,20 @@ router.post(
  *             required:
  *               - offerId
  *             properties:
- *               offerId: { type: string, format: uuid }
+ *               offerId: { type: string, format: uuid, example: "65b2f1a8-c9e1-4234-8789-0abc12345678" }
  *     responses:
  *       200:
- *         description: Loyalty offer claimed successfully.
+ *         description: Loyalty offer redeemed successfully.
  *       400:
  *         description: Insufficient points or offer not active.
  *       409:
- *         description: Already claimed.
+ *         description: Already redeemed.
  */
 router.post(
-  '/offers/claim',
+  '/offers/redeem',
   ...loyaltyUsers,
-  validate(claimLoyaltyOfferBodySchema),
-  controller.claimOffer
+  validate(redeemLoyaltyOfferBodySchema),
+  controller.redeemOffer
 );
 
 /**

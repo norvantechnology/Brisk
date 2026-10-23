@@ -4,7 +4,7 @@ export const loyaltyOfferIdParamSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
 });
 
-export const claimLoyaltyOfferBodySchema = z.object({
+export const redeemLoyaltyOfferBodySchema = z.object({
   body: z
     .object({
       offerId: z.string().uuid().optional(),
@@ -14,3 +14,5 @@ export const claimLoyaltyOfferBodySchema = z.object({
       message: 'offerId or id is required in request body.',
     }),
 });
+
+export const claimLoyaltyOfferBodySchema = redeemLoyaltyOfferBodySchema;
