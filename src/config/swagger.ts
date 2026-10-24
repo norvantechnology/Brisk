@@ -220,6 +220,11 @@ const options: swaggerJSDoc.Options = {
           'Admin CRUD for BRP loyalty offers. Created offers appear on customer GET /loyalty/offers when status=active.',
       },
       {
+        name: 'Admin / Masters Import',
+        description:
+          'Bulk import and sample template downloads for Admin Masters (Categories and Subcategories) via Excel (.xlsx, .xls) and CSV. Supports duplicate skip and upsert modes with row-level error reporting.',
+      },
+      {
         name: 'Admin / Currency',
         description:
           'Admin currency catalog, platform base currency, and exchange rates. Historical payments keep stored currencyCode; rates affect new catalog/display only.',
