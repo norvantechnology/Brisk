@@ -12,7 +12,7 @@ router.use(adminAuthMiddleware);
  * /admin/categories/import:
  *   post:
  *     summary: Bulk import Categories from Excel or CSV
- *     tags: ['Admin / Masters Import']
+ *     tags: ['Admin / Categories', 'Admin / Masters Import']
  *     security:
  *       - bearerAuth: []
  *     description: |
@@ -99,7 +99,7 @@ router.post(
  * /admin/categories/import/template:
  *   get:
  *     summary: Download sample import template for Categories (Excel or CSV)
- *     tags: ['Admin / Masters Import']
+ *     tags: ['Admin / Categories', 'Admin / Masters Import']
  *     security:
  *       - bearerAuth: []
  *     description: |
@@ -135,7 +135,7 @@ router.get(
  * /admin/sub-categories/import:
  *   post:
  *     summary: Bulk import Subcategories from Excel or CSV
- *     tags: ['Admin / Masters Import']
+ *     tags: ['Admin / Sub-Categories', 'Admin / Masters Import']
  *     security:
  *       - bearerAuth: []
  *     description: |
@@ -224,7 +224,7 @@ router.post(
  * /admin/sub-categories/import/template:
  *   get:
  *     summary: Download sample import template for Subcategories (Excel or CSV)
- *     tags: ['Admin / Masters Import']
+ *     tags: ['Admin / Sub-Categories', 'Admin / Masters Import']
  *     security:
  *       - bearerAuth: []
  *     description: |
