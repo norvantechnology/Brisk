@@ -54,6 +54,7 @@ import stripeWebhookRoutes from './modules/webhooks/stripe-webhook.routes';
 import realtimeRoutes from './sockets/realtime.routes';
 import locationsRoutes from './modules/locations/locations.routes';
 import adminLocationsRoutes from './modules/admin/admin-locations/admin-locations.routes';
+import adminImportRoutes from './modules/admin/admin-import/admin-import.routes';
 
 const app = express();
 
@@ -111,6 +112,7 @@ app.use('/admin/auth', adminAuthRoutes);
 app.use('/admin/notifications', adminNotificationsRoutes);
 app.use('/notifications', notificationsRoutes);
 app.use('/admin', adminCategoryRoutes);
+app.use('/admin', adminImportRoutes);
 app.use('/admin', adminCustomerRoutes);
 app.use('/admin', adminCustomerDetailsRoutes);
 app.use('/admin', adminTradersRoutes);
