@@ -157,6 +157,8 @@ const getTraderContext = async (userId: string) => {
       lastDeviceLng: true,
       lastDeviceAt: true,
       country: true,
+      isVatRegistered: true,
+      vatNumber: true,
       categories: { where: { isActive: true }, select: { categoryId: true } },
       user: { select: { fullName: true, preferredCurrency: true, country: true } },
     },
@@ -806,7 +808,9 @@ type PaymentSummarySource = {
   serviceCharge?: Prisma.Decimal | null;
   siteVisitFee?: Prisma.Decimal | null;
   materials: { price: Prisma.Decimal }[];
+  trader?: { isVatRegistered?: boolean } | null;
   booking?: {
+    trader?: { isVatRegistered?: boolean } | null;
     invoice?: {
       serviceCharge: Prisma.Decimal;
       platformFee: Prisma.Decimal;
@@ -818,12 +822,20 @@ type PaymentSummarySource = {
   } | null;
 };
 
-const computePaymentBreakdown = (job: PaymentSummarySource, opts?: { siteVisitOnly?: boolean }) =>
+const computePaymentBreakdown = (
+  job: PaymentSummarySource,
+  opts?: { siteVisitOnly?: boolean; isTraderVatRegistered?: boolean }
+) =>
   buildJobPaymentBreakdown({
     quotePrice: resolveQuotePrice(job) ?? 0,
     materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
     siteVisitFee: money(job.siteVisitFee),
     siteVisitOnly: opts?.siteVisitOnly,
+    isTraderVatRegistered:
+      opts?.isTraderVatRegistered ??
+      job.trader?.isVatRegistered ??
+      job.booking?.trader?.isVatRegistered ??
+      true,
   });
 
 /** Finished job: PAYMENT_PENDING may exist before the trader sends the FULL_JOB request. */
@@ -852,7 +864,7 @@ const jobStatusAfterFinish = async (job: MyJobRow, traderId: string) => {
 type TraderContext = Awaited<ReturnType<typeof getTraderContext>>;
 
 const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderContext) => {
-  const breakdown = computePaymentBreakdown(job);
+  const breakdown = computePaymentBreakdown(job, { isTraderVatRegistered: trader.isVatRegistered });
   const currency = await resolveDiscoverCurrency({
     customerPreferredCurrency: job.customer.preferredCurrency,
     traderPreferredCurrency: trader.user.preferredCurrency,
@@ -869,6 +881,8 @@ const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderConte
     materialsTotal: breakdown.materialsTotal,
     siteVisitFee: breakdown.siteVisitFee,
     platformFee: breakdown.platformFee,
+    platformFeeVat: breakdown.platformFeeVat,
+    twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
     vatRate: breakdown.vatRate,
     vatAmount: breakdown.vatAmount,
     totalAmount: breakdown.totalAmount,
@@ -886,7 +900,13 @@ const createPaymentRequestInvoice = (tx: Prisma.TransactionClient, request: Trad
     data: {
       invoiceNumber: generateInvoiceNumber(),
       serviceCharge: request.serviceCharge,
+      materialsTotal: request.materialsTotal,
+      siteVisitFee: request.siteVisitFee,
       platformFee: request.platformFee,
+      platformFeeVat: request.platformFeeVat,
+      traderVatRate: request.vatRate,
+      traderVatAmount: round2(money(request.vatAmount) - money(request.platformFeeVat)),
+      twoThirdsRuleTriggered: request.twoThirdsRuleTriggered,
       tax: request.vatAmount,
       totalAmount: request.totalAmount,
       currencyCode: request.currencyCode,
@@ -3426,6 +3446,8 @@ export const requestPartialPayment = async (
       materialsTotal: 0,
       siteVisitFee: 0,
       platformFee: 0,
+      platformFeeVat: 0,
+      twoThirdsRuleTriggered: false,
       vatRate: 0,
       vatAmount: 0,
       totalAmount: amount,
@@ -3645,6 +3667,8 @@ export const requestSiteVisitPayment = async (userId: string, jobId: string) => 
       materialsTotal: 0,
       siteVisitFee: breakdown.siteVisitFee,
       platformFee: 0,
+      platformFeeVat: 0,
+      twoThirdsRuleTriggered: false,
       vatRate: breakdown.vatRate,
       vatAmount: breakdown.vatAmount,
       totalAmount: breakdown.totalAmount,

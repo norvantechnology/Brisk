@@ -136,6 +136,9 @@ export const computeInvoiceBreakdown = (input: {
   serviceCharge: number;
   traderOfferDiscount: number;
   promoDiscount?: number;
+  materialsTotal?: number;
+  siteVisitFee?: number;
+  isTraderVatRegistered?: boolean;
   currencyCode?: string;
   /** Site visit fee invoices: no platform fee markup (Figma Pay Fee = flat fee). */
   purpose?: 'SERVICE' | 'SITE_VISIT_FEE';
@@ -143,21 +146,50 @@ export const computeInvoiceBreakdown = (input: {
   const serviceCharge = round2(input.serviceCharge);
   const traderOfferDiscount = round2(Math.min(input.traderOfferDiscount, serviceCharge));
   const promoDiscount = round2(input.promoDiscount ?? 0);
-  const postOffer = Math.max(serviceCharge - traderOfferDiscount, 0);
-  const platformFee =
-    input.purpose === 'SITE_VISIT_FEE' ? 0 : round2(postOffer * 0.1);
-  const tax = 0;
+  const materialsTotal = round2(input.materialsTotal ?? 0);
+  const siteVisitFee = round2(input.siteVisitFee ?? 0);
+  const isSiteVisit = input.purpose === 'SITE_VISIT_FEE';
+
+  // Base Labour after trader discount (discounts only apply to Base Amount per Snehal's doc)
+  const discountedBase = isSiteVisit ? 0 : Math.max(serviceCharge - traderOfferDiscount, 0);
+  const siteVisitPart = isSiteVisit ? serviceCharge : siteVisitFee;
+  const traderNet = round2(discountedBase + materialsTotal + siteVisitPart);
+
+  // Two-Thirds Rule (Irish Revenue): If materials (excl. VAT) exceed two-thirds of total trader price
+  const twoThirdsRuleTriggered = traderNet > 0 && materialsTotal / traderNet > 2 / 3;
+
+  const isVatReg = input.isTraderVatRegistered !== false;
+  const traderVatRate = !isVatReg
+    ? 0
+    : twoThirdsRuleTriggered
+      ? 0.23
+      : 0.135;
+  const traderVatAmount = round2(traderNet * traderVatRate);
+
+  // Platform Fee (Brisk's own supply: €10.00 + 23% VAT = €12.30 gross)
+  const platformFee = isSiteVisit ? 0 : 10.0;
+  const platformFeeVat = isSiteVisit ? 0 : 2.3;
+  const platformFeeGross = round2(platformFee + platformFeeVat);
+
+  const tax = round2(traderVatAmount + platformFeeVat);
   const totalAmount = round2(
-    serviceCharge - traderOfferDiscount - promoDiscount + platformFee + tax
+    Math.max(0, traderNet + traderVatAmount + platformFeeGross - promoDiscount)
   );
 
   return {
     serviceCharge,
     traderOfferDiscount,
     promoDiscount,
+    materialsTotal,
+    siteVisitFee: siteVisitPart,
+    traderNet,
     platformFee,
+    platformFeeVat,
+    twoThirdsRuleTriggered,
+    traderVatRate,
+    traderVatAmount,
     tax,
-    totalAmount: Math.max(totalAmount, 0),
+    totalAmount,
     currencyCode: input.currencyCode ?? 'EUR',
     purpose: input.purpose ?? 'SERVICE',
   };
@@ -2200,6 +2232,12 @@ export const publishJob = async (
           traderOfferDiscount: breakdown.traderOfferDiscount,
           promoDiscount: breakdown.promoDiscount,
           platformFee: breakdown.platformFee,
+          platformFeeVat: breakdown.platformFeeVat,
+          materialsTotal: breakdown.materialsTotal,
+          siteVisitFee: breakdown.siteVisitFee,
+          traderVatRate: breakdown.traderVatRate,
+          traderVatAmount: breakdown.traderVatAmount,
+          twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
           tax: breakdown.tax,
           totalAmount: breakdown.totalAmount,
           currencyCode: breakdown.currencyCode,

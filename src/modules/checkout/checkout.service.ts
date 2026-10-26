@@ -99,6 +99,8 @@ const invoiceTraderSelect = {
   id: true,
   userId: true,
   businessName: true,
+  isVatRegistered: true,
+  vatNumber: true,
   avgRating: true,
   topRated: true,
   verificationStatus: true,
@@ -172,6 +174,12 @@ const serializeInvoiceBreakdown = (invoice: {
   traderOfferDiscount: Prisma.Decimal;
   promoDiscount: Prisma.Decimal;
   platformFee: Prisma.Decimal;
+  platformFeeVat?: Prisma.Decimal | null;
+  materialsTotal?: Prisma.Decimal | null;
+  siteVisitFee?: Prisma.Decimal | null;
+  traderVatRate?: Prisma.Decimal | null;
+  traderVatAmount?: Prisma.Decimal | null;
+  twoThirdsRuleTriggered?: boolean | null;
   tax: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
   currencyCode: string;
@@ -180,6 +188,12 @@ const serializeInvoiceBreakdown = (invoice: {
   traderOfferDiscount: money(invoice.traderOfferDiscount),
   promoDiscount: money(invoice.promoDiscount),
   platformFee: money(invoice.platformFee),
+  platformFeeVat: invoice.platformFeeVat != null ? money(invoice.platformFeeVat) : 0,
+  materialsTotal: invoice.materialsTotal != null ? money(invoice.materialsTotal) : 0,
+  siteVisitFee: invoice.siteVisitFee != null ? money(invoice.siteVisitFee) : 0,
+  traderVatRate: invoice.traderVatRate != null ? money(invoice.traderVatRate) : 0.135,
+  traderVatAmount: invoice.traderVatAmount != null ? money(invoice.traderVatAmount) : 0,
+  twoThirdsRuleTriggered: Boolean(invoice.twoThirdsRuleTriggered),
   tax: money(invoice.tax),
   totalAmount: money(invoice.totalAmount),
   currencyCode: invoice.currencyCode,
@@ -191,6 +205,8 @@ const buildLineItems = (
     traderOfferDiscount: Prisma.Decimal;
     promoDiscount: Prisma.Decimal;
     platformFee: Prisma.Decimal;
+    platformFeeVat?: Prisma.Decimal | null;
+    traderVatAmount?: Prisma.Decimal | null;
     tax: Prisma.Decimal;
   },
   purpose: 'SERVICE' | 'SITE_VISIT_FEE' = 'SERVICE'
@@ -203,13 +219,6 @@ const buildLineItems = (
       type: 'charge',
     },
   ];
-  if (money(invoice.platformFee) > 0) {
-    items.push({
-      key: 'platformFee',
-      amount: money(invoice.platformFee),
-      type: 'fee',
-    });
-  }
   if (money(invoice.traderOfferDiscount) > 0) {
     items.push({
       key: 'traderOfferDiscount',
@@ -217,15 +226,35 @@ const buildLineItems = (
       type: 'discount',
     });
   }
+  if (money(invoice.platformFee) > 0) {
+    items.push({
+      key: 'platformFee',
+      amount: money(invoice.platformFee),
+      type: 'fee',
+    });
+  }
+  if (invoice.traderVatAmount != null && money(invoice.traderVatAmount) > 0) {
+    items.push({
+      key: 'traderVat',
+      amount: money(invoice.traderVatAmount),
+      type: 'fee',
+    });
+  }
+  if (invoice.platformFeeVat != null && money(invoice.platformFeeVat) > 0) {
+    items.push({
+      key: 'platformFeeVat',
+      amount: money(invoice.platformFeeVat),
+      type: 'fee',
+    });
+  } else if (money(invoice.tax) > 0 && (!invoice.traderVatAmount || money(invoice.traderVatAmount) === 0)) {
+    items.push({ key: 'tax', amount: money(invoice.tax), type: 'fee' });
+  }
   if (money(invoice.promoDiscount) > 0) {
     items.push({
       key: 'promoDiscount',
       amount: -money(invoice.promoDiscount),
       type: 'discount',
     });
-  }
-  if (money(invoice.tax) > 0) {
-    items.push({ key: 'tax', amount: money(invoice.tax), type: 'fee' });
   }
   return items;
 };
@@ -631,11 +660,15 @@ const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
   // Payment-request invoices keep the trader's billed totals (materials, site visit, VAT).
   if (invoice.status !== InvoiceStatus.UNPAID || invoice.paymentRequestId) return invoice;
 
-  const purpose = resolveInvoicePurpose(invoiceContext(invoice).job);
+  const { trader, job } = invoiceContext(invoice);
+  const purpose = resolveInvoicePurpose(job);
   const breakdown = computeInvoiceBreakdown({
     serviceCharge: money(invoice.serviceCharge),
     traderOfferDiscount: money(invoice.traderOfferDiscount),
     promoDiscount: money(invoice.promoDiscount),
+    materialsTotal: money(invoice.materialsTotal),
+    siteVisitFee: money(invoice.siteVisitFee),
+    isTraderVatRegistered: trader?.isVatRegistered ?? true,
     currencyCode: invoice.currencyCode,
     purpose,
   });
@@ -644,7 +677,9 @@ const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
     money(invoice.platformFee) !== breakdown.platformFee ||
     money(invoice.tax) !== breakdown.tax ||
     money(invoice.totalAmount) !== breakdown.totalAmount ||
-    money(invoice.promoDiscount) !== breakdown.promoDiscount;
+    money(invoice.promoDiscount) !== breakdown.promoDiscount ||
+    money(invoice.platformFeeVat) !== breakdown.platformFeeVat ||
+    money(invoice.traderVatAmount) !== breakdown.traderVatAmount;
 
   if (!drift) return invoice;
 
@@ -653,6 +688,10 @@ const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
     data: {
       promoDiscount: breakdown.promoDiscount,
       platformFee: breakdown.platformFee,
+      platformFeeVat: breakdown.platformFeeVat,
+      traderVatRate: breakdown.traderVatRate,
+      traderVatAmount: breakdown.traderVatAmount,
+      twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
       tax: breakdown.tax,
       totalAmount: breakdown.totalAmount,
     },
@@ -685,6 +724,7 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
       booking: {
         include: {
           job: { select: { quoteType: true, siteVisitRequested: true } },
+          trader: { select: { isVatRegistered: true } },
         },
       },
     },
@@ -693,10 +733,14 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
   if (money(invoice.promoDiscount) <= 0 && !invoice.appliedPromoCode) return;
 
   const purpose = resolveInvoicePurpose(invoice.booking.job);
+  const trader = invoice.booking.trader;
   const breakdown = computeInvoiceBreakdown({
     serviceCharge: money(invoice.serviceCharge),
     traderOfferDiscount: money(invoice.traderOfferDiscount),
     promoDiscount: 0,
+    materialsTotal: money(invoice.materialsTotal),
+    siteVisitFee: money(invoice.siteVisitFee),
+    isTraderVatRegistered: trader?.isVatRegistered ?? true,
     currencyCode: invoice.currencyCode,
     purpose,
   });
@@ -707,6 +751,10 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
       promoDiscount: breakdown.promoDiscount,
       appliedPromoCode: null,
       platformFee: breakdown.platformFee,
+      platformFeeVat: breakdown.platformFeeVat,
+      traderVatRate: breakdown.traderVatRate,
+      traderVatAmount: breakdown.traderVatAmount,
+      twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
       tax: breakdown.tax,
       totalAmount: breakdown.totalAmount,
     },
@@ -768,10 +816,14 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
   // Must preserve SITE_VISIT_FEE (platformFee = 0). Omitting purpose defaulted to SERVICE
   // and added 10% fee, cancelling the promo (e.g. €30 − €3 + €3 = €30).
   const purpose = resolveInvoicePurpose(invoiceContext(invoice).job);
+  const { trader } = invoiceContext(invoice);
   const breakdown = computeInvoiceBreakdown({
     serviceCharge,
     traderOfferDiscount,
     promoDiscount,
+    materialsTotal: money(invoice.materialsTotal),
+    siteVisitFee: money(invoice.siteVisitFee),
+    isTraderVatRegistered: trader?.isVatRegistered ?? true,
     currencyCode: invoice.currencyCode,
     purpose,
   });
@@ -792,6 +844,10 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
         promoDiscount: breakdown.promoDiscount,
         appliedPromoCode: promoCode,
         platformFee: breakdown.platformFee,
+        platformFeeVat: breakdown.platformFeeVat,
+        traderVatRate: breakdown.traderVatRate,
+        traderVatAmount: breakdown.traderVatAmount,
+        twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
         tax: breakdown.tax,
         totalAmount: breakdown.totalAmount,
       },
@@ -811,6 +867,10 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
       promoDiscount: breakdown.promoDiscount,
       appliedPromoCode: promoCode,
       platformFee: breakdown.platformFee,
+      platformFeeVat: breakdown.platformFeeVat,
+      traderVatRate: breakdown.traderVatRate,
+      traderVatAmount: breakdown.traderVatAmount,
+      twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
       tax: breakdown.tax,
       totalAmount: breakdown.totalAmount,
     },

@@ -12,21 +12,37 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export type JobPayoutBalanceStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
 
 /**
- * Amount owed to the trader after the customer has paid.
- * = PAID payment-request (serviceCharge + materials + siteVisitFee)
- * + PAID booking upfront invoice not tied to a payment request (serviceCharge − trader offer discount).
- * Platform fee + VAT are retained by Brisk / tax — not paid out to the trader.
+ * Amount owed to the trader after the customer has paid (per Irish Disclosed Agent rules):
+ * Trader Payout = Trader Net + Trader VAT.
+ * Brisk absorbs card processing and keeps only Platform Fee + Platform Fee VAT.
+ * Trader remits their own VAT on their Revenue VAT3 return.
  */
 export const traderPayableFromPaidRequest = (r: {
   serviceCharge: Prisma.Decimal | number;
   materialsTotal: Prisma.Decimal | number;
   siteVisitFee: Prisma.Decimal | number;
-}) => round2(money(r.serviceCharge) + money(r.materialsTotal) + money(r.siteVisitFee));
+  vatAmount?: Prisma.Decimal | number | null;
+  platformFeeVat?: Prisma.Decimal | number | null;
+}) => {
+  const net = money(r.serviceCharge) + money(r.materialsTotal) + money(r.siteVisitFee);
+  const traderVat = Math.max(0, money(r.vatAmount) - money(r.platformFeeVat));
+  return round2(net + traderVat);
+};
 
 export const traderPayableFromUpfrontInvoice = (inv: {
   serviceCharge: Prisma.Decimal | number;
   traderOfferDiscount: Prisma.Decimal | number;
-}) => round2(Math.max(0, money(inv.serviceCharge) - money(inv.traderOfferDiscount)));
+  traderVatAmount?: Prisma.Decimal | number | null;
+  platformFeeVat?: Prisma.Decimal | number | null;
+  tax?: Prisma.Decimal | number | null;
+}) => {
+  const net = Math.max(0, money(inv.serviceCharge) - money(inv.traderOfferDiscount));
+  const traderVat =
+    inv.traderVatAmount != null
+      ? money(inv.traderVatAmount)
+      : Math.max(0, money(inv.tax) - money(inv.platformFeeVat));
+  return round2(net + traderVat);
+};
 
 export const jobPayoutBalanceStatus = (
   totalPayable: number,
@@ -50,6 +66,8 @@ export type JobPayoutSource = {
     serviceCharge: Prisma.Decimal | number;
     materialsTotal: Prisma.Decimal | number;
     siteVisitFee: Prisma.Decimal | number;
+    vatAmount?: Prisma.Decimal | number | null;
+    platformFeeVat?: Prisma.Decimal | number | null;
   }[];
   booking: {
     invoice: {
@@ -58,6 +76,9 @@ export type JobPayoutSource = {
       currencyCode: string;
       serviceCharge: Prisma.Decimal | number;
       traderOfferDiscount: Prisma.Decimal | number;
+      traderVatAmount?: Prisma.Decimal | number | null;
+      platformFeeVat?: Prisma.Decimal | number | null;
+      tax?: Prisma.Decimal | number | null;
     } | null;
   } | null;
   payouts: { amount: Prisma.Decimal | number; status: PayoutStatus }[];
@@ -135,6 +156,8 @@ export const jobPayoutSelect = {
       serviceCharge: true,
       materialsTotal: true,
       siteVisitFee: true,
+      vatAmount: true,
+      platformFeeVat: true,
     },
   },
   booking: {
@@ -146,6 +169,9 @@ export const jobPayoutSelect = {
           currencyCode: true,
           serviceCharge: true,
           traderOfferDiscount: true,
+          traderVatAmount: true,
+          platformFeeVat: true,
+          tax: true,
         },
       },
     },
@@ -164,6 +190,8 @@ export const jobPayoutListInclude = {
       serviceCharge: true,
       materialsTotal: true,
       siteVisitFee: true,
+      vatAmount: true,
+      platformFeeVat: true,
     },
   },
   payouts: {
