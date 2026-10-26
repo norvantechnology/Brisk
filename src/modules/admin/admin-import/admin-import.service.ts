@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { SubcategoryPriceEnteredBy } from '@prisma/client';
+import { SubcategoryPriceEnteredBy, DocumentRuleScope, TraderType } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { ImportMode, ImportResult, RowError, SkippedRow } from './admin-import.types';
 import { BadRequestError } from '../../../utils/errors';
@@ -338,10 +338,303 @@ export const importSubcategories = async (
 };
 
 /**
+ * Bulk import Document Rules (for SOLO/COMPANY traders or Categories).
+ */
+export const importDocumentRules = async (
+  rows: Record<string, unknown>[],
+  mode: ImportMode = 'skip'
+): Promise<ImportResult> => {
+  const imported: unknown[] = [];
+  const updated: unknown[] = [];
+  const skipped: SkippedRow[] = [];
+  const errors: RowError[] = [];
+
+  let rowNum = 1;
+  for (const raw of rows) {
+    rowNum++;
+    const row = normalizeRow(raw);
+
+    const documentKey = String(row['documentkey'] || row['key'] || '').trim();
+    const name = String(row['name'] || row['documentname'] || row['title'] || '').trim();
+
+    if (!documentKey) {
+      errors.push({
+        row: rowNum,
+        field: 'documentKey',
+        message: 'Document key is required.',
+      });
+      continue;
+    }
+
+    if (!name) {
+      errors.push({
+        row: rowNum,
+        field: 'name',
+        message: 'Document rule name is required.',
+      });
+      continue;
+    }
+
+    const rawScope = String(row['scope'] || '').trim().toUpperCase();
+    const rawTraderType = String(row['tradertype'] || row['type'] || '').trim().toUpperCase();
+    const categoryRef = String(
+      row['categorycode'] || row['categoryname'] || row['categoryid'] || row['category'] || ''
+    ).trim();
+
+    let scope: DocumentRuleScope;
+    let traderType: TraderType | null = null;
+    let categoryId: string | null = null;
+
+    if (rawScope === 'CATEGORY' || (categoryRef && !rawTraderType)) {
+      scope = DocumentRuleScope.CATEGORY;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryRef);
+      const cat = await prisma.category.findFirst({
+        where: isUuid
+          ? { OR: [{ id: categoryRef }, { categoryCode: categoryRef }, { urlSlug: slugify(categoryRef) }] }
+          : {
+              OR: [
+                { categoryCode: categoryRef },
+                { urlSlug: slugify(categoryRef) },
+                { name: { equals: categoryRef, mode: 'insensitive' } },
+              ],
+            },
+      });
+
+      if (!cat) {
+        errors.push({
+          row: rowNum,
+          field: 'categoryCode',
+          message: `Category not found for identifier "${categoryRef}".`,
+        });
+        continue;
+      }
+      categoryId = cat.id;
+    } else {
+      scope = DocumentRuleScope.ENTITY;
+      if (rawTraderType === 'COMPANY') {
+        traderType = TraderType.COMPANY;
+      } else {
+        traderType = TraderType.SOLO;
+      }
+    }
+
+    const description = row['description'] ? String(row['description']).trim() : null;
+    const required = toBoolean(row['required'], true);
+    const acceptedFormats = String(row['acceptedformats'] || row['formats'] || 'pdf,image').trim();
+    const sortOrder = row['sortorder'] || row['order'] ? Number(row['sortorder'] || row['order']) || 0 : 0;
+    const rawStatus = String(row['status'] || 'active').trim().toLowerCase();
+    const status = rawStatus === 'inactive' ? 'inactive' : 'active';
+
+    const existing = await prisma.documentRule.findFirst({
+      where: {
+        scope,
+        traderType,
+        categoryId,
+        documentKey,
+      },
+    });
+
+    if (existing) {
+      if (mode === 'skip') {
+        skipped.push({
+          row: rowNum,
+          identifier: documentKey,
+          reason: `Document rule with key "${documentKey}" already exists for ${scope}${
+            traderType ? ` (${traderType})` : ''
+          } (mode=skip).`,
+        });
+        continue;
+      }
+
+      const updatedItem = await prisma.documentRule.update({
+        where: { id: existing.id },
+        data: {
+          name,
+          description,
+          required,
+          acceptedFormats,
+          sortOrder,
+          status,
+        },
+      });
+      updated.push(updatedItem);
+    } else {
+      const createdItem = await prisma.documentRule.create({
+        data: {
+          scope,
+          traderType,
+          categoryId,
+          documentKey,
+          name,
+          description,
+          required,
+          acceptedFormats,
+          sortOrder,
+          status,
+        },
+      });
+      imported.push(createdItem);
+    }
+  }
+
+  return {
+    summary: {
+      totalRows: rows.length,
+      importedCount: imported.length,
+      updatedCount: updated.length,
+      skippedCount: skipped.length,
+      failedCount: errors.length,
+    },
+    imported,
+    updated,
+    skipped,
+    errors,
+  };
+};
+
+/**
+ * Bulk import Locations (Countries & Counties).
+ */
+export const importLocations = async (
+  rows: Record<string, unknown>[],
+  mode: ImportMode = 'skip'
+): Promise<ImportResult> => {
+  const imported: unknown[] = [];
+  const updated: unknown[] = [];
+  const skipped: SkippedRow[] = [];
+  const errors: RowError[] = [];
+
+  let rowNum = 1;
+  for (const raw of rows) {
+    rowNum++;
+    const row = normalizeRow(raw);
+
+    const countryCode = String(row['countrycode'] || row['code'] || '').trim().toUpperCase();
+    const countryName = String(row['countryname'] || row['country'] || '').trim();
+    const countyName = String(row['countyname'] || row['county'] || '').trim();
+    const countyCode = row['countycode'] ? String(row['countycode']).trim().toUpperCase() : null;
+
+    if (!countryCode && !countryName) {
+      errors.push({
+        row: rowNum,
+        field: 'countryCode',
+        message: 'Country code or Country name is required.',
+      });
+      continue;
+    }
+
+    const isActive = toBoolean(row['isactive'] ?? row['active'] ?? row['status'], true);
+    const sortOrder = row['sortorder'] || row['order'] ? Number(row['sortorder'] || row['order']) || 0 : 0;
+
+    let country = await prisma.country.findFirst({
+      where: countryCode
+        ? {
+            OR: [
+              { code: countryCode },
+              { name: { equals: countryName || countryCode, mode: 'insensitive' } },
+            ],
+          }
+        : { name: { equals: countryName, mode: 'insensitive' } },
+    });
+
+    if (!country) {
+      country = await prisma.country.create({
+        data: {
+          code: countryCode || countryName.slice(0, 2).toUpperCase(),
+          name: countryName || countryCode,
+          isActive,
+          sortOrder,
+        },
+      });
+      if (!countyName) {
+        imported.push(country);
+        continue;
+      }
+    } else if (!countyName) {
+      if (mode === 'skip') {
+        skipped.push({
+          row: rowNum,
+          identifier: country.code,
+          reason: `Country with code "${country.code}" already exists (mode=skip).`,
+        });
+      } else {
+        const updatedCountry = await prisma.country.update({
+          where: { id: country.id },
+          data: {
+            name: countryName || country.name,
+            isActive,
+            sortOrder,
+          },
+        });
+        updated.push(updatedCountry);
+      }
+      continue;
+    }
+
+    const existingCounty = await prisma.county.findFirst({
+      where: {
+        countryId: country.id,
+        OR: [
+          { name: { equals: countyName, mode: 'insensitive' } },
+          ...(countyCode ? [{ code: countyCode }] : []),
+        ],
+      },
+    });
+
+    if (existingCounty) {
+      if (mode === 'skip') {
+        skipped.push({
+          row: rowNum,
+          identifier: `${country.code} / ${countyName}`,
+          reason: `County "${countyName}" already exists under country "${country.code}" (mode=skip).`,
+        });
+        continue;
+      }
+
+      const updatedCounty = await prisma.county.update({
+        where: { id: existingCounty.id },
+        data: {
+          name: countyName,
+          code: countyCode || existingCounty.code,
+          isActive,
+          sortOrder,
+        },
+      });
+      updated.push(updatedCounty);
+    } else {
+      const createdCounty = await prisma.county.create({
+        data: {
+          countryId: country.id,
+          name: countyName,
+          code: countyCode || null,
+          isActive,
+          sortOrder,
+        },
+      });
+      imported.push(createdCounty);
+    }
+  }
+
+  return {
+    summary: {
+      totalRows: rows.length,
+      importedCount: imported.length,
+      updatedCount: updated.length,
+      skippedCount: skipped.length,
+      failedCount: errors.length,
+    },
+    imported,
+    updated,
+    skipped,
+    errors,
+  };
+};
+
+/**
  * Generate sample CSV / Excel template buffer for download.
  */
 export const generateTemplate = (
-  entity: 'categories' | 'subcategories',
+  entity: 'categories' | 'subcategories' | 'document-rules' | 'locations',
   format: 'csv' | 'xlsx' = 'csv'
 ): { buffer: Buffer; filename: string; mimeType: string } => {
   const wb = XLSX.utils.book_new();
@@ -384,7 +677,7 @@ export const generateTemplate = (
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
     XLSX.utils.book_append_sheet(wb, ws, 'Categories');
-  } else {
+  } else if (entity === 'subcategories') {
     const headers = [
       'categoryCode',
       'name',
@@ -441,6 +734,89 @@ export const generateTemplate = (
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
     XLSX.utils.book_append_sheet(wb, ws, 'Subcategories');
+  } else if (entity === 'document-rules') {
+    const headers = [
+      'scope',
+      'traderType',
+      'categoryCode',
+      'documentKey',
+      'name',
+      'description',
+      'required',
+      'acceptedFormats',
+      'sortOrder',
+      'status',
+    ];
+    const sampleRows = [
+      [
+        'ENTITY',
+        'SOLO',
+        '',
+        'driving_license',
+        'Driving License',
+        'Clear photo of front and back of driving license',
+        true,
+        'pdf,image',
+        1,
+        'active',
+      ],
+      [
+        'ENTITY',
+        'COMPANY',
+        '',
+        'certificate_of_incorporation',
+        'Certificate of Incorporation',
+        'Official CRO company registration document',
+        true,
+        'pdf,image',
+        1,
+        'active',
+      ],
+      [
+        'ENTITY',
+        'SOLO',
+        '',
+        'public_liability_insurance',
+        'Public Liability Insurance',
+        'Minimum €2.6m cover with Brisk indemnified',
+        true,
+        'pdf,image',
+        2,
+        'active',
+      ],
+      [
+        'CATEGORY',
+        '',
+        'CAT-0010',
+        'safe_pass',
+        'Safe Pass Card',
+        'Valid SOLAS Safe Pass registration',
+        true,
+        'pdf,image',
+        1,
+        'active',
+      ],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
+    XLSX.utils.book_append_sheet(wb, ws, 'DocumentRules');
+  } else {
+    const headers = [
+      'countryCode',
+      'countryName',
+      'countyName',
+      'countyCode',
+      'isActive',
+      'sortOrder',
+    ];
+    const sampleRows = [
+      ['IE', 'Ireland', 'Dublin', 'DB', true, 1],
+      ['IE', 'Ireland', 'Cork', 'CK', true, 2],
+      ['IE', 'Ireland', 'Galway', 'GW', true, 3],
+      ['IE', 'Ireland', 'Limerick', 'LK', true, 4],
+      ['GB', 'United Kingdom', 'Greater London', 'LDN', true, 1],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Locations');
   }
 
   const isCsv = format === 'csv';
