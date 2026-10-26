@@ -1602,6 +1602,21 @@ const buildCustomerJobView = async (
     !startedAt &&
     !finished;
 
+  const totalAmount = round2(totalPaid + amountDue) || round2(serviceFee + processingFee + vatAmount - discount);
+  const formatCur = (amt: number) => {
+    const isNegative = amt < 0;
+    const abs = Math.abs(amt);
+    return `${isNegative ? '-' : ''}${currencySymbol}${abs.toFixed(2)}`;
+  };
+
+  const paymentSummaryList = [
+    { key: 'serviceFee', value: formatCur(serviceFee) },
+    ...(discount > 0 ? [{ key: 'discount', value: formatCur(-discount) }] : []),
+    { key: 'processingFee', value: formatCur(processingFee) },
+    { key: 'vatAmount', value: formatCur(vatAmount) },
+    { key: 'totalAmount', value: formatCur(totalAmount) },
+  ];
+
   const view = {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
@@ -1675,6 +1690,8 @@ const buildCustomerJobView = async (
         }
       : null,
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
+    totalAmount,
+    formattedTotalAmount: formatCur(totalAmount),
     paymentSummary: {
       serviceFee,
       processingFee,
@@ -1683,6 +1700,8 @@ const buildCustomerJobView = async (
       vatAmount,
       totalPaid,
       amountDue,
+      totalAmount,
+      formattedTotalAmount: formatCur(totalAmount),
       paymentStatus,
       currencyCode,
       currencySymbol,
@@ -1692,30 +1711,24 @@ const buildCustomerJobView = async (
       baseRate: serviceFee,
       platformFee: processingFee,
       offerApplied: discount > 0 ? -discount : 0,
-      netPayout: round2(totalPaid + amountDue),
+      netPayout: totalAmount,
       confirmedPayments,
       lineItems: [
         { key: 'serviceFee', label: 'Service Fee', amount: serviceFee, type: 'charge' as const },
         ...(discount > 0 ? [{ key: 'discount', label: 'Discount', amount: -discount, type: 'discount' as const }] : []),
         { key: 'processingFee', label: 'Platform Fee', amount: processingFee, type: 'fee' as const },
         { key: 'vatAmount', label: 'VAT', amount: vatAmount, type: 'fee' as const },
-        { key: 'totalAmount', label: 'Total', amount: round2(totalPaid + amountDue), type: 'total' as const },
+        { key: 'totalAmount', label: 'Total', amount: totalAmount, type: 'total' as const },
       ],
       items: [
         { key: 'serviceFee', label: 'Service Fee', amount: serviceFee, type: 'charge' as const },
         ...(discount > 0 ? [{ key: 'discount', label: 'Discount', amount: -discount, type: 'discount' as const }] : []),
         { key: 'processingFee', label: 'Platform Fee', amount: processingFee, type: 'fee' as const },
         { key: 'vatAmount', label: 'VAT', amount: vatAmount, type: 'fee' as const },
-        { key: 'totalAmount', label: 'Total', amount: round2(totalPaid + amountDue), type: 'total' as const },
+        { key: 'totalAmount', label: 'Total', amount: totalAmount, type: 'total' as const },
       ],
     },
-    paymentSummaryList: [
-      { key: 'serviceFee', label: 'Service Fee', amount: serviceFee, type: 'charge' as const },
-      ...(discount > 0 ? [{ key: 'discount', label: 'Discount', amount: -discount, type: 'discount' as const }] : []),
-      { key: 'processingFee', label: 'Platform Fee', amount: processingFee, type: 'fee' as const },
-      { key: 'vatAmount', label: 'VAT', amount: vatAmount, type: 'fee' as const },
-      { key: 'totalAmount', label: 'Total', amount: round2(totalPaid + amountDue), type: 'total' as const },
-    ],
+    paymentSummaryList,
     confirmedPayments,
     invoiceId: pendingPartialRequest?.invoice?.id ?? invoice?.id ?? null,
     invoiceNumber: pendingPartialRequest?.invoice?.invoiceNumber ?? invoice?.invoiceNumber ?? null,
@@ -1781,6 +1794,8 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
       lng: view.address.longitude,
       mapImageUrl: view.address.mapImageUrl,
     },
+    totalAmount: view.totalAmount,
+    formattedTotalAmount: view.formattedTotalAmount,
     paymentDetails: {
       serviceFee: pay.serviceFee,
       processingFee: pay.processingFee,
@@ -1788,6 +1803,8 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
       vatAmount: pay.vatAmount,
       totalPaid: pay.totalPaid,
       amountDue: pay.amountDue,
+      totalAmount: view.totalAmount,
+      formattedTotalAmount: view.formattedTotalAmount,
       currencyCode: pay.currencyCode,
       currencySymbol: pay.currencySymbol,
       paymentStatus: pay.paymentStatus,
