@@ -1606,15 +1606,38 @@ const buildCustomerJobView = async (
   const formatCur = (amt: number) => {
     const isNegative = amt < 0;
     const abs = Math.abs(amt);
-    return `${isNegative ? '-' : ''}${currencySymbol}${abs.toFixed(2)}`;
+    return `${isNegative ? '-' : ''}${currencySymbol} ${abs === 0 ? '0' : abs.toFixed(2)}`;
   };
 
   const paymentSummaryList = [
-    { key: 'serviceFee', value: formatCur(serviceFee) },
-    ...(discount > 0 ? [{ key: 'discount', value: formatCur(-discount) }] : []),
-    { key: 'processingFee', value: formatCur(processingFee) },
-    { key: 'vatAmount', value: formatCur(vatAmount) },
-    { key: 'totalAmount', value: formatCur(totalAmount) },
+    {
+      label: 'Service Fee',
+      amount: formatCur(serviceFee),
+      key: 'serviceFee',
+      value: formatCur(serviceFee),
+    },
+    ...(discount > 0
+      ? [
+          {
+            label: 'Discount',
+            amount: formatCur(-discount),
+            key: 'discount',
+            value: formatCur(-discount),
+          },
+        ]
+      : []),
+    {
+      label: 'Platform Fee',
+      amount: formatCur(processingFee),
+      key: 'processingFee',
+      value: formatCur(processingFee),
+    },
+    {
+      label: 'VAT',
+      amount: formatCur(vatAmount),
+      key: 'vatAmount',
+      value: formatCur(vatAmount),
+    },
   ];
 
   const view = {
@@ -1713,20 +1736,6 @@ const buildCustomerJobView = async (
       offerApplied: discount > 0 ? -discount : 0,
       netPayout: totalAmount,
       confirmedPayments,
-      lineItems: [
-        { key: 'serviceFee', label: 'Service Fee', amount: serviceFee, type: 'charge' as const },
-        ...(discount > 0 ? [{ key: 'discount', label: 'Discount', amount: -discount, type: 'discount' as const }] : []),
-        { key: 'processingFee', label: 'Platform Fee', amount: processingFee, type: 'fee' as const },
-        { key: 'vatAmount', label: 'VAT', amount: vatAmount, type: 'fee' as const },
-        { key: 'totalAmount', label: 'Total', amount: totalAmount, type: 'total' as const },
-      ],
-      items: [
-        { key: 'serviceFee', label: 'Service Fee', amount: serviceFee, type: 'charge' as const },
-        ...(discount > 0 ? [{ key: 'discount', label: 'Discount', amount: -discount, type: 'discount' as const }] : []),
-        { key: 'processingFee', label: 'Platform Fee', amount: processingFee, type: 'fee' as const },
-        { key: 'vatAmount', label: 'VAT', amount: vatAmount, type: 'fee' as const },
-        { key: 'totalAmount', label: 'Total', amount: totalAmount, type: 'total' as const },
-      ],
     },
     paymentSummaryList,
     confirmedPayments,

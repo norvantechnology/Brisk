@@ -660,23 +660,16 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                   totalPaid: 120
  *                   amountDue: 0
  *                   totalAmount: 120
- *                   formattedTotalAmount: €120.00
+ *                   formattedTotalAmount: € 120.00
  *                   currencyCode: EUR
  *                   currencySymbol: €
  *                   paymentStatus: PAID
- *                   lineItems:
- *                     - { key: serviceFee, label: Service Fee, amount: 120, type: charge }
- *                     - { key: discount, label: Discount, amount: -5, type: discount }
- *                     - { key: processingFee, label: Platform Fee, amount: 5, type: fee }
- *                     - { key: vatAmount, label: VAT, amount: 0, type: fee }
- *                     - { key: totalAmount, label: Total, amount: 120, type: total }
  *                 totalAmount: 120
- *                 formattedTotalAmount: €120.00
+ *                 formattedTotalAmount: € 120.00
  *                 paymentSummaryList:
- *                   - { key: serviceFee, value: €120.00 }
- *                   - { key: processingFee, value: €5.00 }
- *                   - { key: vatAmount, value: €0.00 }
- *                   - { key: totalAmount, value: €120.00 }
+ *                   - { label: Service Fee, amount: "€ 120.00", key: serviceFee, value: "€ 120.00" }
+ *                   - { label: Platform Fee, amount: "€ 5.00", key: processingFee, value: "€ 5.00" }
+ *                   - { label: VAT, amount: "€ 0", key: vatAmount, value: "€ 0" }
  *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
  *                 receiptUrl: /payments/7c3d4e5f-0000-4000-8000-000000000004/receipt
  *                 canReview: true
