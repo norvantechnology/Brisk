@@ -95,6 +95,27 @@ export const customerHasFinalPaymentRequest = (job: {
     (p) => p.type === 'FULL_JOB' && (p.status === 'SENT' || p.status === 'PAID')
   );
 
+/** Resolves whether a job is a Site Visit or Direct job, along with display labels. */
+export const resolveJobType = (job: {
+  quoteType?: JobQuoteType | string | null;
+  siteVisitRequested?: boolean | null;
+  siteVisitFee?: Prisma.Decimal | number | null;
+  siteVisitRequests?: unknown[];
+}) => {
+  const isSiteVisit = Boolean(
+    job.quoteType === JobQuoteType.ONSITE ||
+      job.siteVisitRequested === true ||
+      (job.siteVisitFee != null && Number(job.siteVisitFee) > 0) ||
+      (Array.isArray(job.siteVisitRequests) && job.siteVisitRequests.length > 0)
+  );
+
+  return {
+    isSiteVisit,
+    jobType: isSiteVisit ? ('SITE_VISIT' as const) : ('DIRECT' as const),
+    jobTypeLabel: isSiteVisit ? 'Site Visit' : 'Direct',
+  };
+};
+
 const generateJobRef = () => `JOB-${randomBytes(2).toString('hex').toUpperCase()}`;
 const generateBookingRef = () => `BKG-${randomBytes(2).toString('hex').toUpperCase()}`;
 
@@ -508,6 +529,7 @@ const serializeJob = (
     maxBudget: job.maxBudget != null ? money(job.maxBudget) : null,
     siteVisitRequested: job.siteVisitRequested,
     siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
+    ...resolveJobType(job),
   status: job.status,
     statusBadge: customerStatusBadgeFor(
       job.status,
@@ -1145,6 +1167,9 @@ export const listMyJobsByTab = async (
         scheduledDate: true,
         createdAt: true,
         updatedAt: true,
+        quoteType: true,
+        siteVisitRequested: true,
+        siteVisitFee: true,
         category: { select: { id: true, name: true } },
         subcategory: { select: { id: true, name: true } },
         trader: { select: { businessName: true, user: { select: { fullName: true } } } },
@@ -1168,13 +1193,6 @@ export const listMyJobsByTab = async (
     }),
   ]);
 
-  const reschedulableStatuses: JobStatus[] = [
-    JobStatus.PUBLISHED,
-    JobStatus.QUOTED,
-    JobStatus.ACCEPTED,
-    JobStatus.SCHEDULED,
-  ];
-
   const currencyCodes = new Set<string>(['EUR']);
   const rows = jobs.map((job) => {
     const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
@@ -1189,21 +1207,25 @@ export const listMyJobsByTab = async (
         ? (job.booking?.finishedAt ?? job.updatedAt)
         : (job.scheduledDate ?? job.createdAt);
 
-    /** Site visit + non–site visit (Snehal) — date/time only via POST /jobs/{id}/reschedule. */
-    const canReschedule =
-      !cancelled && !job.booking?.arrivedAt && reschedulableStatuses.includes(job.status);
-
     /**
-     * RESCHEDULE badge when the customer can (or already did) move the appointment:
-     * site-visit confirmed/requested, booked/scheduled job, or booking already RESCHEDULED.
+     * Reschedule is allowed until the trader marks "I Have Arrived" (booking.arrivedAt).
+     * Works for site visit and direct/non-site-visit jobs in any active state.
      */
-    const showRescheduleStatus =
-      canReschedule &&
-      (job.siteVisitRequests.length > 0 ||
-        job.booking?.status === BookingStatus.RESCHEDULED ||
-        Boolean(job.booking) ||
-        job.status === JobStatus.SCHEDULED ||
-        job.status === JobStatus.ACCEPTED);
+    const canReschedule =
+      !cancelled &&
+      job.status !== JobStatus.COMPLETED &&
+      job.status !== JobStatus.DRAFT &&
+      !job.booking?.arrivedAt &&
+      !job.booking?.finishedAt;
+
+    /** Only true when the booking/visit was actually marked rescheduled/reschedule-required. */
+    const isRescheduled =
+      job.booking?.status === BookingStatus.RESCHEDULED ||
+      job.siteVisitRequests.some(
+        (r) => r.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+      );
+
+    const { isSiteVisit, jobType, jobTypeLabel } = resolveJobType(job);
 
     /** Paid + finished, no review yet → Completed tab shows Pending Rating. */
     const canReview =
@@ -1225,16 +1247,16 @@ export const listMyJobsByTab = async (
           ? 'PARTIAL_PAYMENT'
           : finished && !paymentRequested && job.status === JobStatus.PAYMENT_PENDING
             ? 'WORK_COMPLETED'
-            : showRescheduleStatus
-              ? 'RESCHEDULE'
+            : isRescheduled
+              ? 'RESCHEDULED'
               : job.status;
 
     const statusLabel = showPendingRating
       ? 'Pending Rating'
       : hasPendingPartial
         ? 'Partial Payment'
-        : showRescheduleStatus
-          ? 'RESCHEDULE'
+        : isRescheduled
+          ? 'Rescheduled'
           : customerStatusBadgeFor(
               job.status,
               job.booking?.status ?? null,
@@ -1255,8 +1277,12 @@ export const listMyJobsByTab = async (
       categoryName: job.category?.name ?? null,
       subcategoryId: job.subcategory?.id ?? null,
       subcategoryName: job.subcategory?.name ?? null,
-      /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule */
+      /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule (allowed until trader arrives) */
       canReschedule,
+      /** Job classification requested by mobile (Dipen): Site Visit vs Direct */
+      jobType,
+      jobTypeLabel,
+      isSiteVisit,
       /** true → open rating bottom sheet; submit via POST /jobs/{id}/review */
       canReview,
       provider: job.trader ? job.trader.businessName || job.trader.user.fullName : null,
@@ -1568,12 +1594,24 @@ const buildCustomerJobView = async (
     };
   });
 
+  const { isSiteVisit, jobType, jobTypeLabel } = resolveJobType(job);
+  const canReschedule =
+    !cancelled &&
+    job.status !== JobStatus.COMPLETED &&
+    job.status !== JobStatus.DRAFT &&
+    !startedAt &&
+    !finished;
+
   const view = {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
     title: job.title,
     description: job.description,
     category: categoryLabel,
+    jobType,
+    jobTypeLabel,
+    isSiteVisit,
+    canReschedule,
     photos: job.photos.filter((p) => p.kind !== JobPhotoKind.PROOF).map((p) => p.photoUrl),
     status: toDisplayStatus(
       cancelled
@@ -1694,6 +1732,10 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     description: view.description,
     status: view.status,
     statusLabel: view.statusBadge,
+    jobType: view.jobType,
+    jobTypeLabel: view.jobTypeLabel,
+    isSiteVisit: view.isSiteVisit,
+    canReschedule: view.canReschedule,
     date: dateAt
       ? `${SHORT_MONTHS[dateAt.getMonth()]} ${dateAt.getDate()}${view.timeSlot ? `, ${view.timeSlot}` : ''}`
       : null,

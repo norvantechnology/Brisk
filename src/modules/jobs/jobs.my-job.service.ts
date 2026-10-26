@@ -20,6 +20,7 @@ import {
   formatDisplayDay,
   money,
   resolveCustomerJobAmount,
+  resolveJobType,
   round2,
   toDisplayStatus,
 } from './jobs.service';
@@ -38,6 +39,8 @@ const RESCHEDULABLE_STATUSES: JobStatus[] = [
   JobStatus.QUOTED,
   JobStatus.ACCEPTED,
   JobStatus.SCHEDULED,
+  JobStatus.IN_PROGRESS,
+  JobStatus.PAYMENT_PENDING,
 ];
 
 const traderName = (t: { businessName: string | null; user: { fullName: string | null } }) =>
@@ -201,6 +204,14 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
       cancelledAt: true,
       createdAt: true,
       updatedAt: true,
+      quoteType: true,
+      siteVisitRequested: true,
+      siteVisitFee: true,
+      siteVisitRequests: {
+        where: { status: { not: TraderSiteVisitStatus.CANCELLED } },
+        select: { id: true, status: true },
+        take: 1,
+      },
       category: { select: { id: true, name: true } },
       subcategory: { select: { id: true, name: true } },
       address: true,
@@ -402,6 +413,7 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
         }),
     category: job.category,
     subcategory: job.subcategory,
+    ...resolveJobType(job),
     scheduledDate,
     date: scheduledDate ? formatDisplayDay(scheduledDate) : null,
     timeSlot: job.timeSlot,
@@ -471,7 +483,11 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
       canConfirmCompletion: finished && !cancelled && !booking?.customerConfirmedAt && !hasActiveDispute,
       canCancel: !cancelled && !finished && pricing.totalPaid === 0,
       canReschedule:
-        !cancelled && !booking?.arrivedAt && RESCHEDULABLE_STATUSES.includes(job.status),
+        !cancelled &&
+        job.status !== JobStatus.COMPLETED &&
+        job.status !== JobStatus.DRAFT &&
+        !booking?.arrivedAt &&
+        !booking?.finishedAt,
       /** true → rate the trader via POST /jobs/{id}/review */
       canReview: finished && !cancelled && Boolean(job.trader) && !booking?.ratingReview,
       canReportIssue: Boolean(job.traderId) && !hasActiveDispute,
@@ -536,7 +552,10 @@ export const rescheduleJob = async (
   });
   if (!job) throw new NotFoundError('Job not found.');
   if (isJobCancelled(job)) throw new BadRequestError('Cancelled jobs cannot be rescheduled.');
-  if (job.booking?.arrivedAt || job.booking?.finishedAt) {
+  if (job.status === JobStatus.COMPLETED || job.booking?.finishedAt) {
+    throw new BadRequestError('Completed jobs cannot be rescheduled.');
+  }
+  if (job.booking?.arrivedAt) {
     throw new BadRequestError('The trader has already started this job, so it can no longer be rescheduled.');
   }
   if (!RESCHEDULABLE_STATUSES.includes(job.status)) {

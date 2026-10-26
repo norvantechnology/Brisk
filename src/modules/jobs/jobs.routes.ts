@@ -313,8 +313,11 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *       - `date` — "October 24, 2026" (ACTIVE: scheduled/posted day · COMPLETED: finished day · OTHER: cancelled day); `dateAt` ISO
  *       - `categoryId` / `categoryName` · `subcategoryId` / `subcategoryName` — Reschedule sheet (read-only)
  *       - Reschedule (site visit + non–site visit): `canReschedule` = true → open sheet
- *         (`status` / `statusLabel` = `RESCHEDULE` when booked / site-visit / already rescheduled).
+ *         Allowed for any active job until the trader marks "I Have Arrived".
  *         Customer may change **date + time only**. Job stays on Active after submit.
+ *       - `jobType` — `SITE_VISIT` | `DIRECT` (distinguishes site visit vs direct job)
+ *       - `jobTypeLabel` — `Site Visit` | `Direct`
+ *       - `isSiteVisit` — boolean flag (true for site visit jobs, false for direct)
  *       - `provider` — assigned trader name (null until assigned)
  *       - `amount` (number or null) + `amountType`:
  *         `Estimated` (accepted quote / service charge / budget) · `Amount Due` (payment request sent) ·
@@ -358,13 +361,14 @@ router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
  *                         statusLabel: Active
  *                         date: October 24, 2026
  *                         dateAt: '2026-10-24T00:00:00.000Z'
- *                         status: RESCHEDULE
- *                         statusLabel: RESCHEDULE
  *                         categoryId: uuid
  *                         categoryName: Boiler
  *                         subcategoryId: uuid
  *                         subcategoryName: Boiler Repair
  *                         canReschedule: true
+ *                         jobType: DIRECT
+ *                         jobTypeLabel: Direct
+ *                         isSiteVisit: false
  *                         provider: "Liam O'Connor Plumbing"
  *                         amount: 140
  *                         amountType: Estimated
@@ -615,6 +619,10 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                 description: Fixing loose kitchen cabinet hinges and repairing a squeaky bedroom door frame.
  *                 status: COMPLETED
  *                 statusLabel: Completed
+ *                 jobType: DIRECT
+ *                 jobTypeLabel: Direct
+ *                 isSiteVisit: false
+ *                 canReschedule: false
  *                 date: 'Oct 24, 2:00 PM - 4:00 PM'
  *                 dateAt: '2026-10-24T00:00:00.000Z'
  *                 estimatedDuration: 2-3 hours
