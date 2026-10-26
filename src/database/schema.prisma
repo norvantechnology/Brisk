@@ -307,6 +307,7 @@ model AdminUser {
   passwordHash    String      @map("password_hash")
   role            AdminRole   @default(ADMIN)
   status          AdminStatus @default(ACTIVE)
+  permissions     String[]    @default([]) @map("permissions")
   profilePhotoUrl String?     @map("profile_photo_url")
   joinedAt        DateTime    @default(now()) @map("joined_at")
   lastLoginAt     DateTime?   @map("last_login_at")

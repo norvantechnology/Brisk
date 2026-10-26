@@ -5,6 +5,7 @@ import * as controller from './admin-customer-details.controller';
 import {
   customerActivityQuerySchema,
   customerAddressesQuerySchema,
+  customerAddressIdParamSchema,
   customerChatThreadParamSchema,
   customerChatsQuerySchema,
   customerDetailsIdParamSchema,
@@ -98,7 +99,10 @@ router.get(
  *         name: sortBy
  *         description: Column to sort by (default `createdAt`). Unknown values return 400.
  *         schema: { type: string, enum: [label, addressType, addressLine1, city, county, eircode, country, isDefault, createdAt, updatedAt], default: createdAt }
- *       - $ref: '#/components/parameters/AdminSortOrder'
+ *       - in: query
+ *         name: unmask
+ *         description: Reveal unmasked address data. Requires permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN`. An audit log entry is recorded upon access.
+ *         schema: { type: boolean, default: false }
  *     responses:
  *       200:
  *         content:
@@ -110,29 +114,88 @@ router.get(
  *                 - id: 8d2e3f40-0000-4000-8000-000000000002
  *                   label: Home
  *                   addressType: Home
- *                   houseNumber: '12'
- *                   addressLine1: Main Street
+ *                   houseNumber: XXXXX
+ *                   addressLine1: XXXXX
  *                   addressLine2: null
  *                   city: Dublin
  *                   county: Dublin
- *                   eircode: D02 X285
+ *                   eircode: XXXXX
  *                   country: Ireland
- *                   latitude: 53.3498
- *                   longitude: -6.2603
+ *                   latitude: null
+ *                   longitude: null
  *                   mapImageUrl: null
  *                   isDefault: true
  *                   isPrimary: true
+ *                   isMasked: true
  *                   createdAt: '2026-09-20T10:00:00.000Z'
  *                   updatedAt: '2026-09-20T10:00:00.000Z'
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  *       400: { $ref: '#/components/responses/AdminListValidationError' }
  *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       403: { description: Forbidden. Lacks VIEW_CUSTOMER_FULL_ADDRESS permission when unmask=true. }
  *       404: { description: Customer not found. }
  */
 router.get(
   '/customers/:id/addresses',
   validate(customerAddressesQuerySchema),
   controller.listAddresses
+);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/addresses/{addressId}/reveal:
+ *   post:
+ *     summary: Reveal full unmasked address for a customer (Security Audit Logged)
+ *     description: |
+ *       Returns the unmasked address for the given customer and address ID.
+ *       Enforces role-based permission `VIEW_CUSTOMER_FULL_ADDRESS` (or `SUPER_ADMIN`).
+ *       Records a separate audit log with admin ID, customer ID, address ID, action, and timestamp.
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: addressId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Unmasked customer address returned successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer address revealed successfully.
+ *               data:
+ *                 id: 8d2e3f40-0000-4000-8000-000000000002
+ *                 label: Home
+ *                 addressType: Home
+ *                 houseNumber: '12'
+ *                 addressLine1: Main Street
+ *                 addressLine2: null
+ *                 city: Dublin
+ *                 county: Dublin
+ *                 eircode: D02 X285
+ *                 country: Ireland
+ *                 latitude: 53.3498
+ *                 longitude: -6.2603
+ *                 mapImageUrl: null
+ *                 isDefault: true
+ *                 isPrimary: true
+ *                 isMasked: false
+ *                 createdAt: '2026-09-20T10:00:00.000Z'
+ *                 updatedAt: '2026-09-20T10:00:00.000Z'
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       403: { description: Access denied. Missing VIEW_CUSTOMER_FULL_ADDRESS permission. }
+ *       404: { description: Customer or address not found. }
+ */
+router.post(
+  '/customers/:id/addresses/:addressId/reveal',
+  validate(customerAddressIdParamSchema),
+  controller.revealAddress
 );
 
 /**
@@ -168,6 +231,10 @@ router.get(
  *       - in: query
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
+ *       - in: query
+ *         name: unmask
+ *         description: Reveal unmasked property address and meter numbers. Requires permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN`. An audit log entry is recorded upon access.
+ *         schema: { type: boolean, default: false }
  *     responses:
  *       200:
  *         content:
@@ -181,29 +248,31 @@ router.get(
  *                   label: Home
  *                   addressId: 8d2e3f40-0000-4000-8000-000000000002
  *                   addressType: Home
- *                   houseNumber: '12'
- *                   addressLine1: Main Street
+ *                   houseNumber: XXXXX
+ *                   addressLine1: XXXXX
  *                   addressLine2: null
  *                   city: Dublin
  *                   county: Dublin
- *                   eircode: D02 X285
+ *                   eircode: XXXXX
  *                   country: Ireland
- *                   fullAddress: 12 Main Street, Dublin, Dublin, D02 X285
- *                   latitude: 53.3498
- *                   longitude: -6.2603
+ *                   fullAddress: XXXXX, Dublin, Ireland
+ *                   latitude: null
+ *                   longitude: null
  *                   mapImageUrl: null
  *                   isPrimary: true
- *                   mprnNumber: '10012345678'
- *                   gprnNumber: '1234567'
+ *                   mprnNumber: XXXXX
+ *                   gprnNumber: XXXXX
  *                   utnNumber: null
  *                   metersCount: 2
  *                   activeSubscriptionsCount: 2
  *                   jobsCount: 3
+ *                   isMasked: true
  *                   createdAt: '2026-09-20T10:00:00.000Z'
  *                   updatedAt: '2026-09-20T10:00:00.000Z'
  *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  *       400: { $ref: '#/components/responses/AdminListValidationError' }
  *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       403: { description: Forbidden. Lacks VIEW_CUSTOMER_FULL_ADDRESS permission when unmask=true. }
  *       404: { description: Customer not found. }
  */
 router.get(
@@ -222,6 +291,57 @@ router.get(
  *       - `meters[]` — electricity (MPRN) / gas (GPRN) meters with full `readings[]` history (latest first)
  *       - `subscriptions[]` — utility provider subscriptions (active and cancelled, with `status`)
  *       - `jobs[]` — jobs posted at this property's address (latest first)
+ *       Address and meter identifier fields are masked by default. Pass `?unmask=true` to view full details (requires `VIEW_CUSTOMER_FULL_ADDRESS` permission).
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: propertyId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: unmask
+ *         description: Reveal unmasked address and meter details. Requires `VIEW_CUSTOMER_FULL_ADDRESS` permission or `SUPER_ADMIN`. Access is recorded in the audit log.
+ *         schema: { type: boolean, default: false }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer property retrieved successfully.
+ *               data:
+ *                 id: 7c1d2e3f-0000-4000-8000-000000000001
+ *                 propertyName: Home
+ *                 fullAddress: XXXXX, Dublin, Ireland
+ *                 isPrimary: true
+ *                 isMasked: true
+ *                 mprnNumber: XXXXX
+ *                 gprnNumber: XXXXX
+ *                 utnNumber: null
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       403: { description: Forbidden. Lacks VIEW_CUSTOMER_FULL_ADDRESS permission when unmask=true. }
+ *       404: { description: Customer or property not found. }
+ */
+router.get(
+  '/customers/:id/properties/:propertyId',
+  validate(customerPropertyIdParamSchema),
+  controller.getProperty
+);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/properties/{propertyId}/reveal:
+ *   post:
+ *     summary: Reveal full unmasked property address for a customer (Security Audit Logged)
+ *     description: |
+ *       Returns the unmasked property detail for the given customer and property ID.
+ *       Enforces role-based permission `VIEW_CUSTOMER_FULL_ADDRESS` (or `SUPER_ADMIN`).
+ *       Records a separate audit log with admin ID, customer ID, property ID, action, and timestamp.
  *     tags: ['Admin / Customer Details']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -235,57 +355,29 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
+ *         description: Unmasked customer property returned successfully.
  *         content:
  *           application/json:
  *             example:
  *               success: true
- *               message: Customer property retrieved successfully.
+ *               message: Customer property revealed successfully.
  *               data:
  *                 id: 7c1d2e3f-0000-4000-8000-000000000001
  *                 propertyName: Home
  *                 fullAddress: 12 Main Street, Dublin, Dublin, D02 X285
  *                 isPrimary: true
+ *                 isMasked: false
  *                 mprnNumber: '10012345678'
  *                 gprnNumber: '1234567'
  *                 utnNumber: null
- *                 meters:
- *                   - id: 9e3f4051-0000-4000-8000-000000000003
- *                     meterType: electricity
- *                     referenceLabel: MPRN
- *                     referenceNumber: '10012345678'
- *                     serialNumber: null
- *                     unitLabel: kWh
- *                     readingsCount: 1
- *                     readings:
- *                       - id: a0405162-0000-4000-8000-000000000004
- *                         value: 15234.5
- *                         readingDate: '2026-10-01T09:00:00.000Z'
- *                         status: pending
- *                         photoUrl: null
- *                         createdAt: '2026-10-01T09:00:00.000Z'
- *                 subscriptions:
- *                   - id: b1516273-0000-4000-8000-000000000005
- *                     serviceType: electricity
- *                     serviceLabel: Electricity
- *                     status: active
- *                     accountNumber: null
- *                     provider: { id: c2627384-0000-4000-8000-000000000006, name: Electric Ireland, logoUrl: null, iconUrl: null }
- *                     createdAt: '2026-09-20T10:00:00.000Z'
- *                 jobsCount: 1
- *                 jobs:
- *                   - id: d3738495-0000-4000-8000-000000000007
- *                     jobRef: JOB-411A
- *                     title: Boiler Repair
- *                     status: COMPLETED
- *                     scheduledDate: '2026-10-02T00:00:00.000Z'
- *                     createdAt: '2026-09-28T10:00:00.000Z'
- *                     trader: { id: e48495a6-0000-4000-8000-000000000008, businessName: Wilson Electrics }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       403: { description: Access denied. Missing VIEW_CUSTOMER_FULL_ADDRESS permission. }
  *       404: { description: Customer or property not found. }
  */
-router.get(
-  '/customers/:id/properties/:propertyId',
+router.post(
+  '/customers/:id/properties/:propertyId/reveal',
   validate(customerPropertyIdParamSchema),
-  controller.getProperty
+  controller.revealProperty
 );
 
 /**

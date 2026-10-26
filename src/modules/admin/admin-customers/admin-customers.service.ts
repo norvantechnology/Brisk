@@ -23,6 +23,13 @@ import bcrypt from 'bcryptjs';
 import { serializeHistoricalMoney } from '../../../services/currency.service';
 import { buildListOrderBy, compareValues, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import { dateRangeWhere, numberRangeWhere } from '../../../utils/list-filters';
+import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
+import {
+  maskAddressRecord,
+  maskPropertyRecord,
+  assertCanViewCustomerFullAddress,
+  recordAddressAuditLog,
+} from '../admin-customer-details/admin-customer-address-security';
 
 const toHistoricalMoney = async (amount: number | { toString(): string }, currencyCode: string) =>
   serializeHistoricalMoney(amount, currencyCode);
@@ -222,7 +229,13 @@ export const listCustomers = async (filters: CustomerQueryFilters) => {
   };
 };
 
-export const getCustomerById = async (id: string) => {
+export const getCustomerById = async (
+  id: string,
+  options?: {
+    unmask?: boolean | string;
+    adminUser?: AuthenticatedAdminRequest['adminUser'];
+  }
+) => {
   const user = await prisma.user.findFirst({
     where: { id, role: UserRole.CUSTOMER },
     include: {
@@ -243,18 +256,49 @@ export const getCustomerById = async (id: string) => {
     throw new NotFoundError('Customer not found.');
   }
 
+  const shouldUnmask = options?.unmask === true || options?.unmask === 'true';
+  if (shouldUnmask) {
+    assertCanViewCustomerFullAddress(options?.adminUser);
+    await recordAddressAuditLog({
+      adminUser: options!.adminUser!,
+      eventType: 'CUSTOMER_ADDRESS_VIEWED',
+      customerId: id,
+      subjectType: 'CUSTOMER',
+      subjectId: id,
+      description: `Admin ${options!.adminUser!.fullName} (${options!.adminUser!.role}) viewed unmasked customer profile (addresses/properties) for customer ${id}`,
+    });
+  }
+
   // Calculate total spent
   const spentAgg = await prisma.payment.aggregate({
     _sum: { amount: true },
     where: { userId: user.id, status: 'COMPLETED' },
   });
 
+  const addresses = (user.addresses || []).map((a) =>
+    shouldUnmask ? { ...a, isMasked: false } : maskAddressRecord({ ...a, isMasked: false })
+  );
+  const properties = (user.properties || []).map((p) =>
+    shouldUnmask ? { ...p, isMasked: false } : maskPropertyRecord({ ...p, isMasked: false })
+  );
+
   return formatCustomerResponse(user, {
     customerCode: user.customerCode || `CUST-${user.id.substring(0, 4).toUpperCase()}`,
     totalOrders: user._count.jobs,
     totalBookings: user._count.bookings,
     totalSpent: spentAgg._sum.amount ? Number(spentAgg._sum.amount) : 0,
+    addresses,
+    properties,
+    isAddressMasked: !shouldUnmask,
   });
+};
+
+export const revealCustomerProfileAddress = async (
+  id: string,
+  adminUser?: AuthenticatedAdminRequest['adminUser']
+) => {
+  assertCanViewCustomerFullAddress(adminUser);
+  return getCustomerById(id, { unmask: true, adminUser });
 };
 
 export const createCustomer = async (adminId: string, adminLabel: string, input: CreateCustomerInput) => {

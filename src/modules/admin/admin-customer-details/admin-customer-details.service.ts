@@ -16,6 +16,13 @@ import {
   buildJobPayoutBalance,
   serializeJobPayoutBalance,
 } from '../../jobs/job-payout-balance';
+import {
+  maskAddressRecord,
+  maskPropertyRecord,
+  assertCanViewCustomerFullAddress,
+  recordAddressAuditLog,
+} from './admin-customer-address-security';
+import { AuthenticatedAdminRequest } from '../../../middlewares/admin-auth.middleware';
 
 const money = (value: Prisma.Decimal | number | null | undefined): number =>
   value == null ? 0 : Number(value);
@@ -278,9 +285,24 @@ export const listCustomerAddresses = async (
     addressType?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
-  }
+    unmask?: string | boolean;
+  },
+  adminUser?: AuthenticatedAdminRequest['adminUser']
 ) => {
   await assertCustomerExists(customerId);
+
+  const shouldUnmask = filters.unmask === true || filters.unmask === 'true';
+  if (shouldUnmask) {
+    assertCanViewCustomerFullAddress(adminUser);
+    await recordAddressAuditLog({
+      adminUser: adminUser!,
+      eventType: 'CUSTOMER_ADDRESS_VIEWED',
+      customerId,
+      subjectType: 'CUSTOMER',
+      subjectId: customerId,
+      description: `Admin ${adminUser!.fullName} (${adminUser!.role}) viewed unmasked addresses list for customer ${customerId}`,
+    });
+  }
 
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
@@ -306,9 +328,8 @@ export const listCustomerAddresses = async (
     prisma.address.findMany({ where, skip, take: limit, orderBy }),
   ]);
 
-  return {
-    meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
-    addresses: rows.map((a) => ({
+  const addresses = rows.map((a) => {
+    const raw = {
       id: a.id,
       label: a.label,
       addressType: a.addressType,
@@ -324,9 +345,62 @@ export const listCustomerAddresses = async (
       mapImageUrl: a.mapImageUrl,
       isDefault: a.isDefault,
       isPrimary: a.isDefault,
+      isMasked: false,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
-    })),
+    };
+    return shouldUnmask ? raw : maskAddressRecord(raw);
+  });
+
+  return {
+    meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
+    addresses,
+  };
+};
+
+export const revealCustomerAddress = async (
+  customerId: string,
+  addressId: string,
+  adminUser?: AuthenticatedAdminRequest['adminUser']
+) => {
+  assertCanViewCustomerFullAddress(adminUser);
+  await assertCustomerExists(customerId);
+
+  const a = await prisma.address.findFirst({
+    where: { id: addressId, userId: customerId },
+  });
+  if (!a) {
+    throw new NotFoundError('Address not found for this customer.');
+  }
+
+  await recordAddressAuditLog({
+    adminUser: adminUser!,
+    eventType: 'CUSTOMER_ADDRESS_REVEALED',
+    customerId,
+    subjectType: 'CUSTOMER_ADDRESS',
+    subjectId: addressId,
+    description: `Admin ${adminUser!.fullName} (${adminUser!.role}) revealed full address (${a.addressLine1}, ${a.city}) for customer ${customerId}`,
+  });
+
+  return {
+    id: a.id,
+    label: a.label,
+    addressType: a.addressType,
+    houseNumber: a.houseNumber,
+    addressLine1: a.addressLine1,
+    addressLine2: a.addressLine2,
+    city: a.city,
+    county: a.county,
+    eircode: a.eircode,
+    country: a.country,
+    latitude: a.latitude,
+    longitude: a.longitude,
+    mapImageUrl: a.mapImageUrl,
+    isDefault: a.isDefault,
+    isPrimary: a.isDefault,
+    isMasked: false,
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
   };
 };
 
@@ -375,9 +449,24 @@ export const listCustomerProperties = async (
     search?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
-  }
+    unmask?: string | boolean;
+  },
+  adminUser?: AuthenticatedAdminRequest['adminUser']
 ) => {
   await assertCustomerExists(customerId);
+
+  const shouldUnmask = filters.unmask === true || filters.unmask === 'true';
+  if (shouldUnmask) {
+    assertCanViewCustomerFullAddress(adminUser);
+    await recordAddressAuditLog({
+      adminUser: adminUser!,
+      eventType: 'CUSTOMER_PROPERTY_VIEWED',
+      customerId,
+      subjectType: 'CUSTOMER',
+      subjectId: customerId,
+      description: `Admin ${adminUser!.fullName} (${adminUser!.role}) viewed unmasked properties list for customer ${customerId}`,
+    });
+  }
 
   const page = parsePage(filters.page);
   const limit = parseLimit(filters.limit);
@@ -410,19 +499,45 @@ export const listCustomerProperties = async (
     }),
   ]);
 
-  return {
-    meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
-    properties: rows.map((p) => ({
+  const properties = rows.map((p) => {
+    const raw = {
       ...serializeAdminPropertySummary(p),
       metersCount: p._count.meters,
       activeSubscriptionsCount: p._count.subscriptions,
       jobsCount: p.address?._count.jobs ?? 0,
-    })),
+      isMasked: false,
+    };
+    return shouldUnmask ? raw : maskPropertyRecord(raw);
+  });
+
+  return {
+    meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
+    properties,
   };
 };
 
-export const getCustomerProperty = async (customerId: string, propertyId: string) => {
+export const getCustomerProperty = async (
+  customerId: string,
+  propertyId: string,
+  options?: {
+    unmask?: string | boolean;
+    adminUser?: AuthenticatedAdminRequest['adminUser'];
+  }
+) => {
   await assertCustomerExists(customerId);
+
+  const shouldUnmask = options?.unmask === true || options?.unmask === 'true';
+  if (shouldUnmask) {
+    assertCanViewCustomerFullAddress(options?.adminUser);
+    await recordAddressAuditLog({
+      adminUser: options!.adminUser!,
+      eventType: 'CUSTOMER_PROPERTY_VIEWED',
+      customerId,
+      subjectType: 'CUSTOMER_PROPERTY',
+      subjectId: propertyId,
+      description: `Admin ${options!.adminUser!.fullName} (${options!.adminUser!.role}) viewed unmasked property details for customer ${customerId} (Property: ${propertyId})`,
+    });
+  }
 
   const property = await prisma.property.findFirst({
     where: { id: propertyId, userId: customerId },
@@ -455,8 +570,9 @@ export const getCustomerProperty = async (customerId: string, propertyId: string
   });
   if (!property) throw new NotFoundError('Property not found for this customer.');
 
-  return {
+  const raw = {
     ...serializeAdminPropertySummary(property),
+    isMasked: false,
     meters: property.meters.map((m) => ({
       id: m.id,
       meterType: m.meterType,
@@ -500,6 +616,33 @@ export const getCustomerProperty = async (customerId: string, propertyId: string
       trader: j.trader,
     })),
   };
+
+  return shouldUnmask ? raw : maskPropertyRecord(raw);
+};
+
+export const revealCustomerProperty = async (
+  customerId: string,
+  propertyId: string,
+  adminUser?: AuthenticatedAdminRequest['adminUser']
+) => {
+  assertCanViewCustomerFullAddress(adminUser);
+  await assertCustomerExists(customerId);
+
+  const res = await getCustomerProperty(customerId, propertyId, {
+    unmask: true,
+    adminUser,
+  });
+
+  await recordAddressAuditLog({
+    adminUser: adminUser!,
+    eventType: 'CUSTOMER_PROPERTY_REVEALED',
+    customerId,
+    subjectType: 'CUSTOMER_PROPERTY',
+    subjectId: propertyId,
+    description: `Admin ${adminUser!.fullName} (${adminUser!.role}) revealed unmasked property for customer ${customerId} (Property: ${propertyId})`,
+  });
+
+  return res;
 };
 
 // ---------------------------------------------------------------------------

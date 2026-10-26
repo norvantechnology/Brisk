@@ -16,6 +16,7 @@ export interface AdminUserProfile {
   role: AdminRole;
   status: AdminStatus;
   profilePhotoUrl?: string | null;
+  permissions: string[];
   joinedAt: Date;
   lastLoginAt?: Date | null;
 }

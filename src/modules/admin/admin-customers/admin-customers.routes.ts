@@ -312,13 +312,50 @@ router.patch(
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: unmask
+ *         description: Reveal unmasked customer addresses and properties. Requires permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN`. Logs access to the audit log.
+ *         schema: { type: boolean, default: false }
  *     responses:
  *       200:
- *         description: Customer profile retrieved with addresses, properties, and total orders/spent summary.
+ *         description: Customer profile retrieved with masked addresses and properties by default (or unmasked if authorized with unmask=true).
+ *       401:
+ *         description: Unauthorized. Missing or invalid admin token.
+ *       403:
+ *         description: Forbidden. Lacks VIEW_CUSTOMER_FULL_ADDRESS permission when unmask=true.
  *       404:
  *         description: Customer not found.
  */
 router.get('/customers/:id', customerAdminController.getCustomer);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/reveal-address:
+ *   post:
+ *     summary: Reveal full unmasked address and properties for customer profile (Security Audit Logged)
+ *     description: |
+ *       Returns the unmasked addresses and properties for the customer profile.
+ *       Enforces role-based permission `VIEW_CUSTOMER_FULL_ADDRESS` (or `SUPER_ADMIN`).
+ *       Records a separate audit log with admin ID, customer ID, timestamp, and action.
+ *     tags: ['Admin / Customers']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Customer profile with unmasked addresses and properties returned successfully.
+ *       401:
+ *         description: Unauthorized. Missing or invalid admin token.
+ *       403:
+ *         description: Access denied. Missing VIEW_CUSTOMER_FULL_ADDRESS permission.
+ *       404:
+ *         description: Customer not found.
+ */
+router.post('/customers/:id/reveal-address', customerAdminController.revealCustomerAddress);
 
 /**
  * @swagger

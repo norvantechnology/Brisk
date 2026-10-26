@@ -68,6 +68,14 @@ export const customerAddressesQuerySchema = z.object({
     ...paginationQuery,
     sortBy: sortByParam(CUSTOMER_ADDRESS_SORT_FIELDS),
     addressType: z.string().optional(),
+    unmask: z.string().optional(),
+  }),
+});
+
+export const customerAddressIdParamSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid customer ID format.'),
+    addressId: z.string().uuid('Invalid address ID format.'),
   }),
 });
 
@@ -78,6 +86,7 @@ export const customerPropertiesQuerySchema = z.object({
   query: z.object({
     ...paginationQuery,
     sortBy: sortByParam(CUSTOMER_PROPERTY_SORT_FIELDS),
+    unmask: z.string().optional(),
   }),
 });
 
@@ -86,6 +95,9 @@ export const customerPropertyIdParamSchema = z.object({
     id: z.string().uuid('Invalid customer ID format.'),
     propertyId: z.string().uuid('Invalid property ID format.'),
   }),
+  query: z.object({
+    unmask: z.string().optional(),
+  }).optional(),
 });
 
 export const customerPaymentsQuerySchema = z.object({

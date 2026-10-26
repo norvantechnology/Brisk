@@ -47,6 +47,7 @@ const options: swaggerJSDoc.Options = {
         '- **Mobile Direct Trader UI flow:** Offers list Claim Now → GET /trader-offers/{id} → Accept Offer POST /trader-offers/{id}/accept → Post a New Job (POST /jobs) → Choose Location: either addressId OR inline location on PUT /jobs/{id}/location or POST /jobs/{id}/publish → Payment Details → POST /payments/intent → confirm/fail',
         '- **Publish body:** addressId (saved) OR location/address object (map search — backend creates address) OR {} if job already has address',
         '- **Customer / Jobs:** /jobs. **Customer / Checkout:** /invoices, /payments, /bookings. **Realtime:** GET /realtime + Socket.IO /socket.io',
+        '- **Admin Customer Address Security:** Customer addresses and properties are masked by default (`XXXXX`, `isMasked: true`). Only authorized admins with permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN` can unmask via `?unmask=true` or POST `/reveal` endpoints. Every unmask/reveal creates a recorded entry in `audit_logs`.',
         '',
         'Each endpoint documents **parameter purpose**, **when to use**, and **examples** in the description.',
       ].join('\n'),
@@ -66,7 +67,11 @@ const options: swaggerJSDoc.Options = {
       },
       { name: 'Admin / Categories', description: 'Master categories' },
       { name: 'Admin / Sub-Categories', description: 'Sub-categories' },
-      { name: 'Admin / Customers', description: 'Customer directory' },
+      {
+        name: 'Admin / Customers',
+        description:
+          'Customer directory — KPI stats, directory list, profile detail (GET/PATCH /admin/customers/{id}). Addresses & properties are masked by default (`XXXXX`, `isMasked: true`). Unmasking requires permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN` and is audit-logged.',
+      },
       {
         name: 'Admin / Traders',
         description:
@@ -75,7 +80,7 @@ const options: swaggerJSDoc.Options = {
       {
         name: 'Admin / Customer Details',
         description:
-          'Customer Details tabs (Addresses, Jobs, Payments, Offers, Reviews, Notifications, Activity, Chats) with pagination/filters/search/sort/date range. Profile: GET/PATCH /admin/customers/{id}.',
+          'Customer Details tabs (Addresses, Properties, Jobs, Payments, Offers, Reviews, Notifications, Activity, Chats) with pagination/filters/search/sort/date range. Addresses and properties are masked by default (`XXXXX`, `isMasked: true`); unmasking via ?unmask=true or POST .../reveal requires `VIEW_CUSTOMER_FULL_ADDRESS` (or `SUPER_ADMIN`) and is recorded in the audit log.',
       },
       {
         name: 'Admin / Trader Details',

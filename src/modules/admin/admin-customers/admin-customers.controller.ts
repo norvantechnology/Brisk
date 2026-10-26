@@ -49,11 +49,32 @@ export const getCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const customer = await customerAdminService.getCustomerById(req.params.id);
+    const customer = await customerAdminService.getCustomerById(req.params.id, {
+      unmask: req.query.unmask as string | boolean | undefined,
+      adminUser: req.adminUser,
+    });
     sendResponse({
       res,
       statusCode: 200,
       message: 'Customer profile retrieved successfully.',
+      data: { customer },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revealCustomerAddress = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const customer = await customerAdminService.revealCustomerProfileAddress(req.params.id, req.adminUser);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer addresses revealed successfully.',
       data: { customer },
     });
   } catch (error) {

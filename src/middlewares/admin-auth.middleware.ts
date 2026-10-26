@@ -11,6 +11,7 @@ export interface AuthenticatedAdminRequest extends Request {
     email: string;
     role: AdminRole;
     fullName: string;
+    permissions: string[];
   };
 }
 
@@ -45,6 +46,7 @@ export const adminAuthMiddleware = async (
         fullName: true,
         role: true,
         status: true,
+        permissions: true,
       },
     });
 
@@ -57,6 +59,7 @@ export const adminAuthMiddleware = async (
       email: admin.email,
       fullName: admin.fullName,
       role: admin.role,
+      permissions: admin.permissions ?? [],
     };
 
     next();
@@ -78,6 +81,29 @@ export const adminRoleMiddleware = (allowedRoles: AdminRole[]) => {
 
     if (!allowedRoles.includes(req.adminUser.role)) {
       next(new ForbiddenError('Forbidden: Access denied for your admin role level.'));
+      return;
+    }
+
+    next();
+  };
+};
+
+export const adminPermissionMiddleware = (requiredPermission: string) => {
+  return (req: AuthenticatedAdminRequest, _res: Response, next: NextFunction): void => {
+    if (!req.adminUser) {
+      next(new UnauthorizedError('Admin authentication required.'));
+      return;
+    }
+
+    // SUPER_ADMIN has full permissions by default
+    if (req.adminUser.role === AdminRole.SUPER_ADMIN) {
+      next();
+      return;
+    }
+
+    const permissions = req.adminUser.permissions || [];
+    if (!permissions.includes(requiredPermission)) {
+      next(new ForbiddenError(`Forbidden: You lack the required permission (${requiredPermission}) to perform this action.`));
       return;
     }
 

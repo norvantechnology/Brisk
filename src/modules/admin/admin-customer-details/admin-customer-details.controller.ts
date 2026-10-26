@@ -45,7 +45,7 @@ export const listProperties = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await service.listCustomerProperties(req.params.id, req.query as any);
+    const result = await service.listCustomerProperties(req.params.id, req.query as any, req.adminUser);
     sendResponse({
       res,
       statusCode: 200,
@@ -64,11 +64,32 @@ export const getProperty = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await service.getCustomerProperty(req.params.id, req.params.propertyId);
+    const data = await service.getCustomerProperty(req.params.id, req.params.propertyId, {
+      unmask: req.query.unmask as string | boolean | undefined,
+      adminUser: req.adminUser,
+    });
     sendResponse({
       res,
       statusCode: 200,
       message: 'Customer property retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revealProperty = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.revealCustomerProperty(req.params.id, req.params.propertyId, req.adminUser);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer property revealed successfully.',
       data,
     });
   } catch (error) {
@@ -82,13 +103,31 @@ export const listAddresses = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await service.listCustomerAddresses(req.params.id, req.query as any);
+    const result = await service.listCustomerAddresses(req.params.id, req.query as any, req.adminUser);
     sendResponse({
       res,
       statusCode: 200,
       message: 'Customer addresses retrieved successfully.',
       data: result.addresses,
       meta: result.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revealAddress = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.revealCustomerAddress(req.params.id, req.params.addressId, req.adminUser);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer address revealed successfully.',
+      data,
     });
   } catch (error) {
     next(error);
