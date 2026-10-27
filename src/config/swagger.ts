@@ -825,42 +825,60 @@ const SWAGGER_CSS = `
 `;
 
 export const setupSwagger = (app: Express): void => {
-  // Ensure Content-Security-Policy does not block Swagger UI assets or scripts
+  // Ensure Content-Security-Policy does not block Swagger UI assets or scripts, and prevent CDN caching of dynamic swagger assets
   app.use(['/api-docs', '/api-docs.json', '/api-docs-theme.css'], (_req, res, next) => {
     res.removeHeader('Content-Security-Policy');
     res.removeHeader('X-Content-Security-Policy');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
     next();
   });
 
   app.get('/api-docs.json', (_req, res) => {
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.send(swaggerSpec);
   });
 
   // Served as a real stylesheet so example-panel contrast is not lost to cache / inject order
   app.get('/api-docs-theme.css', (_req, res) => {
     res.setHeader('Content-Type', 'text/css; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.send(SWAGGER_CSS);
+  });
+
+  const swaggerUiHandler = swaggerUi.setup(swaggerSpec, {
+    customCss: SWAGGER_CSS,
+    customCssUrl: '/api-docs-theme.css',
+    customSiteTitle: 'BRISK API',
+    swaggerOptions: {
+      docExpansion: 'none',
+      tagsSorter: 'none',
+      operationsSorter: 'alpha',
+      filter: true,
+      displayRequestDuration: true,
+      defaultModelsExpandDepth: -1,
+      defaultModelExpandDepth: -1,
+      tryItOutEnabled: false,
+    },
   });
 
   app.use(
     '/api-docs',
     swaggerUi.serve,
-    swaggerUi.setup(swaggerSpec, {
-      customCss: SWAGGER_CSS,
-      customCssUrl: '/api-docs-theme.css',
-      customSiteTitle: 'BRISK API',
-      swaggerOptions: {
-        docExpansion: 'none',
-        tagsSorter: 'none',
-        operationsSorter: 'alpha',
-        filter: true,
-        displayRequestDuration: true,
-        defaultModelsExpandDepth: -1,
-        defaultModelExpandDepth: -1,
-        tryItOutEnabled: false,
-      },
-    })
+    (req: any, res: any, next: any) => {
+      // Injects a query timestamp parameter so CDNs (like Cloudflare) and browsers never cache or serve a stale/corrupted swagger-ui-init.js
+      const originalSend = res.send.bind(res);
+      res.send = function (body: any) {
+        if (typeof body === 'string' && body.includes('swagger-ui-init.js')) {
+          body = body.replace('src="./swagger-ui-init.js"', `src="./swagger-ui-init.js?v=${Date.now()}"`);
+        }
+        return originalSend(body);
+      };
+      swaggerUiHandler(req, res, next);
+    }
   );
 };
+
