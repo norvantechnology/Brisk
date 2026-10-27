@@ -455,4 +455,127 @@ router.get(
   }
 );
 
+/**
+ * @swagger
+ * /admin/currencies/import:
+ *   post:
+ *     summary: Bulk import Currencies from Excel or CSV
+ *     tags: ['Admin / Currency', 'Admin / Masters Import']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Admin Masters Import — Currencies**
+ *       Upload an Excel (`.xlsx`, `.xls`) or CSV file to bulk import or update platform currencies.
+ *
+ *       **Supported Columns in Spreadsheet:**
+ *       - `code` *(Required)*: ISO 3-letter currency code (e.g. `EUR`, `USD`, `GBP`, `INR`, `AED`). Case-insensitive in file.
+ *       - `name` *(Required)*: Full currency name (e.g. `Euro`, `US Dollar`, `British Pound`, `Indian Rupee`).
+ *       - `symbol` *(Required)*: Currency symbol (e.g. `€`, `$`, `£`, `₹`, `د.إ`). Up to 8 chars.
+ *       - `decimalPlaces`: Number of decimal digits (e.g. `2`, `0`). Default: `2`.
+ *       - `isActive`: `true` or `false` (Default: `true`). Base currency cannot be deactivated.
+ *       - `sortOrder`: Display sorting number (Default: `0`).
+ *
+ *       **Duplicate Handling Modes:**
+ *       - `mode=skip` (default): Skips existing currencies without failing the entire import.
+ *       - `mode=upsert`: Updates existing currencies with spreadsheet values.
+ *     parameters:
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [skip, upsert]
+ *           default: skip
+ *         description: How to handle duplicate currency records.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Excel (.xlsx, .xls) or CSV file.
+ *               mode:
+ *                 type: string
+ *                 enum: [skip, upsert]
+ *                 default: skip
+ *     responses:
+ *       200:
+ *         description: Currency import completed with summary, imported list, updated list, skipped list, and errors.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Currency import completed: 5 imported, 1 updated, 1 skipped, 0 failed."
+ *               data:
+ *                 summary:
+ *                   totalRows: 7
+ *                   importedCount: 5
+ *                   updatedCount: 1
+ *                   skippedCount: 1
+ *                   failedCount: 0
+ *                 imported:
+ *                   - code: "AED"
+ *                     name: "United Arab Emirates Dirham"
+ *                     symbol: "د.إ"
+ *                     decimalPlaces: 2
+ *                     isActive: true
+ *                     sortOrder: 5
+ *                 updated: []
+ *                 skipped:
+ *                   - row: 2
+ *                     identifier: "EUR"
+ *                     reason: "Currency with code \"EUR\" already exists (mode=skip)."
+ *                 errors: []
+ *       400:
+ *         description: Invalid file or missing required file.
+ */
+router.post(
+  ['/currencies/import', '/currency/import', '/import/currencies'],
+  uploadMiddleware.single('file'),
+  controller.importCurrencies
+);
+
+/**
+ * @swagger
+ * /admin/currencies/import/template:
+ *   get:
+ *     summary: Download sample import template for Currencies (Excel or CSV)
+ *     tags: ['Admin / Currency', 'Admin / Masters Import']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns a ready-to-use sample spreadsheet with correct headers and example rows.
+ *     parameters:
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *           enum: [csv, xlsx]
+ *           default: csv
+ *         description: File format (CSV or Excel).
+ *     responses:
+ *       200:
+ *         description: Downloadable sample template file.
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
+router.get(
+  ['/currencies/import/template', '/currency/import/template', '/import/currencies/template'],
+  (req, res, next) => {
+    req.params.entity = 'currencies';
+    return controller.downloadTemplate(req, res, next);
+  }
+);
+
 export default router;

@@ -641,35 +641,8 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                   lat: 53.3498
  *                   lng: -6.2603
  *                   mapImageUrl: null
- *                 paymentDetails:
- *                   serviceFee: 120
- *                   processingFee: 5
- *                   discount: -5
- *                   vatAmount: 0
- *                   totalPaid: 120
- *                   amountDue: 0
- *                   currencyCode: EUR
- *                   currencySymbol: €
- *                   paymentStatus: PAID
- *                   paymentMethod: Visa ending in •••• 4242
- *                 paymentSummary:
- *                   serviceFee: 120
- *                   processingFee: 5
- *                   discount: 5
- *                   vatAmount: 0
- *                   totalPaid: 120
- *                   amountDue: 0
- *                   totalAmount: 120
- *                   formattedTotalAmount: € 120.00
- *                   currencyCode: EUR
- *                   currencySymbol: €
- *                   paymentStatus: PAID
  *                 totalAmount: 120
  *                 formattedTotalAmount: € 120.00
- *                 paymentSummaryList:
- *                   - { label: Service Fee, amount: "€ 120.00", key: serviceFee, value: "€ 120.00" }
- *                   - { label: Platform Fee, amount: "€ 5.00", key: processingFee, value: "€ 5.00" }
- *                   - { label: VAT, amount: "€ 0", key: vatAmount, value: "€ 0" }
  *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
  *                 receiptUrl: /payments/7c3d4e5f-0000-4000-8000-000000000004/receipt
  *                 canReview: true
@@ -732,8 +705,9 @@ router.get('/:id/details', ...customerOnly, validate(jobIdParamSchema), controll
  *                 address: { fullAddress: "1 O'Connell Street", city: Dublin, eircode: D01 F5P2, latitude: 53.3498, longitude: -6.2603, mapImageUrl: null }
  *                 trader: { id: adabc55c-6d7d-4b12-8597-6d26366c26bf, name: Brisk Trader, location: 'Dublin, Ireland', avatar: 'https://api.brisk.ie/uploads/files/profile_photo/2380d295-fef3-4365-bb81-1ecfb9b3ec8c/1789385663121-r131zvpo.jpg', rating: 4.9, reviewsCount: 124, isVerified: true, conversationId: 89d85512-3ff7-4fc7-a44a-2e594130d71c }
  *                 review: null
- *                 completionPhotos: ['https://api.brisk.ie/uploads/files/job_photo/99a96a2f-bd59-4dbd-ba1a-e5f04412946d/1788858205135-jv3bvmnx.jpg']
- *                 paymentSummary: { serviceFee: 150, processingFee: 10, discount: 0, vatPercentage: 20, vatAmount: 32, totalPaid: 0, amountDue: 192, paymentStatus: PENDING, currencyCode: EUR, currencySymbol: €, cardBrand: null, cardLast4: null, baseRate: 150, platformFee: 10, offerApplied: 0, netPayout: 192 }
+ *                 totalAmount: 192
+ *                 formattedTotalAmount: '€ 192.00'
+ *                 paymentSummary: { serviceFee: 150, processingFee: 10, discount: 0, vatPercentage: 20, vatAmount: 32, totalPaid: 0, amountDue: 192, totalAmount: 192, formattedTotalAmount: '€ 192.00', paymentStatus: PENDING, currencyCode: EUR, currencySymbol: €, cardBrand: null, cardLast4: null, baseRate: 150, platformFee: 10, offerApplied: 0, netPayout: 192, confirmedPayments: [] }
  *                 invoiceId: null
  *                 invoiceNumber: null
  *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download

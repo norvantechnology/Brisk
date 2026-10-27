@@ -3,6 +3,7 @@ import { SubcategoryPriceEnteredBy, DocumentRuleScope, TraderType } from '@prism
 import { prisma } from '../../../config/database';
 import { ImportMode, ImportResult, RowError, SkippedRow } from './admin-import.types';
 import { BadRequestError } from '../../../utils/errors';
+import { getBaseCurrencyCode, invalidateRateCache } from '../../../services/currency.service';
 
 const slugify = (text: string): string =>
   text
@@ -631,10 +632,136 @@ export const importLocations = async (
 };
 
 /**
+ * Bulk import Currencies from parsed spreadsheet rows.
+ */
+export const importCurrencies = async (
+  rows: Record<string, unknown>[],
+  mode: ImportMode = 'skip'
+): Promise<ImportResult> => {
+  const imported: unknown[] = [];
+  const updated: unknown[] = [];
+  const skipped: SkippedRow[] = [];
+  const errors: RowError[] = [];
+
+  const baseCurrency = await getBaseCurrencyCode().catch(() => 'EUR');
+
+  let rowNum = 1;
+  for (const raw of rows) {
+    rowNum++;
+    const row = normalizeRow(raw);
+
+    const code = String(row['code'] || row['currencycode'] || '').trim().toUpperCase();
+    const name = String(row['name'] || row['currencyname'] || '').trim();
+    const symbol = String(row['symbol'] || row['currencysymbol'] || '').trim();
+
+    if (!code || code.length !== 3) {
+      errors.push({
+        row: rowNum,
+        field: 'code',
+        identifier: code || undefined,
+        message: 'Valid 3-letter currency code is required (e.g. EUR, USD, GBP, INR).',
+      });
+      continue;
+    }
+
+    if (!name) {
+      errors.push({
+        row: rowNum,
+        field: 'name',
+        identifier: code,
+        message: 'Currency name is required (e.g. Euro, US Dollar).',
+      });
+      continue;
+    }
+
+    if (!symbol) {
+      errors.push({
+        row: rowNum,
+        field: 'symbol',
+        identifier: code,
+        message: 'Currency symbol is required (e.g. €, $, £, ₹).',
+      });
+      continue;
+    }
+
+    const rawDecimals = row['decimalplaces'] ?? row['decimals'] ?? row['decimal'];
+    let decimalPlaces = 2;
+    if (rawDecimals !== undefined && rawDecimals !== null && rawDecimals !== '') {
+      const parsed = Number(rawDecimals);
+      if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 4) {
+        decimalPlaces = parsed;
+      }
+    }
+
+    const isActive = toBoolean(row['isactive'] ?? row['active'] ?? row['status'], true);
+    const sortOrder = row['sortorder'] || row['order'] ? Number(row['sortorder'] || row['order']) || 0 : 0;
+
+    const existing = await prisma.currency.findUnique({ where: { code } });
+
+    if (existing) {
+      if (mode === 'skip') {
+        skipped.push({
+          row: rowNum,
+          identifier: code,
+          reason: `Currency with code "${code}" already exists (mode=skip).`,
+        });
+        continue;
+      }
+
+      // mode === 'upsert'
+      // If updating platform base currency, do not allow deactivating it
+      const finalIsActive = code === baseCurrency && !isActive ? true : isActive;
+
+      const updatedCurrency = await prisma.currency.update({
+        where: { code },
+        data: {
+          name,
+          symbol,
+          decimalPlaces,
+          isActive: finalIsActive,
+          sortOrder,
+        },
+      });
+      updated.push(updatedCurrency);
+    } else {
+      const createdCurrency = await prisma.currency.create({
+        data: {
+          code,
+          name,
+          symbol,
+          decimalPlaces,
+          isActive,
+          sortOrder,
+        },
+      });
+      imported.push(createdCurrency);
+    }
+  }
+
+  if (imported.length > 0 || updated.length > 0) {
+    invalidateRateCache();
+  }
+
+  return {
+    summary: {
+      totalRows: rows.length,
+      importedCount: imported.length,
+      updatedCount: updated.length,
+      skippedCount: skipped.length,
+      failedCount: errors.length,
+    },
+    imported,
+    updated,
+    skipped,
+    errors,
+  };
+};
+
+/**
  * Generate sample CSV / Excel template buffer for download.
  */
 export const generateTemplate = (
-  entity: 'categories' | 'subcategories' | 'document-rules' | 'locations',
+  entity: 'categories' | 'subcategories' | 'document-rules' | 'locations' | 'currencies',
   format: 'csv' | 'xlsx' = 'csv'
 ): { buffer: Buffer; filename: string; mimeType: string } => {
   const wb = XLSX.utils.book_new();
@@ -799,6 +926,27 @@ export const generateTemplate = (
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
     XLSX.utils.book_append_sheet(wb, ws, 'DocumentRules');
+  } else if (entity === 'currencies') {
+    const headers = [
+      'code',
+      'name',
+      'symbol',
+      'decimalPlaces',
+      'isActive',
+      'sortOrder',
+    ];
+    const sampleRows = [
+      ['EUR', 'Euro', '€', 2, true, 1],
+      ['GBP', 'British Pound', '£', 2, true, 2],
+      ['USD', 'US Dollar', '$', 2, true, 3],
+      ['INR', 'Indian Rupee', '₹', 2, true, 4],
+      ['AED', 'United Arab Emirates Dirham', 'د.إ', 2, true, 5],
+      ['CAD', 'Canadian Dollar', '$', 2, true, 6],
+      ['AUD', 'Australian Dollar', '$', 2, true, 7],
+      ['JPY', 'Japanese Yen', '¥', 0, true, 8],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Currencies');
   } else {
     const headers = [
       'countryCode',

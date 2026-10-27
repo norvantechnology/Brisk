@@ -1609,37 +1609,6 @@ const buildCustomerJobView = async (
     return `${isNegative ? '-' : ''}${currencySymbol} ${abs === 0 ? '0' : abs.toFixed(2)}`;
   };
 
-  const paymentSummaryList = [
-    {
-      label: 'Service Fee',
-      amount: formatCur(serviceFee),
-      key: 'serviceFee',
-      value: formatCur(serviceFee),
-    },
-    ...(discount > 0
-      ? [
-          {
-            label: 'Discount',
-            amount: formatCur(-discount),
-            key: 'discount',
-            value: formatCur(-discount),
-          },
-        ]
-      : []),
-    {
-      label: 'Platform Fee',
-      amount: formatCur(processingFee),
-      key: 'processingFee',
-      value: formatCur(processingFee),
-    },
-    {
-      label: 'VAT',
-      amount: formatCur(vatAmount),
-      key: 'vatAmount',
-      value: formatCur(vatAmount),
-    },
-  ];
-
   const view = {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
@@ -1737,7 +1706,6 @@ const buildCustomerJobView = async (
       netPayout: totalAmount,
       confirmedPayments,
     },
-    paymentSummaryList,
     confirmedPayments,
     invoiceId: pendingPartialRequest?.invoice?.id ?? invoice?.id ?? null,
     invoiceNumber: pendingPartialRequest?.invoice?.invoiceNumber ?? invoice?.invoiceNumber ?? null,
@@ -1764,9 +1732,7 @@ const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 /** Compact Job Details screen (any status) — only the fields the screen renders. */
 export const getJobDetailsSummary = async (customerId: string, jobId: string) => {
   const { job, view } = await buildCustomerJobView(customerId, jobId);
-  const pay = view.paymentSummary;
   const dateAt = view.scheduledDate;
-  const brand = pay.cardBrand ? pay.cardBrand.charAt(0).toUpperCase() + pay.cardBrand.slice(1) : 'Card';
 
   return {
     jobId: view.id,
@@ -1805,22 +1771,6 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     },
     totalAmount: view.totalAmount,
     formattedTotalAmount: view.formattedTotalAmount,
-    paymentDetails: {
-      serviceFee: pay.serviceFee,
-      processingFee: pay.processingFee,
-      discount: pay.offerApplied,
-      vatAmount: pay.vatAmount,
-      totalPaid: pay.totalPaid,
-      amountDue: pay.amountDue,
-      totalAmount: view.totalAmount,
-      formattedTotalAmount: view.formattedTotalAmount,
-      currencyCode: pay.currencyCode,
-      currencySymbol: pay.currencySymbol,
-      paymentStatus: pay.paymentStatus,
-      paymentMethod: pay.cardLast4 ? `${brand} ending in •••• ${pay.cardLast4}` : null,
-    },
-    paymentSummary: view.paymentSummary,
-    paymentSummaryList: view.paymentSummaryList,
     isPartPayment: view.isPartPayment,
     hasPendingPartial: view.hasPendingPartial,
     flowType: view.flowType,
