@@ -12,6 +12,8 @@ import {
   invoiceFilterSchema,
   refundFilterSchema,
   processRefundSchema,
+  addressAuditLogFilterSchema,
+  customerAddressAuditLogFilterSchema,
 } from './admin-customers.validation';
 
 const router = Router();
@@ -301,6 +303,127 @@ router.patch(
 
 /**
  * @swagger
+ * /admin/customers/address-audit-logs:
+ *   get:
+ *     summary: Track who viewed or revealed masked customer addresses / properties (Security Audit Trail)
+ *     description: |
+ *       **Security Audit Log for Masked Customer Addresses & Properties**
+ *       Returns a paginated list of all access events where an authorized admin viewed or revealed
+ *       a customer's full unmasked address or property details.
+ *
+ *       **Filters Supported:**
+ *       - `adminId`: Filter by the specific admin who performed the view/reveal.
+ *       - `customerId`: Filter by customer whose address was accessed.
+ *       - `addressId`: Filter by address ID or property ID.
+ *       - `action`: Specific action type:
+ *         - `CUSTOMER_ADDRESS_REVEALED`: Explicit unmask click on customer address.
+ *         - `CUSTOMER_ADDRESS_VIEWED`: Full customer address list viewed with `unmask=true`.
+ *         - `CUSTOMER_PROPERTY_REVEALED`: Explicit unmask click on customer property.
+ *         - `CUSTOMER_PROPERTY_VIEWED`: Full property details viewed with `unmask=true`.
+ *       - `from` / `to`: Date range filters (ISO date or YYYY-MM-DD).
+ *       - `search`: Search across admin name, customer ID, address ID, or description.
+ *       - `page`, `limit`: Standard pagination (default: page=1, limit=20).
+ *       - `sortBy`, `sortOrder`: `createdAt`, `eventType`, `actorLabel` (default: `createdAt` desc).
+ *     tags: ['Admin / Customers', 'Admin / Security & Audit']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: adminId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter logs by Admin User ID.
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter logs by Customer ID.
+ *       - in: query
+ *         name: addressId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter logs by Address or Property ID.
+ *       - in: query
+ *         name: action
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - CUSTOMER_ADDRESS_REVEALED
+ *             - CUSTOMER_ADDRESS_VIEWED
+ *             - CUSTOMER_PROPERTY_REVEALED
+ *             - CUSTOMER_PROPERTY_VIEWED
+ *         description: Specific address access action.
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *         description: Filter start date (YYYY-MM-DD or ISO 8601).
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *         description: Filter end date (YYYY-MM-DD or ISO 8601).
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search keyword in description, admin label, or target ID.
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [createdAt, eventType, actorLabel], default: createdAt }
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc], default: desc }
+ *     responses:
+ *       200:
+ *         description: Address access audit logs retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer address access audit logs retrieved successfully.
+ *               data:
+ *                 meta:
+ *                   total: 14
+ *                   page: 1
+ *                   limit: 20
+ *                   totalPages: 1
+ *                 items:
+ *                   - id: "4f8a1234-abcd-5678-ef01-123456789abc"
+ *                     timestamp: "2026-10-27T10:15:30.000Z"
+ *                     action: "CUSTOMER_ADDRESS_REVEALED"
+ *                     actionLabel: "Revealed Customer Address"
+ *                     admin:
+ *                       id: "11111111-2222-3333-4444-555555555555"
+ *                       name: "John Doe"
+ *                       email: "admin@brisk.ie"
+ *                       role: "SUPER_ADMIN"
+ *                       profilePhotoUrl: null
+ *                     customer:
+ *                       id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+ *                       customerCode: "CUST-0042"
+ *                       name: "Jane Smith"
+ *                       email: "jane.smith@example.com"
+ *                       phone: "+353871234567"
+ *                       profilePhotoUrl: null
+ *                     target:
+ *                       type: "CUSTOMER_ADDRESS"
+ *                       addressId: "99999999-8888-7777-6666-555555555555"
+ *                       summary: "14 Oak Street, Dublin, D02 X285"
+ *                     description: "Admin John Doe (SUPER_ADMIN) revealed full address (14 Oak Street, Dublin) for customer aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+ *       401:
+ *         description: Unauthorized. Missing or invalid admin token.
+ *       403:
+ *         description: Forbidden. Insufficient permissions.
+ */
+router.get(
+  '/customers/address-audit-logs',
+  validate(addressAuditLogFilterSchema),
+  customerAdminController.getAddressAuditLogs
+);
+
+/**
+ * @swagger
  * /admin/customers/{id}:
  *   get:
  *     summary: Get Customer Profile detail by ID
@@ -356,6 +479,75 @@ router.get('/customers/:id', customerAdminController.getCustomer);
  *         description: Customer not found.
  */
 router.post('/customers/:id/reveal-address', customerAdminController.revealCustomerAddress);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/address-audit-logs:
+ *   get:
+ *     summary: Track who viewed or revealed masked addresses for a specific customer
+ *     description: |
+ *       Returns a paginated list of all address view/reveal audit events for the given customer ID.
+ *     tags: ['Admin / Customers', 'Admin / Security & Audit']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Customer ID
+ *       - in: query
+ *         name: adminId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter logs by Admin User ID.
+ *       - in: query
+ *         name: addressId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter logs by Address or Property ID.
+ *       - in: query
+ *         name: action
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - CUSTOMER_ADDRESS_REVEALED
+ *             - CUSTOMER_ADDRESS_VIEWED
+ *             - CUSTOMER_PROPERTY_REVEALED
+ *             - CUSTOMER_PROPERTY_VIEWED
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [createdAt, eventType, actorLabel], default: createdAt }
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc], default: desc }
+ *     responses:
+ *       200:
+ *         description: Customer address access audit logs retrieved successfully.
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Customer not found.
+ */
+router.get(
+  '/customers/:id/address-audit-logs',
+  validate(customerAddressAuditLogFilterSchema),
+  customerAdminController.getCustomerAddressAuditLogs
+);
+
 
 /**
  * @swagger

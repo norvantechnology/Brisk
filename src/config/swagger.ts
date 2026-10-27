@@ -47,7 +47,7 @@ const options: swaggerJSDoc.Options = {
         '- **Mobile Direct Trader UI flow:** Offers list Claim Now → GET /trader-offers/{id} → Accept Offer POST /trader-offers/{id}/accept → Post a New Job (POST /jobs) → Choose Location: either addressId OR inline location on PUT /jobs/{id}/location or POST /jobs/{id}/publish → Payment Details → POST /payments/intent → confirm/fail',
         '- **Publish body:** addressId (saved) OR location/address object (map search — backend creates address) OR {} if job already has address',
         '- **Customer / Jobs:** /jobs. **Customer / Checkout:** /invoices, /payments, /bookings. **Realtime:** GET /realtime + Socket.IO /socket.io',
-        '- **Admin Customer Address Security:** Customer addresses and properties are masked by default (`XXXXX`, `isMasked: true`). Only authorized admins with permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN` can unmask via `?unmask=true` or POST `/reveal` endpoints. Every unmask/reveal creates a recorded entry in `audit_logs`.',
+        '- **Admin Customer Address Security:** Customer addresses and properties are masked by default (`XXXXX`, `isMasked: true`). Only authorized admins with permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN` can unmask via `?unmask=true` or POST `/reveal` endpoints. Every unmask/reveal creates a recorded entry in `audit_logs`, trackable via GET `/admin/customers/address-audit-logs`.',
         '',
         'Each endpoint documents **parameter purpose**, **when to use**, and **examples** in the description.',
       ].join('\n'),
@@ -70,7 +70,7 @@ const options: swaggerJSDoc.Options = {
       {
         name: 'Admin / Customers',
         description:
-          'Customer directory — KPI stats, directory list, profile detail (GET/PATCH /admin/customers/{id}). Addresses & properties are masked by default (`XXXXX`, `isMasked: true`). Unmasking requires permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN` and is audit-logged.',
+          'Customer directory — KPI stats, directory list, profile detail (GET/PATCH /admin/customers/{id}), and Security Audit Trail for revealed/viewed masked addresses (GET /admin/customers/address-audit-logs). Addresses & properties are masked by default (`XXXXX`, `isMasked: true`). Unmasking requires permission `VIEW_CUSTOMER_FULL_ADDRESS` or `SUPER_ADMIN` and is audit-logged.',
       },
       {
         name: 'Admin / Traders',
@@ -825,6 +825,13 @@ const SWAGGER_CSS = `
 `;
 
 export const setupSwagger = (app: Express): void => {
+  // Ensure Content-Security-Policy does not block Swagger UI assets or scripts
+  app.use(['/api-docs', '/api-docs.json', '/api-docs-theme.css'], (_req, res, next) => {
+    res.removeHeader('Content-Security-Policy');
+    res.removeHeader('X-Content-Security-Policy');
+    next();
+  });
+
   app.get('/api-docs.json', (_req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerSpec);

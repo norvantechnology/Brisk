@@ -1325,3 +1325,274 @@ export const getLoyaltyRewardsSummary = async () => {
   };
 };
 
+export interface AddressAuditLogFilters {
+  page?: string | number;
+  limit?: string | number;
+  search?: string;
+  adminId?: string;
+  customerId?: string;
+  addressId?: string;
+  action?: string;
+  eventType?: string;
+  from?: string;
+  to?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+const ADDRESS_AUDIT_SORT_MAP: Record<string, string> = {
+  createdAt: 'createdAt',
+  timestamp: 'createdAt',
+  eventType: 'eventType',
+  action: 'eventType',
+  actorLabel: 'actorLabel',
+};
+
+const ADDRESS_AUDIT_EVENT_TYPES = [
+  'CUSTOMER_ADDRESS_REVEALED',
+  'CUSTOMER_ADDRESS_VIEWED',
+  'CUSTOMER_PROPERTY_REVEALED',
+  'CUSTOMER_PROPERTY_VIEWED',
+];
+
+/**
+ * Track who viewed/revealed customer masked addresses or properties and when.
+ * Supports filtering by admin, customer, address/property, action, date range, search, and pagination.
+ */
+export const getAddressAuditLogs = async (filters: AddressAuditLogFilters = {}) => {
+  const page = Math.max(1, parseInt(String(filters.page || '1'), 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(String(filters.limit || '20'), 10) || 20));
+  const skip = (page - 1) * limit;
+
+  const and: Prisma.AuditLogWhereInput[] = [];
+
+  const action = filters.action || filters.eventType;
+  if (action) {
+    and.push({ eventType: action });
+  } else {
+    and.push({ eventType: { in: ADDRESS_AUDIT_EVENT_TYPES } });
+  }
+
+  if (filters.adminId) {
+    and.push({ actorId: filters.adminId });
+  }
+
+  if (filters.addressId) {
+    and.push({ subjectId: filters.addressId });
+  }
+
+  if (filters.customerId) {
+    and.push({
+      OR: [
+        { subjectId: filters.customerId },
+        { description: { contains: filters.customerId, mode: 'insensitive' } },
+      ],
+    });
+  }
+
+  const createdAt = dateRangeWhere(filters.from, filters.to);
+  if (createdAt) {
+    and.push({ createdAt });
+  }
+
+  if (filters.search?.trim()) {
+    const s = filters.search.trim();
+    and.push({
+      OR: [
+        { actorLabel: { contains: s, mode: 'insensitive' } },
+        { description: { contains: s, mode: 'insensitive' } },
+        { eventType: { contains: s, mode: 'insensitive' } },
+        { subjectId: { contains: s, mode: 'insensitive' } },
+      ],
+    });
+  }
+
+  const where: Prisma.AuditLogWhereInput = and.length > 0 ? { AND: and } : {};
+  const sortKey = (filters.sortBy && ADDRESS_AUDIT_SORT_MAP[filters.sortBy]) || 'createdAt';
+  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+
+  const [total, rows] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [sortKey]: sortOrder },
+    }),
+  ]);
+
+  const adminIds = Array.from(new Set(rows.map((r) => r.actorId).filter((id): id is string => Boolean(id))));
+  const addressIds = Array.from(
+    new Set(
+      rows
+        .filter((r) => r.subjectType === 'CUSTOMER_ADDRESS')
+        .map((r) => r.subjectId)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const propertyIds = Array.from(
+    new Set(
+      rows
+        .filter((r) => r.subjectType === 'CUSTOMER_PROPERTY')
+        .map((r) => r.subjectId)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  const [admins, addresses, properties] = await Promise.all([
+    adminIds.length > 0
+      ? prisma.adminUser.findMany({
+          where: { id: { in: adminIds } },
+          select: { id: true, fullName: true, email: true, role: true, profilePhotoUrl: true },
+        })
+      : [],
+    addressIds.length > 0
+      ? prisma.address.findMany({
+          where: { id: { in: addressIds } },
+          select: {
+            id: true,
+            userId: true,
+            label: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            county: true,
+            eircode: true,
+            country: true,
+          },
+        })
+      : [],
+    propertyIds.length > 0
+      ? prisma.property.findMany({
+          where: { id: { in: propertyIds } },
+          select: {
+            id: true,
+            userId: true,
+            propertyName: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            county: true,
+            eircode: true,
+            country: true,
+          },
+        })
+      : [],
+  ]);
+
+  const adminMap = new Map(admins.map((a) => [a.id, a]));
+  const addressMap = new Map(addresses.map((a) => [a.id, a]));
+  const propertyMap = new Map(properties.map((p) => [p.id, p]));
+
+  const customerIds = new Set<string>();
+  if (filters.customerId) customerIds.add(filters.customerId);
+
+  for (const r of rows) {
+    if (r.subjectType === 'CUSTOMER' && r.subjectId) {
+      customerIds.add(r.subjectId);
+    }
+    const addr = r.subjectId ? addressMap.get(r.subjectId) : null;
+    if (addr?.userId) customerIds.add(addr.userId);
+    const prop = r.subjectId ? propertyMap.get(r.subjectId) : null;
+    if (prop?.userId) customerIds.add(prop.userId);
+
+    if (r.description) {
+      const match = r.description.match(/customer\s+([0-9a-fA-F-]{36})/i);
+      if (match) customerIds.add(match[1]);
+    }
+  }
+
+  const customerIdList = Array.from(customerIds);
+  const customers =
+    customerIdList.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: customerIdList } },
+          select: {
+            id: true,
+            customerCode: true,
+            fullName: true,
+            email: true,
+            mobileNumber: true,
+            profilePhotoUrl: true,
+          },
+        })
+      : [];
+  const customerMap = new Map(customers.map((c) => [c.id, c]));
+
+  const items = rows.map((r) => {
+    const admin = r.actorId ? adminMap.get(r.actorId) : null;
+    const addr = r.subjectType === 'CUSTOMER_ADDRESS' && r.subjectId ? addressMap.get(r.subjectId) : null;
+    const prop = r.subjectType === 'CUSTOMER_PROPERTY' && r.subjectId ? propertyMap.get(r.subjectId) : null;
+
+    let customerId =
+      r.subjectType === 'CUSTOMER' ? r.subjectId : (addr?.userId ?? prop?.userId ?? null);
+    if (!customerId && r.description) {
+      const match = r.description.match(/customer\s+([0-9a-fA-F-]{36})/i);
+      if (match) customerId = match[1];
+    }
+    const customer = customerId ? customerMap.get(customerId) : null;
+
+    let actionLabel = 'Address Access';
+    if (r.eventType === 'CUSTOMER_ADDRESS_REVEALED') actionLabel = 'Revealed Customer Address';
+    else if (r.eventType === 'CUSTOMER_ADDRESS_VIEWED') actionLabel = 'Viewed Unmasked Customer Address';
+    else if (r.eventType === 'CUSTOMER_PROPERTY_REVEALED') actionLabel = 'Revealed Customer Property';
+    else if (r.eventType === 'CUSTOMER_PROPERTY_VIEWED') actionLabel = 'Viewed Unmasked Customer Property';
+
+    const addressSummary = addr
+      ? [addr.addressLine1, addr.city, addr.county, addr.eircode].filter(Boolean).join(', ')
+      : prop
+        ? [prop.propertyName, prop.addressLine1, prop.city, prop.eircode].filter(Boolean).join(', ')
+        : null;
+
+    return {
+      id: r.id,
+      timestamp: r.createdAt,
+      action: r.eventType,
+      actionLabel,
+      admin: {
+        id: r.actorId,
+        name: admin?.fullName ?? r.actorLabel ?? 'Admin',
+        email: admin?.email ?? null,
+        role: admin?.role ?? null,
+        profilePhotoUrl: admin?.profilePhotoUrl ?? null,
+      },
+      customer: customer
+        ? {
+            id: customer.id,
+            customerCode: customer.customerCode,
+            name: customer.fullName,
+            email: customer.email,
+            phone: customer.mobileNumber,
+            profilePhotoUrl: customer.profilePhotoUrl,
+          }
+        : customerId
+          ? {
+              id: customerId,
+              customerCode: null,
+              name: null,
+              email: null,
+              phone: null,
+              profilePhotoUrl: null,
+            }
+          : null,
+      target: {
+        type: r.subjectType ?? 'CUSTOMER_ADDRESS',
+        addressId: r.subjectId,
+        summary: addressSummary,
+      },
+      description: r.description,
+    };
+  });
+
+  return {
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 0,
+    },
+    items,
+  };
+};
+
+

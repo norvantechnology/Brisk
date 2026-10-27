@@ -232,3 +232,60 @@ export const processRefundSchema = z.object({
     })
     .superRefine(requireNoteWhenRejected('notes')),
 });
+
+export const ADDRESS_AUDIT_LOG_SORT_FIELDS = [
+  'createdAt',
+  'eventType',
+  'actorLabel',
+] as const;
+
+export const addressAuditLogFilterSchema = z.object({
+  query: z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    search: z.string().optional(),
+    adminId: z.string().uuid('Invalid admin ID format.').optional(),
+    customerId: z.string().uuid('Invalid customer ID format.').optional(),
+    addressId: z.string().uuid('Invalid address ID format.').optional(),
+    action: z
+      .enum([
+        'CUSTOMER_ADDRESS_REVEALED',
+        'CUSTOMER_ADDRESS_VIEWED',
+        'CUSTOMER_PROPERTY_REVEALED',
+        'CUSTOMER_PROPERTY_VIEWED',
+      ])
+      .optional(),
+    eventType: z.string().optional(),
+    from: isoDateParam,
+    to: isoDateParam,
+    sortBy: sortByParam(ADDRESS_AUDIT_LOG_SORT_FIELDS),
+    sortOrder: sortOrderParam,
+  }),
+});
+
+export const customerAddressAuditLogFilterSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid Customer ID format.'),
+  }),
+  query: z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    search: z.string().optional(),
+    adminId: z.string().uuid('Invalid admin ID format.').optional(),
+    addressId: z.string().uuid('Invalid address ID format.').optional(),
+    action: z
+      .enum([
+        'CUSTOMER_ADDRESS_REVEALED',
+        'CUSTOMER_ADDRESS_VIEWED',
+        'CUSTOMER_PROPERTY_REVEALED',
+        'CUSTOMER_PROPERTY_VIEWED',
+      ])
+      .optional(),
+    eventType: z.string().optional(),
+    from: isoDateParam,
+    to: isoDateParam,
+    sortBy: sortByParam(ADDRESS_AUDIT_LOG_SORT_FIELDS),
+    sortOrder: sortOrderParam,
+  }),
+});
+

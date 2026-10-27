@@ -470,7 +470,7 @@ router.get(
  *       **Supported Columns in Spreadsheet:**
  *       - `code` *(Required)*: ISO 3-letter currency code (e.g. `EUR`, `USD`, `GBP`, `INR`, `AED`). Case-insensitive in file.
  *       - `name` *(Required)*: Full currency name (e.g. `Euro`, `US Dollar`, `British Pound`, `Indian Rupee`).
- *       - `symbol` *(Required)*: Currency symbol (e.g. `€`, `$`, `£`, `₹`, `د.إ`). Up to 8 chars.
+ *       - `symbol` *(Required)*: Currency symbol (e.g. Euro, Dollar, Pound, Rupee symbols). Up to 8 chars.
  *       - `decimalPlaces`: Number of decimal digits (e.g. `2`, `0`). Default: `2`.
  *       - `isActive`: `true` or `false` (Default: `true`). Base currency cannot be deactivated.
  *       - `sortOrder`: Display sorting number (Default: `0`).

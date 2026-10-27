@@ -374,3 +374,43 @@ export const getLoyaltyRewardsSummary = async (
   }
 };
 
+export const getAddressAuditLogs = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await customerAdminService.getAddressAuditLogs(req.query);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer address access audit logs retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCustomerAddressAuditLogs = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await customerAdminService.getAddressAuditLogs({
+      ...req.query,
+      customerId: req.params.id,
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer address access audit logs retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+

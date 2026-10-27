@@ -177,7 +177,7 @@
  *         paymentStatus: { type: string, enum: [UNPAID, PENDING, PARTIALLY_PAID, PAID], example: UNPAID }
  *         ratingStatus: { type: string, nullable: true, enum: [PENDING, RATED], example: RATED, description: null unless job is COMPLETED }
  *         hasReview: { type: boolean, example: true }
- *         canReview: { type: boolean, example: true, description: true when trader can rate the customer (POST /traders/jobs/mine/{id}/review) }
+ *         canReview: { type: boolean, example: true, description: "true when trader can rate the customer (POST /traders/jobs/mine/:id/review)" }
  *         myReview: { type: object, nullable: true, description: Trader → customer review once submitted }
  *         rating: { type: number, nullable: true, example: 5, description: Customer stars on this job }
  *         comment: { type: string, nullable: true, example: Test Ratting }
