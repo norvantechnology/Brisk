@@ -413,4 +413,90 @@ export const getCustomerAddressAuditLogs = async (
   }
 };
 
+export const getAddressAuditFilterOptions = async (
+  _req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await customerAdminService.getAddressAuditFilterOptions();
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Address audit log filter dropdown options retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAddressAuditAdminDropdown = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const search = req.query.search as string | undefined;
+    const limit = req.query.limit as string | undefined;
+    const data = await customerAdminService.getAddressAuditAdminDropdown(search, limit);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Admin users dropdown options retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAddressAuditCustomerDropdown = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const search = req.query.search as string | undefined;
+    const limit = req.query.limit as string | undefined;
+    const data = await customerAdminService.getAddressAuditCustomerDropdown(search, limit);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customers dropdown options retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAddressAuditAddressDropdown = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const search = req.query.search as string | undefined;
+    const customerId = req.query.customerId as string | undefined;
+    const type = req.query.type as 'ALL' | 'ADDRESS' | 'PROPERTY' | undefined;
+    const limit = req.query.limit as string | undefined;
+    const data = await customerAdminService.getAddressAuditAddressDropdown({
+      search,
+      customerId,
+      type,
+      limit,
+    });
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Addresses and properties dropdown options retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 

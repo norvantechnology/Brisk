@@ -289,3 +289,20 @@ export const customerAddressAuditLogFilterSchema = z.object({
   }),
 });
 
+export const addressAuditDropdownQuerySchema = z.object({
+  query: z.object({
+    search: z.string().trim().optional(),
+    limit: z.string().optional(),
+  }),
+});
+
+export const addressAuditAddressDropdownQuerySchema = z.object({
+  query: z.object({
+    search: z.string().trim().optional(),
+    customerId: z.string().uuid('Invalid customer ID format.').optional(),
+    type: z.enum(['ALL', 'ADDRESS', 'PROPERTY']).optional(),
+    limit: z.string().optional(),
+  }),
+});
+
+

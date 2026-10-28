@@ -14,6 +14,8 @@ import {
   processRefundSchema,
   addressAuditLogFilterSchema,
   customerAddressAuditLogFilterSchema,
+  addressAuditDropdownQuerySchema,
+  addressAuditAddressDropdownQuerySchema,
 } from './admin-customers.validation';
 
 const router = Router();
@@ -299,6 +301,210 @@ router.patch(
   '/customers/deletion-requests/:id',
   validate(updateDeletionRequestSchema),
   customerAdminController.updateDeletionRequest
+);
+
+// ==========================================
+// ADDRESS AUDIT LOGS DROPDOWN FILTERS
+// ==========================================
+
+/**
+ * @swagger
+ * /admin/customers/address-audit-logs/dropdowns:
+ *   get:
+ *     summary: Retrieve All Filter Options for Address Audit Logs (Admins, Customers, Actions)
+ *     description: |
+ *       Returns pre-populated lists of filter dropdown options (admins, customers, and action event types)
+ *       so the frontend can populate search dropdowns dynamically without manual UUID entry.
+ *     tags: ['Admin / Customers', 'Admin / Security & Audit']
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Filter options retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Address audit log filter dropdown options retrieved successfully.
+ *               data:
+ *                 admins:
+ *                   - id: 550e8400-e29b-41d4-a716-446655440000
+ *                     label: Snehal Patel (snehal@vibrantsofttech.in) · SUPER_ADMIN
+ *                     name: Snehal Patel
+ *                     email: snehal@vibrantsofttech.in
+ *                     role: SUPER_ADMIN
+ *                     status: ACTIVE
+ *                 customers:
+ *                   - id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+ *                     label: Patrick Murphy (CUST-1042) · patrick@example.ie
+ *                     customerCode: CUST-1042
+ *                     name: Patrick Murphy
+ *                     email: patrick@example.ie
+ *                     mobileNumber: "+353871234567"
+ *                 actions:
+ *                   - value: CUSTOMER_ADDRESS_REVEALED
+ *                     label: Revealed Customer Address
+ *                   - value: CUSTOMER_ADDRESS_VIEWED
+ *                     label: Viewed Unmasked Customer Address
+ *                   - value: CUSTOMER_PROPERTY_REVEALED
+ *                     label: Revealed Customer Property
+ *                   - value: CUSTOMER_PROPERTY_VIEWED
+ *                     label: Viewed Unmasked Customer Property
+ */
+router.get(
+  '/customers/address-audit-logs/dropdowns',
+  customerAdminController.getAddressAuditFilterOptions
+);
+router.get(
+  '/customers/address-audit-logs/filter-options',
+  customerAdminController.getAddressAuditFilterOptions
+);
+
+/**
+ * @swagger
+ * /admin/customers/address-audit-logs/dropdowns/admins:
+ *   get:
+ *     summary: Searchable Dropdown of Admin Users (for Address Audit Logs filter)
+ *     description: Search and select admins who have revealed or viewed customer masked data.
+ *     tags: ['Admin / Customers', 'Admin / Security & Audit']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, example: Snehal }
+ *         description: Search by admin name or email.
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 200 }
+ *         description: Maximum number of options to return.
+ *     responses:
+ *       200:
+ *         description: Admin users dropdown options retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Admin users dropdown options retrieved successfully.
+ *               data:
+ *                 - id: 550e8400-e29b-41d4-a716-446655440000
+ *                   label: Snehal Patel (snehal@vibrantsofttech.in) · SUPER_ADMIN
+ *                   name: Snehal Patel
+ *                   email: snehal@vibrantsofttech.in
+ *                   role: SUPER_ADMIN
+ *                   status: ACTIVE
+ */
+router.get(
+  '/customers/address-audit-logs/dropdowns/admins',
+  validate(addressAuditDropdownQuerySchema),
+  customerAdminController.getAddressAuditAdminDropdown
+);
+
+/**
+ * @swagger
+ * /admin/customers/address-audit-logs/dropdowns/customers:
+ *   get:
+ *     summary: Searchable Dropdown of Customers (for Address Audit Logs filter)
+ *     description: Search and select customers by name, customer code, email, or mobile number.
+ *     tags: ['Admin / Customers', 'Admin / Security & Audit']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, example: Murphy }
+ *         description: Search by customer name, customer code, email, or phone.
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 200 }
+ *         description: Maximum number of options to return.
+ *     responses:
+ *       200:
+ *         description: Customers dropdown options retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customers dropdown options retrieved successfully.
+ *               data:
+ *                 - id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+ *                   label: Patrick Murphy (CUST-1042) · patrick@example.ie
+ *                   customerCode: CUST-1042
+ *                   name: Patrick Murphy
+ *                   email: patrick@example.ie
+ *                   mobileNumber: "+353871234567"
+ *                   status: ACTIVE
+ */
+router.get(
+  '/customers/address-audit-logs/dropdowns/customers',
+  validate(addressAuditDropdownQuerySchema),
+  customerAdminController.getAddressAuditCustomerDropdown
+);
+
+/**
+ * @swagger
+ * /admin/customers/address-audit-logs/dropdowns/addresses:
+ *   get:
+ *     summary: Searchable Dropdown of Customer Addresses & Properties (for Address Audit Logs filter)
+ *     description: |
+ *       Search and select addresses or properties by address line, city, county, eircode, property name,
+ *       or customer name. Optionally filter by customer ID to show only that customer's addresses.
+ *     tags: ['Admin / Customers', 'Admin / Security & Audit']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, example: Dublin }
+ *         description: Search by address line, city, county, eircode, property name, or customer name.
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter addresses and properties belonging to a specific customer.
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [ALL, ADDRESS, PROPERTY], default: ALL }
+ *         description: Filter by record type (Customer Address or Customer Property).
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 200 }
+ *         description: Maximum number of options to return.
+ *     responses:
+ *       200:
+ *         description: Addresses and properties dropdown options retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Addresses and properties dropdown options retrieved successfully.
+ *               data:
+ *                 - id: 7ca7b810-9dad-11d1-80b4-00c04fd430c9
+ *                   label: "[Address] 12 Oak Street, Dublin, D02 X285 (Patrick Murphy)"
+ *                   type: CUSTOMER_ADDRESS
+ *                   customerId: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+ *                   customerName: Patrick Murphy
+ *                   customerCode: CUST-1042
+ *                   addressLine: 12 Oak Street
+ *                   city: Dublin
+ *                   county: Dublin
+ *                   eircode: D02 X285
+ *                   isDefault: true
+ *                 - id: 8da7b810-9dad-11d1-80b4-00c04fd430d0
+ *                   label: "[Property] Oak Villa · 14 Oak Street, Dublin, D02 X286 (Patrick Murphy)"
+ *                   type: CUSTOMER_PROPERTY
+ *                   customerId: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+ *                   customerName: Patrick Murphy
+ *                   customerCode: CUST-1042
+ *                   propertyName: Oak Villa
+ *                   addressLine: 14 Oak Street
+ *                   city: Dublin
+ *                   county: Dublin
+ *                   eircode: D02 X286
+ */
+router.get(
+  '/customers/address-audit-logs/dropdowns/addresses',
+  validate(addressAuditAddressDropdownQuerySchema),
+  customerAdminController.getAddressAuditAddressDropdown
 );
 
 /**

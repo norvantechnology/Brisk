@@ -1595,4 +1595,268 @@ export const getAddressAuditLogs = async (filters: AddressAuditLogFilters = {}) 
   };
 };
 
+export const getAddressAuditAdminDropdown = async (
+  search?: string,
+  limitParam?: number | string
+) => {
+  const limit = Math.max(1, Math.min(200, Number(limitParam) || 50));
+  const s = search?.trim();
+
+  const where: Prisma.AdminUserWhereInput = s
+    ? {
+        OR: [
+          { fullName: { contains: s, mode: 'insensitive' } },
+          { email: { contains: s, mode: 'insensitive' } },
+        ],
+      }
+    : {};
+
+  const admins = await prisma.adminUser.findMany({
+    where,
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      role: true,
+      status: true,
+      profilePhotoUrl: true,
+    },
+    orderBy: { fullName: 'asc' },
+    take: limit,
+  });
+
+  return admins.map((a) => ({
+    id: a.id,
+    label: `${a.fullName} (${a.email}) · ${a.role}`,
+    name: a.fullName,
+    email: a.email,
+    role: a.role,
+    status: a.status,
+    profilePhotoUrl: a.profilePhotoUrl,
+  }));
+};
+
+export const getAddressAuditCustomerDropdown = async (
+  search?: string,
+  limitParam?: number | string
+) => {
+  const limit = Math.max(1, Math.min(200, Number(limitParam) || 50));
+  const s = search?.trim();
+
+  const where: Prisma.UserWhereInput = {
+    role: 'CUSTOMER',
+    ...(s
+      ? {
+          OR: [
+            { fullName: { contains: s, mode: 'insensitive' } },
+            { email: { contains: s, mode: 'insensitive' } },
+            { customerCode: { contains: s, mode: 'insensitive' } },
+            { mobileNumber: { contains: s, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const customers = await prisma.user.findMany({
+    where,
+    select: {
+      id: true,
+      customerCode: true,
+      fullName: true,
+      email: true,
+      mobileNumber: true,
+      status: true,
+      profilePhotoUrl: true,
+    },
+    orderBy: { fullName: 'asc' },
+    take: limit,
+  });
+
+  return customers.map((c) => {
+    const codeTag = c.customerCode ? ` (${c.customerCode})` : '';
+    const contact = c.email || c.mobileNumber || '';
+    const label = `${c.fullName}${codeTag}${contact ? ` · ${contact}` : ''}`;
+
+    return {
+      id: c.id,
+      label,
+      customerCode: c.customerCode,
+      name: c.fullName,
+      email: c.email,
+      mobileNumber: c.mobileNumber,
+      status: c.status,
+      profilePhotoUrl: c.profilePhotoUrl,
+    };
+  });
+};
+
+export const getAddressAuditAddressDropdown = async (filters: {
+  search?: string;
+  customerId?: string;
+  type?: 'ALL' | 'ADDRESS' | 'PROPERTY';
+  limit?: number | string;
+}) => {
+  const limit = Math.max(1, Math.min(200, Number(filters.limit) || 50));
+  const s = filters.search?.trim();
+  const customerId = filters.customerId;
+  const typeFilter = filters.type || 'ALL';
+
+  const shouldFetchAddresses = typeFilter === 'ALL' || typeFilter === 'ADDRESS';
+  const shouldFetchProperties = typeFilter === 'ALL' || typeFilter === 'PROPERTY';
+
+  const addressWhere: Prisma.AddressWhereInput = {
+    ...(customerId ? { userId: customerId } : {}),
+    ...(s
+      ? {
+          OR: [
+            { addressLine1: { contains: s, mode: 'insensitive' } },
+            { addressLine2: { contains: s, mode: 'insensitive' } },
+            { city: { contains: s, mode: 'insensitive' } },
+            { county: { contains: s, mode: 'insensitive' } },
+            { eircode: { contains: s, mode: 'insensitive' } },
+            { label: { contains: s, mode: 'insensitive' } },
+            { user: { fullName: { contains: s, mode: 'insensitive' } } },
+            { user: { customerCode: { contains: s, mode: 'insensitive' } } },
+          ],
+        }
+      : {}),
+  };
+
+  const propertyWhere: Prisma.PropertyWhereInput = {
+    ...(customerId ? { userId: customerId } : {}),
+    ...(s
+      ? {
+          OR: [
+            { propertyName: { contains: s, mode: 'insensitive' } },
+            { addressLine1: { contains: s, mode: 'insensitive' } },
+            { addressLine2: { contains: s, mode: 'insensitive' } },
+            { city: { contains: s, mode: 'insensitive' } },
+            { county: { contains: s, mode: 'insensitive' } },
+            { eircode: { contains: s, mode: 'insensitive' } },
+            { user: { fullName: { contains: s, mode: 'insensitive' } } },
+            { user: { customerCode: { contains: s, mode: 'insensitive' } } },
+          ],
+        }
+      : {}),
+  };
+
+  const [addresses, properties] = await Promise.all([
+    shouldFetchAddresses
+      ? prisma.address.findMany({
+          where: addressWhere,
+          select: {
+            id: true,
+            userId: true,
+            label: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            county: true,
+            eircode: true,
+            country: true,
+            isDefault: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                customerCode: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        })
+      : [],
+    shouldFetchProperties
+      ? prisma.property.findMany({
+          where: propertyWhere,
+          select: {
+            id: true,
+            userId: true,
+            propertyName: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            county: true,
+            eircode: true,
+            country: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                customerCode: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        })
+      : [],
+  ]);
+
+  const mappedAddresses = addresses.map((a) => {
+    const locParts = [a.addressLine1, a.city, a.county, a.eircode].filter(Boolean).join(', ');
+    const custTag = a.user?.fullName ? ` (${a.user.fullName})` : '';
+    const label = `[Address] ${locParts}${custTag}`;
+
+    return {
+      id: a.id,
+      label,
+      type: 'CUSTOMER_ADDRESS' as const,
+      customerId: a.userId,
+      customerName: a.user?.fullName ?? null,
+      customerCode: a.user?.customerCode ?? null,
+      addressLine: a.addressLine1,
+      city: a.city,
+      county: a.county,
+      eircode: a.eircode,
+      isDefault: a.isDefault,
+    };
+  });
+
+  const mappedProperties = properties.map((p) => {
+    const propName = p.propertyName ? `${p.propertyName} · ` : '';
+    const locParts = [p.addressLine1, p.city, p.county, p.eircode].filter(Boolean).join(', ');
+    const custTag = p.user?.fullName ? ` (${p.user.fullName})` : '';
+    const label = `[Property] ${propName}${locParts}${custTag}`;
+
+    return {
+      id: p.id,
+      label,
+      type: 'CUSTOMER_PROPERTY' as const,
+      customerId: p.userId,
+      customerName: p.user?.fullName ?? null,
+      customerCode: p.user?.customerCode ?? null,
+      propertyName: p.propertyName,
+      addressLine: p.addressLine1,
+      city: p.city,
+      county: p.county,
+      eircode: p.eircode,
+    };
+  });
+
+  return [...mappedAddresses, ...mappedProperties].slice(0, limit);
+};
+
+export const getAddressAuditFilterOptions = async () => {
+  const [admins, customers] = await Promise.all([
+    getAddressAuditAdminDropdown(undefined, 50),
+    getAddressAuditCustomerDropdown(undefined, 50),
+  ]);
+
+  const actions = [
+    { value: 'CUSTOMER_ADDRESS_REVEALED', label: 'Revealed Customer Address' },
+    { value: 'CUSTOMER_ADDRESS_VIEWED', label: 'Viewed Unmasked Customer Address' },
+    { value: 'CUSTOMER_PROPERTY_REVEALED', label: 'Revealed Customer Property' },
+    { value: 'CUSTOMER_PROPERTY_VIEWED', label: 'Viewed Unmasked Customer Property' },
+  ];
+
+  return {
+    admins,
+    customers,
+    actions,
+  };
+};
+
+
 
