@@ -1509,28 +1509,59 @@ const buildCustomerJobView = async (
       ? (job.booking?.finishedAt ?? job.updatedAt)
       : (job.cancelledAt ?? job.updatedAt);
 
-  const billedInvoice = invoice && invoice.status !== InvoiceStatus.UNPAID ? invoice : null;
+  const { isSiteVisit, jobType, jobTypeLabel } = resolveJobType(job);
+
+  const invoiceData = invoice
+    ? {
+        serviceCharge: money(invoice.serviceCharge),
+        platformFee: money(invoice.platformFee),
+        discount: round2(money(invoice.traderOfferDiscount) + money(invoice.promoDiscount)),
+        tax: money(invoice.tax),
+        totalAmount: money(invoice.totalAmount),
+        isPaid: invoice.status === InvoiceStatus.PAID,
+      }
+    : (job.serviceCharge != null || (isSiteVisit && job.siteVisitFee != null))
+      ? (() => {
+          const bd = computeInvoiceBreakdown({
+            serviceCharge: isSiteVisit ? money(job.siteVisitFee ?? 0) : money(job.serviceCharge ?? 0),
+            traderOfferDiscount: 0,
+            siteVisitFee: isSiteVisit ? money(job.siteVisitFee ?? 0) : 0,
+            purpose: isSiteVisit ? 'SITE_VISIT_FEE' : 'SERVICE',
+            currencyCode: job.offer?.currencyCode || 'EUR',
+          });
+          return {
+            serviceCharge: bd.serviceCharge,
+            platformFee: bd.platformFee,
+            discount: 0,
+            tax: bd.tax,
+            totalAmount: bd.totalAmount,
+            isPaid: false,
+          };
+        })()
+      : null;
+
   const sum = (rows: typeof requests, pick: (r: (typeof requests)[number]) => Prisma.Decimal) =>
     rows.reduce((s, r) => s + money(pick(r)), 0);
 
   const serviceFee = round2(
-    (billedInvoice ? money(billedInvoice.serviceCharge) : 0) +
+    (invoiceData ? invoiceData.serviceCharge : 0) +
       sum(requests, (r) => r.serviceCharge) +
       sum(requests, (r) => r.materialsTotal) +
       sum(requests, (r) => r.siteVisitFee)
   );
   const processingFee = round2(
-    (billedInvoice ? money(billedInvoice.platformFee) : 0) + sum(requests, (r) => r.platformFee)
+    (invoiceData ? invoiceData.platformFee : 0) + sum(requests, (r) => r.platformFee)
   );
-  const discount = billedInvoice
-    ? round2(money(billedInvoice.traderOfferDiscount) + money(billedInvoice.promoDiscount))
-    : 0;
-  const vatAmount = round2((billedInvoice ? money(billedInvoice.tax) : 0) + sum(requests, (r) => r.vatAmount));
+  const discount = invoiceData ? invoiceData.discount : 0;
+  const vatAmount = round2((invoiceData ? invoiceData.tax : 0) + sum(requests, (r) => r.vatAmount));
   const paidRequests = requests.filter((r) => r.status === 'PAID');
   const totalPaid = round2(
-    (billedInvoice ? money(billedInvoice.totalAmount) : 0) + sum(paidRequests, (r) => r.totalAmount)
+    (invoiceData && invoiceData.isPaid ? invoiceData.totalAmount : 0) + sum(paidRequests, (r) => r.totalAmount)
   );
-  const amountDue = round2(sum(requests.filter((r) => r.status === 'SENT'), (r) => r.totalAmount));
+  const amountDue = round2(
+    (invoiceData && !invoiceData.isPaid ? invoiceData.totalAmount : 0) +
+      sum(requests.filter((r) => r.status === 'SENT'), (r) => r.totalAmount)
+  );
   const vatBase = serviceFee + processingFee - discount;
   const vatPercentage = vatBase > 0 ? round2((vatAmount / vatBase) * 100) : 0;
 
@@ -1594,7 +1625,6 @@ const buildCustomerJobView = async (
     };
   });
 
-  const { isSiteVisit, jobType, jobTypeLabel } = resolveJobType(job);
   const canReschedule =
     !cancelled &&
     job.status !== JobStatus.COMPLETED &&
@@ -1606,37 +1636,29 @@ const buildCustomerJobView = async (
   const formatCur = (amt: number) => {
     const isNegative = amt < 0;
     const abs = Math.abs(amt);
-    return `${isNegative ? '-' : ''}${currencySymbol} ${abs === 0 ? '0' : abs.toFixed(2)}`;
+    return `${isNegative ? '-' : ''}${currencySymbol} ${abs.toFixed(2)}`;
   };
 
   const paymentSummaryList = [
     {
       label: 'Service Fee',
       amount: formatCur(serviceFee),
-      key: 'serviceFee',
-      value: formatCur(serviceFee),
     },
     ...(discount > 0
       ? [
           {
             label: 'Discount',
             amount: formatCur(-discount),
-            key: 'discount',
-            value: formatCur(-discount),
           },
         ]
       : []),
     {
       label: 'Platform Fee',
       amount: formatCur(processingFee),
-      key: 'processingFee',
-      value: formatCur(processingFee),
     },
     {
       label: 'VAT',
       amount: formatCur(vatAmount),
-      key: 'vatAmount',
-      value: formatCur(vatAmount),
     },
   ];
 
@@ -1807,7 +1829,6 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     isPartPayment: view.isPartPayment,
     hasPendingPartial: view.hasPendingPartial,
     flowType: view.flowType,
-    confirmedPayments: view.confirmedPayments,
     downloadUrl: view.downloadUrl,
     receiptUrl: view.receiptUrl,
     canReview: view.canReview,
