@@ -1602,14 +1602,35 @@ export const getAddressAuditAdminDropdown = async (
   const limit = Math.max(1, Math.min(200, Number(limitParam) || 50));
   const s = search?.trim();
 
-  const where: Prisma.AdminUserWhereInput = s
-    ? {
-        OR: [
-          { fullName: { contains: s, mode: 'insensitive' } },
-          { email: { contains: s, mode: 'insensitive' } },
-        ],
-      }
-    : {};
+  // Find distinct admin actors who actually logged address access events
+  const auditActors = await prisma.auditLog.findMany({
+    where: {
+      eventType: { in: ADDRESS_AUDIT_EVENT_TYPES },
+      actorId: { not: null },
+    },
+    select: { actorId: true },
+    distinct: ['actorId'],
+  });
+
+  const loggedAdminIds = auditActors
+    .map((a) => a.actorId)
+    .filter((id): id is string => Boolean(id));
+
+  if (loggedAdminIds.length === 0) {
+    return [];
+  }
+
+  const where: Prisma.AdminUserWhereInput = {
+    id: { in: loggedAdminIds },
+    ...(s
+      ? {
+          OR: [
+            { fullName: { contains: s, mode: 'insensitive' } },
+            { email: { contains: s, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
 
   const admins = await prisma.adminUser.findMany({
     where,
@@ -1643,7 +1664,73 @@ export const getAddressAuditCustomerDropdown = async (
   const limit = Math.max(1, Math.min(200, Number(limitParam) || 50));
   const s = search?.trim();
 
+  // Find all audit logs for address events to discover which customers have actual audit logs
+  const auditLogs = await prisma.auditLog.findMany({
+    where: {
+      eventType: { in: ADDRESS_AUDIT_EVENT_TYPES },
+    },
+    select: {
+      subjectId: true,
+      subjectType: true,
+      description: true,
+    },
+  });
+
+  if (auditLogs.length === 0) {
+    return [];
+  }
+
+  const customerIdSet = new Set<string>();
+  const addressIdSet = new Set<string>();
+  const propertyIdSet = new Set<string>();
+
+  for (const log of auditLogs) {
+    if (log.subjectType === 'CUSTOMER' && log.subjectId) {
+      customerIdSet.add(log.subjectId);
+    } else if (log.subjectType === 'CUSTOMER_ADDRESS' && log.subjectId) {
+      addressIdSet.add(log.subjectId);
+    } else if (log.subjectType === 'CUSTOMER_PROPERTY' && log.subjectId) {
+      propertyIdSet.add(log.subjectId);
+    }
+
+    if (log.description) {
+      const match = log.description.match(/customer\s+([0-9a-fA-F-]{36})/i);
+      if (match) {
+        customerIdSet.add(match[1]);
+      }
+    }
+  }
+
+  // Resolve customer IDs from logged addresses and properties
+  const [addrUsers, propUsers] = await Promise.all([
+    addressIdSet.size > 0
+      ? prisma.address.findMany({
+          where: { id: { in: Array.from(addressIdSet) } },
+          select: { userId: true },
+        })
+      : [],
+    propertyIdSet.size > 0
+      ? prisma.property.findMany({
+          where: { id: { in: Array.from(propertyIdSet) } },
+          select: { userId: true },
+        })
+      : [],
+  ]);
+
+  for (const a of addrUsers) {
+    if (a.userId) customerIdSet.add(a.userId);
+  }
+  for (const p of propUsers) {
+    if (p.userId) customerIdSet.add(p.userId);
+  }
+
+  const loggedCustomerIds = Array.from(customerIdSet);
+  if (loggedCustomerIds.length === 0) {
+    return [];
+  }
+
   const where: Prisma.UserWhereInput = {
+    id: { in: loggedCustomerIds },
     role: 'CUSTOMER',
     ...(s
       ? {
@@ -1701,10 +1788,38 @@ export const getAddressAuditAddressDropdown = async (filters: {
   const customerId = filters.customerId;
   const typeFilter = filters.type || 'ALL';
 
-  const shouldFetchAddresses = typeFilter === 'ALL' || typeFilter === 'ADDRESS';
-  const shouldFetchProperties = typeFilter === 'ALL' || typeFilter === 'PROPERTY';
+  // Discover addresses and properties that actually have audit logs
+  const auditLogs = await prisma.auditLog.findMany({
+    where: {
+      eventType: { in: ADDRESS_AUDIT_EVENT_TYPES },
+      subjectId: { not: null },
+      subjectType: { in: ['CUSTOMER_ADDRESS', 'CUSTOMER_PROPERTY'] },
+    },
+    select: {
+      subjectId: true,
+      subjectType: true,
+    },
+    distinct: ['subjectId', 'subjectType'],
+  });
+
+  const loggedAddressIds = auditLogs
+    .filter((l) => l.subjectType === 'CUSTOMER_ADDRESS' && l.subjectId)
+    .map((l) => l.subjectId!);
+  const loggedPropertyIds = auditLogs
+    .filter((l) => l.subjectType === 'CUSTOMER_PROPERTY' && l.subjectId)
+    .map((l) => l.subjectId!);
+
+  const shouldFetchAddresses =
+    (typeFilter === 'ALL' || typeFilter === 'ADDRESS') && loggedAddressIds.length > 0;
+  const shouldFetchProperties =
+    (typeFilter === 'ALL' || typeFilter === 'PROPERTY') && loggedPropertyIds.length > 0;
+
+  if (!shouldFetchAddresses && !shouldFetchProperties) {
+    return [];
+  }
 
   const addressWhere: Prisma.AddressWhereInput = {
+    id: { in: loggedAddressIds },
     ...(customerId ? { userId: customerId } : {}),
     ...(s
       ? {
@@ -1723,6 +1838,7 @@ export const getAddressAuditAddressDropdown = async (filters: {
   };
 
   const propertyWhere: Prisma.PropertyWhereInput = {
+    id: { in: loggedPropertyIds },
     ...(customerId ? { userId: customerId } : {}),
     ...(s
       ? {

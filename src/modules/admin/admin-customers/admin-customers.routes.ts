@@ -315,6 +315,7 @@ router.patch(
  *     description: |
  *       Returns pre-populated lists of filter dropdown options (admins, customers, and action event types)
  *       so the frontend can populate search dropdowns dynamically without manual UUID entry.
+ *       Only includes admins, customers, and addresses/properties that actually exist in the audit log history.
  *     tags: ['Admin / Customers', 'Admin / Security & Audit']
  *     security:
  *       - bearerAuth: []
@@ -365,7 +366,7 @@ router.get(
  * /admin/customers/address-audit-logs/dropdowns/admins:
  *   get:
  *     summary: Searchable Dropdown of Admin Users (for Address Audit Logs filter)
- *     description: Search and select admins who have revealed or viewed customer masked data.
+ *     description: Search and select admins who have revealed or viewed customer masked data. Only returns admins with actual audit log history.
  *     tags: ['Admin / Customers', 'Admin / Security & Audit']
  *     security:
  *       - bearerAuth: []
@@ -405,7 +406,7 @@ router.get(
  * /admin/customers/address-audit-logs/dropdowns/customers:
  *   get:
  *     summary: Searchable Dropdown of Customers (for Address Audit Logs filter)
- *     description: Search and select customers by name, customer code, email, or mobile number.
+ *     description: Search and select customers by name, customer code, email, or mobile number. Only returns customers whose addresses/properties appear in actual audit logs.
  *     tags: ['Admin / Customers', 'Admin / Security & Audit']
  *     security:
  *       - bearerAuth: []
@@ -448,7 +449,8 @@ router.get(
  *     summary: Searchable Dropdown of Customer Addresses & Properties (for Address Audit Logs filter)
  *     description: |
  *       Search and select addresses or properties by address line, city, county, eircode, property name,
- *       or customer name. Optionally filter by customer ID to show only that customer's addresses.
+ *       or customer name. Only returns addresses or properties that have actual audit log entries in the database.
+ *       Optionally filter by customer ID to show only that customer's addresses.
  *     tags: ['Admin / Customers', 'Admin / Security & Audit']
  *     security:
  *       - bearerAuth: []
