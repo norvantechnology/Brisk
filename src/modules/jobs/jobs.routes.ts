@@ -643,6 +643,13 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                   mapImageUrl: null
  *                 totalAmount: 120
  *                 formattedTotalAmount: € 120.00
+ *                 paymentSummaryList:
+ *                   - label: Service Fee
+ *                     amount: € 100.00
+ *                   - label: Platform Fee
+ *                     amount: € 10.00
+ *                   - label: VAT
+ *                     amount: € 10.00
  *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
  *                 receiptUrl: /payments/7c3d4e5f-0000-4000-8000-000000000004/receipt
  *                 canReview: true
