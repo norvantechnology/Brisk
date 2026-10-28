@@ -613,6 +613,7 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     property.address?.gprnNumber ?? gasMeter?.mprnGprn ?? null;
 
   const addressRefs = { mprnNumber, gprnNumber };
+  const utilityProviderList = await listUtilityProviders();
 
   return {
     id: property.id,
@@ -629,6 +630,7 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     subscriptions: property.subscriptions.map((sub) =>
       serializeSubscription(sub, property.meters, addressRefs)
     ),
+    utilityProviderList,
   };
 };
 

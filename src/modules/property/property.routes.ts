@@ -224,6 +224,7 @@ router.get('/properties', ...customerOnly, controller.listProperties);
  *           - `meters[]` with `referenceNumber` (MPRN/GPRN) + `referenceLabel`
  *           - `subscriptions[]` with `mprnNumber`/`gprnNumber` for electricity/gas rows
  *           - `subscriptions[].expiryDate` (ISO date-time like `createdAt`, or null)
+ *           - `utilityProviderList[]` (available utility provider catalog from GET /utility-providers)
  */
 router.get('/properties/:id', ...customerOnly, validate(propertyIdParamSchema), controller.getPropertyDetail);
 
