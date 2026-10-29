@@ -984,12 +984,8 @@ export const saveBankDetails = async (userId: string, input: BankDetailsInput) =
 
 export const saveServiceRadius = async (userId: string, input: ServiceRadiusInput) => {
   const { trader } = await ensureTraderForUser(userId);
-  assertOnboardingEditable(trader);
 
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
-  if (!registration) {
-    throw new BadRequestError('Start onboarding first via POST /traders/onboarding/start.');
-  }
 
   await prisma.$transaction([
     prisma.trader.update({
@@ -1002,13 +998,17 @@ export const saveServiceRadius = async (userId: string, input: ServiceRadiusInpu
         serviceCenterLabel: input.serviceCenterLabel ?? trader.serviceCenterLabel,
       },
     }),
-    prisma.traderRegistration.update({
-      where: { userId },
-      data: {
-        currentStep: ONBOARDING_STEPS.SERVICE_RADIUS,
-        stepData: mergeStepData(registration.stepData, 'service_radius', input),
-      },
-    }),
+    ...(registration
+      ? [
+          prisma.traderRegistration.update({
+            where: { userId },
+            data: {
+              currentStep: ONBOARDING_STEPS.SERVICE_RADIUS,
+              stepData: mergeStepData(registration.stepData, 'service_radius', input),
+            },
+          }),
+        ]
+      : []),
   ]);
 
   return getOnboardingStatus(userId);
