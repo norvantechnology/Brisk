@@ -997,9 +997,9 @@ export const saveServiceRadius = async (userId: string, input: ServiceRadiusInpu
       data: {
         serviceRadiusKm: input.serviceRadiusKm,
         serviceRadius: `${input.serviceRadiusKm} km`,
-        serviceCenterLat: input.serviceCenterLat,
-        serviceCenterLng: input.serviceCenterLng,
-        serviceCenterLabel: input.serviceCenterLabel,
+        serviceCenterLat: input.serviceCenterLat ?? trader.serviceCenterLat,
+        serviceCenterLng: input.serviceCenterLng ?? trader.serviceCenterLng,
+        serviceCenterLabel: input.serviceCenterLabel ?? trader.serviceCenterLabel,
       },
     }),
     prisma.traderRegistration.update({

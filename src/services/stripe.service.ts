@@ -101,24 +101,28 @@ export type ChargeDetails = {
   cardBrand: string | null;
   cardLast4: string | null;
   walletType: string | null;
+  paymentMethodType: string | null;
 };
 
-/** Card brand / last4 / wallet (apple_pay, google_pay) from the intent's latest charge. */
+/** Card brand / last4 / wallet (apple_pay, google_pay, klarna) from the intent's latest charge. */
 export const getChargeDetails = async (intent: Stripe.PaymentIntent): Promise<ChargeDetails> => {
   const chargeId =
     typeof intent.latest_charge === 'string' ? intent.latest_charge : intent.latest_charge?.id;
-  if (!chargeId) return { cardBrand: null, cardLast4: null, walletType: null };
+  if (!chargeId) return { cardBrand: null, cardLast4: null, walletType: null, paymentMethodType: null };
   const charge = await getStripe().charges.retrieve(chargeId);
   const card = charge.payment_method_details?.card;
+  const paymentMethodType = charge.payment_method_details?.type ?? null;
   return {
     cardBrand: card?.brand ?? null,
     cardLast4: card?.last4 ?? null,
     walletType: card?.wallet?.type ?? null,
+    paymentMethodType,
   };
 };
 
-/** Actual method used on the sheet (wallet wins over the method the app pre-selected). */
+/** Actual method used on the sheet (wallet/Klarna wins over the method the app pre-selected). */
 export const paymentMethodFromCharge = (charge: ChargeDetails | null): PaymentMethod | null => {
+  if (charge?.paymentMethodType === 'klarna') return PaymentMethod.KLARNA;
   if (charge?.walletType === 'apple_pay') return PaymentMethod.APPLE_PAY;
   if (charge?.walletType === 'google_pay') return PaymentMethod.GOOGLE_PAY;
   if (charge?.cardLast4) return PaymentMethod.CARD;

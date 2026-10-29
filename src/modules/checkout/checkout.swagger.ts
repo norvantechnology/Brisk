@@ -10,7 +10,7 @@
  *       enum: [PENDING, COMPLETED, FAILED]
  *     PaymentMethod:
  *       type: string
- *       enum: [CARD, APPLE_PAY, GOOGLE_PAY]
+ *       enum: [CARD, APPLE_PAY, GOOGLE_PAY, KLARNA]
  *     BillingType:
  *       type: string
  *       enum: [INDIVIDUAL, COMPANY]

@@ -79,7 +79,7 @@ export const soloProfileSchema = z.object({
 export const companyProfileSchema = z.object({
   body: z.object({
     companyName: z.string().trim().min(2).max(255),
-    croNumber: z.string().trim().regex(/^\d{8}$/, 'CRO must be an 8-digit number'),
+    croNumber: z.string().trim().regex(/^\d{6,8}$/, 'CRO must be a valid 6 to 8-digit number'),
     vatNumber: z.string().trim().min(1).max(20).optional(),
     directorFullName: z.string().trim().min(2).max(255),
     bio: z.string().trim().max(300).optional(),
@@ -116,10 +116,10 @@ export const bankDetailsSchema = z.object({
 
 export const serviceRadiusSchema = z.object({
   body: z.object({
-    serviceRadiusKm: z.number().int().min(1).max(500),
-    serviceCenterLat: z.number().min(-90).max(90),
-    serviceCenterLng: z.number().min(-180).max(180),
-    serviceCenterLabel: z.string().trim().min(1).max(255),
+    serviceRadiusKm: z.coerce.number().int().min(1).max(500),
+    serviceCenterLat: z.coerce.number().min(-90).max(90).optional().nullable(),
+    serviceCenterLng: z.coerce.number().min(-180).max(180).optional().nullable(),
+    serviceCenterLabel: z.string().trim().max(255).optional().nullable(),
   }),
 });
 

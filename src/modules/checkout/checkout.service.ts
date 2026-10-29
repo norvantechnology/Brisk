@@ -507,6 +507,7 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
       },
       { key: 'GOOGLE_PAY', provider: 'stripe', enabled: isStripeConfigured() },
       { key: 'CARD', provider: 'stripe', enabled: isStripeConfigured() },
+      { key: 'KLARNA', provider: 'stripe', enabled: isStripeConfigured() },
     ],
     billingTypes: [
       { key: 'INDIVIDUAL' },

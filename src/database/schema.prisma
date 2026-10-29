@@ -83,6 +83,7 @@ enum PaymentMethod {
   CARD
   APPLE_PAY
   GOOGLE_PAY
+  KLARNA
 }
 
 enum BillingType {

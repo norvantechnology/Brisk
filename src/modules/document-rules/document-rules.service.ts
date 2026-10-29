@@ -47,7 +47,18 @@ export const listEntityDocumentRules = async (traderType: TraderType) => {
     },
     orderBy: { sortOrder: 'asc' },
   });
-  return rules.map(serializeRule);
+  return rules
+    .filter((r) => {
+      const key = r.documentKey.toLowerCase();
+      // Insurance is disabled at this stage
+      if (key.includes('insurance')) return false;
+      // Garda vetting not required at this stage
+      if (key.includes('garda')) return false;
+      // Sole traders do NOT need proof of address
+      if (traderType === TraderType.SOLO && key.includes('address')) return false;
+      return true;
+    })
+    .map(serializeRule);
 };
 
 export const listAdminEntityDocumentRules = async (
@@ -112,10 +123,12 @@ export const listCategoryDocumentRules = async (
     },
   });
 
-  return rules.map((rule) => ({
-    ...serializeRule(rule),
-    category: rule.category,
-  }));
+  return rules
+    .filter((r) => !r.documentKey.toLowerCase().includes('insurance'))
+    .map((rule) => ({
+      ...serializeRule(rule),
+      category: rule.category,
+    }));
 };
 
 /** Group category rules for Category Wise Documents screen (one section per selected trade). */
@@ -206,7 +219,17 @@ export const validateRequiredDocumentsUploaded = async (
   );
 
   const requiredRuleIds = [...entityRules, ...categoryRulesFlat]
-    .filter((rule) => rule.required)
+    .filter((rule) => {
+      if (!rule.required) return false;
+      const key = rule.documentKey.toLowerCase();
+      // Insurance is disabled at this stage
+      if (key.includes('insurance')) return false;
+      // Garda vetting not required at this stage
+      if (key.includes('garda')) return false;
+      // Sole traders do NOT need proof of address
+      if (traderType === TraderType.SOLO && key.includes('address')) return false;
+      return true;
+    })
     .map((rule) => rule.id);
 
   if (!requiredRuleIds.length) {
@@ -223,7 +246,14 @@ export const validateRequiredDocumentsUploaded = async (
 
   const uploadedRuleIds = new Set(uploads.map((doc) => doc.documentRuleId));
   const missing = [...entityRules, ...categoryRulesFlat]
-    .filter((rule) => rule.required && !uploadedRuleIds.has(rule.id))
+    .filter((rule) => {
+      if (!rule.required) return false;
+      const key = rule.documentKey.toLowerCase();
+      if (key.includes('insurance')) return false;
+      if (key.includes('garda')) return false;
+      if (traderType === TraderType.SOLO && key.includes('address')) return false;
+      return !uploadedRuleIds.has(rule.id);
+    })
     .map((rule) => rule.name);
 
   return { complete: missing.length === 0, missing };

@@ -502,7 +502,7 @@
  *
  *       **Field mapping (company-info):**
  *       - Company Name → `companyName`
- *       - Registration (CRO) 8-digit → `croNumber`
+ *       - Registration (CRO) 6-digit (Irish standard) → `croNumber`
  *       - VAT Number → `vatNumber` (optional)
  *       - Director Full Legal Name → `directorFullName`
  *       - Registered address → address fields
@@ -521,9 +521,9 @@
  *                 example: Metro Plumbing Ltd
  *               croNumber:
  *                 type: string
- *                 pattern: '^\\d{8}$'
- *                 example: "12345678"
- *                 description: 8-digit Companies Registration Office number.
+ *                 pattern: '^\\d{6,8}$'
+ *                 example: "123456"
+ *                 description: 6-digit (or up to 8-digit) Companies Registration Office number.
  *               vatNumber:
  *                 type: string
  *                 example: IE1234567X
