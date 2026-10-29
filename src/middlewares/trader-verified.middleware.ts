@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { VerificationStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { AuthenticatedRequest } from './auth.middleware';
-import { ForbiddenError, UnauthorizedError } from '../utils/errors';
+import { UnauthorizedError } from '../utils/errors';
 
 /**
  * Blocks trader portal operational APIs (jobs, offers, etc.) until
@@ -10,7 +10,7 @@ import { ForbiddenError, UnauthorizedError } from '../utils/errors';
  */
 export const traderVerifiedMiddleware = async (
   req: AuthenticatedRequest,
-  _res: Response,
+  res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
@@ -25,29 +25,29 @@ export const traderVerifiedMiddleware = async (
     });
 
     if (!trader) {
-      next(
-        new ForbiddenError('Trader profile not found.', {
+      res.status(200).json({
+        success: false,
+        message: 'Trader profile not found.',
+        data: {
           code: 'TRADER_NOT_FOUND',
-        })
-      );
+        },
+      });
       return;
     }
 
     if (trader.verificationStatus !== VerificationStatus.VERIFIED) {
-      next(
-        new ForbiddenError(
+      res.status(200).json({
+        success: false,
+        message:
           'Trader account is pending verification. Marketplace access is unavailable until admin approval.',
-          {
-            code: 'TRADER_NOT_VERIFIED',
-            data: {
-              verificationStatus: trader.verificationStatus,
-              onboardingStatus: trader.onboardingStatus,
-              nextStep: 'TRADER_PENDING_APPROVAL',
-              traderAccountActive: false,
-            },
-          }
-        )
-      );
+        data: {
+          verificationStatus: trader.verificationStatus,
+          onboardingStatus: trader.onboardingStatus,
+          nextStep: 'TRADER_PENDING_APPROVAL',
+          traderAccountActive: false,
+          code: 'TRADER_NOT_VERIFIED',
+        },
+      });
       return;
     }
 
