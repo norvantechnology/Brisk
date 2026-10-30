@@ -1189,6 +1189,7 @@ export const listMyJobsByTab = async (
           select: { id: true, status: true },
           take: 1,
         },
+        _count: { select: { quotes: true } },
       },
     }),
   ]);
@@ -1264,6 +1265,11 @@ export const listMyJobsByTab = async (
               { paymentRequested, hasPendingPartial }
             );
 
+    const hasQuotes =
+      !job.traderId &&
+      (job._count?.quotes ?? 0) > 0 &&
+      (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
+
     return {
       id: job.id,
       jobRef: job.jobRef,
@@ -1291,7 +1297,7 @@ export const listMyJobsByTab = async (
       currencyCode,
       isPartPayment,
       hasPendingPartial,
-      flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : null,
+      flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : hasQuotes ? 'QUOTED' : null,
       invoiceId,
       downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     };
@@ -1460,7 +1466,7 @@ const buildCustomerJobView = async (
     job.trader?.businessName || job.trader?.user?.fullName || 'Trader';
   const traderLocation = [job.trader?.city, job.trader?.country].filter(Boolean).join(', ');
 
-  const [requests, lastCardPayment, activeDisputes] = await Promise.all([
+  const [requests, lastCardPayment, activeDisputes, quotesCount] = await Promise.all([
     prisma.traderPaymentRequest.findMany({
       where: { jobId, status: { in: ['SENT', 'PAID'] } },
       select: {
@@ -1491,6 +1497,7 @@ const buildCustomerJobView = async (
         })
       : null,
     prisma.jobDispute.count({ where: { jobId, status: { in: ['OPEN', 'IN REVIEW'] } } }),
+    prisma.quote.count({ where: { jobId } }),
   ]);
 
   const paymentRequested = customerHasFinalPaymentRequest({ paymentRequests: requests });
@@ -1640,10 +1647,14 @@ const buildCustomerJobView = async (
   };
 
   const paymentSummaryList = [
-    {
-      label: 'Service Fee',
-      amount: formatCur(serviceFee),
-    },
+    ...(serviceFee > 0
+      ? [
+          {
+            label: 'Service Fee',
+            amount: formatCur(serviceFee),
+          },
+        ]
+      : []),
     ...(discount > 0
       ? [
           {
@@ -1652,15 +1663,28 @@ const buildCustomerJobView = async (
           },
         ]
       : []),
-    {
-      label: 'Platform Fee',
-      amount: formatCur(processingFee),
-    },
-    {
-      label: 'VAT',
-      amount: formatCur(vatAmount),
-    },
+    ...(processingFee > 0
+      ? [
+          {
+            label: 'Platform Fee',
+            amount: formatCur(processingFee),
+          },
+        ]
+      : []),
+    ...(vatAmount > 0
+      ? [
+          {
+            label: 'VAT',
+            amount: formatCur(vatAmount),
+          },
+        ]
+      : []),
   ];
+
+  const hasQuotes =
+    !job.traderId &&
+    quotesCount > 0 &&
+    (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
 
   const view = {
     id: job.id,
@@ -1694,7 +1718,7 @@ const buildCustomerJobView = async (
         ),
     hasPendingPartial,
     isPartPayment: requests.some((r) => r.type === 'PARTIAL'),
-    flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : null,
+    flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : hasQuotes ? 'QUOTED' : null,
     completedAt: kind === 'COMPLETED' ? eventAt : null,
     cancelledAt: kind === 'CANCELLED' ? eventAt : null,
     cancellationReason: kind === 'CANCELLED' ? job.cancellationReason : null,
