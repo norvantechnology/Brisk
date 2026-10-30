@@ -40,7 +40,14 @@ import {
   buildQaFormAnswerList,
   normalizeQaFormAnswers,
 } from './jobs.qa-form';
-import { getCurrencyMeta } from '../../services/currency.service';
+import {
+  getCurrencyMeta,
+  asBriskCurrency,
+  currencyCodeFromCountry,
+  convertAmount,
+  convertAmountSync,
+  resolveUserCurrency,
+} from '../../services/currency.service';
 import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
 import {
   emitJobAcceptCancelled,
@@ -347,14 +354,14 @@ const formatSiteVisitDateKey = (d: Date): string => {
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** "08:00" → "08:00AM" */
-const formatSlotClock = (hhmm: string): string => {
+/** "08:00" → "08:00 AM" */
+export const formatSlotClock = (hhmm: string): string => {
   const [hStr, mStr = '00'] = hhmm.split(':');
   let h = Number(hStr);
   if (!Number.isFinite(h)) return hhmm;
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
-  return `${String(h12).padStart(2, '0')}:${mStr.padStart(2, '0')}${ampm}`;
+  return `${String(h12).padStart(2, '0')}:${mStr.padStart(2, '0')} ${ampm}`;
 };
 
 /** Mobile slot label — e.g. "Jul 25, 08:00AM - 11:00AM". */
@@ -1079,7 +1086,10 @@ export const customerJobAmountSelect = {
 type CustomerJobAmountSource = Prisma.JobGetPayload<{ select: typeof customerJobAmountSelect }>;
 
 /** Single amount shown to the customer: Refunded › Amount Due › Charges › Estimated. */
-export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
+export const resolveCustomerJobAmount = (
+  job: CustomerJobAmountSource,
+  viewerCurrency?: string | null
+) => {
   const invoice = job.booking?.invoice ?? null;
   const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
 
@@ -1097,8 +1107,15 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
   const due = round2(
     job.paymentRequests.filter((p) => p.status === 'SENT').reduce((s, p) => s + money(p.totalAmount), 0)
   );
+
+  let quoteEstimate = job.quotes[0] ? money(job.quotes[0].quotedAmount) : null;
+  const quoteCurrency = job.quotes[0]?.currencyCode;
+  if (quoteEstimate && quoteCurrency && viewerCurrency && quoteCurrency !== viewerCurrency) {
+    quoteEstimate = convertAmountSync(quoteEstimate, quoteCurrency, viewerCurrency).amount;
+  }
+
   const estimate =
-    (job.quotes[0] ? money(job.quotes[0].quotedAmount) : null) ??
+    quoteEstimate ??
     (job.serviceCharge != null ? money(job.serviceCharge) : null) ??
     (job.maxBudget != null ? money(job.maxBudget) : job.minBudget != null ? money(job.minBudget) : null);
 
@@ -1116,7 +1133,11 @@ export const resolveCustomerJobAmount = (job: CustomerJobAmountSource) => {
   }
 
   const currencyCode =
-    invoice?.currencyCode ?? job.paymentRequests[0]?.currencyCode ?? job.quotes[0]?.currencyCode ?? 'EUR';
+    invoice?.currencyCode ??
+    job.paymentRequests[0]?.currencyCode ??
+    (amountType === 'Estimated' && viewerCurrency ? viewerCurrency : null) ??
+    job.quotes[0]?.currencyCode ??
+    'EUR';
 
   /** Trader billed in installments (sent or paid PARTIAL request) — customer opens the Installment Payments screen. */
   const isPartPayment = job.paymentRequests.some((p) => p.type === 'PARTIAL');
@@ -1195,11 +1216,12 @@ export const listMyJobsByTab = async (
   ]);
 
   const currencyCodes = new Set<string>(['EUR']);
+  const userCurrency = await resolveUserCurrency(customerId);
   const rows = jobs.map((job) => {
     const cancelled = job.status === JobStatus.CANCELLED || job.booking?.status === BookingStatus.CANCELLED;
     const finished = job.status === JobStatus.COMPLETED || Boolean(job.booking?.finishedAt);
     const paymentRequested = customerHasFinalPaymentRequest(job);
-    const { amount, amountType, currencyCode, isPartPayment, invoiceId } = resolveCustomerJobAmount(job);
+    const { amount, amountType, currencyCode, isPartPayment, invoiceId } = resolveCustomerJobAmount(job, userCurrency);
     currencyCodes.add(currencyCode);
 
     const dateAt = cancelled
@@ -1387,48 +1409,88 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
     },
   });
 
+  const customer = await prisma.user.findUnique({
+    where: { id: customerId },
+    select: { preferredCurrency: true, country: true },
+  });
+  const customerCurrency =
+    asBriskCurrency(customer?.preferredCurrency) ||
+    currencyCodeFromCountry(customer?.country) ||
+    'EUR';
+  const customerMeta = await getCurrencyMeta(customerCurrency);
+
   const symbols = new Map<string, string>();
-  for (const code of new Set(quotes.map((q) => q.currencyCode))) {
+  for (const code of new Set([...quotes.map((q) => q.currencyCode), customerCurrency])) {
     symbols.set(code, (await getCurrencyMeta(code)).symbol);
   }
   const isOpen =
     !job.traderId && (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
 
-  const items = quotes.map((q) => {
-    const selectionStatus =
-      job.traderId === q.traderId && q.status === QuoteStatus.ACCEPTED
-        ? 'CONFIRMED'
-        : q.status === QuoteStatus.ACCEPTED && isOpen
-          ? 'AWAITING TRADER CONFIRMATION'
-          : q.status;
-    return {
-      id: q.id,
-      quoteId: q.id,
-      jobId: q.jobId,
-      amount: money(q.quotedAmount),
-      currencyCode: q.currencyCode,
-      currencySymbol: symbols.get(q.currencyCode) ?? q.currencyCode,
-      notes: q.notes,
-      estimatedDays: q.estimatedDays,
-      status: q.status,
-      selectionStatus: toDisplayStatus(selectionStatus),
-      canAccept: isOpen && q.status === QuoteStatus.PENDING,
-      requestedAt: q.requestedAt,
-      createdAt: q.createdAt,
-      trader: {
-        id: q.trader.id,
-        displayName: q.trader.businessName || q.trader.user.fullName,
-        fullName: q.trader.user.fullName,
-        profilePhotoUrl: q.trader.profilePhotoUrl ?? q.trader.user.profilePhotoUrl ?? null,
-        avgRating: Number(q.trader.avgRating ?? 0),
-        reviewsCount: q.trader._count.ratingsReceived,
-        topRated: q.trader.topRated,
-        isVerified: q.trader.verificationStatus === 'VERIFIED',
-        yearsExperience: q.trader.yearsExperience ?? 0,
-        city: q.trader.city,
-      },
-    };
-  });
+  const items = await Promise.all(
+    quotes.map(async (q) => {
+      const selectionStatus =
+        job.traderId === q.traderId && q.status === QuoteStatus.ACCEPTED
+          ? 'CONFIRMED'
+          : q.status === QuoteStatus.ACCEPTED && isOpen
+            ? 'AWAITING TRADER CONFIRMATION'
+            : q.status;
+
+      const originalAmount = money(q.quotedAmount);
+      const originalCurrency = q.currencyCode || 'EUR';
+      const originalSymbol = symbols.get(originalCurrency) ?? originalCurrency;
+
+      let displayAmount = originalAmount;
+      let exchangeRate = 1;
+
+      if (originalCurrency !== customerCurrency) {
+        try {
+          const converted = await convertAmount(originalAmount, originalCurrency, customerCurrency);
+          displayAmount = converted.amount;
+          exchangeRate = converted.rate;
+        } catch {
+          // fallback
+        }
+      }
+
+      const displayPriceLabel =
+        originalCurrency !== customerCurrency
+          ? `${customerMeta.symbol}${displayAmount} (approx ${originalSymbol}${originalAmount})`
+          : `${customerMeta.symbol}${displayAmount}`;
+
+      return {
+        id: q.id,
+        quoteId: q.id,
+        jobId: q.jobId,
+        amount: displayAmount,
+        currencyCode: customerCurrency,
+        currencySymbol: customerMeta.symbol,
+        originalAmount,
+        originalCurrencyCode: originalCurrency,
+        originalCurrencySymbol: originalSymbol,
+        exchangeRate,
+        displayPriceLabel,
+        notes: q.notes,
+        estimatedDays: q.estimatedDays,
+        status: q.status,
+        selectionStatus: toDisplayStatus(selectionStatus),
+        canAccept: isOpen && q.status === QuoteStatus.PENDING,
+        requestedAt: q.requestedAt,
+        createdAt: q.createdAt,
+        trader: {
+          id: q.trader.id,
+          displayName: q.trader.businessName || q.trader.user.fullName,
+          fullName: q.trader.user.fullName,
+          profilePhotoUrl: q.trader.profilePhotoUrl ?? q.trader.user.profilePhotoUrl ?? null,
+          avgRating: Number(q.trader.avgRating ?? 0),
+          reviewsCount: q.trader._count.ratingsReceived,
+          topRated: q.trader.topRated,
+          isVerified: q.trader.verificationStatus === 'VERIFIED',
+          yearsExperience: q.trader.yearsExperience ?? 0,
+          city: q.trader.city,
+        },
+      };
+    })
+  );
 
   return {
     jobId: job.id,
@@ -2748,6 +2810,7 @@ export const confirmSiteVisitProposal = async (
   let visitDate = request.visitDate;
   let timeSlot = request.timeSlot;
   let selectedSlotId: string | null = null;
+  let selectedSlot: (typeof slots)[number] | null = null;
 
   if (slots.length > 0) {
     if (!body?.slotId) {
@@ -2760,11 +2823,26 @@ export const confirmSiteVisitProposal = async (
     visitDate = slot.visitDate;
     timeSlot = slot.timeSlot;
     selectedSlotId = slot.id;
+    selectedSlot = slot;
+  } else if (slots[0]) {
+    selectedSlot = slots[0];
   }
 
   if (!visitDate || !timeSlot) {
     throw new BadRequestError('Site visit proposal has no date/time to confirm.');
   }
+
+  const slotStartTime =
+    selectedSlot?.startTime ||
+    (timeSlot ? SITE_VISIT_SLOT_DEFS[timeSlot]?.startTime : null) ||
+    '09:00';
+
+  const scheduledDateWithTime = (() => {
+    const d = new Date(visitDate);
+    const [hStr = '00', mStr = '00'] = slotStartTime.split(':');
+    d.setUTCHours(Number(hStr) || 0, Number(mStr) || 0, 0, 0);
+    return d;
+  })();
 
   const updated = await prisma.$transaction(async (tx) => {
     if (selectedSlotId && slots.length > 0) {
@@ -2797,7 +2875,10 @@ export const confirmSiteVisitProposal = async (
 
     await tx.job.update({
       where: { id: jobId },
-      data: { scheduledDate: visitDate },
+      data: {
+        scheduledDate: scheduledDateWithTime,
+        timeSlot: timeSlot,
+      },
     });
 
     return row;

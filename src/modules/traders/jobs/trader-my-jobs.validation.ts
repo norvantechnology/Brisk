@@ -50,6 +50,7 @@ export const myJobQuoteBodySchema = z.object({
   params: jobIdParam,
   body: z.object({
     amount: z.number().positive('amount must be a positive number.'),
+    currencyCode: z.string().trim().max(10).optional(),
     notes: z.string().max(2000).optional(),
   }),
 });
@@ -59,6 +60,7 @@ export const myJobAcceptBodySchema = z.object({
   body: z
     .object({
       amount: z.number().positive().optional(),
+      currencyCode: z.string().trim().max(10).optional(),
     })
     .optional()
     .default({}),

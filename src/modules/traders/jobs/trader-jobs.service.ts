@@ -188,13 +188,54 @@ type SiteVisitRow = {
   slots?: SiteVisitSlotRow[];
 };
 
+export const normalizeClockTime = (raw?: string | null): string | null => {
+  if (!raw) return null;
+  const str = raw.trim();
+  // 24h format HH:mm e.g. "18:49" or "06:49"
+  if (/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(str)) {
+    return str.slice(0, 5);
+  }
+  // 12h format e.g. "06:49 PM" or "6:49 PM" or "06:49pm"
+  const match12 = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = match12[2];
+    const ampm = match12[3].toUpperCase();
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  }
+  return null;
+};
+
 const normalizeSlotsInput = (body: {
   date?: string;
   timeSlot?: SiteVisitTimeSlot;
-  slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
-}): Array<{ date: string; timeSlot: SiteVisitTimeSlot }> => {
+  startTime?: string;
+  endTime?: string;
+  slots?: Array<{
+    date: string;
+    timeSlot: SiteVisitTimeSlot;
+    startTime?: string;
+    endTime?: string;
+  }>;
+}): Array<{
+  date: string;
+  timeSlot: SiteVisitTimeSlot;
+  startTime?: string;
+  endTime?: string;
+}> => {
   if (body.slots && body.slots.length > 0) return body.slots;
-  if (body.date && body.timeSlot) return [{ date: body.date, timeSlot: body.timeSlot }];
+  if (body.date && body.timeSlot) {
+    return [
+      {
+        date: body.date,
+        timeSlot: body.timeSlot,
+        startTime: body.startTime,
+        endTime: body.endTime,
+      },
+    ];
+  }
   throw new BadRequestError('Provide slots: [{ date, timeSlot }] or date + timeSlot.');
 };
 
@@ -1595,17 +1636,28 @@ const upsertSiteVisit = async (
   body: {
     date?: string;
     timeSlot?: SiteVisitTimeSlot;
-    slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
+    startTime?: string;
+    endTime?: string;
+    slots?: Array<{
+      date: string;
+      timeSlot: SiteVisitTimeSlot;
+      startTime?: string;
+      endTime?: string;
+    }>;
   },
   mode: 'request' | 'reschedule'
 ) => {
   const slotsInput = normalizeSlotsInput(body);
-  const parsed = slotsInput.map((s) => ({
-    visitDate: parseVisitDateOnly(s.date),
-    timeSlot: s.timeSlot,
-    startTime: SITE_VISIT_SLOT_DEFS[s.timeSlot].startTime,
-    endTime: SITE_VISIT_SLOT_DEFS[s.timeSlot].endTime,
-  }));
+  const parsed = slotsInput.map((s) => {
+    const customStart = s.startTime ? normalizeClockTime(s.startTime) : null;
+    const customEnd = s.endTime ? normalizeClockTime(s.endTime) : null;
+    return {
+      visitDate: parseVisitDateOnly(s.date),
+      timeSlot: s.timeSlot,
+      startTime: customStart || SITE_VISIT_SLOT_DEFS[s.timeSlot].startTime,
+      endTime: customEnd || SITE_VISIT_SLOT_DEFS[s.timeSlot].endTime,
+    };
+  });
   const primary = parsed[0];
 
   const job = await prisma.job.findUnique({
@@ -1725,7 +1777,14 @@ export const requestSiteVisit = async (
   body: {
     date?: string;
     timeSlot?: SiteVisitTimeSlot;
-    slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
+    startTime?: string;
+    endTime?: string;
+    slots?: Array<{
+      date: string;
+      timeSlot: SiteVisitTimeSlot;
+      startTime?: string;
+      endTime?: string;
+    }>;
   }
 ) => {
   const trader = await getTraderContext(userId);
@@ -1742,7 +1801,14 @@ export const rescheduleSiteVisit = async (
   body: {
     date?: string;
     timeSlot?: SiteVisitTimeSlot;
-    slots?: Array<{ date: string; timeSlot: SiteVisitTimeSlot }>;
+    startTime?: string;
+    endTime?: string;
+    slots?: Array<{
+      date: string;
+      timeSlot: SiteVisitTimeSlot;
+      startTime?: string;
+      endTime?: string;
+    }>;
   }
 ) => {
   const trader = await getTraderContext(userId);

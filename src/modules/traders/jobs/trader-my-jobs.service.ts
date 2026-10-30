@@ -6,6 +6,7 @@ import {
   JobStatus,
   Prisma,
   QuoteStatus,
+  SiteVisitTimeSlot,
   TraderPaymentRequestStatus,
   TraderPaymentRequestType,
   TraderSiteVisitStatus,
@@ -16,6 +17,8 @@ import { prisma } from '../../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { buildPaginationMeta } from '../../../utils/pagination';
 import { dateRangeWhere } from '../../../utils/list-filters';
+import { SITE_VISIT_SLOT_DEFS } from './trader-jobs.service';
+import { formatSlotClock } from '../../jobs/jobs.service';
 import {
   buildListOrderBy,
   pageIdsByComputedKey,
@@ -23,7 +26,12 @@ import {
   type SortDir,
 } from '../../../utils/list-sort';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
-import { resolveDiscoverCurrency } from '../../../services/currency.service';
+import {
+  asBriskCurrency,
+  currencyCodeFromCountry,
+  convertAmount,
+  resolveDiscoverCurrency,
+} from '../../../services/currency.service';
 import {
   emitJobAccept,
   emitJobAcceptCancelled,
@@ -525,6 +533,11 @@ const assertMyJob = async (traderId: string, jobId: string) => {
         where: { traderId },
         take: 5,
         orderBy: { createdAt: 'desc' },
+        include: {
+          slots: {
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
       },
       paymentRequests: {
         where: { traderId },
@@ -768,12 +781,37 @@ const siteVisitBlock = (job: MyJobRow) => {
   const visit = job.siteVisitRequests[0] ?? null;
   const fee = money(job.siteVisitFee);
   const isSiteVisitDone = visit?.status === TraderSiteVisitStatus.COMPLETED;
+  const slots = visit?.slots ?? [];
+  const selectedSlot = slots.find((s) => s.isSelected) ?? slots[0] ?? null;
+  const resolvedTimeSlot = selectedSlot?.timeSlot ?? visit?.timeSlot ?? null;
+  const def = resolvedTimeSlot ? SITE_VISIT_SLOT_DEFS[resolvedTimeSlot] : null;
+  const startTime = selectedSlot?.startTime ?? def?.startTime ?? null;
+  const endTime = selectedSlot?.endTime ?? def?.endTime ?? null;
+  const timeSlotLabel =
+    startTime && endTime
+      ? `${formatSlotClock(startTime)} - ${formatSlotClock(endTime)}`
+      : null;
+
   if (!visit && !job.siteVisitRequested) {
     return {
       status: 'NONE' as const,
       fee: null as number | null,
       isSiteVisitDone: false,
       completedAt: null as Date | null,
+      visitDate: null as string | null,
+      timeSlot: null as SiteVisitTimeSlot | null,
+      startTime: null as string | null,
+      endTime: null as string | null,
+      timeSlotLabel: null as string | null,
+      slots: [] as Array<{
+        id: string;
+        date: string;
+        timeSlot: SiteVisitTimeSlot;
+        startTime: string;
+        endTime: string;
+        timeSlotLabel: string;
+        isSelected: boolean;
+      }>,
     };
   }
 
@@ -783,6 +821,29 @@ const siteVisitBlock = (job: MyJobRow) => {
     /** true after trader completes site visit (status=COMPLETED). */
     isSiteVisitDone,
     completedAt: visit?.completedAt ?? null,
+    visitDate: selectedSlot?.visitDate
+      ? selectedSlot.visitDate.toISOString().slice(0, 10)
+      : visit?.visitDate
+        ? visit.visitDate.toISOString().slice(0, 10)
+        : null,
+    timeSlot: resolvedTimeSlot,
+    startTime,
+    endTime,
+    timeSlotLabel,
+    slots: slots.map((s) => {
+      const sDef = SITE_VISIT_SLOT_DEFS[s.timeSlot];
+      const sStart = s.startTime || sDef?.startTime || '';
+      const sEnd = s.endTime || sDef?.endTime || '';
+      return {
+        id: s.id,
+        date: s.visitDate.toISOString().slice(0, 10),
+        timeSlot: s.timeSlot,
+        startTime: sStart,
+        endTime: sEnd,
+        timeSlotLabel: sStart && sEnd ? `${formatSlotClock(sStart)} - ${formatSlotClock(sEnd)}` : '',
+        isSelected: s.isSelected,
+      };
+    }),
   };
 };
 
@@ -864,12 +925,27 @@ const jobStatusAfterFinish = async (job: MyJobRow, traderId: string) => {
 type TraderContext = Awaited<ReturnType<typeof getTraderContext>>;
 
 const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderContext) => {
-  const breakdown = computePaymentBreakdown(job, { isTraderVatRegistered: trader.isVatRegistered });
   const currency = await resolveDiscoverCurrency({
     customerPreferredCurrency: job.customer.preferredCurrency,
     traderPreferredCurrency: trader.user.preferredCurrency,
     jobCountry: job.address?.country ?? job.customer.country,
     traderCountry: trader.user.country ?? trader.country,
+  });
+  let quotePrice = resolveQuotePrice(job) ?? 0;
+  const quoteCurrency = job.quotes[0]?.currencyCode;
+  if (quoteCurrency && quoteCurrency !== currency.currencyCode && quotePrice > 0) {
+    try {
+      const converted = await convertAmount(quotePrice, quoteCurrency, currency.currencyCode);
+      quotePrice = converted.amount;
+    } catch {
+      // fallback
+    }
+  }
+  const breakdown = buildJobPaymentBreakdown({
+    quotePrice,
+    materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
+    siteVisitFee: money(job.siteVisitFee),
+    isTraderVatRegistered: trader.isVatRegistered ?? true,
   });
   const data: Prisma.TraderPaymentRequestUncheckedCreateInput = {
     jobId: job.id,
@@ -957,6 +1033,7 @@ const myJobCardSelect = (traderId: string) =>
         longitude: true,
         serviceCharge: true,
         scheduledDate: true,
+        timeSlot: true,
         createdAt: true,
         updatedAt: true,
         customer: {
@@ -979,7 +1056,23 @@ const myJobCardSelect = (traderId: string) =>
         siteVisitRequests: {
           // Keep cancelled visits so cancelled site-visit jobs still get siteVisit=true.
           where: { traderId },
-          select: { status: true, visitDate: true },
+          select: {
+            id: true,
+            status: true,
+            visitDate: true,
+            timeSlot: true,
+            slots: {
+              select: {
+                id: true,
+                visitDate: true,
+                timeSlot: true,
+                startTime: true,
+                endTime: true,
+                isSelected: true,
+              },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
           orderBy: { createdAt: 'desc' },
           take: 5,
         },
@@ -1277,8 +1370,31 @@ const myJobCardMapper =
       primaryAction = 'VIEW_DETAILS';
     }
 
-    const scheduledDate =
-      job.scheduledDate ?? job.booking?.scheduledDate ?? visit?.visitDate ?? null;
+    const selectedSlot =
+      visit?.slots?.find((s) => s.isSelected) ??
+      visit?.slots?.[0] ??
+      null;
+    const resolvedTimeSlot = (selectedSlot?.timeSlot ?? visit?.timeSlot ?? job.timeSlot ?? null) as SiteVisitTimeSlot | null;
+    const def = resolvedTimeSlot ? SITE_VISIT_SLOT_DEFS[resolvedTimeSlot] : null;
+    const slotStartTime = selectedSlot?.startTime ?? def?.startTime ?? null;
+    const slotEndTime = selectedSlot?.endTime ?? def?.endTime ?? null;
+    const timeSlotLabel =
+      slotStartTime && slotEndTime
+        ? `${formatSlotClock(slotStartTime)} - ${formatSlotClock(slotEndTime)}`
+        : null;
+
+    const scheduledDate = (() => {
+      if (job.scheduledDate) return job.scheduledDate;
+      if (job.booking?.scheduledDate) return job.booking.scheduledDate;
+      if (visit?.visitDate) {
+        const d = new Date(visit.visitDate);
+        const st = slotStartTime ?? '09:00';
+        const [hStr = '00', mStr = '00'] = st.split(':');
+        d.setUTCHours(Number(hStr) || 0, Number(mStr) || 0, 0, 0);
+        return d;
+      }
+      return null;
+    })();
 
     // Same totals + labeled rows as GET .../payment-request (dynamic Payment Summary UI).
     const paymentSummary = buildSubmitPaymentSummary(job);
@@ -1338,6 +1454,10 @@ const myJobCardMapper =
       distanceKm,
       quotePrice,
       scheduledDate,
+      timeSlot: resolvedTimeSlot,
+      startTime: slotStartTime,
+      endTime: slotEndTime,
+      timeSlotLabel,
       createdAt: job.createdAt,
       primaryAction,
     };
@@ -1585,11 +1705,37 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     estimatedEarnings,
     durationLabel: job.durationLabel,
     arrivalStatus: arrivalStatus(job),
-    scheduledDate:
-      job.scheduledDate ??
-      job.booking?.scheduledDate ??
-      job.siteVisitRequests[0]?.visitDate ??
+    timeSlot:
+      job.siteVisitRequests[0]?.slots?.find((s) => s.isSelected)?.timeSlot ??
+      job.siteVisitRequests[0]?.timeSlot ??
+      job.timeSlot ??
       null,
+    timeSlotLabel: (() => {
+      const s =
+        job.siteVisitRequests[0]?.slots?.find((s) => s.isSelected) ??
+        job.siteVisitRequests[0]?.slots?.[0];
+      const ts = s?.timeSlot ?? job.siteVisitRequests[0]?.timeSlot ?? (job.timeSlot as SiteVisitTimeSlot | null);
+      const def = ts ? SITE_VISIT_SLOT_DEFS[ts] : null;
+      const st = s?.startTime ?? def?.startTime ?? null;
+      const et = s?.endTime ?? def?.endTime ?? null;
+      return st && et ? `${formatSlotClock(st)} - ${formatSlotClock(et)}` : null;
+    })(),
+    scheduledDate: (() => {
+      if (job.scheduledDate) return job.scheduledDate;
+      if (job.booking?.scheduledDate) return job.booking.scheduledDate;
+      const v = job.siteVisitRequests[0];
+      if (v?.visitDate) {
+        const s = v.slots?.find((sl) => sl.isSelected) ?? v.slots?.[0];
+        const ts = s?.timeSlot ?? v.timeSlot;
+        const def = ts ? SITE_VISIT_SLOT_DEFS[ts] : null;
+        const st = s?.startTime ?? def?.startTime ?? '09:00';
+        const d = new Date(v.visitDate);
+        const [hStr = '00', mStr = '00'] = st.split(':');
+        d.setUTCHours(Number(hStr) || 0, Number(mStr) || 0, 0, 0);
+        return d;
+      }
+      return null;
+    })(),
   };
 };
 
@@ -2494,7 +2640,7 @@ const notifyPaymentRequested = async (
 export const upsertQuote = async (
   userId: string,
   jobId: string,
-  body: { amount: number; notes?: string }
+  body: { amount: number; notes?: string; currencyCode?: string }
 ) => {
   const trader = await getTraderContext(userId);
   const target = await assertJobForQuote(trader.id, jobId);
@@ -2511,11 +2657,18 @@ export const upsertQuote = async (
     );
   }
 
+  const traderCurrency =
+    asBriskCurrency(body.currencyCode) ||
+    asBriskCurrency(trader.user.preferredCurrency) ||
+    currencyCodeFromCountry(trader.country ?? trader.user.country) ||
+    'GBP';
+
   const quote = existing
     ? await prisma.quote.update({
         where: { id: existing.id },
         data: {
           quotedAmount: body.amount,
+          currencyCode: traderCurrency,
           notes: body.notes ?? existing.notes,
           status:
             target.traderId === trader.id && existing.status === QuoteStatus.ACCEPTED
@@ -2528,6 +2681,7 @@ export const upsertQuote = async (
           jobId,
           traderId: trader.id,
           quotedAmount: body.amount,
+          currencyCode: traderCurrency,
           notes: body.notes,
           status: QuoteStatus.PENDING,
         },
@@ -2542,6 +2696,7 @@ export const upsertQuote = async (
     id: quote.id,
     jobId,
     amount: money(quote.quotedAmount),
+    currencyCode: quote.currencyCode,
     notes: quote.notes,
     status: quote.status,
     jobStatus: JobStatus.PUBLISHED,
@@ -2563,7 +2718,7 @@ export const upsertQuote = async (
 export const requestJob = async (
   userId: string,
   jobId: string,
-  body?: { amount?: number; notes?: string }
+  body?: { amount?: number; notes?: string; currencyCode?: string }
 ) => {
   const trader = await getTraderContext(userId);
 
@@ -2632,11 +2787,18 @@ export const requestJob = async (
     };
   }
 
+  const traderCurrency =
+    asBriskCurrency(body?.currencyCode) ||
+    asBriskCurrency(trader.user.preferredCurrency) ||
+    currencyCodeFromCountry(trader.country ?? trader.user.country) ||
+    'GBP';
+
   const quote = existingQuote
     ? await prisma.quote.update({
         where: { id: existingQuote.id },
         data: {
           quotedAmount: amount,
+          currencyCode: traderCurrency,
           notes: body?.notes ?? existingQuote.notes,
           status: QuoteStatus.PENDING,
           requestedAt: new Date(),
@@ -2647,6 +2809,7 @@ export const requestJob = async (
           jobId,
           traderId: trader.id,
           quotedAmount: amount,
+          currencyCode: traderCurrency,
           notes: body?.notes,
           status: QuoteStatus.PENDING,
           requestedAt: new Date(),
@@ -2659,6 +2822,7 @@ export const requestJob = async (
     jobId,
     quoteId: quote.id,
     amount: money(quote.quotedAmount),
+    currencyCode: quote.currencyCode,
     jobStatus: JobStatus.PUBLISHED,
     assignmentStatus: 'WAITING_FOR_CUSTOMER' as const,
     hasSubmittedQuote: true,
@@ -2853,13 +3017,36 @@ export const confirmQuoteAssignment = async (params: {
     if (sheet) emitJobAccept(traderUser.userId, { ...sheet, at });
   }
 
+  const customer = await prisma.user.findUnique({
+    where: { id: params.customerId },
+    select: { preferredCurrency: true, country: true },
+  });
+  const customerCurrency =
+    asBriskCurrency(customer?.preferredCurrency) ||
+    currencyCodeFromCountry(customer?.country) ||
+    'EUR';
+  const originalAmount = money(quote.quotedAmount);
+  const originalCurrency = quote.currencyCode || 'EUR';
+  let displayAmount = originalAmount;
+  if (originalCurrency !== customerCurrency) {
+    try {
+      const converted = await convertAmount(originalAmount, originalCurrency, customerCurrency);
+      displayAmount = converted.amount;
+    } catch {
+      // fallback
+    }
+  }
+
   return {
     jobId: job.id,
     traderId: quote.traderId,
     quoteId: quote.id,
     status: job.status.replace(/_/g, ' '),
     assignmentStatus: 'AWAITING TRADER CONFIRMATION' as const,
-    amount: money(quote.quotedAmount),
+    amount: displayAmount,
+    currencyCode: customerCurrency,
+    originalAmount,
+    originalCurrencyCode: originalCurrency,
   };
 };
 
@@ -3385,7 +3572,30 @@ export const requestPartialPayment = async (
     throw new BadRequestError('Description for this installment is required.');
   }
 
-  const breakdown = computePaymentBreakdown(job);
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+
+  let quotePrice = resolveQuotePrice(job) ?? 0;
+  const quoteCurrency = job.quotes[0]?.currencyCode;
+  if (quoteCurrency && quoteCurrency !== currency.currencyCode && quotePrice > 0) {
+    try {
+      const converted = await convertAmount(quotePrice, quoteCurrency, currency.currencyCode);
+      quotePrice = converted.amount;
+    } catch {
+      // fallback
+    }
+  }
+
+  const breakdown = buildJobPaymentBreakdown({
+    quotePrice,
+    materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
+    siteVisitFee: money(job.siteVisitFee),
+    isTraderVatRegistered: trader.isVatRegistered ?? true,
+  });
   const jobAmount = breakdown.totalAmount;
   const requests = await loadJobPaymentRequests(jobId, trader.id);
   const alreadyPaid = sumPaidAmount(requests);
@@ -3414,13 +3624,6 @@ export const requestPartialPayment = async (
   const photoUrls = [
     ...new Set([...(input.photoUrls ?? []), ...(input.photoUrl ? [input.photoUrl] : [])]),
   ].filter(Boolean);
-
-  const currency = await resolveDiscoverCurrency({
-    customerPreferredCurrency: job.customer.preferredCurrency,
-    traderPreferredCurrency: trader.user.preferredCurrency,
-    jobCountry: job.address?.country ?? job.customer.country,
-    traderCountry: trader.user.country ?? trader.country,
-  });
 
   const paymentRequest = await prisma.$transaction(async (tx) => {
     if (photoUrls.length > 0) {

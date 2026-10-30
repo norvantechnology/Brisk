@@ -70,6 +70,8 @@ const siteVisitTimeSlotEnum = z.enum(['MORNING', 'AFTERNOON', 'EVENING', 'ANYTIM
 const siteVisitSlotItemSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
   timeSlot: siteVisitTimeSlotEnum,
+  startTime: z.string().trim().max(20).optional(),
+  endTime: z.string().trim().max(20).optional(),
 });
 
 /**
@@ -88,6 +90,8 @@ export const siteVisitRequestBodySchema = z.object({
         .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
         .optional(),
       timeSlot: siteVisitTimeSlotEnum.optional(),
+      startTime: z.string().trim().max(20).optional(),
+      endTime: z.string().trim().max(20).optional(),
       slots: z.array(siteVisitSlotItemSchema).min(1).max(20).optional(),
     })
     .superRefine((body, ctx) => {

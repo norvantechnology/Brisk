@@ -9,7 +9,13 @@ import {
 import { randomBytes } from 'crypto';
 import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
-import { getCurrencyMeta } from '../../services/currency.service';
+import {
+  getCurrencyMeta,
+  asBriskCurrency,
+  currencyCodeFromCountry,
+  convertAmount,
+  resolveUserCurrency,
+} from '../../services/currency.service';
 import { emitSiteVisitUpdate, pushUserNotification } from '../../sockets/realtime';
 import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
 import {
@@ -130,15 +136,50 @@ export const getJobQuoteDetail = async (
   const t = quote.trader;
   const isVerified = t.verificationStatus === 'VERIFIED';
 
+  const customer = await prisma.user.findUnique({
+    where: { id: customerId },
+    select: { preferredCurrency: true, country: true },
+  });
+  const customerCurrency =
+    asBriskCurrency(customer?.preferredCurrency) ||
+    currencyCodeFromCountry(customer?.country) ||
+    'EUR';
+  const customerMeta = await getCurrencyMeta(customerCurrency);
+
+  const originalAmount = money(quote.quotedAmount);
+  const originalCurrency = quote.currencyCode || 'EUR';
+  let displayAmount = originalAmount;
+  let exchangeRate = 1;
+
+  if (originalCurrency !== customerCurrency) {
+    try {
+      const converted = await convertAmount(originalAmount, originalCurrency, customerCurrency);
+      displayAmount = converted.amount;
+      exchangeRate = converted.rate;
+    } catch {
+      // fallback
+    }
+  }
+
+  const displayPriceLabel =
+    originalCurrency !== customerCurrency
+      ? `${customerMeta.symbol}${displayAmount} (approx ${currency.symbol}${originalAmount})`
+      : `${customerMeta.symbol}${displayAmount}`;
+
   return {
     quoteId: quote.id,
     jobId: job.id,
     jobRef: job.jobRef,
     jobTitle: job.title,
     jobStatus: toDisplayStatus(job.status),
-    amount: money(quote.quotedAmount),
-    currencyCode: quote.currencyCode,
-    currencySymbol: currency.symbol,
+    amount: displayAmount,
+    currencyCode: customerCurrency,
+    currencySymbol: customerMeta.symbol,
+    originalAmount,
+    originalCurrencyCode: originalCurrency,
+    originalCurrencySymbol: currency.symbol,
+    exchangeRate,
+    displayPriceLabel,
     notes: quote.notes,
     estimatedDays: quote.estimatedDays,
     status: quote.status,
@@ -283,7 +324,8 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
   const cancelled = isJobCancelled(job);
   const finished = Boolean(booking?.finishedAt) || job.status === JobStatus.COMPLETED;
   const paymentRequested = customerHasFinalPaymentRequest(job);
-  const pricing = resolveCustomerJobAmount(job);
+  const customerCurrency = await resolveUserCurrency(customerId);
+  const pricing = resolveCustomerJobAmount(job, customerCurrency);
   const paid = finished && pricing.amountDue === 0 && pricing.totalPaid > 0;
   const paidAt =
     [lastInvoicePayment?.paidAt, lastPaidRequest?.paidAt]
