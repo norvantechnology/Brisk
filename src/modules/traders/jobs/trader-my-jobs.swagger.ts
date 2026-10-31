@@ -90,6 +90,12 @@
  *           type: number
  *           nullable: true
  *           description: Agreed quote / service charge
+ *         currency_symbol:
+ *           type: string
+ *           example: €
+ *         currency_code:
+ *           type: string
+ *           example: EUR
  *         paymentSummary:
  *           type: object
  *           description: Numeric totals (use `paymentDetails` for the labeled Payment Summary UI).

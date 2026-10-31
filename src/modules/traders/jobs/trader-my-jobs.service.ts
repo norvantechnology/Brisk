@@ -1453,6 +1453,8 @@ const myJobCardMapper =
       areaName,
       distanceKm,
       quotePrice,
+      currency_symbol: currency.currencySymbol,
+      currency_code: currency.currencyCode,
       scheduledDate,
       timeSlot: resolvedTimeSlot,
       startTime: slotStartTime,
