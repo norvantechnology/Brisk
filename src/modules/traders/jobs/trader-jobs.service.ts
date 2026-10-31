@@ -14,7 +14,13 @@ import { compareValues, resolveSortDir } from '../../../utils/list-sort';
 import { resolveCategoryIconUrl } from '../../categories/categories.serializers';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import { requestJob } from './trader-my-jobs.service';
-import { resolveDiscoverCurrency } from '../../../services/currency.service';
+import {
+  asBriskCurrency,
+  convertAmountSync,
+  currencyCodeFromCountry,
+  getCurrencyMeta,
+  resolveDiscoverCurrency,
+} from '../../../services/currency.service';
 import { getPlatformSetting } from '../../settings/platform-settings.service';
 import { emitSiteVisitUpdate } from '../../../sockets/realtime';
 import {
@@ -834,12 +840,27 @@ const toListItem = (
     badge,
     distanceKm,
     areaName: areaNameOf(job),
-    siteVisitFee: money(job.siteVisitFee),
-    minBudget: money(job.minBudget),
-    maxBudget: money(job.maxBudget),
-    serviceCharge: money(job.serviceCharge),
-    currencyCode: currency?.currencyCode ?? 'EUR',
-    currencySymbol: currency?.currencySymbol ?? '€',
+    ...(() => {
+      const jobCurrency =
+        asBriskCurrency(job.customer?.preferredCurrency) ||
+        currencyCodeFromCountry(job.address?.country ?? job.customer?.country) ||
+        'EUR';
+      const targetCurrency = currency?.currencyCode ?? 'EUR';
+      const convertVal = (amount: Prisma.Decimal | number | null | undefined): number | null => {
+        const val = money(amount);
+        if (val == null) return null;
+        if (val <= 0 || jobCurrency === targetCurrency) return val;
+        return convertAmountSync(val, jobCurrency, targetCurrency).amount;
+      };
+      return {
+        siteVisitFee: convertVal(job.siteVisitFee),
+        minBudget: convertVal(job.minBudget),
+        maxBudget: convertVal(job.maxBudget),
+        serviceCharge: convertVal(job.serviceCharge),
+        currencyCode: targetCurrency,
+        currencySymbol: currency?.currencySymbol ?? '€',
+      };
+    })(),
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     isBookmarked: bookmarkedIds.has(job.id),
@@ -868,13 +889,16 @@ const currencyForDiscoverJob = async (
     country: string | null;
     user: { preferredCurrency: string; country: string | null };
   }
-): Promise<{ currencyCode: string; currencySymbol: string }> =>
-  resolveDiscoverCurrency({
-    customerPreferredCurrency: job.customer?.preferredCurrency,
-    traderPreferredCurrency: trader.user.preferredCurrency,
-    jobCountry: job.address?.country ?? job.customer?.country,
-    traderCountry: trader.user.country ?? trader.country,
-  });
+): Promise<{ currencyCode: string; currencySymbol: string }> => {
+  const code =
+    asBriskCurrency(trader.user.preferredCurrency) ||
+    currencyCodeFromCountry(trader.user.country ?? trader.country) ||
+    asBriskCurrency(job.customer?.preferredCurrency) ||
+    currencyCodeFromCountry(job.address?.country ?? job.customer?.country) ||
+    'EUR';
+  const meta = await getCurrencyMeta(code);
+  return { currencyCode: meta.code, currencySymbol: meta.symbol };
+};
 
 /**
  * Discover / Nearby Opportunities — open marketplace jobs for traders.
@@ -1292,7 +1316,6 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     quoteState,
     currency
   );
-  const fee = money(job.siteVisitFee);
   const isSiteVisit = list.isSiteVisit || isSiteVisitPreview;
   const baseSiteVisit = toSiteVisitPayload(activeVisit);
   const needsReschedule = jobNeedsReschedule(job, activeVisit?.status);
@@ -1416,9 +1439,9 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
         ? ('SCHEDULED_VISIT' as const)
         : null;
   // Figma "Accept Job for €X" — same action as Request Job; amount for button label.
-  const serviceChargeAmt = money(job.serviceCharge) ?? 0;
-  const maxBudgetAmt = money(job.maxBudget) ?? 0;
-  const minBudgetAmt = money(job.minBudget) ?? 0;
+  const serviceChargeAmt = list.serviceCharge ?? 0;
+  const maxBudgetAmt = list.maxBudget ?? 0;
+  const minBudgetAmt = list.minBudget ?? 0;
   const acceptJobAmount =
     quoteState.quoteAmount ??
     (serviceChargeAmt > 0 ? serviceChargeAmt : null) ??
@@ -1441,7 +1464,7 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     photos,
     photoCount: photos.length,
     /** Prefer showing fee card only when value > 0; still return 0 if DB has 0. */
-    siteVisitFee: isSiteVisit ? fee : null,
+    siteVisitFee: isSiteVisit ? list.siteVisitFee : null,
     siteVisitRequested: Boolean(job.siteVisitRequested),
     /**
      * Single price for Job Details top card (mobile owns labels).
