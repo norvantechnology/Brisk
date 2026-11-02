@@ -615,55 +615,22 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     property.address?.gprnNumber ?? gasMeter?.mprnGprn ?? null;
 
   const addressRefs = { mprnNumber, gprnNumber };
-  const utilityProviderList = await listUtilityProviders();
+  const rawProviders = await listUtilityProviders();
 
-  const categoryOrder = ['electricity', 'gas', 'broadband', 'bins', 'insurance'];
-  const categoryLabels: Record<string, string> = {
-    electricity: 'Electricity',
-    gas: 'GAS',
-    broadband: 'Broadband',
-    bins: 'Bins',
-    insurance: 'Home Insurance',
-  };
-  const categoryIcons: Record<string, string> = {
-    electricity: 'https://cdn.brisk.ie/assets/placeholders/icons/electricity.png',
-    gas: 'https://cdn.brisk.ie/assets/placeholders/icons/gas.png',
-    broadband: 'https://cdn.brisk.ie/assets/placeholders/icons/broadband.png',
-    bins: 'https://cdn.brisk.ie/assets/placeholders/icons/bins.png',
-    insurance: 'https://cdn.brisk.ie/assets/placeholders/icons/insurance.png',
-  };
-
-  const utilityCategories = categoryOrder
-    .map((serviceType) => {
-      const providers = utilityProviderList
-        .filter((p) => p.serviceType.toLowerCase() === serviceType)
-        .map((p) => ({
-          id: p.id,
-          name: p.name,
-          serviceType: p.serviceType,
-          serviceLabel: p.serviceLabel,
-          description: p.description,
-          logoUrl: p.logoUrl,
-          iconUrl: p.iconUrl,
-        }));
-
-      return {
-        serviceType,
-        serviceLabel: categoryLabels[serviceType] ?? serviceType,
-        iconUrl: categoryIcons[serviceType] ?? null,
-        showExpiryDate: true,
-        providers,
-      };
-    })
-    .filter((cat) => cat.providers.length > 0);
-
-  const utilityProvidersByCategory = utilityCategories.reduce(
-    (acc, cat) => {
-      acc[cat.serviceType] = cat;
-      return acc;
-    },
-    {} as Record<string, (typeof utilityCategories)[number]>
-  );
+  const utilityProviderList = rawProviders.map((provider) => ({
+    ...provider,
+    providersCategory: rawProviders
+      .filter((other) => other.serviceType.toLowerCase() === provider.serviceType.toLowerCase())
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        serviceType: item.serviceType,
+        serviceLabel: item.serviceLabel,
+        description: item.description,
+        logoUrl: item.logoUrl,
+        iconUrl: item.iconUrl,
+      })),
+  }));
 
   return {
     id: property.id,
@@ -681,8 +648,6 @@ export const getPropertyDetail = async (userId: string, id: string) => {
       serializeSubscription(sub, property.meters, addressRefs)
     ),
     utilityProviderList,
-    utilityCategories,
-    utilityProvidersByCategory,
   };
 };
 

@@ -5,8 +5,6 @@ node_modules/
 .cursor/
 
 # Environment Variables
-.env
-.env.local
 .env.*.local
 
 # Firebase / Apple push credentials (keep on the server only)
@@ -44,3 +42,4 @@ brisk-trader-web/
 *.tmp.js
 
 PROJECT_OVERVIEW.md
+config.bat
