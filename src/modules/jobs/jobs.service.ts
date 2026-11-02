@@ -3264,7 +3264,7 @@ export const getSimpleJobFormConfig = async (
     siteVisitEnabled,
     siteVisitFee,
     qaFormSchema,
-    quoteType: 'REMOTE',
+    quoteType: siteVisitEnabled ? 'ONSITE' : 'REMOTE',
     fixedTimeSlotLabel,
     timeSlotConfig,
     timeSlotOptions: timeSlotConfig.options,

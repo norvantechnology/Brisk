@@ -201,7 +201,7 @@ export const buildJobFormConfig = (input: {
     offerBanner,
     showQuoteType: true,
     quoteTypeOptions,
-    defaultQuoteType: JobQuoteType.REMOTE,
+    defaultQuoteType: siteVisitEnabled ? JobQuoteType.ONSITE : JobQuoteType.REMOTE,
     quoteTypeLocked: '',
     showBudgetRange: showBudgetForRemote,
     showMinBudget: showBudgetForRemote,
