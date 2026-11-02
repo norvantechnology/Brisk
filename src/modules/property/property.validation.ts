@@ -59,9 +59,22 @@ export const submitReadingSchema = z.object({
 
 export const saveSubscriptionsSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
-  body: z.object({
-    providerIds: z.array(z.string().uuid()).min(0),
-  }),
+  body: z
+    .object({
+      providerIds: z.array(z.string().uuid()).min(0).optional(),
+      subscriptions: z
+        .array(
+          z.object({
+            providerId: z.string().uuid(),
+            expiryDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nullable().optional(),
+            accountNumber: z.string().trim().max(100).nullable().optional(),
+          })
+        )
+        .optional(),
+    })
+    .refine((data) => data.providerIds !== undefined || data.subscriptions !== undefined, {
+      message: 'Provide providerIds or subscriptions array.',
+    }),
 });
 
 export const removeSubscriptionSchema = z.object({

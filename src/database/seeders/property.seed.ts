@@ -40,6 +40,33 @@ const PROVIDERS = [
     iconUrl: `${PLACEHOLDER}/icons/insurance.png`,
     displayOrder: 4,
   },
+  {
+    name: 'Eir Broadband',
+    serviceType: 'broadband',
+    serviceLabel: 'Broadband',
+    description: 'High-speed fibre broadband and Wi-Fi',
+    logoUrl: `${PLACEHOLDER}/providers/eir.png`,
+    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    displayOrder: 5,
+  },
+  {
+    name: 'Virgin Media',
+    serviceType: 'broadband',
+    serviceLabel: 'Broadband',
+    description: 'Ultrafast broadband & digital TV',
+    logoUrl: `${PLACEHOLDER}/providers/virgin-media.png`,
+    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    displayOrder: 6,
+  },
+  {
+    name: 'Vodafone Broadband',
+    serviceType: 'broadband',
+    serviceLabel: 'Broadband',
+    description: 'Home fibre broadband',
+    logoUrl: `${PLACEHOLDER}/providers/vodafone.png`,
+    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    displayOrder: 7,
+  },
 ];
 
 export async function seedPropertyModule(prisma: PrismaClient): Promise<void> {

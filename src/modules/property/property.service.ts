@@ -707,12 +707,26 @@ export const listUtilityProviders = async () => {
 export const savePropertySubscriptions = async (
   userId: string,
   propertyId: string,
-  providerIds: string[]
+  input:
+    | string[]
+    | {
+        providerIds?: string[];
+        subscriptions?: Array<{
+          providerId: string;
+          expiryDate?: string | Date | null;
+          accountNumber?: string | null;
+        }>;
+      }
 ) => {
   await ensureCustomer(userId);
   await getOwnedProperty(userId, propertyId);
 
-  const uniqueIds = [...new Set(providerIds)];
+  const rawProviderIds = Array.isArray(input)
+    ? input
+    : input.subscriptions?.map((s) => s.providerId) ?? input.providerIds ?? [];
+
+  const subItems = Array.isArray(input) ? null : input.subscriptions ?? null;
+  const uniqueIds = [...new Set(rawProviderIds)];
 
   const providers = uniqueIds.length
     ? await prisma.utilityProvider.findMany({
@@ -739,6 +753,15 @@ export const savePropertySubscriptions = async (
 
     // Activate / create each checked provider
     for (const provider of providers) {
+      const customSub = subItems?.find((s) => s.providerId === provider.id);
+      const expiryDate =
+        customSub?.expiryDate !== undefined
+          ? customSub.expiryDate
+            ? new Date(customSub.expiryDate)
+            : null
+          : provider.expiryDate;
+      const accountNumber = customSub?.accountNumber ?? undefined;
+
       await tx.subscription.upsert({
         where: {
           propertyId_utilityProviderId: {
@@ -751,11 +774,14 @@ export const savePropertySubscriptions = async (
           utilityProviderId: provider.id,
           serviceType: provider.serviceType,
           status: 'active',
-          expiryDate: provider.expiryDate,
+          accountNumber,
+          expiryDate,
         },
         update: {
           status: 'active',
           serviceType: provider.serviceType,
+          ...(customSub?.expiryDate !== undefined ? { expiryDate } : {}),
+          ...(customSub?.accountNumber !== undefined ? { accountNumber } : {}),
         },
       });
     }

@@ -117,6 +117,40 @@ export const buildJobFormConfig = (input: {
 
   const showBudgetForRemote = customerEntersPrice;
 
+  const isSkipDelivery = Boolean(
+    sub?.name && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(sub.name)
+  );
+
+  const timeSlotConfig = isSkipDelivery
+    ? {
+        mode: 'SINGLE_FIXED' as const,
+        displayText: 'Any time between 8:00 and 17:00',
+        timeSlotKey: 'ANYTIME',
+        startTime: '08:00',
+        endTime: '17:00',
+        options: [
+          {
+            key: 'ANYTIME',
+            label: 'Any time between 8:00 and 17:00',
+            range: '08:00 - 17:00',
+          },
+        ],
+      }
+    : {
+        mode: 'SELECTABLE' as const,
+        displayText: 'Choose preferred time slot',
+        timeSlotKey: null as string | null,
+        startTime: null as string | null,
+        endTime: null as string | null,
+        options: [
+          { key: 'MORNING', label: 'Morning', range: '08:00 - 12:00' },
+          { key: 'MIDDAY', label: 'Midday', range: '12:00 - 15:00' },
+          { key: 'AFTERNOON', label: 'Afternoon', range: '15:00 - 18:00' },
+          { key: 'EVENING', label: 'Evening', range: '17:00 - 21:00' },
+        ],
+      };
+
+
   const quoteTypeOptions = [
     {
       key: JobQuoteType.REMOTE,
@@ -208,8 +242,8 @@ export const buildJobFormConfig = (input: {
     showImageUpload: true,
     imageUploadPurpose: 'job_photo',
     maxImages: 10,
-    /** Empty — time/duration option lists are owned by the mobile app. */
-    timeSlotOptions: [] as Array<{ key: string; label: string; range: string }>,
+    timeSlotConfig,
+    timeSlotOptions: timeSlotConfig.options,
     durationOptions: [] as Array<{ key: string; label: string }>,
     priceEnabled,
     priceEnteredBy,
@@ -296,7 +330,7 @@ export const buildNextJobPrefill = (input: {
     visibilityByQuoteType: fc.visibilityByQuoteType,
     minBudget: null as number | null,
     maxBudget: null as number | null,
-    timeSlot: '',
+    timeSlot: fc.timeSlotConfig?.mode === 'SINGLE_FIXED' ? 'ANYTIME' : '',
     durationLabel: '',
     phoneNumber: '',
     description: '',

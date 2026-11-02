@@ -191,7 +191,7 @@ export const savePropertySubscriptions = async (
     const data = await propertyService.savePropertySubscriptions(
       req.user!.id,
       req.params.id,
-      req.body.providerIds
+      req.body
     );
     sendResponse({
       res,
