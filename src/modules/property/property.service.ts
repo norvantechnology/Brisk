@@ -535,6 +535,7 @@ const serializeSubscription = (
     serviceType: string;
     status: string;
     expiryDate: Date | null;
+    accountNumber?: string | null;
     utilityProvider: {
       id: string;
       name: string;
@@ -561,6 +562,7 @@ const serializeSubscription = (
     status: sub.status,
     /** ISO date-time (same shape as `createdAt`); null when unset. */
     expiryDate: sub.expiryDate,
+    accountNumber: (sub as { accountNumber?: string | null }).accountNumber ?? null,
     mprnNumber: refs.mprnNumber,
     gprnNumber: refs.gprnNumber,
     referenceNumber: refs.referenceNumber,
