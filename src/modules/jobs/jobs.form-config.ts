@@ -121,6 +121,8 @@ export const buildJobFormConfig = (input: {
     sub?.name && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(sub.name)
   );
 
+  const fixedTimeSlotLabel = isSkipDelivery ? 'Any time between 8:00 and 17:00' : null;
+
   const timeSlotConfig = isSkipDelivery
     ? {
         mode: 'SINGLE_FIXED' as const,
@@ -242,6 +244,7 @@ export const buildJobFormConfig = (input: {
     showImageUpload: true,
     imageUploadPurpose: 'job_photo',
     maxImages: 10,
+    fixedTimeSlotLabel,
     timeSlotConfig,
     timeSlotOptions: timeSlotConfig.options,
     durationOptions: [] as Array<{ key: string; label: string }>,

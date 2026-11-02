@@ -3221,6 +3221,8 @@ export const getSimpleJobFormConfig = async (
     subcategoryFlags?.name && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(subcategoryFlags.name)
   );
 
+  const fixedTimeSlotLabel = isSkipDelivery ? 'Any time between 8:00 and 17:00' : null;
+
   const timeSlotConfig = isSkipDelivery
     ? {
         mode: 'SINGLE_FIXED' as const,
@@ -3263,6 +3265,7 @@ export const getSimpleJobFormConfig = async (
     siteVisitFee,
     qaFormSchema,
     quoteType: 'REMOTE',
+    fixedTimeSlotLabel,
     timeSlotConfig,
     timeSlotOptions: timeSlotConfig.options,
   };
