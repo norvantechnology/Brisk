@@ -3223,34 +3223,7 @@ export const getSimpleJobFormConfig = async (
 
   const fixedTimeSlotLabel = isSkipDelivery ? 'Any time between 8:00 and 17:00' : null;
 
-  const timeSlotConfig = isSkipDelivery
-    ? {
-        mode: 'SINGLE_FIXED' as const,
-        displayText: 'Any time between 8:00 and 17:00',
-        timeSlotKey: 'ANYTIME',
-        startTime: '08:00',
-        endTime: '17:00',
-        options: [
-          {
-            key: 'ANYTIME',
-            label: 'Any time between 8:00 and 17:00',
-            range: '08:00 - 17:00',
-          },
-        ],
-      }
-    : {
-        mode: 'SELECTABLE' as const,
-        displayText: 'Choose preferred time slot',
-        timeSlotKey: null as string | null,
-        startTime: null as string | null,
-        endTime: null as string | null,
-        options: [
-          { key: 'MORNING', label: 'Morning', range: '08:00 - 12:00' },
-          { key: 'MIDDAY', label: 'Midday', range: '12:00 - 15:00' },
-          { key: 'AFTERNOON', label: 'Afternoon', range: '15:00 - 18:00' },
-          { key: 'EVENING', label: 'Evening', range: '17:00 - 21:00' },
-        ],
-      };
+
 
   return {
     categoryId: str(categoryId),
@@ -3266,8 +3239,6 @@ export const getSimpleJobFormConfig = async (
     qaFormSchema,
     quoteType: siteVisitEnabled ? 'ONSITE' : 'REMOTE',
     fixedTimeSlotLabel,
-    timeSlotConfig,
-    timeSlotOptions: timeSlotConfig.options,
   };
 };
 
