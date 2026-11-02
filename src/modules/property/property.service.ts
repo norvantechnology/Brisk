@@ -633,8 +633,6 @@ export const getPropertyDetail = async (userId: string, id: string) => {
       serializeSubscription(sub, property.meters, addressRefs)
     ),
     utilityProviderList,
-    getUtilityProviders: utilityProviderList,
-    utilityProviders: utilityProviderList,
   };
 };
 
