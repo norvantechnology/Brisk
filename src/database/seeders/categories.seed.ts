@@ -73,6 +73,7 @@ export async function seedCategories(prisma: PrismaClient): Promise<void> {
       subcategories: [
         { name: 'Home Deep Cleaning', serviceType: 'Deep Clean', code: 'CLEAN-HOME', urlSlug: 'home-deep-cleaning', featured: true },
         { name: 'End of Tenancy Cleaning', serviceType: 'Sanitization', code: 'CLEAN-EOT', urlSlug: 'end-of-tenancy-cleaning', featured: false },
+        { name: 'Skip Delivery & Hire', serviceType: 'Waste & Haulage', code: 'CLEAN-SKIP', urlSlug: 'skip-delivery-hire', featured: true },
       ],
     },
     {
