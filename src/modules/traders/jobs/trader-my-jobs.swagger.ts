@@ -126,18 +126,19 @@
  *           example: true
  *           description: True if Klarna was used for this job.
  *         paymentDetails:
- *           type: array
- *           description: |
- *             Dynamic Payment Summary rows for the Request Payment UI. Render `label` + `amount` +
- *             `currency_symbol` in order; VAT includes `percentage`. New lines can be added server-side.
- *           items:
- *             type: object
- *             properties:
- *               label: { type: string, example: Base Rate }
- *               amount: { type: number, example: 200 }
- *               currency_symbol: { type: string, example: € }
- *               currency_code: { type: string, example: EUR }
- *               percentage: { type: number, example: 20, description: Present on VAT line }
+ *           type: object
+ *           description: Resolved job payment details including paymentMethod, isKlarna, and payments list.
+ *           properties:
+ *             paymentMethod: { type: string, nullable: true, example: KLARNA }
+ *             paymentMethodLabel: { type: string, nullable: true, example: Klarna }
+ *             isKlarna: { type: boolean, example: true }
+ *             paymentStatus: { type: string, example: PAID }
+ *             amountPaid: { type: number, example: 120 }
+ *             totalAmount: { type: number, example: 120 }
+ *             currencyCode: { type: string, example: EUR }
+ *             payments:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/JobPaymentItem' }
  *         scheduledDate:
  *           type: string
  *           format: date-time
@@ -209,6 +210,20 @@
  *           type: boolean
  *           example: true
  *           description: True if Klarna was used for this job.
+ *         paymentDetails:
+ *           type: object
+ *           description: Resolved job payment details including paymentMethod, isKlarna, and payments list.
+ *           properties:
+ *             paymentMethod: { type: string, nullable: true, example: KLARNA }
+ *             paymentMethodLabel: { type: string, nullable: true, example: Klarna }
+ *             isKlarna: { type: boolean, example: true }
+ *             paymentStatus: { type: string, example: PAID }
+ *             amountPaid: { type: number, example: 120 }
+ *             totalAmount: { type: number, example: 120 }
+ *             currencyCode: { type: string, example: EUR }
+ *             payments:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/JobPaymentItem' }
  *         ratingStatus: { type: string, nullable: true, enum: [PENDING, RATED], example: RATED, description: null unless job is COMPLETED }
  *         hasReview: { type: boolean, example: true }
  *         canReview: { type: boolean, example: true, description: "true when trader can rate the customer (POST /traders/jobs/mine/:id/review)" }

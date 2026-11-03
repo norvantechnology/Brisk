@@ -280,33 +280,125 @@ router.get(
  *       200:
  *         description: |
  *           Paginated jobs (`data` array, pagination in `meta`).
+ *           Includes `paymentMethod`, `paymentMethodLabel`, `isKlarna`, `paymentStatus`, and `paymentDetails`.
  *           `siteVisitStatus` is null when no site visit, else one of Visit Pending / Visit Scheduled / Visit In Progress / Visit Completed / Visit Cancelled.
  *         content:
  *           application/json:
- *             example:
- *               success: true
- *               message: Trader jobs retrieved successfully.
- *               data:
- *                 - id: d3738495-0000-4000-8000-000000000007
- *                   jobRef: JOB-0001
- *                   title: Boiler repair
- *                   customer: { id: 0a1b2c3d-0000-4000-8000-000000000020, fullName: Jane Doe, email: jane@example.com }
- *                   service: Boiler repair
- *                   category: { id: f5a6b7c8-0000-4000-8000-000000000009, name: Plumbing }
- *                   subcategory: { id: a6b7c8d9-0000-4000-8000-000000000010, name: Boilers }
- *                   date: '2026-09-01T09:00:00.000Z'
- *                   createdAt: '2026-08-28T12:00:00.000Z'
- *                   scheduledDate: '2026-09-01T09:00:00.000Z'
- *                   amount: 180
- *                   currencyCode: EUR
- *                   status: COMPLETED
- *                   siteVisitRequested: true
- *                   siteVisitFee: 40
- *                   siteVisitStatus: Visit Completed
- *                   bookingId: b7c8d9e0-0000-4000-8000-000000000011
- *                   bookingRef: BK-0001
- *                   invoiceId: c8d9e0f1-0000-4000-8000-000000000012
- *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Trader job paid via Klarna
+ *                 value:
+ *                   success: true
+ *                   message: Trader jobs retrieved successfully.
+ *                   data:
+ *                     - id: d3738495-0000-4000-8000-000000000007
+ *                       jobRef: JOB-0001
+ *                       paymentMethod: KLARNA
+ *                       paymentMethodLabel: Klarna
+ *                       isKlarna: true
+ *                       paymentStatus: PAID
+ *                       paymentDetails:
+ *                         paymentMethod: KLARNA
+ *                         paymentMethodLabel: Klarna
+ *                         isKlarna: true
+ *                         paymentStatus: PAID
+ *                         paidAt: '2026-09-01T10:00:00.000Z'
+ *                         transactionRef: TXN-KLARNA-0001
+ *                         cardBrand: null
+ *                         cardLast4: null
+ *                         amountPaid: 180
+ *                         totalAmount: 180
+ *                         currencyCode: EUR
+ *                         payments:
+ *                           - id: b7c8d9e0-0000-4000-8000-000000000088
+ *                             transactionRef: TXN-KLARNA-0001
+ *                             stripePaymentIntentId: pi_3KlarnaTrader0001
+ *                             method: KLARNA
+ *                             paymentMethod: KLARNA
+ *                             paymentMethodLabel: Klarna
+ *                             isKlarna: true
+ *                             amount: 180
+ *                             currencyCode: EUR
+ *                             status: COMPLETED
+ *                             paidAt: '2026-09-01T10:00:00.000Z'
+ *                             cardBrand: null
+ *                             cardLast4: null
+ *                             createdAt: '2026-09-01T09:55:00.000Z'
+ *                       title: Boiler repair
+ *                       customer: { id: 0a1b2c3d-0000-4000-8000-000000000020, fullName: Jane Doe, email: jane@example.com }
+ *                       service: Boiler repair
+ *                       category: { id: f5a6b7c8-0000-4000-8000-000000000009, name: Plumbing }
+ *                       subcategory: { id: a6b7c8d9-0000-4000-8000-000000000010, name: Boilers }
+ *                       date: '2026-09-01T09:00:00.000Z'
+ *                       createdAt: '2026-08-28T12:00:00.000Z'
+ *                       scheduledDate: '2026-09-01T09:00:00.000Z'
+ *                       amount: 180
+ *                       currencyCode: EUR
+ *                       status: COMPLETED
+ *                       siteVisitRequested: true
+ *                       siteVisitFee: 40
+ *                       siteVisitStatus: Visit Completed
+ *                       bookingId: b7c8d9e0-0000-4000-8000-000000000011
+ *                       bookingRef: BK-0001
+ *                       invoiceId: c8d9e0f1-0000-4000-8000-000000000012
+ *                   meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *               cardPayment:
+ *                 summary: Trader job paid via Credit/Debit Card
+ *                 value:
+ *                   success: true
+ *                   message: Trader jobs retrieved successfully.
+ *                   data:
+ *                     - id: d3738495-0000-4000-8000-000000000008
+ *                       jobRef: JOB-0002
+ *                       paymentMethod: CARD
+ *                       paymentMethodLabel: Credit / Debit Card
+ *                       isKlarna: false
+ *                       paymentStatus: PAID
+ *                       paymentDetails:
+ *                         paymentMethod: CARD
+ *                         paymentMethodLabel: Credit / Debit Card
+ *                         isKlarna: false
+ *                         paymentStatus: PAID
+ *                         paidAt: '2026-09-02T11:00:00.000Z'
+ *                         transactionRef: TXN-CARD-0002
+ *                         cardBrand: Mastercard
+ *                         cardLast4: '5555'
+ *                         amountPaid: 220
+ *                         totalAmount: 220
+ *                         currencyCode: EUR
+ *                         payments:
+ *                           - id: b7c8d9e0-0000-4000-8000-000000000089
+ *                             transactionRef: TXN-CARD-0002
+ *                             stripePaymentIntentId: pi_3CardTrader0002
+ *                             method: CARD
+ *                             paymentMethod: CARD
+ *                             paymentMethodLabel: Credit / Debit Card
+ *                             isKlarna: false
+ *                             amount: 220
+ *                             currencyCode: EUR
+ *                             status: COMPLETED
+ *                             paidAt: '2026-09-02T11:00:00.000Z'
+ *                             cardBrand: Mastercard
+ *                             cardLast4: '5555'
+ *                             createdAt: '2026-09-02T10:55:00.000Z'
+ *                       title: Pipe installation
+ *                       customer: { id: 0a1b2c3d-0000-4000-8000-000000000020, fullName: Jane Doe, email: jane@example.com }
+ *                       service: Pipe installation
+ *                       category: { id: f5a6b7c8-0000-4000-8000-000000000009, name: Plumbing }
+ *                       subcategory: { id: a6b7c8d9-0000-4000-8000-000000000010, name: Piping }
+ *                       date: '2026-09-02T09:00:00.000Z'
+ *                       createdAt: '2026-08-29T12:00:00.000Z'
+ *                       scheduledDate: '2026-09-02T09:00:00.000Z'
+ *                       amount: 220
+ *                       currencyCode: EUR
+ *                       status: COMPLETED
+ *                       siteVisitRequested: false
+ *                       siteVisitFee: null
+ *                       siteVisitStatus: null
+ *                       bookingId: b7c8d9e0-0000-4000-8000-000000000013
+ *                       bookingRef: BK-0002
+ *                       invoiceId: c8d9e0f1-0000-4000-8000-000000000014
+ *                   meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  *       400: { $ref: '#/components/responses/AdminListValidationError' }
  *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       404:

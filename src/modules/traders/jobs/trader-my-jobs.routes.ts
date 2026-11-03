@@ -80,59 +80,145 @@ const router = Router();
  *                 success: { type: boolean }
  *                 message: { type: string }
  *                 data: { $ref: '#/components/schemas/TraderMyJobsList' }
- *             example:
- *               success: true
- *               message: My jobs retrieved successfully.
- *               data:
- *                 tab: ACTIVE
- *                 items:
- *                   - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
- *                     jobRef: JOB-1119
- *                     title: Kitchen sink leaking
- *                     status: SCHEDULED
- *                     statusBadge: Ready to Arrive
- *                     statusLabel: Ready to Arrive
- *                     flowStatus: READY_TO_ARRIVE
- *                     paymentStatus: UNPAID
- *                     isPartPayment: false
- *                     isPartialJob: false
- *                     siteVisit: false
- *                     siteVisitRequested: false
- *                     isSiteVisitDone: false
- *                     siteVisitLabel: null
- *                     arrivalStatus: ARRIVING SOON
- *                     siteVisitedBadge: false
- *                     customerName: John Murphy
- *                     customerProfilePhotoUrl: https://cdn.brisk.ie/avatars/john.jpg
- *                     ratingStatus: null
- *                     hasReview: false
- *                     rating: null
- *                     comment: null
- *                     review: null
- *                     areaName: Dublin
- *                     distanceKm: 4.2
- *                     quotePrice: 120
- *                     paymentSummary:
- *                       baseRate: 120
- *                       materialCost: 0
- *                       materialsTotal: 0
- *                       platformFee: 10
- *                       offerApplied: 0
- *                       siteVisitFee: 0
- *                       vatRate: 20
- *                       vatPercentage: 20
- *                       vatAmount: 26
- *                       totalAmount: 156
- *                       netPayout: 156
- *                     paymentDetails:
- *                       - { label: Base Rate, amount: 120, currency_symbol: €, currency_code: EUR }
- *                       - { label: Platform Fee, amount: 10, currency_symbol: €, currency_code: EUR }
- *                       - { label: Offer Applied, amount: 0, currency_symbol: €, currency_code: EUR }
- *                       - { label: 'VAT (20%)', percentage: 20, amount: 26, currency_symbol: €, currency_code: EUR }
- *                     scheduledDate: '2026-09-18T09:00:00.000Z'
- *                     createdAt: '2026-09-10T11:30:00.000Z'
- *                     primaryAction: ARRIVE
- *                 meta: { total: 14, page: 1, limit: 10, totalPages: 2 }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Trader job paid via Klarna
+ *                 value:
+ *                   success: true
+ *                   message: My jobs retrieved successfully.
+ *                   data:
+ *                     tab: ACTIVE
+ *                     items:
+ *                       - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                         jobRef: JOB-1119
+ *                         title: Kitchen sink leaking
+ *                         status: COMPLETED
+ *                         statusBadge: Completed
+ *                         statusLabel: Completed
+ *                         flowStatus: COMPLETED
+ *                         paymentStatus: PAID
+ *                         paymentMethod: KLARNA
+ *                         paymentMethodLabel: Klarna
+ *                         isKlarna: true
+ *                         paymentDetails:
+ *                           paymentMethod: KLARNA
+ *                           paymentMethodLabel: Klarna
+ *                           isKlarna: true
+ *                           paymentStatus: PAID
+ *                           amountPaid: 156
+ *                           totalAmount: 156
+ *                           currencyCode: EUR
+ *                           payments:
+ *                             - id: b7c8d9e0-0000-4000-8000-000000000088
+ *                               transactionRef: TXN-KLARNA-1119
+ *                               stripePaymentIntentId: pi_3KlarnaTrader1119
+ *                               method: KLARNA
+ *                               paymentMethod: KLARNA
+ *                               paymentMethodLabel: Klarna
+ *                               isKlarna: true
+ *                               amount: 156
+ *                               currencyCode: EUR
+ *                               status: COMPLETED
+ *                               paidAt: '2026-09-18T10:00:00.000Z'
+ *                         isPartPayment: false
+ *                         isPartialJob: false
+ *                         siteVisit: false
+ *                         siteVisitRequested: false
+ *                         isSiteVisitDone: false
+ *                         siteVisitLabel: null
+ *                         arrivalStatus: ARRIVED
+ *                         siteVisitedBadge: false
+ *                         customerName: John Murphy
+ *                         customerProfilePhotoUrl: https://cdn.brisk.ie/avatars/john.jpg
+ *                         areaName: Dublin
+ *                         distanceKm: 4.2
+ *                         quotePrice: 120
+ *                         paymentSummary:
+ *                           baseRate: 120
+ *                           materialCost: 0
+ *                           materialsTotal: 0
+ *                           platformFee: 10
+ *                           offerApplied: 0
+ *                           siteVisitFee: 0
+ *                           vatRate: 20
+ *                           vatPercentage: 20
+ *                           vatAmount: 26
+ *                           totalAmount: 156
+ *                           netPayout: 156
+ *                         scheduledDate: '2026-09-18T09:00:00.000Z'
+ *                         createdAt: '2026-09-10T11:30:00.000Z'
+ *                         primaryAction: VIEW_DETAILS
+ *                     meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *               cardPayment:
+ *                 summary: Trader job paid via Credit/Debit Card
+ *                 value:
+ *                   success: true
+ *                   message: My jobs retrieved successfully.
+ *                   data:
+ *                     tab: ACTIVE
+ *                     items:
+ *                       - id: 8a8fb0e5-a330-4c62-8e76-a358bd792b85
+ *                         jobRef: JOB-1120
+ *                         title: Pipe installation
+ *                         status: COMPLETED
+ *                         statusBadge: Completed
+ *                         statusLabel: Completed
+ *                         flowStatus: COMPLETED
+ *                         paymentStatus: PAID
+ *                         paymentMethod: CARD
+ *                         paymentMethodLabel: Credit / Debit Card
+ *                         isKlarna: false
+ *                         paymentDetails:
+ *                           paymentMethod: CARD
+ *                           paymentMethodLabel: Credit / Debit Card
+ *                           isKlarna: false
+ *                           paymentStatus: PAID
+ *                           amountPaid: 180
+ *                           totalAmount: 180
+ *                           currencyCode: EUR
+ *                           payments:
+ *                             - id: b7c8d9e0-0000-4000-8000-000000000089
+ *                               transactionRef: TXN-CARD-1120
+ *                               stripePaymentIntentId: pi_3CardTrader1120
+ *                               method: CARD
+ *                               paymentMethod: CARD
+ *                               paymentMethodLabel: Credit / Debit Card
+ *                               isKlarna: false
+ *                               cardBrand: Visa
+ *                               cardLast4: '4242'
+ *                               amount: 180
+ *                               currencyCode: EUR
+ *                               status: COMPLETED
+ *                               paidAt: '2026-09-19T10:00:00.000Z'
+ *                         isPartPayment: false
+ *                         isPartialJob: false
+ *                         siteVisit: false
+ *                         siteVisitRequested: false
+ *                         isSiteVisitDone: false
+ *                         siteVisitLabel: null
+ *                         arrivalStatus: ARRIVED
+ *                         siteVisitedBadge: false
+ *                         customerName: John Murphy
+ *                         customerProfilePhotoUrl: https://cdn.brisk.ie/avatars/john.jpg
+ *                         areaName: Dublin
+ *                         distanceKm: 4.2
+ *                         quotePrice: 150
+ *                         paymentSummary:
+ *                           baseRate: 150
+ *                           materialCost: 0
+ *                           materialsTotal: 0
+ *                           platformFee: 10
+ *                           offerApplied: 0
+ *                           siteVisitFee: 0
+ *                           vatRate: 20
+ *                           vatPercentage: 20
+ *                           vatAmount: 20
+ *                           totalAmount: 180
+ *                           netPayout: 180
+ *                         scheduledDate: '2026-09-19T09:00:00.000Z'
+ *                         createdAt: '2026-09-11T11:30:00.000Z'
+ *                         primaryAction: VIEW_DETAILS
+ *                     meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  *       400:
  *         $ref: '#/components/responses/TraderListValidationError'
  *       401:
@@ -417,6 +503,107 @@ router.post(
  *                 success: { type: boolean, example: true }
  *                 message: { type: string, example: Job details retrieved successfully. }
  *                 data: { $ref: '#/components/schemas/TraderMyJobDetail' }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Trader job detail paid via Klarna
+ *                 value:
+ *                   success: true
+ *                   message: Job details retrieved successfully.
+ *                   data:
+ *                     id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     jobRef: JOB-1119
+ *                     title: Kitchen sink leaking
+ *                     description: Water leaking under the kitchen sink since yesterday.
+ *                     status: COMPLETED
+ *                     statusBadge: Completed
+ *                     statusLabel: Completed
+ *                     flowStatus: COMPLETED
+ *                     paymentStatus: PAID
+ *                     paymentMethod: KLARNA
+ *                     paymentMethodLabel: Klarna
+ *                     isKlarna: true
+ *                     paymentDetails:
+ *                       paymentMethod: KLARNA
+ *                       paymentMethodLabel: Klarna
+ *                       isKlarna: true
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-07-29T13:00:00.000Z'
+ *                       transactionRef: TXN-KLARNA-1119
+ *                       cardBrand: null
+ *                       cardLast4: null
+ *                       amountPaid: 1500
+ *                       totalAmount: 1500
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: b1718293-0000-4000-8000-000000000070
+ *                           transactionRef: TXN-KLARNA-1119
+ *                           stripePaymentIntentId: pi_3KlarnaTrader1119
+ *                           method: KLARNA
+ *                           paymentMethod: KLARNA
+ *                           paymentMethodLabel: Klarna
+ *                           isKlarna: true
+ *                           amount: 1500
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-07-29T13:00:00.000Z'
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       fullName: John Murphy
+ *                       name: John Murphy
+ *                       phoneNumber: '+353871234567'
+ *                     quotePrice: 1500
+ *                     scheduledDate: '2026-07-29T00:00:00.000Z'
+ *                     createdAt: '2026-07-20T10:00:00.000Z'
+ *               cardPayment:
+ *                 summary: Trader job detail paid via Card
+ *                 value:
+ *                   success: true
+ *                   message: Job details retrieved successfully.
+ *                   data:
+ *                     id: 8a8fb0e5-a330-4c62-8e76-a358bd792b85
+ *                     jobRef: JOB-1120
+ *                     title: Electrical fuse replacement
+ *                     description: Fuse blown in utility room.
+ *                     status: COMPLETED
+ *                     statusBadge: Completed
+ *                     statusLabel: Completed
+ *                     flowStatus: COMPLETED
+ *                     paymentStatus: PAID
+ *                     paymentMethod: CARD
+ *                     paymentMethodLabel: Credit / Debit Card
+ *                     isKlarna: false
+ *                     paymentDetails:
+ *                       paymentMethod: CARD
+ *                       paymentMethodLabel: Credit / Debit Card
+ *                       isKlarna: false
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-07-29T13:00:00.000Z'
+ *                       transactionRef: TXN-CARD-1120
+ *                       cardBrand: Visa
+ *                       cardLast4: '4242'
+ *                       amountPaid: 250
+ *                       totalAmount: 250
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: b1718293-0000-4000-8000-000000000072
+ *                           transactionRef: TXN-CARD-1120
+ *                           stripePaymentIntentId: pi_3CardTrader1120
+ *                           method: CARD
+ *                           paymentMethod: CARD
+ *                           paymentMethodLabel: Credit / Debit Card
+ *                           isKlarna: false
+ *                           amount: 250
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-07-29T13:00:00.000Z'
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       fullName: John Murphy
+ *                       name: John Murphy
+ *                       phoneNumber: '+353871234567'
+ *                     quotePrice: 250
+ *                     scheduledDate: '2026-07-29T00:00:00.000Z'
+ *                     createdAt: '2026-07-20T10:00:00.000Z'
  *       404:
  *         description: Job not found
  */

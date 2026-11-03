@@ -45,6 +45,41 @@
  *             traderCode: { type: string, nullable: true, example: TRD-1001 }
  *             businessName: { type: string, nullable: true }
  *             fullName: { type: string, nullable: true }
+ *     JobPaymentItem:
+ *       type: object
+ *       properties:
+ *         id: { type: string, format: uuid, example: b1718293-0000-4000-8000-000000000070 }
+ *         transactionRef: { type: string, nullable: true, example: TXN-6FC74183 }
+ *         stripePaymentIntentId: { type: string, nullable: true, example: pi_3UOtwLRpa2IWHYmQ1zyTvLvf }
+ *         method: { type: string, nullable: true, example: KLARNA }
+ *         paymentMethod: { type: string, nullable: true, example: KLARNA }
+ *         paymentMethodLabel: { type: string, nullable: true, example: Klarna }
+ *         isKlarna: { type: boolean, example: true }
+ *         amount: { type: number, example: 1812 }
+ *         currencyCode: { type: string, example: EUR }
+ *         status: { type: string, enum: [PENDING, COMPLETED, FAILED], example: COMPLETED }
+ *         paidAt: { type: string, format: date-time, nullable: true, example: '2026-07-29T13:00:00.000Z' }
+ *         cardBrand: { type: string, nullable: true, example: null }
+ *         cardLast4: { type: string, nullable: true, example: null }
+ *         createdAt: { type: string, format: date-time, nullable: true, example: '2026-07-29T12:59:00.000Z' }
+ *     JobPaymentDetails:
+ *       type: object
+ *       description: Complete job payment breakdown and transaction history.
+ *       properties:
+ *         paymentMethod: { type: string, nullable: true, example: KLARNA, description: 'Payment method used (KLARNA, CARD, APPLE_PAY, GOOGLE_PAY).' }
+ *         paymentMethodLabel: { type: string, nullable: true, example: Klarna, description: 'Human-readable label for payment method.' }
+ *         isKlarna: { type: boolean, example: true, description: 'True if Klarna was used.' }
+ *         paymentStatus: { type: string, nullable: true, example: PAID, description: 'Payment status.' }
+ *         paidAt: { type: string, format: date-time, nullable: true, example: '2026-07-29T13:00:00.000Z' }
+ *         transactionRef: { type: string, nullable: true, example: TXN-6FC74183 }
+ *         cardBrand: { type: string, nullable: true, example: null }
+ *         cardLast4: { type: string, nullable: true, example: null }
+ *         amountPaid: { type: number, example: 1812 }
+ *         totalAmount: { type: number, example: 1812 }
+ *         currencyCode: { type: string, example: EUR }
+ *         payments:
+ *           type: array
+ *           items: { $ref: '#/components/schemas/JobPaymentItem' }
  *     AdminJobDetail:
  *       type: object
  *       description: Admin job drawer payload (GET /admin/jobs/{id}). Nullable objects are null when not linked yet.
@@ -84,9 +119,13 @@
  *           type: boolean
  *           example: true
  *           description: True if Klarna was used.
+ *         paymentStatus:
+ *           type: string
+ *           nullable: true
+ *           example: PAID
+ *           description: Payment status.
  *         paymentDetails:
- *           type: object
- *           description: Complete payment details object including transactions list.
+ *           $ref: '#/components/schemas/JobPaymentDetails'
  *         quoteType: { type: string, nullable: true, enum: [REMOTE, ONSITE, FIXED, BUDGET_RANGE, OPEN_QUOTE], example: ONSITE }
  *         siteVisitRequested: { type: boolean, example: true }
  *         siteVisitFee: { type: number, nullable: true, example: 30 }

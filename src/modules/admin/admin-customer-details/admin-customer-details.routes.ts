@@ -435,44 +435,148 @@ router.get(
  *       - $ref: '#/components/parameters/AdminSortOrder'
  *     responses:
  *       200:
+ *         description: Paginated customer jobs including payment breakdown.
  *         content:
  *           application/json:
- *             example:
- *               success: true
- *               message: Customer jobs retrieved successfully.
- *               data:
- *                 - id: d3738495-0000-4000-8000-000000000007
- *                   jobRef: JOB-411A
- *                   title: Boiler Repair
- *                   status: COMPLETED
- *                   category: { id: f5a6b7c8-0000-4000-8000-000000000009, name: Plumbing }
- *                   subcategory: { id: a6b7c8d9-0000-4000-8000-000000000010, name: Boiler Service }
- *                   addressLine: 12 Main Street, Dublin
- *                   city: Dublin
- *                   postcode: D02 X285
- *                   scheduledDate: '2026-10-02T00:00:00.000Z'
- *                   createdAt: '2026-09-28T10:00:00.000Z'
- *                   serviceCharge: 120
- *                   siteVisitFee: null
- *                   siteVisitRequested: false
- *                   coverPhotoUrl: https://cdn.example.com/jobs/boiler.jpg
- *                   photosCount: 2
- *                   quotesCount: 3
- *                   trader:
- *                     id: e48495a6-0000-4000-8000-000000000008
- *                     traderCode: TRD-1001
- *                     businessName: Wilson Electrics
- *                     fullName: James Wilson
- *                     profilePhotoUrl: null
- *                   booking:
- *                     id: b7c8d9e0-0000-4000-8000-000000000011
- *                     bookingRef: BKG-2001
- *                     status: COMPLETED
- *                     invoiceId: c8d9e0f1-0000-4000-8000-000000000012
- *                     totalAmount: 147.6
- *                     invoiceStatus: PAID
- *                     currencyCode: EUR
- *               meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Customer job paid via Klarna
+ *                 value:
+ *                   success: true
+ *                   message: Customer jobs retrieved successfully.
+ *                   data:
+ *                     - id: d3738495-0000-4000-8000-000000000007
+ *                       jobRef: JOB-411A
+ *                       title: Boiler Repair
+ *                       status: COMPLETED
+ *                       paymentMethod: KLARNA
+ *                       paymentMethodLabel: Klarna
+ *                       isKlarna: true
+ *                       paymentStatus: PAID
+ *                       paymentDetails:
+ *                         paymentMethod: KLARNA
+ *                         paymentMethodLabel: Klarna
+ *                         isKlarna: true
+ *                         paymentStatus: PAID
+ *                         paidAt: '2026-10-02T11:00:00.000Z'
+ *                         transactionRef: TXN-KLARNA-411A
+ *                         cardBrand: null
+ *                         cardLast4: null
+ *                         amountPaid: 147.6
+ *                         totalAmount: 147.6
+ *                         currencyCode: EUR
+ *                         payments:
+ *                           - id: c8d9e0f1-0000-4000-8000-000000000099
+ *                             transactionRef: TXN-KLARNA-411A
+ *                             stripePaymentIntentId: pi_3KlarnaCustomer411
+ *                             method: KLARNA
+ *                             paymentMethod: KLARNA
+ *                             paymentMethodLabel: Klarna
+ *                             isKlarna: true
+ *                             amount: 147.6
+ *                             currencyCode: EUR
+ *                             status: COMPLETED
+ *                             paidAt: '2026-10-02T11:00:00.000Z'
+ *                             cardBrand: null
+ *                             cardLast4: null
+ *                             createdAt: '2026-10-02T10:58:00.000Z'
+ *                       category: { id: f5a6b7c8-0000-4000-8000-000000000009, name: Plumbing }
+ *                       subcategory: { id: a6b7c8d9-0000-4000-8000-000000000010, name: Boiler Service }
+ *                       addressLine: 12 Main Street, Dublin
+ *                       city: Dublin
+ *                       postcode: D02 X285
+ *                       scheduledDate: '2026-10-02T00:00:00.000Z'
+ *                       createdAt: '2026-09-28T10:00:00.000Z'
+ *                       serviceCharge: 120
+ *                       siteVisitFee: null
+ *                       siteVisitRequested: false
+ *                       coverPhotoUrl: https://cdn.example.com/jobs/boiler.jpg
+ *                       photosCount: 2
+ *                       quotesCount: 3
+ *                       trader:
+ *                         id: e48495a6-0000-4000-8000-000000000008
+ *                         traderCode: TRD-1001
+ *                         businessName: Wilson Electrics
+ *                         fullName: James Wilson
+ *                         profilePhotoUrl: null
+ *                       booking:
+ *                         id: b7c8d9e0-0000-4000-8000-000000000011
+ *                         bookingRef: BKG-2001
+ *                         status: COMPLETED
+ *                         invoiceId: c8d9e0f1-0000-4000-8000-000000000012
+ *                         totalAmount: 147.6
+ *                         invoiceStatus: PAID
+ *                         currencyCode: EUR
+ *                   meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *               cardPayment:
+ *                 summary: Customer job paid via Credit/Debit Card
+ *                 value:
+ *                   success: true
+ *                   message: Customer jobs retrieved successfully.
+ *                   data:
+ *                     - id: d3738495-0000-4000-8000-000000000008
+ *                       jobRef: JOB-411B
+ *                       title: Pipe Fitting
+ *                       status: COMPLETED
+ *                       paymentMethod: CARD
+ *                       paymentMethodLabel: Credit / Debit Card
+ *                       isKlarna: false
+ *                       paymentStatus: PAID
+ *                       paymentDetails:
+ *                         paymentMethod: CARD
+ *                         paymentMethodLabel: Credit / Debit Card
+ *                         isKlarna: false
+ *                         paymentStatus: PAID
+ *                         paidAt: '2026-10-03T11:00:00.000Z'
+ *                         transactionRef: TXN-CARD-411B
+ *                         cardBrand: Visa
+ *                         cardLast4: '4242'
+ *                         amountPaid: 160
+ *                         totalAmount: 160
+ *                         currencyCode: EUR
+ *                         payments:
+ *                           - id: c8d9e0f1-0000-4000-8000-000000000100
+ *                             transactionRef: TXN-CARD-411B
+ *                             stripePaymentIntentId: pi_3CardCustomer411B
+ *                             method: CARD
+ *                             paymentMethod: CARD
+ *                             paymentMethodLabel: Credit / Debit Card
+ *                             isKlarna: false
+ *                             amount: 160
+ *                             currencyCode: EUR
+ *                             status: COMPLETED
+ *                             paidAt: '2026-10-03T11:00:00.000Z'
+ *                             cardBrand: Visa
+ *                             cardLast4: '4242'
+ *                             createdAt: '2026-10-03T10:58:00.000Z'
+ *                       category: { id: f5a6b7c8-0000-4000-8000-000000000009, name: Plumbing }
+ *                       subcategory: { id: a6b7c8d9-0000-4000-8000-000000000010, name: Pipe Service }
+ *                       addressLine: 14 High Street, Dublin
+ *                       city: Dublin
+ *                       postcode: D02 X286
+ *                       scheduledDate: '2026-10-03T00:00:00.000Z'
+ *                       createdAt: '2026-09-29T10:00:00.000Z'
+ *                       serviceCharge: 130
+ *                       siteVisitFee: null
+ *                       siteVisitRequested: false
+ *                       coverPhotoUrl: https://cdn.example.com/jobs/pipe.jpg
+ *                       photosCount: 1
+ *                       quotesCount: 2
+ *                       trader:
+ *                         id: e48495a6-0000-4000-8000-000000000008
+ *                         traderCode: TRD-1001
+ *                         businessName: Wilson Electrics
+ *                         fullName: James Wilson
+ *                         profilePhotoUrl: null
+ *                       booking:
+ *                         id: b7c8d9e0-0000-4000-8000-000000000012
+ *                         bookingRef: BKG-2002
+ *                         status: COMPLETED
+ *                         invoiceId: c8d9e0f1-0000-4000-8000-000000000013
+ *                         totalAmount: 160
+ *                         invoiceStatus: PAID
+ *                         currencyCode: EUR
+ *                   meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  *       400: { $ref: '#/components/responses/AdminListValidationError' }
  *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  *       404: { description: Customer not found. }
@@ -488,6 +592,7 @@ router.get(
  * /admin/customers/{id}/jobs/{jobId}:
  *   get:
  *     summary: Customer job detail (drawer payload)
+ *     description: Full job details drawer including payment details, breakdown, trader, and invoice.
  *     tags: ['Admin / Customer Details']
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -499,12 +604,135 @@ router.get(
  *         name: jobId
  *         required: true
  *         schema: { type: string, format: uuid }
- */
-router.get(
-  '/customers/:id/jobs/:jobId',
-  validate(customerJobIdParamSchema),
-  controller.getJob
-);
+ *     responses:
+ *       200:
+ *         description: Job detail retrieved successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Job detail retrieved successfully. }
+ *                 data: { $ref: '#/components/schemas/AdminJobDetail' }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Customer job detail paid via Klarna
+ *                 value:
+ *                   success: true
+ *                   message: Job detail retrieved successfully.
+ *                   data:
+ *                     id: 224c2226-7e7f-4343-bbf4-e07d9bf28213
+ *                     jobRef: JOB-1119
+ *                     title: Kitchen sink leaking
+ *                     description: Water leaking under the kitchen sink since yesterday.
+ *                     status: COMPLETED
+ *                     statusLabel: Completed
+ *                     paymentStatus: PAID
+ *                     paymentMethod: KLARNA
+ *                     paymentMethodLabel: Klarna
+ *                     isKlarna: true
+ *                     paymentDetails:
+ *                       paymentMethod: KLARNA
+ *                       paymentMethodLabel: Klarna
+ *                       isKlarna: true
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-07-29T13:00:00.000Z'
+ *                       transactionRef: TXN-KLARNA-1119
+ *                       cardBrand: null
+ *                       cardLast4: null
+ *                       amountPaid: 1500
+ *                       totalAmount: 1500
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: b1718293-0000-4000-8000-000000000070
+ *                           transactionRef: TXN-KLARNA-1119
+ *                           stripePaymentIntentId: pi_3KlarnaDetailCustomer123
+ *                           method: KLARNA
+ *                           paymentMethod: KLARNA
+ *                           paymentMethodLabel: Klarna
+ *                           isKlarna: true
+ *                           amount: 1500
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-07-29T13:00:00.000Z'
+ *                           cardBrand: null
+ *                           cardLast4: null
+ *                           createdAt: '2026-07-29T12:59:00.000Z'
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       customerCode: CUS-1001
+ *                       fullName: John Murphy
+ *                       email: john@example.com
+ *                       mobileNumber: '+353871234567'
+ *                     trader:
+ *                       id: 6b2c3d4e-0000-4000-8000-000000000020
+ *                       traderCode: TRD-1001
+ *                       businessName: Murphy Plumbing Ltd
+ *                       fullName: Sean Kelly
+ *                     quoteType: ONSITE
+ *                     siteVisitRequested: true
+ *                     siteVisitFee: 30
+ *                     serviceCharge: 1500
+ *               cardPayment:
+ *                 summary: Customer job detail paid via Card
+ *                 value:
+ *                   success: true
+ *                   message: Job detail retrieved successfully.
+ *                   data:
+ *                     id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     jobRef: JOB-1120
+ *                     title: Electrical fuse replacement
+ *                     description: Fuse blown in utility room.
+ *                     status: COMPLETED
+ *                     statusLabel: Completed
+ *                     paymentStatus: PAID
+ *                     paymentMethod: CARD
+ *                     paymentMethodLabel: Credit / Debit Card
+ *                     isKlarna: false
+ *                     paymentDetails:
+ *                       paymentMethod: CARD
+ *                       paymentMethodLabel: Credit / Debit Card
+ *                       isKlarna: false
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-07-29T13:00:00.000Z'
+ *                       transactionRef: TXN-CARD-1120
+ *                       cardBrand: Visa
+ *                       cardLast4: '4242'
+ *                       amountPaid: 250
+ *                       totalAmount: 250
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: b1718293-0000-4000-8000-000000000072
+ *                           transactionRef: TXN-CARD-1120
+ *                           stripePaymentIntentId: pi_3CardDetailCustomer456
+ *                           method: CARD
+ *                           paymentMethod: CARD
+ *                           paymentMethodLabel: Credit / Debit Card
+ *                           isKlarna: false
+ *                           amount: 250
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-07-29T13:00:00.000Z'
+ *                           cardBrand: Visa
+ *                           cardLast4: '4242'
+ *                           createdAt: '2026-07-29T12:59:00.000Z'
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       customerCode: CUS-1001
+ *                       fullName: John Murphy
+ *                       email: john@example.com
+ *                       mobileNumber: '+353871234567'
+ *                     trader:
+ *                       id: 6b2c3d4e-0000-4000-8000-000000000020
+ *                       traderCode: TRD-1001
+ *                       businessName: Murphy Electrical Ltd
+ *                       fullName: Sean Kelly
+ *                     quoteType: REMOTE
+ *                     siteVisitRequested: false
+ *                     siteVisitFee: null
+ *                     serviceCharge: 250
+ *       404: { description: Job not found. }
 
 /**
  * @swagger

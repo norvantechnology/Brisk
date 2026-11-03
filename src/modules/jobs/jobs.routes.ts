@@ -286,6 +286,83 @@ router.get(
  *                 success: { type: boolean }
  *                 message: { type: string }
  *                 data: { $ref: '#/components/schemas/JobListResponse' }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Customer job list with Klarna payment
+ *                 value:
+ *                   success: true
+ *                   message: Jobs retrieved successfully.
+ *                   data:
+ *                     jobs:
+ *                       - id: 224c2226-7e7f-4343-bbf4-e07d9bf28213
+ *                         jobRef: JOB-A1B2
+ *                         title: Boiler Repair
+ *                         status: COMPLETED
+ *                         statusBadge: Completed
+ *                         paymentMethod: KLARNA
+ *                         paymentMethodLabel: Klarna
+ *                         isKlarna: true
+ *                         paymentStatus: PAID
+ *                         paymentDetails:
+ *                           paymentMethod: KLARNA
+ *                           paymentMethodLabel: Klarna
+ *                           isKlarna: true
+ *                           paymentStatus: PAID
+ *                           paidAt: '2026-10-24T12:00:00.000Z'
+ *                           amountPaid: 140
+ *                           totalAmount: 140
+ *                           currencyCode: EUR
+ *                           payments:
+ *                             - id: p1-klarna-uuid
+ *                               transactionRef: TXN-KLARNA-A1B2
+ *                               method: KLARNA
+ *                               paymentMethod: KLARNA
+ *                               paymentMethodLabel: Klarna
+ *                               isKlarna: true
+ *                               amount: 140
+ *                               currencyCode: EUR
+ *                               status: COMPLETED
+ *                               paidAt: '2026-10-24T12:00:00.000Z'
+ *               cardPayment:
+ *                 summary: Customer job list with Card payment
+ *                 value:
+ *                   success: true
+ *                   message: Jobs retrieved successfully.
+ *                   data:
+ *                     jobs:
+ *                       - id: 334c2226-7e7f-4343-bbf4-e07d9bf28214
+ *                         jobRef: JOB-A1B3
+ *                         title: Sink Leak Repair
+ *                         status: COMPLETED
+ *                         statusBadge: Completed
+ *                         paymentMethod: CARD
+ *                         paymentMethodLabel: Credit / Debit Card
+ *                         isKlarna: false
+ *                         paymentStatus: PAID
+ *                         paymentDetails:
+ *                           paymentMethod: CARD
+ *                           paymentMethodLabel: Credit / Debit Card
+ *                           isKlarna: false
+ *                           paymentStatus: PAID
+ *                           paidAt: '2026-10-24T13:00:00.000Z'
+ *                           cardBrand: Visa
+ *                           cardLast4: '4242'
+ *                           amountPaid: 150
+ *                           totalAmount: 150
+ *                           currencyCode: EUR
+ *                           payments:
+ *                             - id: p2-card-uuid
+ *                               transactionRef: TXN-CARD-A1B3
+ *                               method: CARD
+ *                               paymentMethod: CARD
+ *                               paymentMethodLabel: Credit / Debit Card
+ *                               isKlarna: false
+ *                               cardBrand: Visa
+ *                               cardLast4: '4242'
+ *                               amount: 150
+ *                               currencyCode: EUR
+ *                               status: COMPLETED
+ *                               paidAt: '2026-10-24T13:00:00.000Z'
  */
 router.post('/', ...customerOnly, validate(createJobSchema), controller.createJob);
 router.get('/', ...customerOnly, validate(listJobsSchema), controller.listJobs);
@@ -579,6 +656,109 @@ router.get('/:id/invoice/download', ...customerOnly, validate(jobIdParamSchema),
  *         description: Job is not DRAFT, or subcategory does not belong to category.
  *       404:
  *         description: Job / category / trader not found.
+ *
+ *   get:
+ *     summary: Get job by ID
+ *     tags: ['Customer / Jobs']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns the full Job object by UUID, including payment details (`paymentMethod`, `paymentMethodLabel`, `isKlarna`, `paymentStatus`, `paymentDetails`).
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Full Job detail object.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Job retrieved successfully. }
+ *                 data: { $ref: '#/components/schemas/Job' }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Job detail with Klarna payment
+ *                 value:
+ *                   success: true
+ *                   message: Job retrieved successfully.
+ *                   data:
+ *                     id: 224c2226-7e7f-4343-bbf4-e07d9bf28213
+ *                     jobRef: JOB-A1B2
+ *                     title: Boiler Repair
+ *                     status: COMPLETED
+ *                     statusBadge: Completed
+ *                     paymentMethod: KLARNA
+ *                     paymentMethodLabel: Klarna
+ *                     isKlarna: true
+ *                     paymentStatus: PAID
+ *                     paymentDetails:
+ *                       paymentMethod: KLARNA
+ *                       paymentMethodLabel: Klarna
+ *                       isKlarna: true
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-10-24T12:00:00.000Z'
+ *                       amountPaid: 140
+ *                       totalAmount: 140
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: p1-klarna-uuid
+ *                           transactionRef: TXN-KLARNA-A1B2
+ *                           stripePaymentIntentId: pi_3KlarnaJobExample123
+ *                           method: KLARNA
+ *                           paymentMethod: KLARNA
+ *                           paymentMethodLabel: Klarna
+ *                           isKlarna: true
+ *                           amount: 140
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-10-24T12:00:00.000Z'
+ *               cardPayment:
+ *                 summary: Job detail with Card payment
+ *                 value:
+ *                   success: true
+ *                   message: Job retrieved successfully.
+ *                   data:
+ *                     id: 334c2226-7e7f-4343-bbf4-e07d9bf28214
+ *                     jobRef: JOB-A1B3
+ *                     title: Sink Leak Repair
+ *                     status: COMPLETED
+ *                     statusBadge: Completed
+ *                     paymentMethod: CARD
+ *                     paymentMethodLabel: Credit / Debit Card
+ *                     isKlarna: false
+ *                     paymentStatus: PAID
+ *                     paymentDetails:
+ *                       paymentMethod: CARD
+ *                       paymentMethodLabel: Credit / Debit Card
+ *                       isKlarna: false
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-10-24T13:00:00.000Z'
+ *                       cardBrand: Visa
+ *                       cardLast4: '4242'
+ *                       amountPaid: 150
+ *                       totalAmount: 150
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: p2-card-uuid
+ *                           transactionRef: TXN-CARD-A1B3
+ *                           stripePaymentIntentId: pi_3CardJobExample456
+ *                           method: CARD
+ *                           paymentMethod: CARD
+ *                           paymentMethodLabel: Credit / Debit Card
+ *                           isKlarna: false
+ *                           cardBrand: Visa
+ *                           cardLast4: '4242'
+ *                           amount: 150
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-10-24T13:00:00.000Z'
+ *       404:
+ *         description: Job not found.
  */
 router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJob);
 

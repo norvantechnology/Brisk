@@ -192,41 +192,152 @@ router.get('/jobs/stats', validate(adminJobsStatsQuerySchema), controller.getSta
  *         description: Paginated jobs (`meta.total`, `page`, `limit`, `totalPages`).
  *         content:
  *           application/json:
- *             example:
- *               success: true
- *               message: Jobs retrieved successfully.
- *               data:
- *                 - id: 1f2e3d4c-5b6a-4789-8abc-def012345678
- *                   jobRef: JOB-1042
- *                   title: Leakage & Sink Repair
- *                   status: COMPLETED
- *                   statusLabel: Completed
- *                   category: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Residential Plumbing }
- *                   subcategory: null
- *                   customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, customerCode: CUS-1001, fullName: Sarah Connor, mobileNumber: '+353879123456', email: sarah@example.com, profilePhotoUrl: null }
- *                   trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", traderType: COMPANY, fullName: "Liam O'Connor", profilePhotoUrl: null }
- *                   addressLine: 12 Main Street
- *                   city: Dublin
- *                   postcode: D02 X234
- *                   scheduledDate: '2026-07-29T00:00:00.000Z'
- *                   createdAt: '2026-07-20T10:00:00.000Z'
- *                   amount: 144
- *                   estimatedAmount: 140
- *                   currencyCode: EUR
- *                   paymentStatus: PAID
- *                   offerApplied: true
- *                   offer: { id: 5a1b2c3d-0000-4000-8000-000000000002, title: Summer Plumbing Offer, offerCode: OFF-10 }
- *                   quotesCount: 3
- *                   coverPhotoUrl: null
- *                   siteVisitRequested: true
- *                   siteVisitFee: 30
- *                   hasSiteVisit: true
- *                   siteVisitsCount: 1
- *                   siteVisit: { id: 8d4e5f60-0000-4000-8000-000000000005, status: CONFIRMED, statusLabel: Visit Confirmed, visitDate: '2026-07-28', timeSlot: MORNING, arrivedAt: null, completedAt: null, durationMinutes: null, requestedAt: '2026-07-21T09:00:00.000Z', updatedAt: '2026-07-22T11:00:00.000Z', trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", fullName: "Liam O'Connor" } }
- *                   siteVisits:
- *                     - { id: 8d4e5f60-0000-4000-8000-000000000005, status: CONFIRMED, statusLabel: Visit Confirmed, visitDate: '2026-07-28', timeSlot: MORNING, trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", fullName: "Liam O'Connor" } }
- *                   booking: { id: 6b2c3d4e-0000-4000-8000-000000000003, bookingRef: BK-1042, status: COMPLETED, invoiceId: 7c3d4e5f-0000-4000-8000-000000000004 }
- *               meta: { total: 9, page: 1, limit: 10, totalPages: 1 }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Job paid via Klarna
+ *                 value:
+ *                   success: true
+ *                   message: Jobs retrieved successfully.
+ *                   data:
+ *                     - id: 224c2226-7e7f-4343-bbf4-e07d9bf28213
+ *                       jobRef: JOB-1042
+ *                       title: Leakage & Sink Repair
+ *                       status: COMPLETED
+ *                       statusLabel: Completed
+ *                       paymentStatus: PAID
+ *                       paymentMethod: KLARNA
+ *                       paymentMethodLabel: Klarna
+ *                       isKlarna: true
+ *                       paymentDetails:
+ *                         paymentMethod: KLARNA
+ *                         paymentMethodLabel: Klarna
+ *                         isKlarna: true
+ *                         paymentStatus: PAID
+ *                         paidAt: '2026-07-29T13:00:00.000Z'
+ *                         transactionRef: TXN-KLARNA-1042
+ *                         cardBrand: null
+ *                         cardLast4: null
+ *                         amountPaid: 144
+ *                         totalAmount: 144
+ *                         currencyCode: EUR
+ *                         payments:
+ *                           - id: b1718293-0000-4000-8000-000000000070
+ *                             transactionRef: TXN-KLARNA-1042
+ *                             stripePaymentIntentId: pi_3KlarnaExample123456
+ *                             method: KLARNA
+ *                             paymentMethod: KLARNA
+ *                             paymentMethodLabel: Klarna
+ *                             isKlarna: true
+ *                             amount: 144
+ *                             currencyCode: EUR
+ *                             status: COMPLETED
+ *                             paidAt: '2026-07-29T13:00:00.000Z'
+ *                             cardBrand: null
+ *                             cardLast4: null
+ *                             createdAt: '2026-07-29T12:59:00.000Z'
+ *                       category: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Residential Plumbing }
+ *                       subcategory: null
+ *                       customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, customerCode: CUS-1001, fullName: Sarah Connor, mobileNumber: '+353879123456', email: sarah@example.com, profilePhotoUrl: null }
+ *                       trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", traderType: COMPANY, fullName: "Liam O'Connor", profilePhotoUrl: null }
+ *                       addressLine: 12 Main Street
+ *                       city: Dublin
+ *                       postcode: D02 X234
+ *                       scheduledDate: '2026-07-29T00:00:00.000Z'
+ *                       createdAt: '2026-07-20T10:00:00.000Z'
+ *                       amount: 144
+ *                       estimatedAmount: 140
+ *                       currencyCode: EUR
+ *                       traderPayout: { payoutStatus: ELIGIBLE, totalPayable: 144, amountPaid: 0, remainingBalance: 144, eligibleForPayout: true, currencyCode: EUR }
+ *                       payoutStatus: ELIGIBLE
+ *                       totalPayable: 144
+ *                       amountPaid: 0
+ *                       remainingBalance: 144
+ *                       eligibleForPayout: true
+ *                       offerApplied: true
+ *                       offer: { id: 5a1b2c3d-0000-4000-8000-000000000002, title: Summer Plumbing Offer, offerCode: OFF-10 }
+ *                       quotesCount: 3
+ *                       coverPhotoUrl: null
+ *                       siteVisitRequested: true
+ *                       siteVisitFee: 30
+ *                       hasSiteVisit: true
+ *                       siteVisitsCount: 1
+ *                       siteVisit: { id: 8d4e5f60-0000-4000-8000-000000000005, status: CONFIRMED, statusLabel: Visit Confirmed, visitDate: '2026-07-28', timeSlot: MORNING, arrivedAt: null, completedAt: null, durationMinutes: null, requestedAt: '2026-07-21T09:00:00.000Z', updatedAt: '2026-07-22T11:00:00.000Z', trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", fullName: "Liam O'Connor" } }
+ *                       siteVisits:
+ *                         - { id: 8d4e5f60-0000-4000-8000-000000000005, status: CONFIRMED, statusLabel: Visit Confirmed, visitDate: '2026-07-28', timeSlot: MORNING, trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", fullName: "Liam O'Connor" } }
+ *                       booking: { id: 6b2c3d4e-0000-4000-8000-000000000003, bookingRef: BK-1042, status: COMPLETED, invoiceId: 7c3d4e5f-0000-4000-8000-000000000004 }
+ *                   meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
+ *               cardPayment:
+ *                 summary: Job paid via Credit/Debit Card
+ *                 value:
+ *                   success: true
+ *                   message: Jobs retrieved successfully.
+ *                   data:
+ *                     - id: 1f2e3d4c-5b6a-4789-8abc-def012345678
+ *                       jobRef: JOB-1043
+ *                       title: Boiler Maintenance
+ *                       status: COMPLETED
+ *                       statusLabel: Completed
+ *                       paymentStatus: PAID
+ *                       paymentMethod: CARD
+ *                       paymentMethodLabel: Credit / Debit Card
+ *                       isKlarna: false
+ *                       paymentDetails:
+ *                         paymentMethod: CARD
+ *                         paymentMethodLabel: Credit / Debit Card
+ *                         isKlarna: false
+ *                         paymentStatus: PAID
+ *                         paidAt: '2026-07-29T13:00:00.000Z'
+ *                         transactionRef: TXN-CARD-1043
+ *                         cardBrand: Visa
+ *                         cardLast4: '4242'
+ *                         amountPaid: 180
+ *                         totalAmount: 180
+ *                         currencyCode: EUR
+ *                         payments:
+ *                           - id: b1718293-0000-4000-8000-000000000071
+ *                             transactionRef: TXN-CARD-1043
+ *                             stripePaymentIntentId: pi_3CardExample123456
+ *                             method: CARD
+ *                             paymentMethod: CARD
+ *                             paymentMethodLabel: Credit / Debit Card
+ *                             isKlarna: false
+ *                             amount: 180
+ *                             currencyCode: EUR
+ *                             status: COMPLETED
+ *                             paidAt: '2026-07-29T13:00:00.000Z'
+ *                             cardBrand: Visa
+ *                             cardLast4: '4242'
+ *                             createdAt: '2026-07-29T12:59:00.000Z'
+ *                       category: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Residential Plumbing }
+ *                       subcategory: null
+ *                       customer: { id: 99a96a2f-bd59-4dbd-ba1a-e5f04412946d, customerCode: CUS-1001, fullName: Sarah Connor, mobileNumber: '+353879123456', email: sarah@example.com, profilePhotoUrl: null }
+ *                       trader: { id: 3033aa30-0000-4000-8000-000000000001, traderCode: TRD-1001, businessName: "Liam O'Connor Plumbing", traderType: COMPANY, fullName: "Liam O'Connor", profilePhotoUrl: null }
+ *                       addressLine: 12 Main Street
+ *                       city: Dublin
+ *                       postcode: D02 X234
+ *                       scheduledDate: '2026-07-29T00:00:00.000Z'
+ *                       createdAt: '2026-07-20T10:00:00.000Z'
+ *                       amount: 180
+ *                       estimatedAmount: 180
+ *                       currencyCode: EUR
+ *                       traderPayout: { payoutStatus: ELIGIBLE, totalPayable: 180, amountPaid: 0, remainingBalance: 180, eligibleForPayout: true, currencyCode: EUR }
+ *                       payoutStatus: ELIGIBLE
+ *                       totalPayable: 180
+ *                       amountPaid: 0
+ *                       remainingBalance: 180
+ *                       eligibleForPayout: true
+ *                       offerApplied: false
+ *                       offer: null
+ *                       quotesCount: 2
+ *                       coverPhotoUrl: null
+ *                       siteVisitRequested: false
+ *                       siteVisitFee: null
+ *                       hasSiteVisit: false
+ *                       siteVisitsCount: 0
+ *                       siteVisit: null
+ *                       siteVisits: []
+ *                       booking: { id: 6b2c3d4e-0000-4000-8000-000000000003, bookingRef: BK-1043, status: COMPLETED, invoiceId: 7c3d4e5f-0000-4000-8000-000000000004 }
+ *                   meta: { total: 1, page: 1, limit: 10, totalPages: 1 }
  *       400: { $ref: '#/components/responses/AdminListValidationError' }
  *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
@@ -266,6 +377,133 @@ router.get('/jobs', validate(adminJobsListQuerySchema), controller.listJobs);
  *                 success: { type: boolean, example: true }
  *                 message: { type: string, example: Job detail retrieved successfully. }
  *                 data: { $ref: '#/components/schemas/AdminJobDetail' }
+ *             examples:
+ *               klarnaPayment:
+ *                 summary: Job drawer paid via Klarna
+ *                 value:
+ *                   success: true
+ *                   message: Job detail retrieved successfully.
+ *                   data:
+ *                     id: 224c2226-7e7f-4343-bbf4-e07d9bf28213
+ *                       jobRef: JOB-1119
+ *                     title: Kitchen sink leaking
+ *                     description: Water leaking under the kitchen sink since yesterday.
+ *                     status: COMPLETED
+ *                     statusLabel: Completed
+ *                     paymentStatus: PAID
+ *                     paymentMethod: KLARNA
+ *                     paymentMethodLabel: Klarna
+ *                     isKlarna: true
+ *                     paymentDetails:
+ *                       paymentMethod: KLARNA
+ *                       paymentMethodLabel: Klarna
+ *                       isKlarna: true
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-07-29T13:00:00.000Z'
+ *                       transactionRef: TXN-KLARNA-1119
+ *                       cardBrand: null
+ *                       cardLast4: null
+ *                       amountPaid: 1500
+ *                       totalAmount: 1500
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: b1718293-0000-4000-8000-000000000070
+ *                           transactionRef: TXN-KLARNA-1119
+ *                           stripePaymentIntentId: pi_3KlarnaDetailExample123
+ *                           method: KLARNA
+ *                           paymentMethod: KLARNA
+ *                           paymentMethodLabel: Klarna
+ *                           isKlarna: true
+ *                           amount: 1500
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-07-29T13:00:00.000Z'
+ *                           cardBrand: null
+ *                           cardLast4: null
+ *                           createdAt: '2026-07-29T12:59:00.000Z'
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       customerCode: CUS-1001
+ *                       fullName: John Murphy
+ *                       email: john@example.com
+ *                       mobileNumber: '+353871234567'
+ *                       profilePhotoUrl: null
+ *                     trader:
+ *                       id: 6b2c3d4e-0000-4000-8000-000000000020
+ *                       traderCode: TRD-1001
+ *                       businessName: Murphy Plumbing Ltd
+ *                       fullName: Sean Kelly
+ *                       email: sean@example.com
+ *                       mobileNumber: '+353861234567'
+ *                     quoteType: ONSITE
+ *                     siteVisitRequested: true
+ *                     siteVisitFee: 30
+ *                     serviceCharge: 1500
+ *                     scheduledDate: '2026-07-29T00:00:00.000Z'
+ *                     createdAt: '2026-07-20T10:00:00.000Z'
+ *               cardPayment:
+ *                 summary: Job drawer paid via Card
+ *                 value:
+ *                   success: true
+ *                   message: Job detail retrieved successfully.
+ *                   data:
+ *                     id: 8a8fb0e5-a330-4c62-8e76-a358bd792b84
+ *                     jobRef: JOB-1120
+ *                     title: Electrical fuse replacement
+ *                     description: Fuse blown in utility room.
+ *                     status: COMPLETED
+ *                     statusLabel: Completed
+ *                     paymentStatus: PAID
+ *                     paymentMethod: CARD
+ *                     paymentMethodLabel: Credit / Debit Card
+ *                     isKlarna: false
+ *                     paymentDetails:
+ *                       paymentMethod: CARD
+ *                       paymentMethodLabel: Credit / Debit Card
+ *                       isKlarna: false
+ *                       paymentStatus: PAID
+ *                       paidAt: '2026-07-29T13:00:00.000Z'
+ *                       transactionRef: TXN-CARD-1120
+ *                       cardBrand: Visa
+ *                       cardLast4: '4242'
+ *                       amountPaid: 250
+ *                       totalAmount: 250
+ *                       currencyCode: EUR
+ *                       payments:
+ *                         - id: b1718293-0000-4000-8000-000000000072
+ *                           transactionRef: TXN-CARD-1120
+ *                           stripePaymentIntentId: pi_3CardDetailExample456
+ *                           method: CARD
+ *                           paymentMethod: CARD
+ *                           paymentMethodLabel: Credit / Debit Card
+ *                           isKlarna: false
+ *                           amount: 250
+ *                           currencyCode: EUR
+ *                           status: COMPLETED
+ *                           paidAt: '2026-07-29T13:00:00.000Z'
+ *                           cardBrand: Visa
+ *                           cardLast4: '4242'
+ *                           createdAt: '2026-07-29T12:59:00.000Z'
+ *                     customer:
+ *                       id: 1f2e3d4c-0000-4000-8000-000000000001
+ *                       customerCode: CUS-1001
+ *                       fullName: John Murphy
+ *                       email: john@example.com
+ *                       mobileNumber: '+353871234567'
+ *                       profilePhotoUrl: null
+ *                     trader:
+ *                       id: 6b2c3d4e-0000-4000-8000-000000000020
+ *                       traderCode: TRD-1001
+ *                       businessName: Murphy Electrical Ltd
+ *                       fullName: Sean Kelly
+ *                       email: sean@example.com
+ *                       mobileNumber: '+353861234567'
+ *                     quoteType: REMOTE
+ *                     siteVisitRequested: false
+ *                     siteVisitFee: null
+ *                     serviceCharge: 250
+ *                     scheduledDate: '2026-07-29T00:00:00.000Z'
+ *                     createdAt: '2026-07-20T10:00:00.000Z'
  *       404: { description: Job not found. }
  */
 router.get('/jobs/:id', validate(adminJobIdParamSchema), controller.getJob);
