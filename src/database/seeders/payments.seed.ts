@@ -126,6 +126,61 @@ export async function seedPayments(prisma: PrismaClient): Promise<void> {
     }
   }
 
+  // 4b. Seed Dedicated Klarna Test Job
+  const existingKlarnaJob = await prisma.job.findFirst({ where: { jobRef: 'JOB-KLARNA-7788' } });
+  if (!existingKlarnaJob && trader && customer && category) {
+    const klarnaJob = await prisma.job.create({
+      data: {
+        jobRef: 'JOB-KLARNA-7788',
+        customerId: customer.id,
+        categoryId: category.id,
+        title: 'Boiler Maintenance (Klarna Test Job)',
+        description: 'Annual boiler safety check and service paid via Klarna.',
+        status: 'COMPLETED',
+      },
+    });
+
+    const klarnaBooking = await prisma.booking.create({
+      data: {
+        bookingRef: 'BKG-KLARNA-7788',
+        jobId: klarnaJob.id,
+        traderId: trader.id,
+        customerId: customer.id,
+        scheduledDate: new Date('2026-08-15'),
+        status: 'COMPLETED',
+      },
+    });
+
+    const klarnaInvoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber: 'INV-KLARNA-7788',
+        bookingId: klarnaBooking.id,
+        serviceCharge: 180.0,
+        platformFee: 10.0,
+        tax: 25.65,
+        totalAmount: 215.65,
+        status: InvoiceStatus.PAID,
+      },
+    });
+
+    await prisma.payment.create({
+      data: {
+        transactionRef: 'TXN-KLARNA-998811',
+        stripePaymentIntentId: 'pi_test_klarna_7788',
+        invoiceId: klarnaInvoice.id,
+        userId: customer.id,
+        amount: 215.65,
+        serviceCharge: 180.0,
+        feeAmount: 10.0,
+        discountAmount: 0.0,
+        method: PaymentMethod.KLARNA,
+        status: PaymentStatus.COMPLETED,
+        paidAt: new Date('2026-08-15T10:30:00Z'),
+      },
+    });
+    logger.info(`✅ Klarna test job seeded: JOB-KLARNA-7788 (${klarnaJob.id})`);
+  }
+
   // 5. Seed Sample Refunds (Matching Screenshot 4)
   const sampleRefunds = [
     {
