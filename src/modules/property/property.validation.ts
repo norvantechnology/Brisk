@@ -57,6 +57,60 @@ export const submitReadingSchema = z.object({
   }),
 });
 
+
+export const parseFlexibleDate = (val: string | Date | null | undefined): Date | null => {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const str = String(val).trim();
+  if (!str) return null;
+
+  // 1. Simple YYYY-MM-DD
+  const ymdMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymdMatch) {
+    const [, y, m, d] = ymdMatch;
+    const date = new Date(Date.UTC(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), 0, 0, 0));
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  // 2. "dd MMM yyyy, hh:mm a" / "dd MMM yyyy hh:mm a" / "dd MMM yyyy"
+  const dMMyyyyMatch = str.match(
+    /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?)?$/i
+  );
+  if (dMMyyyyMatch) {
+    const [, dayStr, monthStr, yearStr, hourStr, minStr, secStr, ampm] = dMMyyyyMatch;
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const monthIndex = months.findIndex((m) => monthStr.toLowerCase().startsWith(m));
+    if (monthIndex >= 0) {
+      let hour = hourStr ? parseInt(hourStr, 10) : 0;
+      const min = minStr ? parseInt(minStr, 10) : 0;
+      const sec = secStr ? parseInt(secStr, 10) : 0;
+      if (ampm) {
+        const isPM = ampm.toUpperCase() === 'PM';
+        if (isPM && hour < 12) hour += 12;
+        if (!isPM && hour === 12) hour = 0;
+      }
+      const date = new Date(Date.UTC(parseInt(yearStr, 10), monthIndex, parseInt(dayStr, 10), hour, min, sec));
+      if (!isNaN(date.getTime())) return date;
+    }
+  }
+
+  // 3. Fallback to standard native Date parsing (handles ISO-8601, RFC2822, etc.)
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) return parsed;
+
+  return null;
+};
+
+export const flexibleDateSchema = z
+  .union([
+    z.string().refine((val) => parseFlexibleDate(val) !== null, {
+      message: 'Invalid date format. Expected "YYYY-MM-DD", "dd MMM yyyy, hh:mm a", or ISO-8601.',
+    }),
+    z.date(),
+  ])
+  .nullable()
+  .optional();
+
 export const saveSubscriptionsSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
   body: z
@@ -66,7 +120,7 @@ export const saveSubscriptionsSchema = z.object({
         .array(
           z.object({
             providerId: z.string().uuid(),
-            expiryDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nullable().optional(),
+            expiryDate: flexibleDateSchema,
             accountNumber: z.string().trim().max(100).nullable().optional(),
             serviceType: z.string().optional(),
             categoryId: z.string().optional(),

@@ -186,7 +186,7 @@ export const resolveJobPaymentDetails = (job: JobPaymentSource | null | undefine
         // Fallback if payment request was marked paid without a nested payment record
         addPayment({
           id: r.id,
-          transactionRef: r.stripePaymentIntentId ? `TXN-${r.id.slice(-6).toUpperCase()}` : null,
+          transactionRef: r.stripePaymentIntentId && r.id ? `TXN-${r.id.slice(-6).toUpperCase()}` : null,
           stripePaymentIntentId: r.stripePaymentIntentId ?? null,
           method: r.paymentMethod,
           paymentMethod: r.paymentMethod,

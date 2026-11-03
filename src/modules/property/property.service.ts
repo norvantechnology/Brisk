@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
-import type { CreateAddressInput, SubmitReadingInput, UpdateAddressInput } from './property.validation';
+import { parseFlexibleDate, type CreateAddressInput, type SubmitReadingInput, type UpdateAddressInput } from './property.validation';
 
 const PLACEHOLDER = 'https://cdn.brisk.ie/assets/placeholders';
 
@@ -773,9 +773,7 @@ export const savePropertySubscriptions = async (
       const customSub = subItems?.find((s) => s.providerId === provider.id);
       const expiryDate =
         customSub?.expiryDate !== undefined
-          ? customSub.expiryDate
-            ? new Date(customSub.expiryDate)
-            : null
+          ? parseFlexibleDate(customSub.expiryDate)
           : provider.expiryDate;
       const accountNumber = customSub?.accountNumber ?? undefined;
 
