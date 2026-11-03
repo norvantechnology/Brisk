@@ -58,9 +58,13 @@ export const submitReadingSchema = z.object({
 });
 
 
-export const parseFlexibleDate = (val: string | Date | null | undefined): Date | null => {
+export const parseFlexibleDate = (val: unknown): Date | null => {
   if (!val) return null;
   if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if (typeof val === 'number') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
   const str = String(val).trim();
   if (!str) return null;
 
@@ -102,12 +106,7 @@ export const parseFlexibleDate = (val: string | Date | null | undefined): Date |
 };
 
 export const flexibleDateSchema = z
-  .union([
-    z.string().refine((val) => parseFlexibleDate(val) !== null, {
-      message: 'Invalid date format. Expected "YYYY-MM-DD", "dd MMM yyyy, hh:mm a", or ISO-8601.',
-    }),
-    z.date(),
-  ])
+  .union([z.string(), z.date(), z.number()])
   .nullable()
   .optional();
 

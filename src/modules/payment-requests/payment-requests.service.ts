@@ -394,10 +394,14 @@ export const markPaymentRequestPaid = async (
   } else if (request.type === TraderPaymentRequestType.PARTIAL) {
     const job = await tx.job.findUnique({
       where: { id: request.jobId },
-      select: { status: true },
+      select: {
+        status: true,
+        booking: { select: { finishedAt: true } },
+      },
     });
     if (
       job &&
+      !job.booking?.finishedAt &&
       job.status !== JobStatus.IN_PROGRESS &&
       job.status !== JobStatus.COMPLETED &&
       job.status !== JobStatus.CANCELLED
@@ -406,8 +410,10 @@ export const markPaymentRequestPaid = async (
         where: { id: request.jobId },
         data: { status: JobStatus.IN_PROGRESS },
       });
+      jobStatus = JobStatus.IN_PROGRESS;
+    } else if (job) {
+      jobStatus = job.status;
     }
-    jobStatus = JobStatus.IN_PROGRESS;
   }
   await tx.invoice.updateMany({
     where: { paymentRequestId: id, status: InvoiceStatus.UNPAID },

@@ -444,6 +444,27 @@ export const requestPartialPayment = async (
   }
 };
 
+export const cancelPaymentRequest = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const paymentRequestId =
+      req.body?.paymentRequestId || (req.query?.paymentRequestId as string | undefined);
+    const data = await service.cancelPaymentRequest(req.user!.id, req.params.id, paymentRequestId);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Payment request cancelled successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const completeSiteVisit = async (
   req: AuthenticatedRequest,
   res: Response,

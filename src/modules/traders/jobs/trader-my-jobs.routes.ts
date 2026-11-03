@@ -1215,6 +1215,47 @@ router.post(
 
 /**
  * @swagger
+ * /traders/jobs/mine/{id}/cancel-payment-request:
+ *   post:
+ *     summary: Cancel pending payment request (partial installment or full-job payment request)
+ *     tags: ['Trader / My Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentRequestId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional specific payment request ID to cancel. If omitted, cancels the open pending request.
+ *     responses:
+ *       200:
+ *         description: Payment request cancelled successfully
+ *       400:
+ *         description: Cannot cancel already paid request
+ *       404:
+ *         description: No pending payment request found
+ */
+router.post(
+  '/mine/:id/cancel-payment-request',
+  controller.cancelPaymentRequest
+);
+
+router.post(
+  '/mine/:id/cancel-partial-payment',
+  controller.cancelPaymentRequest
+);
+
+/**
+ * @swagger
  * /traders/jobs/mine/{id}/site-visit/complete:
  *   post:
  *     summary: Complete site visit
