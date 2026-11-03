@@ -1,3 +1,4 @@
+import { formatPaymentMethodLabel, isKlarnaMethod } from '../jobs/job-payment-details';
 import {
   InvoiceStatus,
   JobStatus,
@@ -74,7 +75,7 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
                 where: { status: 'COMPLETED' },
                 orderBy: { paidAt: 'desc' },
                 take: 1,
-                select: { id: true, amount: true, paidAt: true, stripePaymentIntentId: true, transactionRef: true },
+                select: { id: true, amount: true, paidAt: true, stripePaymentIntentId: true, transactionRef: true, method: true },
               },
             },
           },
@@ -214,6 +215,9 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
     date: string;
     formattedAmount: string;
     status?: string;
+    paymentMethod?: string | null;
+    paymentMethodLabel?: string | null;
+    isKlarna?: boolean;
   }> = requests
     .filter((r) => r.status === TraderPaymentRequestStatus.PAID)
     .map((r) => {
@@ -225,6 +229,9 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
         date: paidDate.toISOString(),
         formattedAmount: `${sym}${money(r.totalAmount).toFixed(2)}`,
         status: 'PAID',
+        paymentMethod: r.paymentMethod,
+        paymentMethodLabel: formatPaymentMethodLabel(r.paymentMethod),
+        isKlarna: isKlarnaMethod(r.paymentMethod),
       };
     });
 
@@ -236,10 +243,11 @@ export const listJobPaymentRequests = async (customerId: string, jobId: string) 
       date: upfrontPayment.paidAt ? upfrontPayment.paidAt.toISOString() : new Date().toISOString(),
       formattedAmount: `${currencySymbol}${money(upfrontPayment.amount).toFixed(2)}`,
       status: 'PAID',
+      paymentMethod: upfrontPayment.method,
+      paymentMethodLabel: formatPaymentMethodLabel(upfrontPayment.method),
+      isKlarna: isKlarnaMethod(upfrontPayment.method),
     });
   }
-
-
 
   return {
     jobId: job.id,
@@ -276,7 +284,7 @@ export const getJobPaymentHistory = async (
               payments: {
                 where: { status: 'COMPLETED' },
                 orderBy: { paidAt: 'desc' },
-                select: { id: true, amount: true, paidAt: true, stripePaymentIntentId: true, transactionRef: true },
+                select: { id: true, amount: true, paidAt: true, stripePaymentIntentId: true, transactionRef: true, method: true },
               },
             },
           },
@@ -300,6 +308,9 @@ export const getJobPaymentHistory = async (
     date: string;
     formattedAmount: string;
     status: string;
+    paymentMethod?: string | null;
+    paymentMethodLabel?: string | null;
+    isKlarna?: boolean;
   }> = requests
     .filter((r) => r.status === TraderPaymentRequestStatus.PAID)
     .map((r) => {
@@ -311,6 +322,9 @@ export const getJobPaymentHistory = async (
         date: paidDate.toISOString(),
         formattedAmount: `${sym}${money(r.totalAmount).toFixed(2)}`,
         status: 'PAID',
+        paymentMethod: r.paymentMethod,
+        paymentMethodLabel: formatPaymentMethodLabel(r.paymentMethod),
+        isKlarna: isKlarnaMethod(r.paymentMethod),
       };
     });
 
@@ -322,10 +336,11 @@ export const getJobPaymentHistory = async (
       date: upfrontPayment.paidAt ? upfrontPayment.paidAt.toISOString() : new Date().toISOString(),
       formattedAmount: `${currencySymbol}${money(upfrontPayment.amount).toFixed(2)}`,
       status: 'PAID',
+      paymentMethod: upfrontPayment.method,
+      paymentMethodLabel: formatPaymentMethodLabel(upfrontPayment.method),
+      isKlarna: isKlarnaMethod(upfrontPayment.method),
     });
   }
-
-
 
   const { page, limit, skip } = parsePageLimit(query, { defaultLimit: 10, maxLimit: 50 });
   const total = history.length;

@@ -1,3 +1,4 @@
+import { resolveJobPaymentDetails } from '../../jobs/job-payment-details';
 import {
   BookingStatus,
   InvoiceStatus,
@@ -495,7 +496,19 @@ const assertMyJob = async (traderId: string, jobId: string) => {
             include: {
               payments: {
                 orderBy: { createdAt: 'desc' },
-                take: 1,
+                select: {
+                  id: true,
+                  transactionRef: true,
+                  stripePaymentIntentId: true,
+                  method: true,
+                  amount: true,
+                  currencyCode: true,
+                  status: true,
+                  paidAt: true,
+                  cardBrand: true,
+                  cardLast4: true,
+                  createdAt: true,
+                },
               },
             },
           },
@@ -1087,12 +1100,32 @@ const myJobCardSelect = (traderId: string) =>
             traderCustomerReview: { select: REVIEW_SELECT },
             invoice: {
               select: {
+                id: true,
+                invoiceNumber: true,
+                status: true,
+                currencyCode: true,
                 serviceCharge: true,
                 platformFee: true,
                 traderOfferDiscount: true,
                 promoDiscount: true,
                 tax: true,
                 totalAmount: true,
+                payments: {
+                  orderBy: { createdAt: 'desc' as const },
+                  select: {
+                    id: true,
+                    transactionRef: true,
+                    stripePaymentIntentId: true,
+                    method: true,
+                    amount: true,
+                    currencyCode: true,
+                    status: true,
+                    paidAt: true,
+                    cardBrand: true,
+                    cardLast4: true,
+                    createdAt: true,
+                  },
+                },
               },
             },
           },
@@ -1111,7 +1144,45 @@ const myJobCardSelect = (traderId: string) =>
             traderId,
             status: { not: TraderPaymentRequestStatus.CANCELLED },
           },
-          select: { id: true, type: true, status: true, totalAmount: true, currencyCode: true },
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            title: true,
+            description: true,
+            totalAmount: true,
+            currencyCode: true,
+            paymentMethod: true,
+            cardBrand: true,
+            cardLast4: true,
+            stripePaymentIntentId: true,
+            paidAt: true,
+            createdAt: true,
+            invoice: {
+              select: {
+                id: true,
+                invoiceNumber: true,
+                status: true,
+                totalAmount: true,
+                payments: {
+                  orderBy: { createdAt: 'desc' as const },
+                  select: {
+                    id: true,
+                    transactionRef: true,
+                    stripePaymentIntentId: true,
+                    method: true,
+                    amount: true,
+                    currencyCode: true,
+                    status: true,
+                    paidAt: true,
+                    cardBrand: true,
+                    cardLast4: true,
+                    createdAt: true,
+                  },
+                },
+              },
+            },
+          },
           take: 20,
         },
         siteVisitRequested: true,
@@ -1295,14 +1366,14 @@ const myJobCardMapper =
       (quotePrice ?? 0) + PLATFORM_FEE + ((quotePrice ?? 0) + PLATFORM_FEE) * VAT_RATE
     );
     const remainingBalance = round2(Math.max(0, jobAmountEstimate - alreadyPaidAmount));
-    const isPartialJob =
-      !job.booking?.finishedAt && (hasAnyPartial || alreadyPaidAmount > 0);
+  const isPartialJob =
+    !job.booking?.finishedAt && (hasAnyPartial || alreadyPaidAmount > 0);
 
     const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
     const finalRequested = hasFinalPaymentRequest(job);
     const customerReview = serializeCustomerJobReview(job.booking?.ratingReview);
     const hasCustomerReview = Boolean(customerReview);
-    const { flowStatus, statusLabel: flowStatusLabel } = resolveFlowStatus({
+  const { flowStatus, statusLabel: flowStatusLabel } = resolveFlowStatus({
       status: job.status,
       bookingStatus: job.booking?.status ?? null,
       arrivedAt: job.booking?.arrivedAt ?? null,
@@ -1405,6 +1476,7 @@ const myJobCardMapper =
       traderCountry: traderCurrency.country,
     });
     const paymentDetails = buildPaymentSummaryDetails(paymentSummary, currency);
+    const resolvedPayments = resolveJobPaymentDetails(job);
 
     return {
       id: job.id,
@@ -1437,7 +1509,16 @@ const myJobCardMapper =
         job.paymentRequests.some((p) => p.status === TraderPaymentRequestStatus.SENT)
       ),
       paymentSummary,
-      paymentDetails,
+      paymentDetails: {
+        ...paymentDetails,
+        paymentMethod: resolvedPayments.paymentMethod,
+        paymentMethodLabel: resolvedPayments.paymentMethodLabel,
+        isKlarna: resolvedPayments.isKlarna,
+        payments: resolvedPayments.payments,
+      },
+      paymentMethod: resolvedPayments.paymentMethod,
+      paymentMethodLabel: resolvedPayments.paymentMethodLabel,
+      isKlarna: resolvedPayments.isKlarna,
       isPartPayment: isPartialJob,
       isPartialJob,
       siteVisit: isSiteVisitJob,
@@ -1627,6 +1708,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
       ? 'Pending Rating'
       : statusBadgeFor(job.status, job.booking?.status ?? null, flowStatus);
 
+  const resolvedDetailPayments = resolveJobPaymentDetails(job);
   return {
     id: job.id,
     title: job.title,
@@ -1653,6 +1735,10 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     flowStatus,
     paymentStatus,
     customerConfirmedAt: job.booking?.customerConfirmedAt ?? null,
+    paymentMethod: resolvedDetailPayments.paymentMethod,
+    paymentMethodLabel: resolvedDetailPayments.paymentMethodLabel,
+    isKlarna: resolvedDetailPayments.isKlarna,
+    paymentDetails: resolvedDetailPayments,
     /** Boolean flag for Active-list FE routing (same meaning as list `siteVisit`). */
     isSiteVisit: Boolean(job.siteVisitRequested || job.siteVisitRequests[0]),
     /**

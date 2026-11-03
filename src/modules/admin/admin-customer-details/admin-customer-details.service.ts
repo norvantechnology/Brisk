@@ -1,3 +1,4 @@
+import { resolveJobPaymentDetails, formatPaymentMethodLabel, isKlarnaMethod } from '../../jobs/job-payment-details';
 import {
   JobStatus,
   OfferClaimStatus,
@@ -752,11 +753,18 @@ export const listCustomerJobs = async (
 
   return {
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 0 },
-    jobs: rows.map((job) => ({
-      id: job.id,
-      jobRef: job.jobRef,
-      title: job.title,
-      status: job.status,
+    jobs: rows.map((job) => {
+      const paymentDetails = resolveJobPaymentDetails(job);
+      return {
+        id: job.id,
+        jobRef: job.jobRef,
+        title: job.title,
+        status: job.status,
+        paymentMethod: paymentDetails.paymentMethod,
+        paymentMethodLabel: paymentDetails.paymentMethodLabel,
+        isKlarna: paymentDetails.isKlarna,
+        paymentStatus: paymentDetails.paymentStatus,
+        paymentDetails,
       category: job.category,
       subcategory: job.subcategory,
       addressLine: job.addressLine,
@@ -790,7 +798,8 @@ export const listCustomerJobs = async (
             currencyCode: job.booking.invoice?.currencyCode ?? 'EUR',
           }
         : null,
-    })),
+      };
+    }),
   };
 };
 
@@ -869,7 +878,16 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
           couponCode: true,
         },
       },
-      paymentRequests: { orderBy: { createdAt: 'asc' } },
+      paymentRequests: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          invoice: {
+            include: {
+              payments: { orderBy: { createdAt: 'desc' } },
+            },
+          },
+        },
+      },
       payouts: {
         orderBy: { createdAt: 'desc' },
         select: {
@@ -889,6 +907,7 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
   });
 
   if (!job) throw new NotFoundError(notFoundMessage);
+  const paymentDetails = resolveJobPaymentDetails(job);
 
   const traderPayoutBalance = buildJobPayoutBalance({
     id: job.id,
@@ -916,6 +935,11 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
   return {
     id: job.id,
     jobRef: job.jobRef,
+    paymentMethod: paymentDetails.paymentMethod,
+    paymentMethodLabel: paymentDetails.paymentMethodLabel,
+    isKlarna: paymentDetails.isKlarna,
+    paymentStatus: paymentDetails.paymentStatus,
+    paymentDetails,
     title: job.title,
     description: job.description,
     qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
@@ -1013,6 +1037,11 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
                   method: p.method,
                   paidAt: p.paidAt,
                   createdAt: p.createdAt,
+                  cardBrand: p.cardBrand,
+                  cardLast4: p.cardLast4,
+                  paymentMethod: p.method,
+                  paymentMethodLabel: formatPaymentMethodLabel(p.method),
+                  isKlarna: isKlarnaMethod(p.method),
                 })),
               }
             : null,
@@ -1038,7 +1067,9 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
       vatAmount: money(r.vatAmount),
       totalAmount: money(r.totalAmount),
       currencyCode: r.currencyCode,
-      paymentMethod: r.paymentMethod?.replace(/_/g, ' ') ?? null,
+      paymentMethod: r.paymentMethod,
+      paymentMethodLabel: formatPaymentMethodLabel(r.paymentMethod),
+      isKlarna: isKlarnaMethod(r.paymentMethod),
       cardLast4: r.cardLast4,
       /** Stripe PaymentIntent id (`pi_…`) set when the customer pays (incl. PARTIAL). */
       stripePaymentIntentId: r.stripePaymentIntentId,

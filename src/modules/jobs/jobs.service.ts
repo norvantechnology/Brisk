@@ -35,6 +35,7 @@ import type {
 } from './jobs.validation';
 import type { JobFormEntryPoint } from './jobs.form-config';
 import { generateInvoiceNumber, isAwaitingUpfrontPayment } from './job-payment-state';
+import { resolveJobPaymentDetails } from './job-payment-details';
 import {
   assertRequiredQaFormAnswers,
   buildQaFormAnswerList,
@@ -291,8 +292,19 @@ const jobInclude = {
           currencyCode: true,
           payments: {
             orderBy: { createdAt: 'desc' as const },
-            take: 1,
-            select: { status: true, paidAt: true },
+            select: {
+              id: true,
+              transactionRef: true,
+              stripePaymentIntentId: true,
+              method: true,
+              amount: true,
+              currencyCode: true,
+              status: true,
+              paidAt: true,
+              cardBrand: true,
+              cardLast4: true,
+              createdAt: true,
+            },
           },
         },
       },
@@ -500,6 +512,7 @@ const serializeCustomerSiteVisitTrader = (v: SiteVisitRequestRow) => {
 const serializeJob = (
   job: Prisma.JobGetPayload<{ include: typeof jobInclude }>
 ) => {
+  const paymentDetails = resolveJobPaymentDetails(job);
   const offerApplied = Boolean(job.offer);
   const traderDisplayName =
     job.trader?.businessName || job.trader?.user?.fullName || null;
@@ -725,11 +738,15 @@ const serializeJob = (
         invoice: job.booking.invoice
           ? {
               id: job.booking.invoice.id,
-                invoiceNumber: str(job.booking.invoice.invoiceNumber),
+              invoiceNumber: str(job.booking.invoice.invoiceNumber),
               status: job.booking.invoice.status,
               totalAmount: money(job.booking.invoice.totalAmount),
+              paymentMethod: paymentDetails.paymentMethod,
+              paymentMethodLabel: paymentDetails.paymentMethodLabel,
+              isKlarna: paymentDetails.isKlarna,
+              payments: paymentDetails.payments,
             }
-            : { id: '', invoiceNumber: '', status: '', totalAmount: 0 },
+          : { id: '', invoiceNumber: '', status: '', totalAmount: 0, paymentMethod: null, paymentMethodLabel: null, isKlarna: false, payments: [] },
         }
       : {
           id: '',
@@ -738,6 +755,11 @@ const serializeJob = (
           scheduledDate: '',
           invoice: { id: '', invoiceNumber: '', status: '', totalAmount: 0 },
         },
+    paymentMethod: paymentDetails.paymentMethod,
+    paymentMethodLabel: paymentDetails.paymentMethodLabel,
+    isKlarna: paymentDetails.isKlarna,
+    paymentStatus: paymentDetails.paymentStatus,
+    paymentDetails,
     nextSteps: {
       needsLocation: !job.addressId,
       canPublish: Boolean(job.addressId) && job.status === JobStatus.DRAFT,

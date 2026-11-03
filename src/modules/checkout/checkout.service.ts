@@ -1,3 +1,4 @@
+import { resolveJobPaymentDetails, formatPaymentMethodLabel, isKlarnaMethod } from '../jobs/job-payment-details';
 import {
   DiscountType,
   InvoiceStatus,
@@ -413,6 +414,11 @@ const serializeBooking = (booking: ReturnType<typeof invoiceContext>['booking'])
 
 const serializeInvoice = (invoice: InvoiceWithRelations) => {
   const { job, trader, booking } = invoiceContext(invoice);
+  const paymentDetails = resolveJobPaymentDetails({
+    serviceCharge: invoice.serviceCharge,
+    booking: { invoice },
+    paymentRequests: invoice.paymentRequest ? [invoice.paymentRequest] : null,
+  });
   const breakdown = serializeInvoiceBreakdown(invoice);
   const purpose = invoicePurposeOf(invoice);
   const request = invoice.paymentRequest;
@@ -430,6 +436,11 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     createdAt: invoice.createdAt,
     updatedAt: invoice.updatedAt,
     purpose,
+    paymentMethod: paymentDetails.paymentMethod,
+    paymentMethodLabel: paymentDetails.paymentMethodLabel,
+    isKlarna: paymentDetails.isKlarna,
+    paymentStatus: paymentDetails.paymentStatus,
+    paymentDetails,
     ...breakdown,
     materialsTotal: request ? money(request.materialsTotal) : 0,
     siteVisitFee: request
@@ -513,7 +524,6 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
       { key: 'INDIVIDUAL' },
       { key: 'COMPANY' },
     ],
-    paymentStatus: invoice.payments[0]?.status ?? null,
     latestPaymentId: invoice.payments[0]?.id ?? null,
     /** True when a promo discount is on the invoice. */
     promoApplied: money(invoice.promoDiscount) > 0,
@@ -570,6 +580,9 @@ const buildReceipt = async (paymentId: string, userId: string) => {
     transactionRef: payment.transactionRef,
     status: payment.status,
     method: payment.method,
+    paymentMethod: payment.method,
+    paymentMethodLabel: formatPaymentMethodLabel(payment.method),
+    isKlarna: isKlarnaMethod(payment.method),
     amount: amountPaid,
     amountPaid,
     currencyCode: payment.currencyCode,
@@ -1478,6 +1491,9 @@ export const listPaymentHistory = async (userId: string, query: PaymentHistoryQu
         currencyCode: invoice.currencyCode,
         currencySymbol: currencySymbol(invoice.currencyCode),
         method: payment?.method ?? request?.paymentMethod ?? null,
+        paymentMethod: payment?.method ?? request?.paymentMethod ?? null,
+        paymentMethodLabel: formatPaymentMethodLabel(payment?.method ?? request?.paymentMethod ?? null),
+        isKlarna: isKlarnaMethod(payment?.method ?? request?.paymentMethod ?? null),
         cardBrand: payment?.cardBrand ?? request?.cardBrand ?? null,
         cardLast4: payment?.cardLast4 ?? request?.cardLast4 ?? null,
         serviceCategory: job.category,

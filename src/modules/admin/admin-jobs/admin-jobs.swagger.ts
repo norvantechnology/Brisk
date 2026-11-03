@@ -70,6 +70,23 @@
  *           enum: [DRAFT, PUBLISHED, QUOTED, ACCEPTED, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, PAYMENT_PENDING]
  *           example: PAYMENT_PENDING
  *         statusLabel: { type: string, example: Payment Pending, description: Display label for status }
+ *         paymentMethod:
+ *           type: string
+ *           nullable: true
+ *           example: KLARNA
+ *           description: Payment method used (KLARNA, CARD, APPLE_PAY, GOOGLE_PAY).
+ *         paymentMethodLabel:
+ *           type: string
+ *           nullable: true
+ *           example: Klarna
+ *           description: Human-readable label for payment method.
+ *         isKlarna:
+ *           type: boolean
+ *           example: true
+ *           description: True if Klarna was used.
+ *         paymentDetails:
+ *           type: object
+ *           description: Complete payment details object including transactions list.
  *         quoteType: { type: string, nullable: true, enum: [REMOTE, ONSITE, FIXED, BUDGET_RANGE, OPEN_QUOTE], example: ONSITE }
  *         siteVisitRequested: { type: boolean, example: true }
  *         siteVisitFee: { type: number, nullable: true, example: 30 }
@@ -246,7 +263,7 @@
  *                       stripeTransactionId: { type: string, nullable: true, example: pi_3UOtwLRpa2IWHYmQ1zyTvLvf, description: Alias of stripePaymentIntentId }
  *                       amount: { type: number, example: 1812 }
  *                       status: { type: string, enum: [PENDING, COMPLETED, FAILED], example: COMPLETED }
- *                       method: { type: string, nullable: true, enum: [CARD, APPLE_PAY, GOOGLE_PAY], example: CARD }
+ *                       method: { type: string, nullable: true, enum: [CARD, APPLE_PAY, GOOGLE_PAY, KLARNA], example: CARD }
  *                       paidAt: { type: string, format: date-time, nullable: true, example: '2026-07-29T13:00:00.000Z' }
  *                       createdAt: { type: string, format: date-time, example: '2026-07-29T12:59:00.000Z' }
  *             rating:

@@ -1,3 +1,4 @@
+import { resolveJobPaymentDetails } from '../../jobs/job-payment-details';
 import {
   ActorType,
   DocumentRuleScope,
@@ -473,6 +474,22 @@ export const listTraderJobs = async (
             totalAmount: true,
             currencyCode: true,
             status: true,
+            payments: {
+              orderBy: { createdAt: 'desc' as const },
+              select: {
+                id: true,
+                transactionRef: true,
+                stripePaymentIntentId: true,
+                method: true,
+                amount: true,
+                currencyCode: true,
+                status: true,
+                paidAt: true,
+                cardBrand: true,
+                cardLast4: true,
+                createdAt: true,
+              },
+            },
           },
         },
       },
@@ -510,9 +527,15 @@ export const listTraderJobs = async (
               ? money(job.siteVisitFee)
               : 0;
 
-      return {
-        id: job.id,
-        jobRef: job.jobRef,
+      const jobPayment = resolveJobPaymentDetails(job);
+        return {
+          id: job.id,
+          jobRef: job.jobRef,
+          paymentMethod: jobPayment.paymentMethod,
+          paymentMethodLabel: jobPayment.paymentMethodLabel,
+          isKlarna: jobPayment.isKlarna,
+          paymentStatus: jobPayment.paymentStatus,
+          paymentDetails: jobPayment,
         title: job.title,
         customer: job.customer
           ? {

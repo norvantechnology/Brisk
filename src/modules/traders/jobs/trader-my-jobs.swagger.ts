@@ -111,6 +111,20 @@
  *             vatAmount: { type: number }
  *             totalAmount: { type: number }
  *             netPayout: { type: number }
+ *         paymentMethod:
+ *           type: string
+ *           nullable: true
+ *           example: KLARNA
+ *           description: Payment method used (KLARNA, CARD, APPLE_PAY, GOOGLE_PAY).
+ *         paymentMethodLabel:
+ *           type: string
+ *           nullable: true
+ *           example: Klarna
+ *           description: Human-readable label for payment method.
+ *         isKlarna:
+ *           type: boolean
+ *           example: true
+ *           description: True if Klarna was used for this job.
  *         paymentDetails:
  *           type: array
  *           description: |
@@ -181,6 +195,20 @@
  *             SITE_VISIT_PAYMENT_PENDING is legacy; fee is optional via canRequestSiteVisitPayment.
  *           example: COMPLETED
  *         paymentStatus: { type: string, enum: [UNPAID, PENDING, PARTIALLY_PAID, PAID], example: UNPAID }
+ *         paymentMethod:
+ *           type: string
+ *           nullable: true
+ *           example: KLARNA
+ *           description: Payment method used (KLARNA, CARD, APPLE_PAY, GOOGLE_PAY).
+ *         paymentMethodLabel:
+ *           type: string
+ *           nullable: true
+ *           example: Klarna
+ *           description: Human-readable label for payment method.
+ *         isKlarna:
+ *           type: boolean
+ *           example: true
+ *           description: True if Klarna was used for this job.
  *         ratingStatus: { type: string, nullable: true, enum: [PENDING, RATED], example: RATED, description: null unless job is COMPLETED }
  *         hasReview: { type: boolean, example: true }
  *         canReview: { type: boolean, example: true, description: "true when trader can rate the customer (POST /traders/jobs/mine/:id/review)" }

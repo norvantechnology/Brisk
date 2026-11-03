@@ -68,6 +68,8 @@ export const saveSubscriptionsSchema = z.object({
             providerId: z.string().uuid(),
             expiryDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nullable().optional(),
             accountNumber: z.string().trim().max(100).nullable().optional(),
+            serviceType: z.string().optional(),
+            categoryId: z.string().optional(),
           })
         )
         .optional(),

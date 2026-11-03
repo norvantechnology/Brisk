@@ -1,3 +1,4 @@
+import { resolveJobPaymentDetails } from '../../jobs/job-payment-details';
 import { ActorType, InvoiceStatus, JobStatus, Prisma, TraderSiteVisitStatus } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { BadRequestError, NotFoundError } from '../../../utils/errors';
@@ -291,6 +292,22 @@ const JOB_LIST_INCLUDE = {
           paymentRequestId: true,
           serviceCharge: true,
           traderOfferDiscount: true,
+          payments: {
+            orderBy: { createdAt: 'desc' as const },
+            select: {
+              id: true,
+              transactionRef: true,
+              stripePaymentIntentId: true,
+              method: true,
+              amount: true,
+              currencyCode: true,
+              status: true,
+              paidAt: true,
+              cardBrand: true,
+              cardLast4: true,
+              createdAt: true,
+            },
+          },
         },
       },
     },
@@ -395,6 +412,7 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     jobs: rows.map((job) => {
       const invoice = job.booking?.invoice ?? null;
+      const jobPayment = resolveJobPaymentDetails(job);
       const estimatedAmount = money(job.serviceCharge);
       const isQuoted =
         job.status === JobStatus.QUOTED ||
@@ -440,7 +458,11 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
         amount: invoice ? money(invoice.totalAmount) : estimatedAmount,
         estimatedAmount,
         currencyCode: invoice?.currencyCode ?? traderPayout.currencyCode,
-        paymentStatus: invoice?.status ?? 'NOT_INVOICED',
+        paymentStatus: jobPayment.paymentStatus || invoice?.status || 'NOT_INVOICED',
+        paymentMethod: jobPayment.paymentMethod,
+        paymentMethodLabel: jobPayment.paymentMethodLabel,
+        isKlarna: jobPayment.isKlarna,
+        paymentDetails: jobPayment,
         /** Job-wise trader bank payout balance (manual admin installments). */
         traderPayout,
         payoutStatus: traderPayout.payoutStatus,

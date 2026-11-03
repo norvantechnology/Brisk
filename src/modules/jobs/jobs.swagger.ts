@@ -213,6 +213,53 @@
  *         siteVisitRequested: { type: boolean }
  *         siteVisitFee: { type: number }
  *         status: { $ref: '#/components/schemas/JobStatus' }
+ *         paymentMethod:
+ *           type: string
+ *           nullable: true
+ *           example: KLARNA
+ *           description: Payment method used (KLARNA, CARD, APPLE_PAY, GOOGLE_PAY).
+ *         paymentMethodLabel:
+ *           type: string
+ *           nullable: true
+ *           example: Klarna
+ *           description: Human-readable label for payment method.
+ *         isKlarna:
+ *           type: boolean
+ *           example: true
+ *           description: Explicit flag indicating whether Klarna was used.
+ *         paymentStatus:
+ *           type: string
+ *           nullable: true
+ *           example: PAID
+ *           description: Overall payment status (PAID, PARTIALLY_PAID, UNPAID, NOT_INVOICED).
+ *         paymentDetails:
+ *           type: object
+ *           description: Complete job payment breakdown and transaction history.
+ *           properties:
+ *             paymentMethod: { type: string, nullable: true, example: KLARNA }
+ *             paymentMethodLabel: { type: string, nullable: true, example: Klarna }
+ *             isKlarna: { type: boolean, example: true }
+ *             paymentStatus: { type: string, example: PAID }
+ *             amountPaid: { type: number, example: 120 }
+ *             totalAmount: { type: number, example: 120 }
+ *             currencyCode: { type: string, example: EUR }
+ *             payments:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string }
+ *                   method: { type: string, example: KLARNA }
+ *                   paymentMethod: { type: string, example: KLARNA }
+ *                   paymentMethodLabel: { type: string, example: Klarna }
+ *                   isKlarna: { type: boolean, example: true }
+ *                   amount: { type: number, example: 120 }
+ *                   currencyCode: { type: string, example: EUR }
+ *                   status: { type: string, example: COMPLETED }
+ *                   paidAt: { type: string, format: date-time, nullable: true }
+ *                   cardBrand: { type: string, nullable: true, example: Visa }
+ *                   cardLast4: { type: string, nullable: true, example: '4242' }
+ *                   transactionRef: { type: string, nullable: true }
  *         statusBadge:
  *           type: string
  *           enum: [Draft, Open, Active, Completed, Payment Pending, Cancelled]
