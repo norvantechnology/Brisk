@@ -2,7 +2,7 @@ import { Category, Subcategory, SubcategoryPriceEnteredBy } from '@prisma/client
 
 const DEFAULT_CATEGORY_ICON_BASE_URL = 'https://cdn.brisk.com/icons/categories';
 
-const isHttpUrl = (value: string | null | undefined): value is string =>
+const isHttpUrl = (value: string | null | undefined): boolean =>
   typeof value === 'string' && /^https?:\/\//i.test(value);
 
 /**
@@ -13,8 +13,19 @@ const isHttpUrl = (value: string | null | undefined): value is string =>
 export const resolveCategoryIconUrl = (
   cat: Pick<Category, 'iconName' | 'urlSlug'> & { bannerImageUrl?: string | null }
 ): string | null => {
-  if (isHttpUrl(cat.iconName)) {
-    return cat.iconName;
+  const icon = cat.iconName;
+  if (typeof icon === 'string') {
+    if (isHttpUrl(icon)) {
+      return icon;
+    }
+    if (icon.startsWith('/')) {
+      const publicBase = (
+        process.env.UPLOAD_PUBLIC_BASE_URL ||
+        process.env.PUBLIC_API_URL ||
+        'http://104.207.88.181:3000'
+      ).replace(/\/$/, '');
+      return `${publicBase}${icon}`;
+    }
   }
 
   const baseUrl = (process.env.CATEGORY_ICON_BASE_URL ?? DEFAULT_CATEGORY_ICON_BASE_URL).replace(
@@ -27,7 +38,7 @@ export const resolveCategoryIconUrl = (
   }
 
   if (isHttpUrl(cat.bannerImageUrl)) {
-    return cat.bannerImageUrl;
+    return cat.bannerImageUrl ?? null;
   }
 
   return null;

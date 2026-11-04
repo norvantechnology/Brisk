@@ -27,6 +27,8 @@ export interface CreateCategoryInput {
   urlSlug: string;
   description?: string;
   iconName?: string;
+  iconUrl?: string;
+  iconUrl?: string;
   brandThemeColor?: string;
   bannerImageUrl?: string;
   displayOrder?: number;
@@ -40,6 +42,7 @@ export interface UpdateCategoryInput {
   urlSlug?: string;
   description?: string;
   iconName?: string;
+  iconUrl?: string;
   brandThemeColor?: string;
   bannerImageUrl?: string;
   displayOrder?: number;

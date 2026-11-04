@@ -169,8 +169,13 @@ export const createCategory = async (adminId: string, adminLabel: string, input:
     throw new ConflictError('URL slug already exists.');
   }
 
+  const { iconUrl, ...restInput } = input;
+  const dataToSave = {
+    ...restInput,
+    iconName: iconUrl || input.iconName || null,
+  };
   const category = await prisma.category.create({
-    data: input,
+    data: dataToSave,
   });
 
   await prisma.auditLog.create({
@@ -209,9 +214,14 @@ export const updateCategory = async (
     if (slugConflict) throw new ConflictError('URL slug already in use.');
   }
 
+  const { iconUrl, ...restInput } = input;
+  const dataToSave = {
+    ...restInput,
+    ...(iconUrl ? { iconName: iconUrl } : {}),
+  };
   const updatedCategory = await prisma.category.update({
     where: { id },
-    data: input,
+    data: dataToSave,
   });
 
   await prisma.auditLog.create({
