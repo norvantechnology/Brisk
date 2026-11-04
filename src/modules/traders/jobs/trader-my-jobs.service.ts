@@ -1501,6 +1501,7 @@ const myJobCardMapper =
       id: job.id,
       jobRef: job.jobRef,
       title: job.title,
+      tab: (cancelled ? 'OTHER' : job.status === JobStatus.COMPLETED ? 'COMPLETED' : 'ACTIVE') as MyJobsTab,
       status: job.status,
       // Cancelled always wins for status chip; site-visit type is separate field below.
       statusBadge:
@@ -1731,6 +1732,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     description: job.description,
     qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
     status: job.status,
+    tab: (cancelled ? 'OTHER' : job.status === JobStatus.COMPLETED ? 'COMPLETED' : 'ACTIVE') as MyJobsTab,
     statusBadge,
     statusLabel,
     /** PENDING until customer rates; RATED after POST /jobs/{id}/review. null if not completed. */

@@ -34,6 +34,11 @@
  *         status:
  *           type: string
  *           description: JobStatus e.g. ACCEPTED | SCHEDULED | IN_PROGRESS | CANCELLED
+ *         tab:
+ *           type: string
+ *           enum: [ACTIVE, COMPLETED, OTHER]
+ *           example: ACTIVE
+ *           description: Section/tab for My Jobs UI (ACTIVE = in progress, COMPLETED = finished, OTHER = cancelled)
  *         statusBadge:
  *           type: string
  *           description: Short UI badge derived from flowStatus
