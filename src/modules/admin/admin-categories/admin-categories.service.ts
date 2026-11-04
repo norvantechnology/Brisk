@@ -170,9 +170,9 @@ export const createCategory = async (adminId: string, adminLabel: string, input:
   }
 
   const { iconUrl, ...restInput } = input;
-  const dataToSave = {
+  const dataToSave: Prisma.CategoryCreateInput = {
     ...restInput,
-    iconName: iconUrl || input.iconName || null,
+    iconName: iconUrl ?? input.iconName ?? null,
   };
   const category = await prisma.category.create({
     data: dataToSave,
@@ -215,10 +215,14 @@ export const updateCategory = async (
   }
 
   const { iconUrl, ...restInput } = input;
-  const dataToSave = {
+  const dataToSave: Prisma.CategoryUpdateInput = {
     ...restInput,
-    ...(iconUrl ? { iconName: iconUrl } : {}),
   };
+  if (iconUrl !== undefined) {
+    dataToSave.iconName = iconUrl;
+  } else if (input.iconName !== undefined) {
+    dataToSave.iconName = input.iconName;
+  }
   const updatedCategory = await prisma.category.update({
     where: { id },
     data: dataToSave,

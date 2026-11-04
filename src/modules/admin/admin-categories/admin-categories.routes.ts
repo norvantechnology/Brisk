@@ -206,6 +206,7 @@ router.get('/categories/:id', validate(idParamSchema), categoryAdminController.g
  *         description: Category not found.
  */
 router.patch('/categories/:id', validate(updateCategorySchema), categoryAdminController.updateCategory);
+router.put('/categories/:id', validate(updateCategorySchema), categoryAdminController.updateCategory);
 
 /**
  * @swagger
@@ -469,6 +470,7 @@ router.get('/sub-categories/:id', validate(idParamSchema), categoryAdminControll
  *         description: Sub-Category not found.
  */
 router.patch('/sub-categories/:id', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
+router.put('/sub-categories/:id', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
 
 /**
  * @swagger
