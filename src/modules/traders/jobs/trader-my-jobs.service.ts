@@ -2069,6 +2069,64 @@ const formatMoneyWithSymbol = (currencySymbol: string, amount: number) => {
   return `${currencySymbol} ${amountDisplay}`;
 };
 
+const formatMoneyFixed2 = (currencySymbol: string, amount: number) => {
+  const rounded = round2(amount);
+  const sign = rounded < 0 ? '-' : '';
+  const absVal = Math.abs(rounded).toFixed(2);
+  return `${sign}${currencySymbol} ${absVal}`;
+};
+
+const buildOutcomePaymentSummaryList = (
+  summary: PaymentSummaryNumbers,
+  currency: { currencyCode: string; currencySymbol: string }
+): Array<{ label: string; amount: string }> => {
+  const format = (val: number) => formatMoneyFixed2(currency.currencySymbol, val);
+  const list: Array<{ label: string; amount: string }> = [];
+
+  list.push({
+    label: 'Service Fee',
+    amount: format(summary.baseRate),
+  });
+
+  if (summary.materialsTotal > 0) {
+    list.push({
+      label: 'Materials',
+      amount: format(summary.materialsTotal),
+    });
+  }
+
+  if (summary.siteVisitFee > 0) {
+    list.push({
+      label: 'Site Visit Fee',
+      amount: format(summary.siteVisitFee),
+    });
+  }
+
+  if (summary.platformFee > 0) {
+    list.push({
+      label: 'Platform Fee',
+      amount: format(summary.platformFee),
+    });
+  }
+
+  if (summary.offerApplied !== 0) {
+    list.push({
+      label: 'Offer Applied',
+      amount: `-${format(Math.abs(summary.offerApplied))}`,
+    });
+  }
+
+  if (summary.vatAmount > 0) {
+    const vatLabel = summary.vatPercentage ? `VAT (${summary.vatPercentage}%)` : 'VAT';
+    list.push({
+      label: vatLabel,
+      amount: format(summary.vatAmount),
+    });
+  }
+
+  return list;
+};
+
 const buildOutcomePaymentSummary = (
   job: MyJobRow,
   currency: { currencyCode: string; currencySymbol: string }
@@ -2229,6 +2287,18 @@ export const getJobOutcomeDetail = async (
   const ratingStatus = hasCustomerReview ? 'RATED' : 'PENDING';
   const canReview = !hasMyReview;
 
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+  const summaryNumbers = buildSubmitPaymentSummary(job);
+  const outcomePaymentSummary = buildOutcomePaymentSummary(job, currency);
+  const paymentSummaryList = buildOutcomePaymentSummaryList(summaryNumbers, currency);
+  const netPayout = formatMoneyFixed2(currency.currencySymbol, summaryNumbers.netPayout);
+  const totalAmount = formatMoneyFixed2(currency.currencySymbol, summaryNumbers.totalAmount);
+
   return {
     id: job.id,
     jobRef: job.jobRef ? (job.jobRef.startsWith('#') ? job.jobRef : `#${job.jobRef}`) : null,
@@ -2272,15 +2342,13 @@ export const getJobOutcomeDetail = async (
     /** Trader → customer review (null until submitted). */
     myReview,
     completionPhotos: proofPhotos.map((p) => p.photoUrl),
-    paymentSummary: buildOutcomePaymentSummary(
-      job,
-      await resolveDiscoverCurrency({
-        customerPreferredCurrency: job.customer.preferredCurrency,
-        traderPreferredCurrency: trader.user.preferredCurrency,
-        jobCountry: job.address?.country ?? job.customer.country,
-        traderCountry: trader.user.country ?? trader.country,
-      })
-    ),
+    netPayout,
+    totalAmount,
+    paymentSummaryList,
+    paymentSummary: {
+      ...outcomePaymentSummary,
+      paymentSummaryList,
+    },
     /** Full installment list — same shape as GET .../part-payment-history (FE truncates for UI). */
     previousPayments,
     previousPaymentsTotal,

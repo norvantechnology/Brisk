@@ -667,6 +667,18 @@ router.get('/mine/:id/process', validate(myJobIdParamSchema), controller.getProc
  *                 data:
  *                   type: object
  *                   properties:
+ *                     netPayout:
+ *                       type: string
+ *                       example: '£ 300.00'
+ *                       description: Global field for Net Payout amount formatted with currency
+ *                     paymentSummaryList:
+ *                       type: array
+ *                       description: Line-item breakdown list without Net Payout
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           label: { type: string, example: 'Service Fee' }
+ *                           amount: { type: string, example: '£ 300.00' }
  *                     previousPayments:
  *                       type: array
  *                       description: All part-payment history items (same shape as part-payment-history)
