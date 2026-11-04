@@ -44,6 +44,68 @@ const DEFAULT_POLICIES = [
       <p>You may request access, correction, or deletion of your personal data via the app (account deletion) or by contacting support.</p>
     `.trim(),
   },
+  {
+    name: 'Tax Information',
+    slug: 'brisk-trader-tax-information',
+    versionLabel: '1.0',
+    content: `
+      <h1>Tax Information</h1>
+      <p class="subtitle">Guidelines and tax responsibilities for independent traders using BRISK.</p>
+      <p>As an independent Trader on BRISK, you are self-employed or operate your own registered business. BRISK does not act as your employer, and you are responsible for your own tax, VAT, and revenue obligations.</p>
+      <h2>1. Self-Employment &amp; Tax Status</h2>
+      <p>All earnings generated from jobs completed on the BRISK platform are paid gross. You are personally responsible for reporting your income, paying income tax, PRSI / National Insurance contributions, and filing required tax returns with the relevant tax authorities (Revenue Commissioners in Ireland or HMRC in the UK).</p>
+      <h2>2. Tax Registration &amp; Identification</h2>
+      <p>Depending on your jurisdiction, you must register for tax and maintain valid identification details:</p>
+      <ul>
+        <li><strong>Republic of Ireland:</strong> A valid Personal Public Service Number (PPSN) or Tax Reference Number (TRN) registered with the Revenue Commissioners.</li>
+        <li><strong>United Kingdom:</strong> A valid Unique Taxpayer Reference (UTR) or National Insurance (NI) Number registered with HMRC.</li>
+      </ul>
+      <h2>3. Value Added Tax (VAT)</h2>
+      <p>You must determine whether you are required to register for VAT based on your business turnover and local tax thresholds:</p>
+      <ul>
+        <li>If you are VAT-registered, you must provide your VAT registration number during onboarding or under Profile settings.</li>
+        <li>When VAT is applicable, it will be clearly reflected on customer invoices and receipts issued for your services.</li>
+        <li>If you are not VAT-registered, you must not charge VAT to customers.</li>
+      </ul>
+      <h2>4. Records &amp; Invoicing</h2>
+      <p>BRISK provides digital job records, booking details, and payment payout summaries under your Earnings and Job History sections. We strongly recommend that you maintain complete accounting records, receipts, and invoices for your annual tax returns.</p>
+      <h2>5. DAC7 &amp; Regulatory Reporting</h2>
+      <p>In accordance with EU Council Directive 2021/514 (DAC7) and applicable digital platform reporting regulations, BRISK may be required to collect, verify, and report certain seller identity and transaction information to tax authorities annually.</p>
+      <h2>6. Independent Professional Advice</h2>
+      <p>BRISK provides marketplace technology and does not provide formal tax, accounting, or legal advice. If you have specific questions regarding your tax status or obligations, we encourage you to consult a qualified accountant or professional tax advisor.</p>
+    `.trim(),
+  },
+  {
+    name: 'Tax Information',
+    slug: 'tax-information',
+    versionLabel: '1.0',
+    content: `
+      <h1>Tax Information</h1>
+      <p class="subtitle">Guidelines and tax responsibilities for independent traders using BRISK.</p>
+      <p>As an independent Trader on BRISK, you are self-employed or operate your own registered business. BRISK does not act as your employer, and you are responsible for your own tax, VAT, and revenue obligations.</p>
+      <h2>1. Self-Employment &amp; Tax Status</h2>
+      <p>All earnings generated from jobs completed on the BRISK platform are paid gross. You are personally responsible for reporting your income, paying income tax, PRSI / National Insurance contributions, and filing required tax returns with the relevant tax authorities (Revenue Commissioners in Ireland or HMRC in the UK).</p>
+      <h2>2. Tax Registration &amp; Identification</h2>
+      <p>Depending on your jurisdiction, you must register for tax and maintain valid identification details:</p>
+      <ul>
+        <li><strong>Republic of Ireland:</strong> A valid Personal Public Service Number (PPSN) or Tax Reference Number (TRN) registered with the Revenue Commissioners.</li>
+        <li><strong>United Kingdom:</strong> A valid Unique Taxpayer Reference (UTR) or National Insurance (NI) Number registered with HMRC.</li>
+      </ul>
+      <h2>3. Value Added Tax (VAT)</h2>
+      <p>You must determine whether you are required to register for VAT based on your business turnover and local tax thresholds:</p>
+      <ul>
+        <li>If you are VAT-registered, you must provide your VAT registration number during onboarding or under Profile settings.</li>
+        <li>When VAT is applicable, it will be clearly reflected on customer invoices and receipts issued for your services.</li>
+        <li>If you are not VAT-registered, you must not charge VAT to customers.</li>
+      </ul>
+      <h2>4. Records &amp; Invoicing</h2>
+      <p>BRISK provides digital job records, booking details, and payment payout summaries under your Earnings and Job History sections. We strongly recommend that you maintain complete accounting records, receipts, and invoices for your annual tax returns.</p>
+      <h2>5. DAC7 &amp; Regulatory Reporting</h2>
+      <p>In accordance with EU Council Directive 2021/514 (DAC7) and applicable digital platform reporting regulations, BRISK may be required to collect, verify, and report certain seller identity and transaction information to tax authorities annually.</p>
+      <h2>6. Independent Professional Advice</h2>
+      <p>BRISK provides marketplace technology and does not provide formal tax, accounting, or legal advice. If you have specific questions regarding your tax status or obligations, we encourage you to consult a qualified accountant or professional tax advisor.</p>
+    `.trim(),
+  },
 ];
 
 export async function seedLegalPolicies(prisma: PrismaClient): Promise<void> {

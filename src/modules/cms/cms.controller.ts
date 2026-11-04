@@ -327,12 +327,13 @@ export const getLegalHtmlBySlug = async (
 };
 
 export const getHelpCenterHtml = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const html = await cmsService.getHelpCenterHtml();
+    const audience = typeof req.query.audience === 'string' ? req.query.audience : undefined;
+    const html = await cmsService.getHelpCenterHtml(audience);
     res.status(200).type('html').send(html);
   } catch (error) {
     next(error);

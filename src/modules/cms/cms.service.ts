@@ -761,11 +761,20 @@ export const getLegalHtmlBySlug = async (slug: string) => {
 };
 
 /** HTML Help Center for in-app WebView — published FAQs. */
-export const getHelpCenterHtml = async () => {
+export const getHelpCenterHtml = async (audience?: string) => {
+  const where: Prisma.CmsFaqWhereInput = {
+    status: CmsPublishStatus.PUBLISHED,
+  };
+
+  const targetAudience = audienceFilter(audience);
+  if (targetAudience) {
+    where.targetAudience = targetAudience;
+  }
+
   const faqs = await prisma.cmsFaq.findMany({
-    where: { status: CmsPublishStatus.PUBLISHED },
+    where,
     orderBy: [{ displayOrder: 'asc' }, { createdAt: 'desc' }],
-    take: 50,
+    take: 100,
     include: { category: { select: { name: true } } },
   });
 
@@ -784,20 +793,32 @@ export const getHelpCenterHtml = async () => {
     },
   ];
 
+  // Exclude any FAQs mentioning insurance (per client feedback)
+  const filteredFaqs = faqs.filter(
+    (f) =>
+      !f.question.toLowerCase().includes('insurance') &&
+      !f.answer.toLowerCase().includes('insurance')
+  );
+
+  const legalLinks = '<div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--brisk-border); display: flex; flex-wrap: wrap; gap: 20px; font-size: 15px;"><a href="/cms/legal/privacy-policy/html" style="color: var(--brisk-accent); text-decoration: underline; font-weight: 600;">Privacy Policy &rarr;</a><a href="/cms/legal/terms-and-conditions/html" style="color: var(--brisk-accent); text-decoration: underline; font-weight: 600;">Terms &amp; Conditions &rarr;</a></div>';
+
   const items =
-    faqs.length > 0
-      ? faqs
-          .map(
-            (faq) =>
-              `<div class="card"><div class="q">${escapeHtml(faq.question)}</div><div class="a">${faq.answer}</div></div>`
-          )
-          .join('')
+    filteredFaqs.length > 0
+      ? filteredFaqs
+          .map((faq) => {
+            // Fix any "BRISKS" typo to "Brisk's"
+            const cleanedAnswer = faq.answer
+              .replace(/\bBRISKS\b/g, "Brisk's")
+              .replace(/\bBrisks\b/g, "Brisk's");
+            return `<div class="card"><div class="q">${escapeHtml(faq.question)}</div><div class="a">${cleanedAnswer}</div></div>`;
+          })
+          .join('') + legalLinks
       : defaultCards
           .map(
             (item) =>
               `<div class="card"><div class="q">${escapeHtml(item.q)}</div><div class="a">${escapeHtml(item.a)}</div></div>`
           )
-          .join('');
+          .join('') + legalLinks;
 
   return wrapHtmlPage(
     'Help Center',
