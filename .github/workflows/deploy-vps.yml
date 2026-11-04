@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -18,6 +19,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          password: ${{ secrets.VPS_PASSWORD }}
           port: 22
           script: |
             set -e
@@ -33,7 +35,7 @@ jobs:
             git clean -fd
 
             echo "=== Installing dependencies ==="
-            npm ci
+            npm ci || npm install
 
             echo "=== Generating Prisma client ==="
             npx prisma generate --schema=src/database/schema.prisma
