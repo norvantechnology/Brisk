@@ -28,7 +28,6 @@ export interface CreateCategoryInput {
   description?: string;
   iconName?: string;
   iconUrl?: string;
-  iconUrl?: string;
   brandThemeColor?: string;
   bannerImageUrl?: string;
   displayOrder?: number;
