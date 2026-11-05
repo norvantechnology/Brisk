@@ -1024,6 +1024,11 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
       },
       { idempotencyKey: `invoice-payment-${payment.id}` }
     );
+    console.log('Payment Methods:', intent.payment_method_types);
+    console.log('Currency:', intent.currency);
+    console.log('Amount:', intent.amount);
+    console.log('Status:', intent.status);
+    console.log('Automatic Payment Methods:', intent.automatic_payment_methods);
     await prisma.payment.update({
       where: { id: payment.id },
       data: { stripePaymentIntentId: intent.id },
