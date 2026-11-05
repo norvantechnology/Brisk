@@ -247,7 +247,7 @@ export const syncTraderVerificationFromDocuments = async (traderId: string) => {
   };
 };
 
-const serializeTraderDocument = (doc: {
+export const serializeTraderDocument = (doc: {
   id: string;
   traderId: string;
   documentRuleId: string;

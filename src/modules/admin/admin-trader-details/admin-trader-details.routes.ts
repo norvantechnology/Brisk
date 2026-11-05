@@ -8,6 +8,9 @@ import {
   reviewTraderPayoutSchema,
   traderDetailsIdParamSchema,
   traderDocumentsQuerySchema,
+  traderDocumentIdParamSchema,
+  adminUploadTraderDocumentSchema,
+  adminUpdateTraderDocumentSchema,
   traderJobPayoutSummarySchema,
   traderJobsQuerySchema,
   traderOffersQuerySchema,
@@ -182,6 +185,149 @@ router.get(
   '/traders/:id/documents',
   validate(traderDocumentsQuerySchema),
   controller.listDocuments
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/documents:
+ *   post:
+ *     summary: Upload or replace a document for an individual trader
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Allows an administrator to upload or replace a KYC/trade document on behalf of a trader.
+ *       Automatically updates or inserts the trader document and synchronizes verification status.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Trader UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [documentRuleId, fileUrl]
+ *             properties:
+ *               documentRuleId:
+ *                 type: string
+ *                 format: uuid
+ *                 example: '33333333-3333-3333-3333-333333333333'
+ *               fileUrl:
+ *                 type: string
+ *                 format: uri
+ *                 example: 'https://cdn.example.com/docs/new-insurance.pdf'
+ *               fileName:
+ *                 type: string
+ *                 example: 'new-insurance.pdf'
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *                 example: '2027-12-31'
+ *               status:
+ *                 type: string
+ *                 enum: [PENDING, APPROVED, REJECTED]
+ *                 default: APPROVED
+ *     responses:
+ *       201:
+ *         description: Document uploaded/replaced successfully.
+ *       400: { $ref: '#/components/responses/AdminListValidationError' }
+ *       404:
+ *         description: Trader or document rule not found.
+ */
+router.post(
+  '/traders/:id/documents',
+  validate(adminUploadTraderDocumentSchema),
+  controller.uploadDocument
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/documents/{documentId}:
+ *   patch:
+ *     summary: Edit an individual trader's document
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Allows an administrator to edit document properties (status, rejection reason, expiry date, fileUrl, fileName)
+ *       for an individual trader.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Trader UUID
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Trader document UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [PENDING, APPROVED, REJECTED]
+ *               rejectionReason:
+ *                 type: string
+ *                 example: 'Document expired'
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *                 example: '2028-06-30'
+ *               fileUrl:
+ *                 type: string
+ *                 format: uri
+ *               fileName:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Document updated successfully.
+ *       404:
+ *         description: Trader or document not found.
+ */
+router.patch(
+  '/traders/:id/documents/:documentId',
+  validate(adminUpdateTraderDocumentSchema),
+  controller.updateDocument
+);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/documents/{documentId}:
+ *   delete:
+ *     summary: Delete an individual trader's document
+ *     tags: ['Admin / Trader Details']
+ *     security: [{ bearerAuth: [] }]
+ *     description: |
+ *       Permanently deletes an uploaded document for an individual trader and recalculates their compliance status.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Trader UUID
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Trader document UUID
+ *     responses:
+ *       200:
+ *         description: Document deleted successfully.
+ *       404:
+ *         description: Trader or document not found.
+ */
+router.delete(
+  '/traders/:id/documents/:documentId',
+  validate(traderDocumentIdParamSchema),
+  controller.deleteDocument
 );
 
 /**

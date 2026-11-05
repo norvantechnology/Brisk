@@ -22,7 +22,11 @@ import type {
 } from './admin-trader-details.validation';
 import { serializeOffer } from '../../offers/offers.serializers';
 import { getDocumentRequirementsForTrader } from '../../document-rules/document-rules.service';
-import { formatDocumentExpiryDate } from '../../document-rules/document-expiry';
+import { formatDocumentExpiryDate, parseDocumentExpiryDate } from '../../document-rules/document-expiry';
+import {
+  syncTraderVerificationFromDocuments,
+  serializeTraderDocument,
+} from '../admin-trader-verification/admin-trader-verification.service';
 import {
   listTraderSiteVisits,
   type TraderSiteVisitListQuery,
@@ -292,6 +296,142 @@ export const listTraderDocuments = async (
       reviewedAt: doc.reviewedAt,
       reviewedById: doc.reviewedById,
     })),
+  };
+};
+
+export const adminUploadTraderDocument = async (
+  traderId: string,
+  adminId: string,
+  input: {
+    documentRuleId: string;
+    fileUrl: string;
+    fileName?: string;
+    expiryDate?: string | null;
+    status?: TraderDocumentStatus;
+  }
+) => {
+  await assertTraderExists(traderId);
+  const rule = await prisma.documentRule.findUnique({ where: { id: input.documentRuleId } });
+  if (!rule) {
+    throw new NotFoundError('Document rule not found.');
+  }
+
+  const status = input.status ?? TraderDocumentStatus.APPROVED;
+  const expiryDate = parseDocumentExpiryDate(input.expiryDate);
+
+  const document = await prisma.traderDocument.upsert({
+    where: {
+      traderId_documentRuleId: {
+        traderId,
+        documentRuleId: input.documentRuleId,
+      },
+    },
+    create: {
+      traderId,
+      documentRuleId: input.documentRuleId,
+      fileUrl: input.fileUrl,
+      fileName: input.fileName ?? null,
+      expiryDate,
+      status,
+      reviewedAt: new Date(),
+      reviewedById: adminId,
+    },
+    update: {
+      fileUrl: input.fileUrl,
+      fileName: input.fileName ?? null,
+      expiryDate,
+      status,
+      rejectionReason: null,
+      reviewedAt: new Date(),
+      reviewedById: adminId,
+    },
+    include: {
+      documentRule: {
+        select: { id: true, documentKey: true, name: true, required: true },
+      },
+    },
+  });
+
+  const syncResult = await syncTraderVerificationFromDocuments(traderId);
+
+  return {
+    document: serializeTraderDocument(document),
+    trader: syncResult,
+  };
+};
+
+export const adminUpdateTraderDocument = async (
+  traderId: string,
+  documentId: string,
+  adminId: string,
+  input: {
+    fileUrl?: string;
+    fileName?: string;
+    expiryDate?: string | null;
+    status?: TraderDocumentStatus;
+    rejectionReason?: string | null;
+  }
+) => {
+  await assertTraderExists(traderId);
+  const existing = await prisma.traderDocument.findFirst({
+    where: { id: documentId, traderId },
+  });
+  if (!existing) {
+    throw new NotFoundError('Document not found for this trader.');
+  }
+
+  const data: Prisma.TraderDocumentUpdateInput = {};
+  if (input.fileUrl !== undefined) data.fileUrl = input.fileUrl;
+  if (input.fileName !== undefined) data.fileName = input.fileName;
+  if (input.expiryDate !== undefined) {
+    data.expiryDate = parseDocumentExpiryDate(input.expiryDate);
+    data.expiryReminderStage = null;
+  }
+  if (input.status !== undefined) {
+    data.status = input.status;
+    data.reviewedAt = new Date();
+    data.reviewedById = adminId;
+    data.rejectionReason =
+      input.status === TraderDocumentStatus.REJECTED ? input.rejectionReason ?? null : null;
+  }
+
+  const updated = await prisma.traderDocument.update({
+    where: { id: documentId },
+    data,
+    include: {
+      documentRule: {
+        select: { id: true, documentKey: true, name: true, required: true },
+      },
+    },
+  });
+
+  const syncResult = await syncTraderVerificationFromDocuments(traderId);
+
+  return {
+    document: serializeTraderDocument(updated),
+    trader: syncResult,
+  };
+};
+
+export const adminDeleteTraderDocument = async (traderId: string, documentId: string) => {
+  await assertTraderExists(traderId);
+  const existing = await prisma.traderDocument.findFirst({
+    where: { id: documentId, traderId },
+  });
+  if (!existing) {
+    throw new NotFoundError('Document not found for this trader.');
+  }
+
+  await prisma.traderDocument.delete({
+    where: { id: documentId },
+  });
+
+  const syncResult = await syncTraderVerificationFromDocuments(traderId);
+
+  return {
+    deleted: true,
+    documentId,
+    trader: syncResult,
   };
 };
 

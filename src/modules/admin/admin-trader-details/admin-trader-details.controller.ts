@@ -41,6 +41,72 @@ export const listDocuments = async (
   }
 };
 
+export const uploadDocument = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.adminUploadTraderDocument(
+      req.params.id,
+      req.adminUser!.id,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: 'Trader document uploaded successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateDocument = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.adminUpdateTraderDocument(
+      req.params.id,
+      req.params.documentId,
+      req.adminUser!.id,
+      req.body
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Trader document updated successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteDocument = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.adminDeleteTraderDocument(
+      req.params.id,
+      req.params.documentId
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Trader document deleted successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getJobsStats = async (
   req: AuthenticatedAdminRequest,
   res: Response,

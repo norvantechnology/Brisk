@@ -64,6 +64,48 @@ export const traderDocumentsQuerySchema = z.object({
   }),
 });
 
+export const traderDocumentIdParamSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid trader ID format.'),
+    documentId: z.string().uuid('Invalid document ID format.'),
+  }),
+});
+
+export const adminUploadTraderDocumentSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid trader ID format.'),
+  }),
+  body: z.object({
+    documentRuleId: z.string().uuid('Invalid document rule ID format.'),
+    fileUrl: z.string().url('Invalid file URL.'),
+    fileName: z.string().trim().max(255).optional(),
+    expiryDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry date must be in YYYY-MM-DD format.')
+      .nullable()
+      .optional(),
+    status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+  }),
+});
+
+export const adminUpdateTraderDocumentSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid trader ID format.'),
+    documentId: z.string().uuid('Invalid document ID format.'),
+  }),
+  body: z.object({
+    fileUrl: z.string().url('Invalid file URL.').optional(),
+    fileName: z.string().trim().max(255).optional(),
+    expiryDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry date must be in YYYY-MM-DD format.')
+      .nullable()
+      .optional(),
+    status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+    rejectionReason: z.string().trim().max(1000).nullable().optional(),
+  }),
+});
+
 export const traderJobsQuerySchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid trader ID format.'),
