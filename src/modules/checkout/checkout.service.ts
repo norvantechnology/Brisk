@@ -1007,12 +1007,29 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
 
   try {
     const customerId = await ensureStripeCustomer(userId);
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { fullName: true },
+    });
+
+    const isUk = (payment.currencyCode || 'GBP').toUpperCase() === 'GBP';
+    const shipping = {
+      name: (user?.fullName || invoice.booking?.customer?.fullName || 'Customer').trim(),
+      address: {
+        line1: context.job.addressLine || 'Property Address',
+        city: context.job.city || 'London',
+        postal_code: context.job.postcode || 'SW1A 1AA',
+        country: isUk ? 'GB' : 'GB',
+      },
+    };
+
     const intent = await getStripe().paymentIntents.create(
       {
         amount: toMinorUnits(amount, payment.currencyCode),
         currency: payment.currencyCode.toLowerCase(),
         customer: customerId,
-        automatic_payment_methods: { enabled: true },
+        payment_method_types: ['card', 'klarna'],
+        shipping,
         description: `Brisk ${base.orderId} — ${context.job.title}`,
         metadata: {
           kind: STRIPE_KIND_INVOICE,
@@ -1024,6 +1041,7 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
       },
       { idempotencyKey: `invoice-payment-${payment.id}` }
     );
+    console.log('PaymentIntent ID:', intent.id);
     console.log('Payment Methods:', intent.payment_method_types);
     console.log('Currency:', intent.currency);
     console.log('Amount:', intent.amount);
