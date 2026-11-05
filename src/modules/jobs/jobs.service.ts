@@ -951,6 +951,12 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
     jobRef = generateJobRef();
   }
 
+  const isSkipDelivery = Boolean(
+    subcategoryFlags?.name &&
+      /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(subcategoryFlags.name)
+  );
+  const resolvedTimeSlot = input.timeSlot || (isSkipDelivery ? 'ANYTIME' : undefined);
+
   const created = await prisma.$transaction(
     async (tx) => {
       const job = await tx.job.create({
@@ -965,7 +971,7 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
         title,
         description: input.description,
         scheduledDate: input.scheduledDate,
-        timeSlot: input.timeSlot,
+        timeSlot: resolvedTimeSlot,
         durationLabel: input.durationLabel,
         phoneNumber: input.phoneNumber,
         serviceCharge: input.serviceCharge,
