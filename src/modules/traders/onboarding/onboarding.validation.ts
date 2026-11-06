@@ -29,9 +29,8 @@ export const categoriesSchema = z.object({
     categoryIds: z.array(z.string().uuid()).min(1, 'Select at least one trade category'),
     /**
      * Profile only (`PUT /traders/me/categories`).
-     * false/omitted = merge (add) into existing selections — uploading docs for one
-     * trade must not drop others.
-     * true = full replace (explicit remove/re-pick).
+     * true / omitted = full replace (sync selection to categoryIds; unselected become inactive).
+     * false = merge (add) into existing selections without deactivating others.
      * Onboarding `PUT /traders/onboarding/categories` always replaces.
      */
     replace: z.boolean().optional(),

@@ -230,15 +230,9 @@ const serializeOnboardingStatus = async (
   registration: { currentStep: number; entityType: TraderType; status: string; stepData: Prisma.JsonValue | null }
 ) => {
   const selectedCategoryIds = trader.categories.map((item) => item.categoryId);
-  // Include trades that still have uploads even if temporarily deselected so
-  // Profile Category Documents does not look like files were deleted.
-  const uploadedCategoryIds = trader.documents
-    .map((d) => d.documentRule?.categoryId)
-    .filter((id): id is string => Boolean(id));
-  const categoryIds = [...new Set([...selectedCategoryIds, ...uploadedCategoryIds])];
   const documentRequirements = await buildDocumentRequirementsWithUploads(
     registration.entityType,
-    categoryIds,
+    selectedCategoryIds,
     trader.documents
   );
   const nextStep = await resolveAppNextStep({
@@ -432,9 +426,9 @@ export const getDocumentRequirements = async (userId: string) => {
     throw new BadRequestError('Start onboarding first via POST /traders/onboarding/start.');
   }
 
-  // Active + inactive trades so the trader can keep docs current before reactivating.
+  // Active trades only so document requirements match currently selected categories dynamically.
   const traderCategories = await prisma.traderCategory.findMany({
-    where: { traderId: trader.id },
+    where: { traderId: trader.id, isActive: true },
     orderBy: { createdAt: 'asc' },
     select: { categoryId: true, isActive: true },
   });
@@ -789,17 +783,8 @@ export const saveCategories = async (
 
   if (options?.allowAfterSubmit) {
     // Profile: trades are never deleted. Selected → active; with `replace`, others → inactive.
-    // Default (merge) only adds/re-activates, so a single-category save keeps sibling trades.
-    const replace = Boolean((input as { replace?: boolean }).replace);
-    const reactivating = await prisma.traderCategory.findMany({
-      where: { traderId: trader.id, categoryId: { in: selectedIds }, isActive: false },
-      select: { categoryId: true },
-    });
-    await assertCategoryDocumentsReady(
-      trader.id,
-      trader.traderType,
-      reactivating.map((row) => row.categoryId)
-    );
+    // Default (replace) updates active categories to match exactly the selected list.
+    const replace = (input as { replace?: boolean }).replace !== false;
     if (replace) {
       const deactivating = await prisma.traderCategory.findMany({
         where: { traderId: trader.id, categoryId: { notIn: selectedIds }, isActive: true },
