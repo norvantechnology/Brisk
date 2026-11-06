@@ -57,16 +57,15 @@ jobs:
               [ -z "$DB_USER" ] && DB_USER="brisk_user"
               [ -z "$DB_NAME" ] && DB_NAME="brisk_db"
 
-              cat > "$APP_DIR/.env" <<ENV
-NODE_ENV=production
-PORT=3000
-DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}
-DIRECT_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}
-JWT_SECRET=super_secret_jwt_key_brisk_production_2026
-CONTACT_FROM_EMAIL=noreply@brisk.ie
-MAIL_FROM=noreply@brisk.ie
-CONTACT_ADMIN_EMAIL=support@brisk.ie
-ENV
+              printf "%s\n" \
+                "NODE_ENV=production" \
+                "PORT=3000" \
+                "DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}" \
+                "DIRECT_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}" \
+                "JWT_SECRET=super_secret_jwt_key_brisk_production_2026" \
+                "CONTACT_FROM_EMAIL=noreply@brisk.ie" \
+                "MAIL_FROM=noreply@brisk.ie" \
+                "CONTACT_ADMIN_EMAIL=support@brisk.ie" > "$APP_DIR/.env"
               chmod 600 "$APP_DIR/.env"
               echo ".env successfully restored on VPS."
             fi
