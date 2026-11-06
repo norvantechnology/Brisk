@@ -785,16 +785,6 @@ export const saveCategories = async (
     // Profile: trades are never deleted. Selected → active; with `replace`, others → inactive.
     // Default (replace) updates active categories to match exactly the selected list.
     const replace = (input as { replace?: boolean }).replace !== false;
-    if (replace) {
-      const deactivating = await prisma.traderCategory.findMany({
-        where: { traderId: trader.id, categoryId: { notIn: selectedIds }, isActive: true },
-        select: { categoryId: true },
-      });
-      await assertNoActiveJobsInCategories(
-        trader.id,
-        deactivating.map((row) => row.categoryId)
-      );
-    }
     const existingActiveIds = new Set(
       trader.categories.filter((c) => c.isActive).map((c) => c.categoryId)
     );
