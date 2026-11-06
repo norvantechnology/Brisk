@@ -419,6 +419,8 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
       name: true,
       urlSlug: true,
       featured: true,
+      imageUrl: true,
+      bannerImageUrl: true,
       category: {
         select: { id: true, name: true, iconName: true, urlSlug: true, bannerImageUrl: true },
       },
@@ -431,7 +433,7 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
       subcategoryId: s.id,
       title: s.name,
       urlSlug: s.urlSlug,
-      imageUrl: s.category.bannerImageUrl ?? null,
+      imageUrl: s.imageUrl || s.bannerImageUrl || s.category.bannerImageUrl || null,
       category: {
         id: s.category.id,
         name: s.category.name,

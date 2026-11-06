@@ -68,6 +68,9 @@ type SubcategoryRow = Pick<
   | 'urlSlug'
   | 'featured'
   | 'status'
+  | 'imageUrl'
+  | 'bannerImageUrl'
+  | 'iconUrl'
   | 'siteVisitEnabled'
   | 'siteVisitFee'
   | 'priceEnabled'
@@ -112,6 +115,9 @@ export const serializeSubcategory = (
   urlSlug: sub.urlSlug,
   featured: sub.featured,
   status: sub.status,
+  imageUrl: sub.imageUrl ?? null,
+  bannerImageUrl: sub.bannerImageUrl ?? null,
+  iconUrl: sub.iconUrl ?? null,
   siteVisitEnabled: sub.siteVisitEnabled,
   /** Site-visit fee set on this subcategory. Null = not set; job form falls back to admin setting `site_visit.default_fee`. */
   siteVisitFee: sub.siteVisitFee != null ? Number(sub.siteVisitFee) : null,

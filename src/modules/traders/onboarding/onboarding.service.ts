@@ -755,7 +755,7 @@ export const saveCategories = async (
   input: CategoriesInput,
   options?: { allowAfterSubmit?: boolean }
 ) => {
-  const { trader } = await ensureTraderForUser(userId);
+  const { trader, user } = await ensureTraderForUser(userId);
   if (!options?.allowAfterSubmit) {
     assertOnboardingEditable(trader);
   }
@@ -764,7 +764,7 @@ export const saveCategories = async (
 
   const categories = await prisma.category.findMany({
     where: { id: { in: input.categoryIds }, status: 'active' },
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   if (categories.length !== input.categoryIds.length) {
@@ -796,6 +796,11 @@ export const saveCategories = async (
         deactivating.map((row) => row.categoryId)
       );
     }
+    const existingActiveIds = new Set(
+      trader.categories.filter((c) => c.isActive).map((c) => c.categoryId)
+    );
+    const addedIds = selectedIds.filter((id) => !existingActiveIds.has(id));
+
     await prisma.$transaction(async (tx) => {
       for (const categoryId of selectedIds) {
         await tx.traderCategory.upsert({
@@ -812,6 +817,24 @@ export const saveCategories = async (
       }
       await syncPrimaryCategory(tx, trader.id, trader.categoryId);
     });
+
+    if (addedIds.length > 0) {
+      const addedNames = categories
+        .filter((c) => addedIds.includes(c.id))
+        .map((c) => c.name);
+      if (addedNames.length > 0) {
+        void import('../../../services/trader-onboarding-notify.service').then(
+          ({ notifyTraderCategoryAdded }) =>
+            notifyTraderCategoryAdded({
+              userId,
+              fullName: user.fullName || trader.businessName || 'Trader',
+              email: user.email,
+              categoryNames: addedNames,
+            })
+        );
+      }
+    }
+
     return getOnboardingStatus(userId);
   }
 

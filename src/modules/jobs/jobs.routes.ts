@@ -1342,6 +1342,7 @@ router.post(
  *         description: Job is already cancelled.
  */
 router.post('/:id/cancel', ...customerOnly, validate(cancelJobSchema), controller.cancelJob);
+router.delete('/:id', ...customerOnly, validate(cancelJobSchema), controller.cancelJob);
 
 /**
  * @swagger

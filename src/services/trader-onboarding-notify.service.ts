@@ -509,3 +509,55 @@ export const notifyTraderDocumentReviewed = async (input: {
     }
   );
 };
+
+/** When a trader adds a new category/trade to their profile. */
+export const notifyTraderCategoryAdded = async (input: {
+  userId: string;
+  fullName: string;
+  email: string;
+  categoryNames: string[];
+}) => {
+  const categoriesList = input.categoryNames.join(', ');
+  const subject = 'New trade category added to your BRISK profile';
+  const name = escapeHtml(input.fullName || 'there');
+  const text = [
+    `Hi ${input.fullName},`,
+    '',
+    `You have successfully added new trade category: ${categoriesList} to your BRISK profile.`,
+    'If additional documents are required for this category, please make sure they are uploaded for review.',
+    '',
+    'Regards,',
+    'BRISK Team',
+  ].join('\n');
+
+  await sendBrandedMail({
+    to: input.email,
+    subject,
+    title: 'Category added',
+    audience: 'trader',
+    text,
+    paragraphs: [
+      `Hi ${name},`,
+      `You have successfully added the following trade category to your BRISK profile: <strong>${escapeHtml(categoriesList)}</strong>.`,
+      'If additional documents are required for this category, please ensure they are uploaded for review in the app.',
+    ],
+    cta: {
+      label: 'View categories & documents',
+      url: absoluteTraderWebUrl(traderNotificationActionUrl.dashboard()),
+    },
+  }).catch((err) => {
+    logger.warn('[NOTIFY] Trader category added email failed', { email: input.email, err: String(err) });
+  });
+
+  await notifyAdminsByEmail({
+    subject: `[BRISK] Trader added category: ${categoriesList}`,
+    text: `Trader ${input.fullName} (${input.email}) has added new trade categories: ${categoriesList}.`,
+    title: 'Trader category added',
+    cta: {
+      label: 'Open admin portal',
+      url: absoluteAdminWebUrl('/traders'),
+    },
+  }).catch((err) => {
+    logger.warn('[NOTIFY] Admin category added email failed', { email: input.email, err: String(err) });
+  });
+};

@@ -599,6 +599,9 @@ model Subcategory {
   urlSlug            String                      @map("url_slug")
   featured           Boolean                     @default(false)
   status             String                      @default("active") // active | inactive
+  imageUrl           String?                     @map("image_url")
+  bannerImageUrl     String?                     @map("banner_image_url")
+  iconUrl            String?                     @map("icon_url")
   /// Admin toggle: site visit required / available for this service
   siteVisitEnabled   Boolean                     @default(false) @map("site_visit_enabled")
   /// Site-visit fee charged when quoteType=ONSITE. Admin-configured; null/unset → 0 (no platform default).

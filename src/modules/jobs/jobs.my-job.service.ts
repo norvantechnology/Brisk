@@ -563,6 +563,7 @@ export const rescheduleJob = async (
       jobRef: true,
       title: true,
       status: true,
+      timeSlot: true,
       categoryId: true,
       subcategoryId: true,
       traderId: true,
@@ -604,9 +605,15 @@ export const rescheduleJob = async (
     throw new BadRequestError('This job cannot be rescheduled in its current status.');
   }
 
-  const scheduledDate = new Date(`${input.date}T00:00:00.000Z`);
+  const rawDateStr = input.date || input.scheduledDate;
+  const dateStr = rawDateStr ? rawDateStr.slice(0, 10) : '';
+  const scheduledDate = new Date(`${dateStr}T00:00:00.000Z`);
+  if (isNaN(scheduledDate.getTime())) {
+    throw new BadRequestError('Invalid date format. Expected YYYY-MM-DD or ISO date string.');
+  }
   const todayUtc = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
   if (scheduledDate < todayUtc) throw new BadRequestError('Please choose today or a future date.');
+  const finalTimeSlot = input.timeSlot?.trim() || job.timeSlot || 'ANYTIME';
 
   /** Reschedule = date + time only (site visit and non–site visit). Category is read-only. */
   const categoryChanged =
@@ -640,7 +647,7 @@ export const rescheduleJob = async (
       where: { id: jobId },
       data: {
         scheduledDate,
-        timeSlot: input.timeSlot,
+        timeSlot: finalTimeSlot,
         ...(job.status === JobStatus.ACCEPTED && job.booking && !siteVisitReschedule
           ? { status: JobStatus.SCHEDULED }
           : {}),
@@ -677,7 +684,7 @@ export const rescheduleJob = async (
       )?.userId ??
       null;
     if (traderUserId) {
-      const slot = asSiteVisitTimeSlot(siteVisit.timeSlot ?? '') ?? asSiteVisitTimeSlot(input.timeSlot);
+      const slot = asSiteVisitTimeSlot(siteVisit.timeSlot ?? '') ?? asSiteVisitTimeSlot(finalTimeSlot);
       emitSiteVisitUpdate({
         type: 'SITE_VISIT_RESCHEDULE_REQUESTED',
         recipientUserId: traderUserId,
@@ -692,13 +699,13 @@ export const rescheduleJob = async (
     await pushUserNotification(recipients, {
       type: 'JOB_RESCHEDULED',
       title: 'Job rescheduled',
-      message: `${byLabel} moved "${job.title}" to ${formatDisplayDay(scheduledDate)} (${input.timeSlot}).`,
+      message: `${byLabel} moved "${job.title}" to ${formatDisplayDay(scheduledDate)} (${finalTimeSlot}).`,
       data: {
         jobId,
         jobRef: job.jobRef,
         bookingId: job.booking?.id ?? null,
         scheduledDate: scheduledDate.toISOString(),
-        timeSlot: input.timeSlot,
+        timeSlot: finalTimeSlot,
       },
     });
   }

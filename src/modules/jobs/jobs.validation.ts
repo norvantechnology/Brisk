@@ -236,17 +236,22 @@ export const cancelJobSchema = z.object({
 
 export const rescheduleJobSchema = z.object({
   params: z.object({ id: uuid }),
-  body: z.object({
-    /** Customer may only change date + time (site visit and non–site visit). */
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD.'),
-    timeSlot: z.string().trim().min(1, 'timeSlot is required.').max(50),
-    /**
-     * Optional display echo only — must match the job’s current category if sent.
-     * Changing service is not allowed on reschedule.
-     */
-    serviceCategoryId: uuid.optional(),
-    serviceSubcategoryId: uuid.nullable().optional(),
-  }),
+  body: z
+    .object({
+      /** Customer may only change date + time (site visit and non–site visit). */
+      date: z.string().optional(),
+      scheduledDate: z.string().optional(),
+      timeSlot: z.string().trim().max(50).optional(),
+      /**
+       * Optional display echo only — must match the job’s current category if sent.
+       * Changing service is not allowed on reschedule.
+       */
+      serviceCategoryId: uuid.optional(),
+      serviceSubcategoryId: uuid.nullable().optional(),
+    })
+    .refine((data) => Boolean(data.date || data.scheduledDate), {
+      message: 'Please provide date or scheduledDate.',
+    }),
 });
 
 export const jobReviewSchema = z.object({
