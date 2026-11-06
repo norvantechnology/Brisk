@@ -34,6 +34,43 @@ jobs:
             git reset --hard origin/main
             git clean -fd
 
+            echo "=== Ensuring database container & valid .env ==="
+            if [ -f /opt/brisk-postgres.yml ]; then
+              docker compose -f /opt/brisk-postgres.yml up -d || true
+            fi
+
+            if [ ! -s "$APP_DIR/.env" ] || ! grep -q "DATABASE_URL=" "$APP_DIR/.env" || grep -q "catbox.moe" "$APP_DIR/.env"; then
+              echo "=== Recreating valid .env from VPS postgres config ==="
+              DB_USER=""
+              DB_PASS=""
+              DB_NAME=""
+              if [ -f /opt/brisk-postgres.yml ]; then
+                DB_USER=$(grep -E "POSTGRES_USER" /opt/brisk-postgres.yml | head -1 | awk '{print $NF}' | tr -d ' "\r\n')
+                DB_PASS=$(grep -E "POSTGRES_PASSWORD" /opt/brisk-postgres.yml | head -1 | awk '{print $NF}' | tr -d ' "\r\n')
+                DB_NAME=$(grep -E "POSTGRES_DB" /opt/brisk-postgres.yml | head -1 | awk '{print $NF}' | tr -d ' "\r\n')
+              fi
+              if [ -z "$DB_PASS" ] && command -v docker &>/dev/null; then
+                DB_USER=$(docker exec brisk_postgres printenv POSTGRES_USER 2>/dev/null || echo "brisk_user")
+                DB_PASS=$(docker exec brisk_postgres printenv POSTGRES_PASSWORD 2>/dev/null || echo "")
+                DB_NAME=$(docker exec brisk_postgres printenv POSTGRES_DB 2>/dev/null || echo "brisk_db")
+              fi
+              [ -z "$DB_USER" ] && DB_USER="brisk_user"
+              [ -z "$DB_NAME" ] && DB_NAME="brisk_db"
+
+              cat > "$APP_DIR/.env" <<ENV
+NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}
+DIRECT_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}
+JWT_SECRET=super_secret_jwt_key_brisk_production_2026
+CONTACT_FROM_EMAIL=noreply@brisk.ie
+MAIL_FROM=noreply@brisk.ie
+CONTACT_ADMIN_EMAIL=support@brisk.ie
+ENV
+              chmod 600 "$APP_DIR/.env"
+              echo ".env successfully restored on VPS."
+            fi
+
             echo "=== Installing dependencies ==="
             npm ci || npm install
 
