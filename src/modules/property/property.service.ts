@@ -536,6 +536,7 @@ const serializeSubscription = (
     status: string;
     expiryDate: Date | null;
     accountNumber?: string | null;
+    customProviderName?: string | null;
     utilityProvider: {
       id: string;
       name: string;
@@ -555,7 +556,8 @@ const serializeSubscription = (
     serviceType: sub.serviceType,
     serviceLabel: sub.utilityProvider.serviceLabel ?? sub.serviceType,
     providerId: sub.utilityProvider.id,
-    providerName: sub.utilityProvider.name,
+    providerName: sub.customProviderName || sub.utilityProvider.name,
+    customProviderName: sub.customProviderName ?? null,
     description: sub.utilityProvider.description,
     logoUrl: sub.utilityProvider.logoUrl,
     iconUrl: sub.utilityProvider.iconUrl ?? sub.utilityProvider.logoUrl,
@@ -730,6 +732,8 @@ export const savePropertySubscriptions = async (
         providerIds?: string[];
         subscriptions?: Array<{
           providerId: string;
+          providerName?: string | null;
+          customProviderName?: string | null;
           expiryDate?: string | Date | null;
           accountNumber?: string | null;
         }>;
@@ -776,6 +780,12 @@ export const savePropertySubscriptions = async (
           ? parseFlexibleDate(customSub.expiryDate)
           : provider.expiryDate;
       const accountNumber = customSub?.accountNumber ?? undefined;
+      const customProviderName =
+        customSub?.providerName !== undefined
+          ? (customSub.providerName?.trim() || null)
+          : customSub?.customProviderName !== undefined
+          ? (customSub.customProviderName?.trim() || null)
+          : undefined;
 
       await tx.subscription.upsert({
         where: {
@@ -791,12 +801,14 @@ export const savePropertySubscriptions = async (
           status: 'active',
           accountNumber,
           expiryDate,
+          customProviderName: customProviderName ?? null,
         },
         update: {
           status: 'active',
           serviceType: provider.serviceType,
           ...(customSub?.expiryDate !== undefined ? { expiryDate } : {}),
           ...(customSub?.accountNumber !== undefined ? { accountNumber } : {}),
+          ...(customProviderName !== undefined ? { customProviderName } : {}),
         },
       });
     }

@@ -546,6 +546,7 @@ model Subscription {
   serviceType       String    @map("service_type")
   accountNumber     String?   @map("account_number")
   status            String    @default("active") // active | cancelled
+  customProviderName String?  @map("custom_provider_name")
   /// Copied from provider on create when set; ISO datetime in API (same shape as createdAt).
   expiryDate        DateTime? @map("expiry_date")
   createdAt         DateTime  @default(now()) @map("created_at")
