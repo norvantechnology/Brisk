@@ -578,15 +578,45 @@ const syncCategories = async (traderId: string, categoryIds: string[]) => {
   }
   const categories = await prisma.category.findMany({
     where: { id: { in: categoryIds } },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (categories.length !== categoryIds.length) {
     throw new NotFoundError('One or more categoryIds are invalid.');
   }
+  const existing = await prisma.traderCategory.findMany({
+    where: { traderId },
+    select: { categoryId: true },
+  });
+  const existingSet = new Set(existing.map((e) => e.categoryId));
+  const newlyAdded = categoryIds.filter((cid) => !existingSet.has(cid));
+
   await prisma.traderCategory.deleteMany({ where: { traderId } });
   await prisma.traderCategory.createMany({
     data: categoryIds.map((categoryId) => ({ traderId, categoryId })),
   });
+
+  if (newlyAdded.length > 0) {
+    const trader = await prisma.trader.findUnique({
+      where: { id: traderId },
+      include: { user: true },
+    });
+    if (trader?.user) {
+      const addedNames = categories
+        .filter((c) => newlyAdded.includes(c.id))
+        .map((c) => c.name);
+      if (addedNames.length > 0) {
+        void import('../../../services/trader-onboarding-notify.service').then(
+          ({ notifyTraderCategoryAdded }) =>
+            notifyTraderCategoryAdded({
+              userId: trader.userId,
+              fullName: trader.user.fullName || trader.businessName || 'Trader',
+              email: trader.user.email,
+              categoryNames: addedNames,
+            })
+        );
+      }
+    }
+  }
 };
 
 export const createTrader = async (

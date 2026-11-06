@@ -713,7 +713,7 @@ export const setTraderCategoryActive = async (
   categoryId: string,
   isActive: boolean
 ) => {
-  const { trader } = await ensureTraderForUser(userId);
+  const { trader, user } = await ensureTraderForUser(userId);
   const link = await prisma.traderCategory.findUnique({
     where: { traderId_categoryId: { traderId: trader.id, categoryId } },
     select: { isActive: true },
@@ -721,16 +721,18 @@ export const setTraderCategoryActive = async (
   if (!link) {
     throw new NotFoundError('This trade category is not on your profile.');
   }
+  let activatedCategoryName: string | null = null;
   if (isActive && !link.isActive) {
     const category = await prisma.category.findFirst({
       where: { id: categoryId, status: 'active' },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!category) {
       throw new BadRequestError('This category is no longer available.', {
         code: 'CATEGORY_INACTIVE',
       });
     }
+    activatedCategoryName = category.name;
     await assertCategoryDocumentsReady(trader.id, trader.traderType, [categoryId]);
   }
   if (!isActive && link.isActive) {
@@ -745,6 +747,18 @@ export const setTraderCategoryActive = async (
       });
       await syncPrimaryCategory(tx, trader.id, trader.categoryId);
     });
+
+    if (isActive && activatedCategoryName) {
+      void import('../../../services/trader-onboarding-notify.service').then(
+        ({ notifyTraderCategoryAdded }) =>
+          notifyTraderCategoryAdded({
+            userId,
+            fullName: user.fullName || trader.businessName || 'Trader',
+            email: user.email,
+            categoryNames: [activatedCategoryName!],
+          })
+      );
+    }
   }
 
   return getOnboardingStatus(userId);
@@ -839,6 +853,8 @@ export const saveCategories = async (
   }
 
   const nextCategoryIds = selectedIds;
+  const existingIds = new Set(trader.categories.map((c) => c.categoryId));
+  const newlyAddedInDraft = nextCategoryIds.filter((id) => !existingIds.has(id));
 
   await prisma.$transaction(async (tx) => {
     await tx.traderCategory.deleteMany({ where: { traderId: trader.id } });
@@ -866,6 +882,23 @@ export const saveCategories = async (
       });
     }
   });
+
+  if (newlyAddedInDraft.length > 0) {
+    const addedNames = categories
+      .filter((c) => newlyAddedInDraft.includes(c.id))
+      .map((c) => c.name);
+    if (addedNames.length > 0) {
+      void import('../../../services/trader-onboarding-notify.service').then(
+        ({ notifyTraderCategoryAdded }) =>
+          notifyTraderCategoryAdded({
+            userId,
+            fullName: user.fullName || trader.businessName || 'Trader',
+            email: user.email,
+            categoryNames: addedNames,
+          })
+      );
+    }
+  }
 
   return getOnboardingStatus(userId);
 };

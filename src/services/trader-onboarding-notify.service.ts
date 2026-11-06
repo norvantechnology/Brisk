@@ -560,4 +560,15 @@ export const notifyTraderCategoryAdded = async (input: {
   }).catch((err) => {
     logger.warn('[NOTIFY] Admin category added email failed', { email: input.email, err: String(err) });
   });
+
+  await createUserNotification(input.userId, 'TRADER_CATEGORY_ADDED', {
+    title: 'New category added',
+    message: `You added ${categoriesList} to your BRISK profile.`,
+    actionUrl: traderNotificationActionUrl.dashboard(),
+  }).catch((err) => {
+    logger.warn('[NOTIFY] In-app category added notification failed', {
+      userId: input.userId,
+      err: String(err),
+    });
+  });
 };
