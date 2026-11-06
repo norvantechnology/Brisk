@@ -24,6 +24,7 @@ import {
 
 const router = Router();
 const customerOnly = [authMiddleware, roleMiddleware(['CUSTOMER'] as const)];
+const jobRescheduleAuth = [authMiddleware, roleMiddleware(['CUSTOMER', 'TRADER'] as const)];
 
 /**
  * @swagger
@@ -1533,7 +1534,7 @@ router.get('/:id/progress', ...customerOnly, validate(jobIdParamSchema), control
  *           `Only the date and time can be rescheduled. The service category cannot be changed.`
  *       404: { description: Job not found }
  */
-router.post('/:id/reschedule', ...customerOnly, validate(rescheduleJobSchema), controller.rescheduleJob);
+router.post('/:id/reschedule', ...jobRescheduleAuth, validate(rescheduleJobSchema), controller.rescheduleJob);
 
 /**
  * @swagger

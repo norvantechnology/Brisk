@@ -16,6 +16,7 @@ import {
   myJobSubmitCompletionBodySchema,
   myJobsListQuerySchema,
 } from './trader-my-jobs.validation';
+import { rescheduleJobSchema } from '../../jobs/jobs.validation';
 
 const router = Router();
 
@@ -1532,6 +1533,12 @@ router.get(
   '/mine/:id/invoice/download',
   validate(myJobIdParamSchema),
   controller.downloadJobInvoice
+);
+
+router.post(
+  '/mine/:id/reschedule',
+  validate(rescheduleJobSchema),
+  controller.rescheduleMyJob
 );
 
 export default router;

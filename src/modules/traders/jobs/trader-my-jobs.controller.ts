@@ -3,6 +3,7 @@ import { sendResponse } from '../../../utils/apiResponse';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
 import * as service from './trader-my-jobs.service';
 import * as tradersService from '../traders.service';
+import * as myJobService from '../../jobs/jobs.my-job.service';
 
 export const listMyJobs = async (
   req: AuthenticatedRequest,
@@ -601,6 +602,25 @@ export const downloadJobInvoice = async (
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', String(buffer.length));
     res.status(200).send(buffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rescheduleMyJob = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await tradersService.ensureTraderProfile(req.user!.id);
+    const data = await myJobService.rescheduleJob(req.user!.id, req.params.id, req.body, 'TRADER');
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Job rescheduled successfully.',
+      data,
+    });
   } catch (error) {
     next(error);
   }

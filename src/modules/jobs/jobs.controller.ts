@@ -30,7 +30,7 @@ export const getJobProgress = respond(200, 'Job progress retrieved successfully.
 );
 
 export const rescheduleJob = respond(200, 'Job rescheduled successfully.', (req) =>
-  myJobService.rescheduleJob(req.user!.id, req.params.id, req.body)
+  myJobService.rescheduleJob(req.user!.id, req.params.id, req.body, req.user!.role as any)
 );
 
 export const submitJobReview = respond(201, 'Thank you! Your review has been submitted.', (req) =>

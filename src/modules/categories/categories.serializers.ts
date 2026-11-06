@@ -44,6 +44,68 @@ export const resolveCategoryIconUrl = (
   return null;
 };
 
+const DEFAULT_SUBCATEGORY_ICON_BASE_URL = 'https://cdn.brisk.com/icons/subcategories';
+
+/**
+ * Resolve a fetchable icon URL for subcategories.
+ * Priority: iconUrl (if full URL or absolute path) → imageUrl → SUBCATEGORY_ICON_BASE_URL/{urlSlug}.svg → null.
+ */
+export const resolveSubcategoryIconUrl = (
+  sub: {
+    urlSlug?: string | null;
+    iconUrl?: string | null;
+    imageUrl?: string | null;
+    bannerImageUrl?: string | null;
+  }
+): string | null => {
+  const icon = sub.iconUrl;
+  if (typeof icon === 'string' && icon.trim()) {
+    if (isHttpUrl(icon)) {
+      return icon;
+    }
+    if (icon.startsWith('/')) {
+      const publicBase = (
+        process.env.UPLOAD_PUBLIC_BASE_URL ||
+        process.env.PUBLIC_API_URL ||
+        'http://104.207.88.181:3000'
+      ).replace(/\/$/, '');
+      return `${publicBase}${icon}`;
+    }
+  }
+
+  const img = sub.imageUrl;
+  if (typeof img === 'string' && img.trim()) {
+    if (isHttpUrl(img)) {
+      return img;
+    }
+    if (img.startsWith('/')) {
+      const publicBase = (
+        process.env.UPLOAD_PUBLIC_BASE_URL ||
+        process.env.PUBLIC_API_URL ||
+        'http://104.207.88.181:3000'
+      ).replace(/\/$/, '');
+      return `${publicBase}${img}`;
+    }
+  }
+
+  const baseUrl = (
+    process.env.SUBCATEGORY_ICON_BASE_URL ??
+    (process.env.CATEGORY_ICON_BASE_URL
+      ? `${process.env.CATEGORY_ICON_BASE_URL.replace(/\/$/, '')}/subcategories`
+      : DEFAULT_SUBCATEGORY_ICON_BASE_URL)
+  ).replace(/\/$/, '');
+
+  if (sub.urlSlug) {
+    return `${baseUrl}/${sub.urlSlug}.svg`;
+  }
+
+  if (isHttpUrl(sub.bannerImageUrl)) {
+    return sub.bannerImageUrl ?? null;
+  }
+
+  return null;
+};
+
 /** Trader category-wise required docs status (for blue highlight when complete). */
 export type CategoryDocumentsStatus = 'ACTIVE' | 'PENDING' | 'N_A';
 
@@ -117,7 +179,7 @@ export const serializeSubcategory = (
   status: sub.status,
   imageUrl: sub.imageUrl ?? null,
   bannerImageUrl: sub.bannerImageUrl ?? null,
-  iconUrl: sub.iconUrl ?? null,
+  iconUrl: resolveSubcategoryIconUrl(sub),
   siteVisitEnabled: sub.siteVisitEnabled,
   /** Site-visit fee set on this subcategory. Null = not set; job form falls back to admin setting `site_visit.default_fee`. */
   siteVisitFee: sub.siteVisitFee != null ? Number(sub.siteVisitFee) : null,

@@ -26,6 +26,7 @@ import {
   resolveSiteVisitIntent,
   str,
 } from './jobs.form-config';
+import { resolveSubcategoryIconUrl } from '../categories/categories.serializers';
 import type {
   CreateJobInput,
   PublishAddressObject,
@@ -3111,6 +3112,8 @@ export const getJobFormConfig = async (
       ? {
           id: subcategoryFlags.id,
           name: str(subcategoryFlags.name),
+          imageUrl: subcategoryFlags.imageUrl ?? null,
+          iconUrl: resolveSubcategoryIconUrl(subcategoryFlags),
           siteVisitEnabled: subcategoryFlags.siteVisitEnabled,
           siteVisitFee: resolveSiteVisitFee(subcategoryFlags),
           priceEnabled: subcategoryFlags.priceEnabled,
@@ -3119,6 +3122,8 @@ export const getJobFormConfig = async (
       : {
           id: '',
           name: '',
+          imageUrl: null,
+          iconUrl: null,
           siteVisitEnabled: false,
           siteVisitFee: 0,
           priceEnabled: true,
