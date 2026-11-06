@@ -551,12 +551,14 @@ const serializeSubscription = (
   addressRefs?: { mprnNumber?: string | null; gprnNumber?: string | null }
 ) => {
   const refs = meterRefForService(sub.serviceType, meters, addressRefs);
+  const displayName = sub.customProviderName || sub.utilityProvider.name;
   return {
     id: sub.id,
     serviceType: sub.serviceType,
     serviceLabel: sub.utilityProvider.serviceLabel ?? sub.serviceType,
     providerId: sub.utilityProvider.id,
-    providerName: sub.customProviderName || sub.utilityProvider.name,
+    name: displayName,
+    providerName: displayName,
     customProviderName: sub.customProviderName ?? null,
     description: sub.utilityProvider.description,
     logoUrl: sub.utilityProvider.logoUrl,
@@ -569,6 +571,12 @@ const serializeSubscription = (
     gprnNumber: refs.gprnNumber,
     referenceNumber: refs.referenceNumber,
     referenceLabel: refs.referenceLabel,
+    utilityProvider: {
+      ...sub.utilityProvider,
+      name: displayName,
+      providerName: displayName,
+      customProviderName: sub.customProviderName ?? null,
+    },
   };
 };
 
@@ -732,9 +740,10 @@ export const savePropertySubscriptions = async (
         providerIds?: string[];
         subscriptions?: Array<{
           providerId: string;
+          name?: string | null;
           providerName?: string | null;
           customProviderName?: string | null;
-          expiryDate?: string | Date | null;
+          expiryDate?: string | Date | number | null;
           accountNumber?: string | null;
         }>;
       }
@@ -751,12 +760,14 @@ export const savePropertySubscriptions = async (
 
   const providers = uniqueIds.length
     ? await prisma.utilityProvider.findMany({
-        where: { id: { in: uniqueIds }, isActive: true },
+        where: { id: { in: uniqueIds } },
       })
     : [];
 
   if (providers.length !== uniqueIds.length) {
-    throw new BadRequestError('One or more utility providers are invalid.');
+    const foundIds = new Set(providers.map((p) => p.id));
+    const missingIds = uniqueIds.filter((id) => !foundIds.has(id));
+    throw new BadRequestError(`Invalid or unknown utility provider ID(s): ${missingIds.join(', ')}`);
   }
 
   await prisma.$transaction(async (tx) => {
@@ -783,6 +794,8 @@ export const savePropertySubscriptions = async (
       const customProviderName =
         customSub?.providerName !== undefined
           ? (customSub.providerName?.trim() || null)
+          : (customSub as { name?: string | null })?.name !== undefined
+          ? ((customSub as { name?: string | null }).name?.trim() || null)
           : customSub?.customProviderName !== undefined
           ? (customSub.customProviderName?.trim() || null)
           : undefined;
