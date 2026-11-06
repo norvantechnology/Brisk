@@ -5,6 +5,7 @@ import {
   absoluteAdminWebUrl,
   absoluteTraderWebUrl,
   buildBrandedEmailHtml,
+  type EmailAudience,
   escapeHtml,
   getAdminEmailCc,
   sendBrandedMail,
@@ -40,6 +41,7 @@ export const notifyAdminsByEmail = async (input: {
   text: string;
   title: string;
   cta?: { label: string; url: string };
+  audience?: EmailAudience;
 }) => {
   const paragraphs = input.text
     .split(/\n\n+/)
@@ -48,7 +50,7 @@ export const notifyAdminsByEmail = async (input: {
   const html = buildBrandedEmailHtml({
     title: input.title,
     paragraphs,
-    audience: 'customer',
+    audience: input.audience ?? 'trader',
     cta: input.cta,
   });
 
