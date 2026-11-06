@@ -619,13 +619,11 @@ router.delete(
  *       Trades are **never deleted** from Profile — they are activated / deactivated.
  *       To toggle one trade use `PATCH /traders/me/categories/{categoryId}`.
  *
- *       **Merge by default:** `categoryIds` are added (or re-activated).
- *       `replace: true` → listed trades active, every other trade on the profile becomes **inactive**
- *       (documents are kept). At least one trade must stay active.
+ *       **Replace by default:** `categoryIds` become the active trades; any omitted trades on the profile become **inactive**
+ *       (documents are kept). Set `replace: false` for merge mode. At least one trade must stay active.
  *       Inactive trades get no Discover jobs, incoming jobs, or realtime job alerts.
- *       `selectedCategories` = active trades only (same as before); `allCategories[]` = every trade with `isActive`.
- *       Re-activating an inactive trade via `categoryIds` follows the same document rule as the PATCH (`CATEGORY_DOCUMENTS_REQUIRED`).
- *       With `replace: true`, trades being switched off must have no active jobs (`CATEGORY_HAS_ACTIVE_JOBS`).
+ *       `selectedCategories` = active trades only; `allCategories[]` = every trade with `isActive`.
+ *       Trades being switched off must have no active jobs (`CATEGORY_HAS_ACTIVE_JOBS`).
  *     requestBody:
  *       required: true
  *       content:
@@ -640,7 +638,7 @@ router.delete(
  *               replace:
  *                 type: boolean
  *                 description: |
- *                   Profile only. Default false = merge/add. true = replace full list.
+ *                   Profile only. Default true = replace active list. false = merge/add.
  *     responses:
  *       200:
  *         description: Categories updated. Onboarding snapshot in `data` (includes documentRequirements).
