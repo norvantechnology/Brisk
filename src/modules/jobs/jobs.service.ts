@@ -1885,6 +1885,8 @@ const buildCustomerJobView = async (
     completionConfirmedAt: job.booking?.customerConfirmedAt ?? null,
     canConfirmCompletion:
       kind === 'COMPLETED' && finished && Boolean(job.booking) && !job.booking?.customerConfirmedAt && activeDisputes === 0,
+    /** Whether the customer can cancel this job (no payment made yet). */
+    canCancel: !cancelled && !finished && totalPaid === 0,
   };
   return { job, view };
 };
@@ -1947,6 +1949,7 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     downloadUrl: view.downloadUrl,
     receiptUrl: view.receiptUrl,
     canReview: view.canReview,
+    canCancel: view.canCancel,
   };
 };
 
