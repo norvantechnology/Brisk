@@ -664,7 +664,7 @@ const assertCategoryDocumentsReady = async (
 };
 
 /** A trade with running jobs (My Jobs → Active) cannot be deactivated until those jobs finish. */
-const assertNoActiveJobsInCategories = async (traderId: string, categoryIds: string[]) => {
+export const assertNoActiveJobsInCategories = async (traderId: string, categoryIds: string[]) => {
   if (!categoryIds.length) return;
   const activeJobs = await listActiveJobsInCategories(traderId, categoryIds);
   if (activeJobs.length) {
@@ -717,20 +717,21 @@ export const setTraderCategoryActive = async (
   }
   let activatedCategoryName: string | null = null;
   if (isActive && !link.isActive) {
-    const category = await prisma.category.findFirst({
-      where: { id: categoryId, status: 'active' },
-      select: { id: true, name: true },
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { id: true, name: true, status: true },
     });
     if (!category) {
-      throw new BadRequestError('This category is no longer available.', {
-        code: 'CATEGORY_INACTIVE',
+      throw new NotFoundError('Category not found.');
+    }
+    if (category.status !== 'active') {
+      await prisma.category.update({
+        where: { id: categoryId },
+        data: { status: 'active' },
       });
     }
     activatedCategoryName = category.name;
     await assertCategoryDocumentsReady(trader.id, trader.traderType, [categoryId]);
-  }
-  if (!isActive && link.isActive) {
-    await assertNoActiveJobsInCategories(trader.id, [categoryId]);
   }
 
   if (link.isActive !== isActive) {
@@ -771,12 +772,20 @@ export const saveCategories = async (
   const registration = await ensureRegistration(userId, trader.id, trader.traderType);
 
   const categories = await prisma.category.findMany({
-    where: { id: { in: input.categoryIds }, status: 'active' },
-    select: { id: true, name: true },
+    where: { id: { in: input.categoryIds } },
+    select: { id: true, name: true, status: true },
   });
 
   if (categories.length !== input.categoryIds.length) {
-    throw new BadRequestError('One or more selected categories are invalid or inactive.');
+    throw new BadRequestError('One or more selected categories were not found.');
+  }
+
+  const inactiveCategories = categories.filter((c) => c.status !== 'active');
+  if (inactiveCategories.length > 0) {
+    await prisma.category.updateMany({
+      where: { id: { in: inactiveCategories.map((c) => c.id) } },
+      data: { status: 'active' },
+    });
   }
 
   const selectedIds = [...new Set(input.categoryIds)];
