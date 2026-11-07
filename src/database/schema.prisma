@@ -650,7 +650,6 @@ model Job {
   durationLabel String?   @map("duration_label")
   phoneNumber   String?   @map("phone_number")
   additionalName String?  @map("additional_name")
-  additionalNumber String? @map("additional_number")
   /// Direct Trader flow: quoted/service charge before fees & discounts
   serviceCharge Decimal?  @map("service_charge") @db.Decimal(10, 2)
   /// Post a New Job — quote type (show/hide driven by subcategory + offerApplied)

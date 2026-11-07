@@ -337,7 +337,6 @@ export const buildNextJobPrefill = (input: {
     durationLabel: '',
     phoneNumber: '',
     additionalName: '',
-    additionalNumber: '',
     description: '',
     photoUrls: [] as string[],
   };
