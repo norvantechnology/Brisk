@@ -75,6 +75,12 @@ export interface CreateSubcategoryInput {
   serviceType?: string;
   code?: string;
   urlSlug: string;
+  imageUrl?: string | null;
+  image?: string | null;
+  bannerImageUrl?: string | null;
+  bannerImage?: string | null;
+  iconUrl?: string | null;
+  icon?: string | null;
   featured?: boolean;
   status?: string;
   siteVisitEnabled?: boolean;
@@ -90,6 +96,12 @@ export interface UpdateSubcategoryInput {
   serviceType?: string;
   code?: string;
   urlSlug?: string;
+  imageUrl?: string | null;
+  image?: string | null;
+  bannerImageUrl?: string | null;
+  bannerImage?: string | null;
+  iconUrl?: string | null;
+  icon?: string | null;
   featured?: boolean;
   status?: string;
   siteVisitEnabled?: boolean;

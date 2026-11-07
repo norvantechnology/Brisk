@@ -410,11 +410,17 @@ export const createSubcategory = async (adminId: string, adminLabel: string, inp
     throw new NotFoundError('Parent Category not found.');
   }
 
-  const { qaFormSchema, ...rest } = input;
+  const { qaFormSchema, image, icon, bannerImage, ...rest } = input;
+  const resolvedImageUrl = input.imageUrl !== undefined ? input.imageUrl : image;
+  const resolvedIconUrl = input.iconUrl !== undefined ? input.iconUrl : icon;
+  const resolvedBannerImageUrl = input.bannerImageUrl !== undefined ? input.bannerImageUrl : bannerImage;
 
   const subcategory = await prisma.subcategory.create({
     data: {
       ...rest,
+      ...(resolvedImageUrl !== undefined ? { imageUrl: resolvedImageUrl } : {}),
+      ...(resolvedIconUrl !== undefined ? { iconUrl: resolvedIconUrl } : {}),
+      ...(resolvedBannerImageUrl !== undefined ? { bannerImageUrl: resolvedBannerImageUrl } : {}),
       qaFormSchema: qaFormSchema === null ? Prisma.JsonNull : qaFormSchema ?? undefined,
     },
     include: {
@@ -461,12 +467,18 @@ export const updateSubcategory = async (
     if (!parentCategory) throw new NotFoundError('Parent Category not found.');
   }
 
-  const { qaFormSchema, ...rest } = input;
+  const { qaFormSchema, image, icon, bannerImage, ...rest } = input;
+  const resolvedImageUrl = input.imageUrl !== undefined ? input.imageUrl : image;
+  const resolvedIconUrl = input.iconUrl !== undefined ? input.iconUrl : icon;
+  const resolvedBannerImageUrl = input.bannerImageUrl !== undefined ? input.bannerImageUrl : bannerImage;
 
   const updatedSubcategory = await prisma.subcategory.update({
     where: { id },
     data: {
       ...rest,
+      ...(resolvedImageUrl !== undefined ? { imageUrl: resolvedImageUrl } : {}),
+      ...(resolvedIconUrl !== undefined ? { iconUrl: resolvedIconUrl } : {}),
+      ...(resolvedBannerImageUrl !== undefined ? { bannerImageUrl: resolvedBannerImageUrl } : {}),
       ...(qaFormSchema !== undefined
         ? { qaFormSchema: qaFormSchema === null ? Prisma.JsonNull : qaFormSchema }
         : {}),
@@ -535,22 +547,21 @@ export const listSubcategoriesDropdown = async (categoryId?: string) => {
 export const deleteSubcategory = async (adminId: string, adminLabel: string, id: string) => {
   const subcategory = await prisma.subcategory.findUnique({
     where: { id },
-    include: {
-      _count: {
-        select: { jobs: true },
-      },
-    },
   });
 
   if (!subcategory) {
     throw new NotFoundError('Sub-category not found.');
   }
 
-  if (subcategory._count.jobs > 0) {
-    throw new BadRequestError(`Cannot delete sub-category: it has ${subcategory._count.jobs} associated jobs.`);
-  }
-
-  await prisma.subcategory.delete({ where: { id } });
+  // Null-out subcategoryId on any jobs referencing this sub-category before deleting,
+  // since Job.subcategoryId has no onDelete cascade in the DB schema.
+  await prisma.$transaction(async (tx) => {
+    await tx.job.updateMany({
+      where: { subcategoryId: id },
+      data: { subcategoryId: null },
+    });
+    await tx.subcategory.delete({ where: { id } });
+  });
 
   await prisma.auditLog.create({
     data: {

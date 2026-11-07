@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { getPlatformSetting } from '../modules/settings/platform-settings.service';
 import { createUserNotifications } from '../modules/notifications/notifications.service';
 import { userNotificationMeta } from '../modules/notifications/notification-types';
+import { resolveUserNotificationActionUrl } from '../modules/notifications/notification-action-urls';
 import { getCurrencyMeta } from '../services/currency.service';
 import { sendPushToUsers } from '../services/push.service';
 import {
@@ -101,6 +102,8 @@ export const pushUserNotification = async (
 
   const byUser = new Map((persisted ?? []).map((p) => [p.userId, p.notification]));
   const meta = userNotificationMeta(input.type);
+  const actionUrl = resolveUserNotificationActionUrl(input.type, input.data);
+  const jobId = input.data?.jobId ? String(input.data.jobId) : undefined;
   const pushItems: Parameters<typeof sendPushToUsers>[0] = [];
   for (const userId of ids) {
     const notification = byUser.get(userId);
@@ -116,6 +119,8 @@ export const pushUserNotification = async (
           type: input.type,
           tab: meta.tab,
           section: meta.section,
+          ...(jobId ? { jobId } : {}),
+          ...(actionUrl ? { actionUrl, url: actionUrl, route: actionUrl } : {}),
           ...(notification ? { notificationId: notification.id } : {}),
         },
       },
@@ -127,6 +132,7 @@ export const pushUserNotification = async (
       message: input.message,
       data: input.legacyData ?? input.data ?? {},
       at,
+      actionUrl,
       ...meta,
       ...(notification ? { id: notification.id, notification } : {}),
     });

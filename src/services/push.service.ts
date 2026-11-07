@@ -65,11 +65,29 @@ export const sendPushToUsers = async (items: Array<{ userId: string; payload: Pu
   if (!app) return;
 
   try {
-    const devices = await prisma.deviceToken.findMany({
+    const allDevices = await prisma.deviceToken.findMany({
       where: { userId: { in: [...new Set(items.map((i) => i.userId))] } },
+      orderBy: { updatedAt: 'desc' },
       select: { userId: true, token: true },
     });
-    if (!devices.length) return;
+    if (!allDevices.length) return;
+
+    // Dedupe: keep only the most recent device token per user to prevent duplicate push notifications
+    const seenUsers = new Set<string>();
+    const devices = allDevices.filter(({ userId }) => {
+      if (seenUsers.has(userId)) return false;
+      seenUsers.add(userId);
+      return true;
+    });
+
+    // Cleanup older tokens for these users in background
+    if (allDevices.length > devices.length) {
+      const activeTokens = new Set(devices.map((d) => d.token));
+      const staleUserTokens = allDevices.filter((d) => !activeTokens.has(d.token)).map((d) => d.token);
+      if (staleUserTokens.length) {
+        void prisma.deviceToken.deleteMany({ where: { token: { in: staleUserTokens } } }).catch(() => {});
+      }
+    }
 
     const payloadByUser = new Map(items.map((i) => [i.userId, i.payload]));
     const messages: Message[] = devices.map(({ userId, token }) => {

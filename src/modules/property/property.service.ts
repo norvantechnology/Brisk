@@ -705,10 +705,23 @@ export const submitMeterReading = async (
 };
 
 export const listUtilityProviders = async () => {
-  const providers = await prisma.utilityProvider.findMany({
+  let providers = await prisma.utilityProvider.findMany({
     where: { isActive: true },
     orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
   });
+
+  if (providers.length === 0) {
+    try {
+      const { seedPropertyModule } = await import('../../database/seeders/property.seed');
+      await seedPropertyModule(prisma);
+      providers = await prisma.utilityProvider.findMany({
+        where: { isActive: true },
+        orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+      });
+    } catch {
+      // Ignore seeding errors in query path
+    }
+  }
 
   return providers.map((provider) => ({
     id: provider.id,

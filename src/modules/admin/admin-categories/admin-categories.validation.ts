@@ -86,15 +86,23 @@ export const qaFormSchema = z.array(qaFormFieldSchema).superRefine((fields, ctx)
   });
 });
 
+const optionalImageInput = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((v) => (typeof v === 'string' && v.trim() ? v.trim() : null));
+
 const subcategoryBodyBase = {
   categoryId: z.string().uuid('Invalid Category ID format.'),
   name: z.string().min(1, 'Sub-category name is required.'),
   serviceType: z.string().optional(),
   code: z.string().optional(),
   urlSlug: z.string().min(1, 'URL slug is required.'),
-  imageUrl: z.string().url().optional().nullable().or(z.literal('')).transform((v) => v || null),
-  bannerImageUrl: z.string().url().optional().nullable().or(z.literal('')).transform((v) => v || null),
-  iconUrl: z.string().url().optional().nullable().or(z.literal('')).transform((v) => v || null),
+  imageUrl: optionalImageInput,
+  image: optionalImageInput,
+  bannerImageUrl: optionalImageInput,
+  bannerImage: optionalImageInput,
+  iconUrl: optionalImageInput,
+  icon: optionalImageInput,
   featured: z.boolean().optional().default(false),
   status: z.enum(['active', 'inactive']).optional().default('active'),
   siteVisitEnabled: z.boolean().optional().default(false),
@@ -118,9 +126,12 @@ export const updateSubcategorySchema = z.object({
     serviceType: z.string().optional(),
     code: z.string().optional(),
     urlSlug: z.string().min(1).optional(),
-    imageUrl: z.string().url().optional().nullable().or(z.literal('')).transform((v) => v || null),
-    bannerImageUrl: z.string().url().optional().nullable().or(z.literal('')).transform((v) => v || null),
-    iconUrl: z.string().url().optional().nullable().or(z.literal('')).transform((v) => v || null),
+    imageUrl: optionalImageInput,
+    image: optionalImageInput,
+    bannerImageUrl: optionalImageInput,
+    bannerImage: optionalImageInput,
+    iconUrl: optionalImageInput,
+    icon: optionalImageInput,
     featured: z.boolean().optional(),
     status: z.enum(['active', 'inactive']).optional(),
     siteVisitEnabled: z.boolean().optional(),

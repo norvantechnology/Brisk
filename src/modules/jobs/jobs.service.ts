@@ -970,7 +970,7 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
         claimId: claimId ?? undefined,
         traderId: traderId ?? undefined,
         title,
-        description: input.description,
+        description: input.description?.trim() || title || category.name || 'Job request',
         scheduledDate: input.scheduledDate,
         timeSlot: resolvedTimeSlot,
         durationLabel: input.durationLabel,

@@ -1549,6 +1549,9 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       distanceKm: list.distanceKm,
       latitude: coords.lat,
       longitude: coords.lng,
+      isApproximate: true,
+      approximateRadiusKm: 2,
+      approximateRadiusMeters: 2000,
       mapPreviewUrl: `https://www.openstreetmap.org/export/embed.html?bbox=${coords.lng - 0.02}%2C${coords.lat - 0.015}%2C${coords.lng + 0.02}%2C${coords.lat + 0.015}&layer=mapnik&marker=${coords.lat}%2C${coords.lng}`,
     },
   };

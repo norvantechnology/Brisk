@@ -93,24 +93,57 @@ export const resolveUserNotificationActionUrl = (
   payload: unknown
 ): string | null => {
   const data = asRecord(payload);
-  const stored = str(data.actionUrl) || str(data.url);
+  const stored = str(data.actionUrl) || str(data.url) || str(data.route);
   if (stored) {
     return stored.startsWith('/') ? stored : `/${stored}`;
   }
 
+  const jobId = str(data.jobId);
+
   switch (type) {
-    case 'TRADER_PROFILE_APPROVED':
-      return traderNotificationActionUrl.dashboard();
+    case 'TRADER_ONBOARDING_SUBMITTED':
     case 'TRADER_PROFILE_REJECTED':
       return traderNotificationActionUrl.onboardingPendingReview();
+    case 'TRADER_PROFILE_APPROVED':
+      return traderNotificationActionUrl.dashboard();
     case 'DOCUMENT_APPROVED':
     case 'DOCUMENT_REJECTED':
-    case 'DOCUMENT_STATUS': {
+    case 'DOCUMENT_STATUS':
+    case 'DOCUMENT_EXPIRY_REMINDER': {
       const documentId = str(data.documentId);
       if (documentId) return traderNotificationActionUrl.documentDetail(documentId);
       return traderNotificationActionUrl.documents();
     }
+    case 'NEW_CHAT_MESSAGE':
+      if (jobId) return `/jobs/${jobId}/chat`;
+      return null;
+    case 'NEW_MATCHING_JOB':
+      if (jobId) return `/traders/jobs/discover/${jobId}`;
+      return null;
+    case 'QUOTE_RECEIVED':
+    case 'QUOTE_ACCEPTED':
+    case 'QUOTE_SELECTION_CANCELLED':
+    case 'JOB_DECLINED':
+    case 'JOB_PUBLISHED':
+    case 'DIRECT_JOB_RECEIVED':
+    case 'JOB_STATUS_CHANGED':
+    case 'JOB_RESCHEDULED':
+    case 'JOB_COMPLETION_CONFIRMED':
+    case 'NEW_REVIEW':
+    case 'DISPUTE_UPDATE':
+    case 'SITE_VISIT_REQUESTED':
+    case 'SITE_VISIT_RESCHEDULED':
+    case 'SITE_VISIT_CONFIRMED':
+    case 'SITE_VISIT_RESCHEDULE_REQUESTED':
+    case 'PAYMENT_REQUESTED':
+    case 'PAYMENT_SUCCESSFUL':
+    case 'PAYMENT_FAILED':
+    case 'PAYMENT_RECEIVED':
+    case 'REFUND_UPDATE':
+      if (jobId) return `/jobs/${jobId}`;
+      return null;
     default:
+      if (jobId) return `/jobs/${jobId}`;
       return null;
   }
 };

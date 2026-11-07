@@ -8,6 +8,7 @@ import { initSocketServer } from './sockets/socket-server';
 import { startDocumentExpiryReminderScheduler } from './services/document-expiry-reminder.service';
 import { startPlatformSettingsSync } from './modules/settings/platform-settings.service';
 import { seedAdmin } from './database/seeders/admin.seed';
+import { seedPropertyModule } from './database/seeders/property.seed';
 
 const startServer = async () => {
   await connectDatabase();
@@ -15,6 +16,11 @@ const startServer = async () => {
     await seedAdmin(prisma);
   } catch (err) {
     logger.warn('Initial admin seed check skipped/failed', { err });
+  }
+  try {
+    await seedPropertyModule(prisma);
+  } catch (err) {
+    logger.warn('Initial property seed check skipped/failed', { err });
   }
   await startPlatformSettingsSync();
 

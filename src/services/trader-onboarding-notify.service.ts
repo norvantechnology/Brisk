@@ -27,9 +27,11 @@ const listActiveAdminEmails = async (): Promise<string[]> => {
     select: { email: true },
     take: 50,
   });
-  const emails = admins.map((a) => a.email).filter(Boolean);
+  const emails = admins
+    .map((a) => (a.email?.trim().toLowerCase() === 'admin@brisk.com' ? 'admin@brisk.ie' : a.email))
+    .filter(Boolean) as string[];
   const inbox = getAdminInbox();
-  return [...new Set([inbox, ...emails])];
+  return [...new Set([inbox, ...emails])].filter((e) => e.toLowerCase() !== 'admin@brisk.com');
 };
 
 /**

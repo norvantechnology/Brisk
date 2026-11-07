@@ -3,10 +3,20 @@ import bcrypt from 'bcryptjs';
 import { logger } from '../../utils/logger';
 
 export async function seedAdmin(prisma: PrismaClient): Promise<void> {
+  // Migrate legacy admin@brisk.com to admin@brisk.ie if present
+  try {
+    await prisma.adminUser.updateMany({
+      where: { email: 'admin@brisk.com' },
+      data: { email: 'admin@brisk.ie' },
+    });
+  } catch (err) {
+    logger.warn('Failed to migrate admin@brisk.com to admin@brisk.ie', err);
+  }
+
   const admins = [
     {
       fullName: 'System Super Admin',
-      email: 'admin@brisk.com',
+      email: 'admin@brisk.ie',
       mobileNumber: '+353870000000',
       address: 'Dublin, Ireland',
       role: AdminRole.SUPER_ADMIN,
