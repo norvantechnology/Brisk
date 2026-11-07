@@ -24,14 +24,18 @@ export const ensureUploadRoot = async () => {
 
 export const getPublicBaseUrl = (reqHost?: string) => {
   if (env.UPLOAD_PUBLIC_BASE_URL) return env.UPLOAD_PUBLIC_BASE_URL.replace(/\/$/, '');
+  if (process.env.PUBLIC_API_URL) return process.env.PUBLIC_API_URL.replace(/\/$/, '');
   if (process.env.RAILWAY_PUBLIC_DOMAIN) {
     return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
   }
   if (process.env.RENDER_EXTERNAL_URL) {
     return process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '');
   }
-  if (reqHost) return `http://${reqHost}`;
-  return `http://localhost:${env.PORT}`;
+  if (reqHost && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')) {
+    const proto = reqHost.includes('brisk.ie') ? 'https' : 'http';
+    return `${proto}://${reqHost}`;
+  }
+  return 'https://api.brisk.ie';
 };
 
 export const buildObjectKey = (

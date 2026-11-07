@@ -5,6 +5,35 @@ const DEFAULT_CATEGORY_ICON_BASE_URL = 'https://cdn.brisk.com/icons/categories';
 const isHttpUrl = (value: string | null | undefined): boolean =>
   typeof value === 'string' && /^https?:\/\//i.test(value);
 
+const getPublicApiBaseUrl = (): string =>
+  (
+    process.env.UPLOAD_PUBLIC_BASE_URL ||
+    process.env.PUBLIC_API_URL ||
+    'https://api.brisk.ie'
+  ).replace(/\/$/, '');
+
+/**
+ * Normalizes any image URL or file path so mobile apps always get an absolute, loadable HTTPS URL.
+ * Converts `/uploads/...` -> `https://api.brisk.ie/uploads/...`
+ * Converts `http://localhost:.../uploads/...` -> `https://api.brisk.ie/uploads/...`
+ */
+export const normalizeMediaUrl = (url: string | null | undefined): string | null => {
+  if (!url || typeof url !== 'string' || !url.trim()) return null;
+  let clean = url.trim();
+  const publicBase = getPublicApiBaseUrl();
+
+  if (clean.includes('localhost') || clean.includes('127.0.0.1')) {
+    clean = clean.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, publicBase);
+  }
+  if (clean.startsWith('http://') && clean.includes('brisk.ie')) {
+    clean = clean.replace('http://', 'https://');
+  }
+  if (clean.startsWith('/')) {
+    clean = `${publicBase}${clean}`;
+  }
+  return clean;
+};
+
 /**
  * Resolve a fetchable icon URL for mobile apps.
  * Priority: iconName (if full http URL) → CATEGORY_ICON_BASE_URL/{urlSlug}.svg → null.
@@ -16,15 +45,10 @@ export const resolveCategoryIconUrl = (
   const icon = cat.iconName;
   if (typeof icon === 'string') {
     if (isHttpUrl(icon)) {
-      return icon;
+      return normalizeMediaUrl(icon);
     }
     if (icon.startsWith('/')) {
-      const publicBase = (
-        process.env.UPLOAD_PUBLIC_BASE_URL ||
-        process.env.PUBLIC_API_URL ||
-        'http://104.207.88.181:3000'
-      ).replace(/\/$/, '');
-      return `${publicBase}${icon}`;
+      return normalizeMediaUrl(icon);
     }
   }
 
@@ -38,7 +62,7 @@ export const resolveCategoryIconUrl = (
   }
 
   if (isHttpUrl(cat.bannerImageUrl)) {
-    return cat.bannerImageUrl ?? null;
+    return normalizeMediaUrl(cat.bannerImageUrl) ?? null;
   }
 
   return null;
@@ -60,32 +84,12 @@ export const resolveSubcategoryIconUrl = (
 ): string | null => {
   const icon = sub.iconUrl;
   if (typeof icon === 'string' && icon.trim()) {
-    if (isHttpUrl(icon)) {
-      return icon;
-    }
-    if (icon.startsWith('/')) {
-      const publicBase = (
-        process.env.UPLOAD_PUBLIC_BASE_URL ||
-        process.env.PUBLIC_API_URL ||
-        'http://104.207.88.181:3000'
-      ).replace(/\/$/, '');
-      return `${publicBase}${icon}`;
-    }
+    return normalizeMediaUrl(icon);
   }
 
   const img = sub.imageUrl;
   if (typeof img === 'string' && img.trim()) {
-    if (isHttpUrl(img)) {
-      return img;
-    }
-    if (img.startsWith('/')) {
-      const publicBase = (
-        process.env.UPLOAD_PUBLIC_BASE_URL ||
-        process.env.PUBLIC_API_URL ||
-        'http://104.207.88.181:3000'
-      ).replace(/\/$/, '');
-      return `${publicBase}${img}`;
-    }
+    return normalizeMediaUrl(img);
   }
 
   const baseUrl = (
@@ -99,8 +103,8 @@ export const resolveSubcategoryIconUrl = (
     return `${baseUrl}/${sub.urlSlug}.svg`;
   }
 
-  if (isHttpUrl(sub.bannerImageUrl)) {
-    return sub.bannerImageUrl ?? null;
+  if (sub.bannerImageUrl) {
+    return normalizeMediaUrl(sub.bannerImageUrl);
   }
 
   return null;
@@ -177,8 +181,8 @@ export const serializeSubcategory = (
   urlSlug: sub.urlSlug,
   featured: sub.featured,
   status: sub.status,
-  imageUrl: sub.imageUrl ?? null,
-  bannerImageUrl: sub.bannerImageUrl ?? null,
+  imageUrl: normalizeMediaUrl(sub.imageUrl),
+  bannerImageUrl: normalizeMediaUrl(sub.bannerImageUrl),
   iconUrl: resolveSubcategoryIconUrl(sub),
   siteVisitEnabled: sub.siteVisitEnabled,
   /** Site-visit fee set on this subcategory. Null = not set; job form falls back to admin setting `site_visit.default_fee`. */

@@ -169,10 +169,20 @@ export const createCategory = async (adminId: string, adminLabel: string, input:
     throw new ConflictError('URL slug already exists.');
   }
 
-  const { iconUrl, ...restInput } = input;
+  const { iconUrl, icon, bannerImageUrl, bannerImage, imageUrl, image, iconName, ...restInput } = input as any;
+  const resolvedIcon = iconUrl !== undefined ? iconUrl : icon !== undefined ? icon : iconName ?? null;
+  const resolvedBanner =
+    bannerImageUrl !== undefined
+      ? bannerImageUrl
+      : bannerImage !== undefined
+      ? bannerImage
+      : imageUrl !== undefined
+      ? imageUrl
+      : image ?? null;
   const dataToSave: Prisma.CategoryCreateInput = {
     ...restInput,
-    iconName: iconUrl ?? input.iconName ?? null,
+    iconName: resolvedIcon,
+    bannerImageUrl: resolvedBanner,
   };
   const category = await prisma.category.create({
     data: dataToSave,
@@ -214,14 +224,24 @@ export const updateCategory = async (
     if (slugConflict) throw new ConflictError('URL slug already in use.');
   }
 
-  const { iconUrl, ...restInput } = input;
+  const { iconUrl, icon, bannerImageUrl, bannerImage, imageUrl, image, iconName, ...restInput } = input as any;
   const dataToSave: Prisma.CategoryUpdateInput = {
     ...restInput,
   };
-  if (iconUrl !== undefined) {
-    dataToSave.iconName = iconUrl;
-  } else if (input.iconName !== undefined) {
-    dataToSave.iconName = input.iconName;
+  const resolvedIcon = iconUrl !== undefined ? iconUrl : icon !== undefined ? icon : iconName;
+  if (resolvedIcon !== undefined) {
+    dataToSave.iconName = resolvedIcon;
+  }
+  const resolvedBanner =
+    bannerImageUrl !== undefined
+      ? bannerImageUrl
+      : bannerImage !== undefined
+      ? bannerImage
+      : imageUrl !== undefined
+      ? imageUrl
+      : image;
+  if (resolvedBanner !== undefined) {
+    dataToSave.bannerImageUrl = resolvedBanner;
   }
   const updatedCategory = await prisma.category.update({
     where: { id },

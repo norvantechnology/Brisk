@@ -302,6 +302,7 @@ router.delete('/categories/:id', validate(idParamSchema), categoryAdminControlle
  *       401: { $ref: '#/components/responses/AdminUnauthorized' }
  */
 router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminController.listSubcategories);
+router.get('/subcategories', validate(subcategoryFilterSchema), categoryAdminController.listSubcategories);
 
 /**
  * @swagger
@@ -325,6 +326,7 @@ router.get('/sub-categories', validate(subcategoryFilterSchema), categoryAdminCo
  *         description: Flat array of `{ id, name, code, status, categoryId, category }` objects.
  */
 router.get('/sub-categories/dropdown', categoryAdminController.listSubcategoriesDropdown);
+router.get('/subcategories/dropdown', categoryAdminController.listSubcategoriesDropdown);
 
 /**
  * @swagger
@@ -406,6 +408,7 @@ router.get('/sub-categories/dropdown', categoryAdminController.listSubcategories
  *         description: Sub-Category created successfully.
  */
 router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminController.createSubcategory);
+router.post('/subcategories', validate(createSubcategorySchema), categoryAdminController.createSubcategory);
 
 /**
  * @swagger
@@ -427,6 +430,7 @@ router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminC
  *         description: Sub-Category not found.
  */
 router.get('/sub-categories/:id', validate(idParamSchema), categoryAdminController.getSubcategory);
+router.get('/subcategories/:id', validate(idParamSchema), categoryAdminController.getSubcategory);
 
 /**
  * @swagger
@@ -471,6 +475,8 @@ router.get('/sub-categories/:id', validate(idParamSchema), categoryAdminControll
  */
 router.patch('/sub-categories/:id', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
 router.put('/sub-categories/:id', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
+router.patch('/subcategories/:id', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
+router.put('/subcategories/:id', validate(updateSubcategorySchema), categoryAdminController.updateSubcategory);
 
 /**
  * @swagger
@@ -494,5 +500,6 @@ router.put('/sub-categories/:id', validate(updateSubcategorySchema), categoryAdm
  *         description: Sub-Category not found.
  */
 router.delete('/sub-categories/:id', validate(idParamSchema), categoryAdminController.deleteSubcategory);
+router.delete('/subcategories/:id', validate(idParamSchema), categoryAdminController.deleteSubcategory);
 
 export default router;

@@ -17,7 +17,11 @@ import { assertActiveCurrency } from '../../services/currency.service';
 import { describePersonalId } from './personal-id';
 import { listTraderCategoriesWithState } from './onboarding/onboarding.service';
 import { buildPaginationMeta, parsePageLimit } from '../../utils/pagination';
-import { resolveCategoryIconUrl } from '../categories/categories.serializers';
+import {
+  normalizeMediaUrl,
+  resolveCategoryIconUrl,
+  resolveSubcategoryIconUrl,
+} from '../categories/categories.serializers';
 import type {
   MyReviewsQuery,
   UpdateTraderAccountInput,
@@ -421,6 +425,7 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
       featured: true,
       imageUrl: true,
       bannerImageUrl: true,
+      iconUrl: true,
       category: {
         select: { id: true, name: true, iconName: true, urlSlug: true, bannerImageUrl: true },
       },
@@ -428,21 +433,25 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
   });
 
   return subcategories
-    .map((s) => ({
-      id: s.id,
-      subcategoryId: s.id,
-      title: s.name,
-      urlSlug: s.urlSlug,
-      imageUrl: s.imageUrl || s.bannerImageUrl || s.category.bannerImageUrl || null,
-      category: {
-        id: s.category.id,
-        name: s.category.name,
-        iconUrl: resolveCategoryIconUrl(s.category),
-      },
-      recentJobsCount: recentCounts.get(s.id) ?? 0,
-      totalJobsCount: totalCounts.get(s.id) ?? 0,
-      featured: s.featured,
-    }))
+    .map((s) => {
+      const rawImage = s.imageUrl || s.bannerImageUrl || s.iconUrl || s.category.bannerImageUrl;
+      const imageUrl = normalizeMediaUrl(rawImage) || resolveSubcategoryIconUrl(s);
+      return {
+        id: s.id,
+        subcategoryId: s.id,
+        title: s.name,
+        urlSlug: s.urlSlug,
+        imageUrl,
+        category: {
+          id: s.category.id,
+          name: s.category.name,
+          iconUrl: resolveCategoryIconUrl(s.category),
+        },
+        recentJobsCount: recentCounts.get(s.id) ?? 0,
+        totalJobsCount: totalCounts.get(s.id) ?? 0,
+        featured: s.featured,
+      };
+    })
     .sort(
       (a, b) =>
         b.recentJobsCount - a.recentJobsCount ||
