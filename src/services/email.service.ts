@@ -4,7 +4,7 @@ import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 import { decryptSecret } from '../utils/secret-box';
 
-const DEFAULT_ADMIN_EMAIL = 'support@brisk.ie';
+const DEFAULT_ADMIN_EMAIL = 'admin@brisk.ie';
 /** Manager: survey + transactional from-address */
 const DEFAULT_FROM_EMAIL = 'noreply@brisk.ie';
 /** Hosted logos (no MIME attachments - Gmail flags CID/attachments as phishing). */
@@ -83,8 +83,13 @@ export type SurveyWaitlistEmailPayload = {
   registrationCode?: string;
 };
 
-const getAdminEmail = (): string =>
-  process.env.CONTACT_ADMIN_EMAIL?.trim() || DEFAULT_ADMIN_EMAIL;
+const getAdminEmail = (): string => {
+  const envEmail = process.env.CONTACT_ADMIN_EMAIL?.trim();
+  if (envEmail && envEmail.toLowerCase() !== 'admin@brisk.com') {
+    return envEmail;
+  }
+  return DEFAULT_ADMIN_EMAIL;
+};
 
 const getFromEmail = (): string =>
   process.env.CONTACT_FROM_EMAIL?.trim() ||
@@ -532,13 +537,15 @@ export const isSmtpConfigured = async (): Promise<boolean> => Boolean(await reso
  */
 export const sendMail = async (input: SendMailInput): Promise<void> => {
   const config = await resolveSmtpConfig();
-  const ccList = normalizeAddressList(input.cc).filter(
-    (e) => e.toLowerCase() !== input.to.trim().toLowerCase()
+  const toAddress = input.to.trim().toLowerCase() === 'admin@brisk.com' ? 'admin@brisk.ie' : input.to.trim();
+  const rawCc = normalizeAddressList(input.cc).map((e) =>
+    e.toLowerCase() === 'admin@brisk.com' ? 'admin@brisk.ie' : e
   );
+  const ccList = rawCc.filter((e) => e.toLowerCase() !== toAddress.toLowerCase());
 
   if (!config) {
     logger.info('[EMAIL] SMTP not configured - logging outbound mail', {
-      to: input.to,
+      to: toAddress,
       cc: ccList,
       from: getFromEmail(),
       subject: input.subject,
@@ -552,11 +559,11 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
   // Non-mailbox usernames (e.g. SendGrid "apikey") cannot be an envelope sender.
   const useEnvelope =
     Boolean(smtpUser?.includes('@')) && smtpUser!.toLowerCase() !== fromAddress.toLowerCase();
-  const envelopeTo = [input.to, ...ccList];
+  const envelopeTo = [toAddress, ...ccList];
 
   await createSmtpTransport(config).sendMail({
     from: { name: config.fromName, address: fromAddress },
-    to: input.to,
+    to: toAddress,
     ...(ccList.length ? { cc: ccList.join(', ') } : {}),
     subject: input.subject,
     text: input.text,

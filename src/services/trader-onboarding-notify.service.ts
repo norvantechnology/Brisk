@@ -18,8 +18,13 @@ import {
   traderNotificationActionUrl,
 } from '../modules/notifications/notification-action-urls';
 
-const getAdminInbox = (): string =>
-  process.env.CONTACT_ADMIN_EMAIL?.trim() || 'support@brisk.ie';
+const getAdminInbox = (): string => {
+  const envEmail = process.env.CONTACT_ADMIN_EMAIL?.trim();
+  if (envEmail && envEmail.toLowerCase() !== 'admin@brisk.com') {
+    return envEmail;
+  }
+  return 'admin@brisk.ie';
+};
 
 const listActiveAdminEmails = async (): Promise<string[]> => {
   const admins = await prisma.adminUser.findMany({

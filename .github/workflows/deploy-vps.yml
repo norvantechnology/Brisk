@@ -65,7 +65,7 @@ jobs:
                 "JWT_SECRET=super_secret_jwt_key_brisk_production_2026" \
                 "CONTACT_FROM_EMAIL=noreply@brisk.ie" \
                 "MAIL_FROM=noreply@brisk.ie" \
-                "CONTACT_ADMIN_EMAIL=support@brisk.ie" > "$APP_DIR/.env"
+                "CONTACT_ADMIN_EMAIL=admin@brisk.ie" > "$APP_DIR/.env"
               chmod 600 "$APP_DIR/.env"
               echo ".env successfully restored on VPS."
             fi
