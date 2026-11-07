@@ -543,6 +543,8 @@ const serializeJob = (
     timeSlot: str(job.timeSlot),
     durationLabel: str(job.durationLabel),
     phoneNumber: str(job.phoneNumber),
+    additionalName: str(job.additionalName),
+    additionalNumber: str(job.additionalNumber),
     serviceCharge: job.serviceCharge != null ? money(job.serviceCharge) : 0,
     quoteType: job.quoteType ?? JobQuoteType.REMOTE,
     /** null when customer skipped budget — never fake 0. */
@@ -975,6 +977,8 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
         timeSlot: resolvedTimeSlot,
         durationLabel: input.durationLabel,
         phoneNumber: input.phoneNumber,
+        additionalName: input.additionalName,
+        additionalNumber: input.additionalNumber || input.additionalPhoneNumber,
         serviceCharge: input.serviceCharge,
           quoteType,
           minBudget: input.minBudget ?? undefined,
@@ -1950,6 +1954,9 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     receiptUrl: view.receiptUrl,
     canReview: view.canReview,
     canCancel: view.canCancel,
+    phoneNumber: job.phoneNumber ?? null,
+    additionalName: job.additionalName ?? null,
+    additionalNumber: job.additionalNumber ?? null,
   };
 };
 
@@ -2032,6 +2039,13 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
         timeSlot: input.timeSlot === undefined ? undefined : input.timeSlot,
         durationLabel: input.durationLabel === undefined ? undefined : input.durationLabel,
         phoneNumber: input.phoneNumber === undefined ? undefined : input.phoneNumber,
+        additionalName: input.additionalName === undefined ? undefined : input.additionalName,
+        additionalNumber:
+          input.additionalNumber !== undefined
+            ? input.additionalNumber
+            : input.additionalPhoneNumber !== undefined
+            ? input.additionalPhoneNumber
+            : undefined,
         serviceCharge: input.serviceCharge === undefined ? undefined : input.serviceCharge,
         quoteType: nextQuoteType,
         minBudget: input.minBudget === undefined ? undefined : input.minBudget,

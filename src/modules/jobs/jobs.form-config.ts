@@ -336,6 +336,8 @@ export const buildNextJobPrefill = (input: {
     timeSlot: fc.timeSlotConfig?.mode === 'SINGLE_FIXED' ? 'ANYTIME' : '',
     durationLabel: '',
     phoneNumber: '',
+    additionalName: '',
+    additionalNumber: '',
     description: '',
     photoUrls: [] as string[],
   };

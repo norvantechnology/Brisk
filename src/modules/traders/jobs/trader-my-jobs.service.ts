@@ -1789,6 +1789,8 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
       location: job.city || job.address?.city || formatFullAddress(job),
       isVerified: customerVerified,
       phoneNumber: job.phoneNumber || job.customer.mobileNumber || null,
+      additionalName: job.additionalName ?? null,
+      additionalNumber: job.additionalNumber ?? null,
       /** Stars the customer gave on this job (null until rated). */
       rating: customerReview?.rating ?? null,
       jobsPosted: job.customer._count.jobs,
