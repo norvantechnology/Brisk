@@ -544,7 +544,6 @@ const serializeJob = (
     durationLabel: str(job.durationLabel),
     phoneNumber: str(job.phoneNumber),
     additionalName: str(job.additionalName),
-    additionalNumber: str(job.additionalNumber),
     serviceCharge: job.serviceCharge != null ? money(job.serviceCharge) : 0,
     quoteType: job.quoteType ?? JobQuoteType.REMOTE,
     /** null when customer skipped budget — never fake 0. */
@@ -976,9 +975,8 @@ export const createJob = async (customerId: string, input: CreateJobInput) => {
         scheduledDate: input.scheduledDate,
         timeSlot: resolvedTimeSlot,
         durationLabel: input.durationLabel,
-        phoneNumber: input.phoneNumber,
+        phoneNumber: input.phoneNumber || input.additionalPhone || input.additionalPhoneNumber || input.additionalNumber || null,
         additionalName: input.additionalName,
-        additionalNumber: input.additionalNumber || input.additionalPhoneNumber,
         serviceCharge: input.serviceCharge,
           quoteType,
           minBudget: input.minBudget ?? undefined,
@@ -1955,8 +1953,8 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     canReview: view.canReview,
     canCancel: view.canCancel,
     phoneNumber: job.phoneNumber ?? null,
+    additionalPhone: job.phoneNumber ?? null,
     additionalName: job.additionalName ?? null,
-    additionalNumber: job.additionalNumber ?? null,
   };
 };
 
@@ -2038,14 +2036,17 @@ export const updateJob = async (customerId: string, jobId: string, input: Update
         scheduledDate: input.scheduledDate === undefined ? undefined : input.scheduledDate,
         timeSlot: input.timeSlot === undefined ? undefined : input.timeSlot,
         durationLabel: input.durationLabel === undefined ? undefined : input.durationLabel,
-        phoneNumber: input.phoneNumber === undefined ? undefined : input.phoneNumber,
-        additionalName: input.additionalName === undefined ? undefined : input.additionalName,
-        additionalNumber:
-          input.additionalNumber !== undefined
-            ? input.additionalNumber
+        phoneNumber:
+          input.phoneNumber !== undefined
+            ? input.phoneNumber
+            : input.additionalPhone !== undefined
+            ? input.additionalPhone
             : input.additionalPhoneNumber !== undefined
             ? input.additionalPhoneNumber
+            : input.additionalNumber !== undefined
+            ? input.additionalNumber
             : undefined,
+        additionalName: input.additionalName === undefined ? undefined : input.additionalName,
         serviceCharge: input.serviceCharge === undefined ? undefined : input.serviceCharge,
         quoteType: nextQuoteType,
         minBudget: input.minBudget === undefined ? undefined : input.minBudget,
