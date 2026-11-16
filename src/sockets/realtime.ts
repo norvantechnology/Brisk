@@ -122,6 +122,7 @@ export const pushUserNotification = async (
           ...(jobId ? { jobId } : {}),
           ...(actionUrl ? { actionUrl, url: actionUrl, route: actionUrl } : {}),
           ...(notification ? { notificationId: notification.id } : {}),
+          ...(notification?.imageUrl ? { imageUrl: notification.imageUrl } : {}),
         },
       },
     });
@@ -133,6 +134,7 @@ export const pushUserNotification = async (
       data: input.legacyData ?? input.data ?? {},
       at,
       actionUrl,
+      imageUrl: notification?.imageUrl ?? null,
       ...meta,
       ...(notification ? { id: notification.id, notification } : {}),
     });

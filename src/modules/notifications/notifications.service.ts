@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { NotificationListFilters } from './notifications.types';
 import { resolveUserNotificationActionUrl } from './notification-action-urls';
+import { normalizeMediaUrl } from '../categories/categories.serializers';
 import {
   BRISK_TAB_TYPES,
   USER_NOTIFICATION_SECTIONS,
@@ -23,6 +24,23 @@ const asPayload = (payload: Prisma.JsonValue | null): Record<string, unknown> =>
   return {};
 };
 
+const resolveNotificationImageUrl = (payload: Record<string, unknown>): string | null => {
+  const candidate =
+    payload.imageUrl ||
+    payload.image ||
+    payload.senderPhotoUrl ||
+    payload.profilePhotoUrl ||
+    payload.avatar ||
+    payload.avatarUrl ||
+    payload.photoUrl ||
+    payload.iconUrl ||
+    payload.icon;
+  if (typeof candidate === 'string' && candidate.trim()) {
+    return normalizeMediaUrl(candidate);
+  }
+  return null;
+};
+
 export const serializeUserNotification = (n: {
   id: string;
   type: string;
@@ -39,6 +57,7 @@ export const serializeUserNotification = (n: {
     (typeof payload.body === 'string' && payload.body) ||
     (typeof payload.desc === 'string' && payload.desc) ||
     '';
+  const imageUrl = resolveNotificationImageUrl(payload);
 
   return {
     id: n.id,
@@ -48,6 +67,7 @@ export const serializeUserNotification = (n: {
     message,
     read: n.read,
     actionUrl: resolveUserNotificationActionUrl(n.type, payload),
+    imageUrl,
     data: payload,
     createdAt: n.createdAt,
   };
