@@ -37,7 +37,6 @@ router.use(authMiddleware);
  *         message: { type: string, example: 'Your BRISK trader profile has been approved.' }
  *         read: { type: boolean, example: false }
  *         actionUrl: { type: string, nullable: true, example: '/dashboard', description: 'Detail/screen route — FE navigates with router.push(actionUrl); no per-type routing.' }
- *         imageUrl: { type: string, nullable: true, example: 'https://api.brisk.ie/uploads/...', description: 'Avatar/icon URL to display on the notification card.' }
  *         data:
  *           type: object
  *           additionalProperties: true

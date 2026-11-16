@@ -91,34 +91,9 @@ const emptyOfferBanner = () => ({
  * Returns **flags + DB amounts + navigation keys** only.
  * UI labels / CTAs / marketing copy live on the mobile client (Figma is visual reference only).
  */
-export const buildJobFormConfig = (input: {
-  offerApplied: boolean;
-  subcategory?: SubcategoryFlags;
-  entryPoint?: JobFormEntryPoint;
-  currencyCode?: string;
-  offerBanner?: ReturnType<typeof buildOfferAppliedBanner> | null;
-}) => {
-  const sub = input.subcategory ?? null;
-  const qaFormSchema = Array.isArray(sub?.qaFormSchema) ? sub!.qaFormSchema : [];
-  const priceEnabled = sub?.priceEnabled ?? true;
-  const priceEnteredBy = (sub?.priceEnteredBy ?? SubcategoryPriceEnteredBy.CUSTOMER) as
-    | SubcategoryPriceEnteredBy
-    | 'CUSTOMER'
-    | 'TRADER';
-  const customerEntersPrice =
-    priceEnabled && priceEnteredBy === SubcategoryPriceEnteredBy.CUSTOMER;
-  const siteVisitEnabled = Boolean(sub?.siteVisitEnabled);
-  const offerApplied = input.offerApplied;
-  const entryPoint: JobFormEntryPoint =
-    input.entryPoint ?? (offerApplied ? 'OFFER' : 'DIRECT');
-  const currencyCode = str(input.currencyCode);
-  const siteVisitFeeAmount = siteVisitEnabled ? resolveSiteVisitFee(sub) : 0;
-  const siteVisitFeeFormatted = formatFee(siteVisitFeeAmount, currencyCode);
-
-  const showBudgetForRemote = customerEntersPrice;
-
+export const resolveTimeSlotConfig = (subName?: string | null) => {
   const isSkipDelivery = Boolean(
-    sub?.name && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(sub.name)
+    subName && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(subName)
   );
 
   const fixedTimeSlotLabel = isSkipDelivery ? 'Any time between 8:00 and 17:00' : null;
@@ -151,6 +126,42 @@ export const buildJobFormConfig = (input: {
           { key: 'EVENING', label: 'Evening', range: '17:00 - 21:00' },
         ],
       };
+
+  return {
+    isSkipDelivery,
+    fixedTimeSlotLabel,
+    timeSlotConfig,
+    timeSlotOptions: timeSlotConfig.options,
+  };
+};
+
+export const buildJobFormConfig = (input: {
+  offerApplied: boolean;
+  subcategory?: SubcategoryFlags;
+  entryPoint?: JobFormEntryPoint;
+  currencyCode?: string;
+  offerBanner?: ReturnType<typeof buildOfferAppliedBanner> | null;
+}) => {
+  const sub = input.subcategory ?? null;
+  const qaFormSchema = Array.isArray(sub?.qaFormSchema) ? sub!.qaFormSchema : [];
+  const priceEnabled = sub?.priceEnabled ?? true;
+  const priceEnteredBy = (sub?.priceEnteredBy ?? SubcategoryPriceEnteredBy.CUSTOMER) as
+    | SubcategoryPriceEnteredBy
+    | 'CUSTOMER'
+    | 'TRADER';
+  const customerEntersPrice =
+    priceEnabled && priceEnteredBy === SubcategoryPriceEnteredBy.CUSTOMER;
+  const siteVisitEnabled = Boolean(sub?.siteVisitEnabled);
+  const offerApplied = input.offerApplied;
+  const entryPoint: JobFormEntryPoint =
+    input.entryPoint ?? (offerApplied ? 'OFFER' : 'DIRECT');
+  const currencyCode = str(input.currencyCode);
+  const siteVisitFeeAmount = siteVisitEnabled ? resolveSiteVisitFee(sub) : 0;
+  const siteVisitFeeFormatted = formatFee(siteVisitFeeAmount, currencyCode);
+
+  const showBudgetForRemote = customerEntersPrice;
+
+  const { fixedTimeSlotLabel, timeSlotConfig } = resolveTimeSlotConfig(sub?.name);
 
 
   const quoteTypeOptions = [

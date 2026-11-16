@@ -18,6 +18,7 @@ import {
 } from '../../services/currency.service';
 import { emitSiteVisitUpdate, pushUserNotification } from '../../sockets/realtime';
 import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
+import { resolveTimeSlotConfig } from './jobs.form-config';
 import {
   customerJobAmountSelect,
   customerHasFinalPaymentRequest,
@@ -459,6 +460,9 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
     scheduledDate,
     date: scheduledDate ? formatDisplayDay(scheduledDate) : null,
     timeSlot: job.timeSlot,
+    timeSlotConfig: resolveTimeSlotConfig(job.subcategory?.name).timeSlotConfig,
+    timeSlotOptions: resolveTimeSlotConfig(job.subcategory?.name).timeSlotOptions,
+    fixedTimeSlotLabel: resolveTimeSlotConfig(job.subcategory?.name).fixedTimeSlotLabel,
     address: {
       fullAddress: job.address ? formatAddressLine(job.address) : job.addressLine,
       city: job.city,

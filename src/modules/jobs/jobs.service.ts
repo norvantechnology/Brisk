@@ -24,6 +24,7 @@ import {
   resolveQuoteTypeForCreate,
   resolveSiteVisitFee,
   resolveSiteVisitIntent,
+  resolveTimeSlotConfig,
   str,
 } from './jobs.form-config';
 import { resolveSubcategoryIconUrl } from '../categories/categories.serializers';
@@ -1952,6 +1953,10 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     receiptUrl: view.receiptUrl,
     canReview: view.canReview,
     canCancel: view.canCancel,
+    timeSlot: view.timeSlot,
+    timeSlotConfig: resolveTimeSlotConfig(job.subcategory?.name).timeSlotConfig,
+    timeSlotOptions: resolveTimeSlotConfig(job.subcategory?.name).timeSlotOptions,
+    fixedTimeSlotLabel: resolveTimeSlotConfig(job.subcategory?.name).fixedTimeSlotLabel,
     phoneNumber: job.phoneNumber ?? null,
     additionalPhone: job.phoneNumber ?? null,
     additionalName: job.additionalName ?? null,
