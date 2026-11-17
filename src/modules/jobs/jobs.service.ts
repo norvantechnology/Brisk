@@ -1339,7 +1339,11 @@ export const listMyJobsByTab = async (
       subcategoryId: job.subcategory?.id ?? null,
       subcategoryName: job.subcategory?.name ?? null,
       timeSlot: job.timeSlot ?? null,
-      fixedTimeSlotLabel: resolveTimeSlotConfig(job.subcategory?.name).fixedTimeSlotLabel,
+      fixedTimeSlotLabel: resolveTimeSlotConfig(
+        job.subcategory?.name,
+        job.category?.name,
+        job.timeSlot
+      ).fixedTimeSlotLabel,
       /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule (allowed until trader arrives) */
       canReschedule,
       /** Job classification requested by mobile (Dipen): Site Visit vs Direct */
@@ -1957,9 +1961,21 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     canReview: view.canReview,
     canCancel: view.canCancel,
     timeSlot: view.timeSlot,
-    timeSlotConfig: resolveTimeSlotConfig(job.subcategory?.name).timeSlotConfig,
-    timeSlotOptions: resolveTimeSlotConfig(job.subcategory?.name).timeSlotOptions,
-    fixedTimeSlotLabel: resolveTimeSlotConfig(job.subcategory?.name).fixedTimeSlotLabel,
+    timeSlotConfig: resolveTimeSlotConfig(
+      job.subcategory?.name,
+      job.category?.name,
+      job.timeSlot
+    ).timeSlotConfig,
+    timeSlotOptions: resolveTimeSlotConfig(
+      job.subcategory?.name,
+      job.category?.name,
+      job.timeSlot
+    ).timeSlotOptions,
+    fixedTimeSlotLabel: resolveTimeSlotConfig(
+      job.subcategory?.name,
+      job.category?.name,
+      job.timeSlot
+    ).fixedTimeSlotLabel,
     phoneNumber: job.phoneNumber ?? null,
     additionalPhone: job.phoneNumber ?? null,
     additionalName: job.additionalName ?? null,
@@ -3276,11 +3292,10 @@ export const getSimpleJobFormConfig = async (
   const siteVisitFee = siteVisitFeeAmount > 0 ? `€${siteVisitFeeAmount.toFixed(2)}` : '';
   const qaFormSchema = Array.isArray(subcategoryFlags?.qaFormSchema) ? subcategoryFlags!.qaFormSchema : [];
 
-  const isSkipDelivery = Boolean(
-    subcategoryFlags?.name && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(subcategoryFlags.name)
+  const { fixedTimeSlotLabel } = resolveTimeSlotConfig(
+    subcategoryFlags?.name,
+    category?.name
   );
-
-  const fixedTimeSlotLabel = isSkipDelivery ? 'Any time between 8:00 and 17:00' : null;
 
 
 

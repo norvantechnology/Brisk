@@ -91,9 +91,17 @@ const emptyOfferBanner = () => ({
  * Returns **flags + DB amounts + navigation keys** only.
  * UI labels / CTAs / marketing copy live on the mobile client (Figma is visual reference only).
  */
-export const resolveTimeSlotConfig = (subName?: string | null) => {
+export const resolveTimeSlotConfig = (
+  subName?: string | null,
+  categoryName?: string | null,
+  timeSlot?: string | null
+) => {
   const isSkipDelivery = Boolean(
-    subName && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(subName)
+    (subName && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(subName)) ||
+    (categoryName && /skip(\s+hire|\s+delivery|\s+removal|\s+bin)?/i.test(categoryName)) ||
+    (timeSlot &&
+      (timeSlot.toUpperCase() === 'ANYTIME' ||
+        /8:00\s*-\s*17:00|08:00\s*-\s*17:00/i.test(timeSlot)))
   );
 
   const fixedTimeSlotLabel = isSkipDelivery ? 'Any time between 8:00 and 17:00' : null;

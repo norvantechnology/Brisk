@@ -460,9 +460,21 @@ export const getJobProgress = async (customerId: string, jobId: string) => {
     scheduledDate,
     date: scheduledDate ? formatDisplayDay(scheduledDate) : null,
     timeSlot: job.timeSlot,
-    timeSlotConfig: resolveTimeSlotConfig(job.subcategory?.name).timeSlotConfig,
-    timeSlotOptions: resolveTimeSlotConfig(job.subcategory?.name).timeSlotOptions,
-    fixedTimeSlotLabel: resolveTimeSlotConfig(job.subcategory?.name).fixedTimeSlotLabel,
+    timeSlotConfig: resolveTimeSlotConfig(
+      job.subcategory?.name,
+      job.category?.name,
+      job.timeSlot
+    ).timeSlotConfig,
+    timeSlotOptions: resolveTimeSlotConfig(
+      job.subcategory?.name,
+      job.category?.name,
+      job.timeSlot
+    ).timeSlotOptions,
+    fixedTimeSlotLabel: resolveTimeSlotConfig(
+      job.subcategory?.name,
+      job.category?.name,
+      job.timeSlot
+    ).fixedTimeSlotLabel,
     address: {
       fullAddress: job.address ? formatAddressLine(job.address) : job.addressLine,
       city: job.city,
