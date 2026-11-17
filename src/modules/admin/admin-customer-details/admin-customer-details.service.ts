@@ -12,7 +12,7 @@ import { NotFoundError } from '../../../utils/errors';
 import { buildListOrderBy, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
-import { formatAddressLine } from '../../property/property.service';
+import { formatAddressLine, resolveUtilityIconUrl } from '../../property/property.service';
 import {
   buildJobPayoutBalance,
   serializeJobPayoutBalance,
@@ -602,7 +602,7 @@ export const getCustomerProperty = async (
         id: s.utilityProvider.id,
         name: s.utilityProvider.name,
         logoUrl: s.utilityProvider.logoUrl,
-        iconUrl: s.utilityProvider.iconUrl ?? s.utilityProvider.logoUrl,
+        iconUrl: resolveUtilityIconUrl(s.utilityProvider.iconUrl),
       },
       createdAt: s.createdAt,
     })),

@@ -1,7 +1,5 @@
 import { Category, Subcategory, SubcategoryPriceEnteredBy } from '@prisma/client';
 
-const DEFAULT_CATEGORY_ICON_BASE_URL = 'https://cdn.brisk.com/icons/categories';
-
 const isHttpUrl = (value: string | null | undefined): boolean =>
   typeof value === 'string' && /^https?:\/\//i.test(value);
 
@@ -36,14 +34,18 @@ export const normalizeMediaUrl = (url: string | null | undefined): string | null
 
 /**
  * Resolve a fetchable icon URL for mobile apps.
- * Priority: iconName (if full http URL) → CATEGORY_ICON_BASE_URL/{urlSlug}.svg → null.
+ * Priority: iconName (if full http URL or absolute path) → null.
  * When null, map `iconName` (e.g. Wrench) to a local asset in the app.
+ * By default, this is null unless an icon URL is explicitly configured.
  */
 export const resolveCategoryIconUrl = (
   cat: Pick<Category, 'iconName' | 'urlSlug'> & { bannerImageUrl?: string | null }
 ): string | null => {
   const icon = cat.iconName;
-  if (typeof icon === 'string') {
+  if (typeof icon === 'string' && icon.trim()) {
+    if (icon.includes('placeholders') || icon.includes('cdn.brisk.com')) {
+      return null;
+    }
     if (isHttpUrl(icon)) {
       return normalizeMediaUrl(icon);
     }
@@ -52,27 +54,20 @@ export const resolveCategoryIconUrl = (
     }
   }
 
-  const baseUrl = (process.env.CATEGORY_ICON_BASE_URL ?? DEFAULT_CATEGORY_ICON_BASE_URL).replace(
-    /\/$/,
-    ''
-  );
-
-  if (cat.urlSlug) {
-    return `${baseUrl}/${cat.urlSlug}.svg`;
-  }
-
-  if (isHttpUrl(cat.bannerImageUrl)) {
-    return normalizeMediaUrl(cat.bannerImageUrl) ?? null;
+  if (process.env.CATEGORY_ICON_BASE_URL && cat.urlSlug) {
+    const baseUrl = process.env.CATEGORY_ICON_BASE_URL.replace(/\/$/, '');
+    if (!baseUrl.includes('cdn.brisk.com')) {
+      return `${baseUrl}/${cat.urlSlug}.svg`;
+    }
   }
 
   return null;
 };
 
-const DEFAULT_SUBCATEGORY_ICON_BASE_URL = 'https://cdn.brisk.com/icons/subcategories';
-
 /**
  * Resolve a fetchable icon URL for subcategories.
- * Priority: iconUrl (if full URL or absolute path) → imageUrl → SUBCATEGORY_ICON_BASE_URL/{urlSlug}.svg → null.
+ * Priority: iconUrl (if full URL or absolute path) → imageUrl → null.
+ * Returns null by default unless an icon URL is explicitly set.
  */
 export const resolveSubcategoryIconUrl = (
   sub: {
@@ -84,27 +79,25 @@ export const resolveSubcategoryIconUrl = (
 ): string | null => {
   const icon = sub.iconUrl;
   if (typeof icon === 'string' && icon.trim()) {
+    if (icon.includes('placeholders') || icon.includes('cdn.brisk.com')) {
+      return null;
+    }
     return normalizeMediaUrl(icon);
   }
 
   const img = sub.imageUrl;
   if (typeof img === 'string' && img.trim()) {
+    if (img.includes('placeholders') || img.includes('cdn.brisk.com')) {
+      return null;
+    }
     return normalizeMediaUrl(img);
   }
 
-  const baseUrl = (
-    process.env.SUBCATEGORY_ICON_BASE_URL ??
-    (process.env.CATEGORY_ICON_BASE_URL
-      ? `${process.env.CATEGORY_ICON_BASE_URL.replace(/\/$/, '')}/subcategories`
-      : DEFAULT_SUBCATEGORY_ICON_BASE_URL)
-  ).replace(/\/$/, '');
-
-  if (sub.urlSlug) {
-    return `${baseUrl}/${sub.urlSlug}.svg`;
-  }
-
-  if (sub.bannerImageUrl) {
-    return normalizeMediaUrl(sub.bannerImageUrl);
+  if (process.env.SUBCATEGORY_ICON_BASE_URL && sub.urlSlug) {
+    const baseUrl = process.env.SUBCATEGORY_ICON_BASE_URL.replace(/\/$/, '');
+    if (!baseUrl.includes('cdn.brisk.com')) {
+      return `${baseUrl}/${sub.urlSlug}.svg`;
+    }
   }
 
   return null;

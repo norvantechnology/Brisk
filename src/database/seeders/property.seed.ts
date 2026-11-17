@@ -10,7 +10,7 @@ const PROVIDERS = [
     serviceLabel: 'Bins',
     description: 'Household waste collection',
     logoUrl: `${PLACEHOLDER}/providers/dublin-city-council.png`,
-    iconUrl: `${PLACEHOLDER}/icons/bins.png`,
+    iconUrl: null,
     displayOrder: 1,
   },
   {
@@ -19,7 +19,7 @@ const PROVIDERS = [
     serviceLabel: 'Electricity',
     description: 'Electricity supply',
     logoUrl: `${PLACEHOLDER}/providers/electric-ireland.png`,
-    iconUrl: `${PLACEHOLDER}/icons/electricity.png`,
+    iconUrl: null,
     displayOrder: 2,
   },
   {
@@ -28,7 +28,7 @@ const PROVIDERS = [
     serviceLabel: 'GAS',
     description: 'Gas supply',
     logoUrl: `${PLACEHOLDER}/providers/bord-gais.png`,
-    iconUrl: `${PLACEHOLDER}/icons/gas.png`,
+    iconUrl: null,
     displayOrder: 3,
   },
   {
@@ -37,7 +37,7 @@ const PROVIDERS = [
     serviceLabel: 'Home Insurance',
     description: 'Building & Contents cover',
     logoUrl: `${PLACEHOLDER}/providers/aviva.png`,
-    iconUrl: `${PLACEHOLDER}/icons/insurance.png`,
+    iconUrl: null,
     displayOrder: 4,
   },
   {
@@ -46,7 +46,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: 'High-speed fibre broadband and Wi-Fi',
     logoUrl: `${PLACEHOLDER}/providers/eir.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 5,
   },
   {
@@ -55,7 +55,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: 'Ultrafast broadband & digital TV',
     logoUrl: `${PLACEHOLDER}/providers/virgin-media.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 6,
   },
   {
@@ -64,7 +64,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: 'Home fibre broadband',
     logoUrl: `${PLACEHOLDER}/providers/vodafone.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 7,
   },
   {
@@ -73,7 +73,7 @@ const PROVIDERS = [
     serviceLabel: 'Electricity',
     description: '100% green electricity supply',
     logoUrl: `${PLACEHOLDER}/providers/sse-airtricity.png`,
-    iconUrl: `${PLACEHOLDER}/icons/electricity.png`,
+    iconUrl: null,
     displayOrder: 8,
   },
   {
@@ -82,7 +82,7 @@ const PROVIDERS = [
     serviceLabel: 'GAS',
     description: 'Natural gas supply',
     logoUrl: `${PLACEHOLDER}/providers/sse-airtricity.png`,
-    iconUrl: `${PLACEHOLDER}/icons/gas.png`,
+    iconUrl: null,
     displayOrder: 9,
   },
   {
@@ -91,7 +91,7 @@ const PROVIDERS = [
     serviceLabel: 'Electricity',
     description: 'Dual fuel and green electricity',
     logoUrl: `${PLACEHOLDER}/providers/energia.png`,
-    iconUrl: `${PLACEHOLDER}/icons/electricity.png`,
+    iconUrl: null,
     displayOrder: 10,
   },
   {
@@ -100,7 +100,7 @@ const PROVIDERS = [
     serviceLabel: 'GAS',
     description: 'Domestic natural gas supply',
     logoUrl: `${PLACEHOLDER}/providers/energia.png`,
-    iconUrl: `${PLACEHOLDER}/icons/gas.png`,
+    iconUrl: null,
     displayOrder: 11,
   },
   {
@@ -109,7 +109,7 @@ const PROVIDERS = [
     serviceLabel: 'Electricity',
     description: 'Residential electricity plans',
     logoUrl: `${PLACEHOLDER}/providers/flogas.png`,
-    iconUrl: `${PLACEHOLDER}/icons/electricity.png`,
+    iconUrl: null,
     displayOrder: 12,
   },
   {
@@ -118,7 +118,7 @@ const PROVIDERS = [
     serviceLabel: 'GAS',
     description: 'LPG and natural gas supply',
     logoUrl: `${PLACEHOLDER}/providers/flogas.png`,
-    iconUrl: `${PLACEHOLDER}/icons/gas.png`,
+    iconUrl: null,
     displayOrder: 13,
   },
   {
@@ -127,7 +127,7 @@ const PROVIDERS = [
     serviceLabel: 'Electricity',
     description: 'Pay As You Go electricity',
     logoUrl: `${PLACEHOLDER}/providers/prepaypower.png`,
-    iconUrl: `${PLACEHOLDER}/icons/electricity.png`,
+    iconUrl: null,
     displayOrder: 14,
   },
   {
@@ -136,7 +136,7 @@ const PROVIDERS = [
     serviceLabel: 'GAS',
     description: 'Pay As You Go gas',
     logoUrl: `${PLACEHOLDER}/providers/prepaypower.png`,
-    iconUrl: `${PLACEHOLDER}/icons/gas.png`,
+    iconUrl: null,
     displayOrder: 15,
   },
   {
@@ -145,7 +145,7 @@ const PROVIDERS = [
     serviceLabel: 'Electricity',
     description: 'Smart electricity plans',
     logoUrl: `${PLACEHOLDER}/providers/yuno-energy.png`,
-    iconUrl: `${PLACEHOLDER}/icons/electricity.png`,
+    iconUrl: null,
     displayOrder: 16,
   },
   {
@@ -154,7 +154,7 @@ const PROVIDERS = [
     serviceLabel: 'Electricity',
     description: 'Smart energy and electricity',
     logoUrl: `${PLACEHOLDER}/providers/pinergy.png`,
-    iconUrl: `${PLACEHOLDER}/icons/electricity.png`,
+    iconUrl: null,
     displayOrder: 17,
   },
   {
@@ -163,7 +163,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: 'Ultrafast fibre broadband',
     logoUrl: `${PLACEHOLDER}/providers/sky.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 18,
   },
   {
@@ -172,7 +172,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: 'Fibre broadband for homes',
     logoUrl: `${PLACEHOLDER}/providers/pure-telecom.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 19,
   },
   {
@@ -181,7 +181,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: 'High-speed fibre & rural broadband',
     logoUrl: `${PLACEHOLDER}/providers/digiweb.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 20,
   },
   {
@@ -190,7 +190,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: '5G and fibre home broadband',
     logoUrl: `${PLACEHOLDER}/providers/three.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 21,
   },
   {
@@ -199,7 +199,7 @@ const PROVIDERS = [
     serviceLabel: 'Broadband',
     description: 'Fibre and 5G rural broadband',
     logoUrl: `${PLACEHOLDER}/providers/imagine.png`,
-    iconUrl: `${PLACEHOLDER}/icons/broadband.png`,
+    iconUrl: null,
     displayOrder: 22,
   },
   {
@@ -208,7 +208,7 @@ const PROVIDERS = [
     serviceLabel: 'Bins',
     description: 'Domestic waste and recycling collection',
     logoUrl: `${PLACEHOLDER}/providers/panda.png`,
-    iconUrl: `${PLACEHOLDER}/icons/bins.png`,
+    iconUrl: null,
     displayOrder: 23,
   },
   {
@@ -217,7 +217,7 @@ const PROVIDERS = [
     serviceLabel: 'Bins',
     description: 'Household wheelie bin collection',
     logoUrl: `${PLACEHOLDER}/providers/oxigen.png`,
-    iconUrl: `${PLACEHOLDER}/icons/bins.png`,
+    iconUrl: null,
     displayOrder: 24,
   },
   {
@@ -226,7 +226,7 @@ const PROVIDERS = [
     serviceLabel: 'Bins',
     description: 'Award-winning waste and recycling service',
     logoUrl: `${PLACEHOLDER}/providers/city-bin.png`,
-    iconUrl: `${PLACEHOLDER}/icons/bins.png`,
+    iconUrl: null,
     displayOrder: 25,
   },
   {
@@ -235,7 +235,7 @@ const PROVIDERS = [
     serviceLabel: 'Bins',
     description: 'Residential bin collection & skip hire',
     logoUrl: `${PLACEHOLDER}/providers/thorntons.png`,
-    iconUrl: `${PLACEHOLDER}/icons/bins.png`,
+    iconUrl: null,
     displayOrder: 26,
   },
   {
@@ -244,7 +244,7 @@ const PROVIDERS = [
     serviceLabel: 'Bins',
     description: 'Household bin collections',
     logoUrl: `${PLACEHOLDER}/providers/greyhound.png`,
-    iconUrl: `${PLACEHOLDER}/icons/bins.png`,
+    iconUrl: null,
     displayOrder: 27,
   },
   {
@@ -253,7 +253,7 @@ const PROVIDERS = [
     serviceLabel: 'Bins',
     description: 'Domestic waste and recycling services',
     logoUrl: `${PLACEHOLDER}/providers/mr-binman.png`,
-    iconUrl: `${PLACEHOLDER}/icons/bins.png`,
+    iconUrl: null,
     displayOrder: 28,
   },
 ];

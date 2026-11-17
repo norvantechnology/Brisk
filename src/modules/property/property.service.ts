@@ -1,9 +1,23 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { normalizeMediaUrl } from '../categories/categories.serializers';
 import { parseFlexibleDate, type CreateAddressInput, type SubmitReadingInput, type UpdateAddressInput } from './property.validation';
 
 const PLACEHOLDER = 'https://cdn.brisk.ie/assets/placeholders';
+
+export const resolveUtilityIconUrl = (url?: string | null): string | null => {
+  if (!url || typeof url !== 'string' || !url.trim()) return null;
+  const trimmed = url.trim();
+  if (
+    trimmed.includes('placeholders') ||
+    trimmed.includes('cdn.brisk.ie/assets/placeholders') ||
+    trimmed.includes('cdn.brisk.com')
+  ) {
+    return null;
+  }
+  return normalizeMediaUrl(trimmed);
+};
 
 /** Dynamic MPRN / GPRN popup content for My Property help icons. */
 export const getMeterHelpTips = () => [
@@ -561,8 +575,8 @@ const serializeSubscription = (
     providerName: displayName,
     customProviderName: sub.customProviderName ?? null,
     description: sub.utilityProvider.description,
-    logoUrl: sub.utilityProvider.logoUrl,
-    iconUrl: sub.utilityProvider.iconUrl ?? sub.utilityProvider.logoUrl,
+    logoUrl: normalizeMediaUrl(sub.utilityProvider.logoUrl),
+    iconUrl: resolveUtilityIconUrl(sub.utilityProvider.iconUrl),
     status: sub.status,
     /** ISO date-time (same shape as `createdAt`); null when unset. */
     expiryDate: sub.expiryDate,
@@ -576,6 +590,8 @@ const serializeSubscription = (
       name: displayName,
       providerName: displayName,
       customProviderName: sub.customProviderName ?? null,
+      logoUrl: normalizeMediaUrl(sub.utilityProvider.logoUrl),
+      iconUrl: resolveUtilityIconUrl(sub.utilityProvider.iconUrl),
     },
   };
 };
@@ -629,6 +645,8 @@ export const getPropertyDetail = async (userId: string, id: string) => {
 
   const utilityProviderList = rawProviders.map((provider) => ({
     ...provider,
+    logoUrl: normalizeMediaUrl(provider.logoUrl),
+    iconUrl: resolveUtilityIconUrl(provider.iconUrl),
     providersCategory: rawProviders
       .filter((other) => other.serviceType.toLowerCase() === provider.serviceType.toLowerCase())
       .map((item) => ({
@@ -637,8 +655,8 @@ export const getPropertyDetail = async (userId: string, id: string) => {
         serviceType: item.serviceType,
         serviceLabel: item.serviceLabel,
         description: item.description,
-        logoUrl: item.logoUrl,
-        iconUrl: item.iconUrl,
+        logoUrl: normalizeMediaUrl(item.logoUrl),
+        iconUrl: resolveUtilityIconUrl(item.iconUrl),
       })),
   }));
 
@@ -729,8 +747,8 @@ export const listUtilityProviders = async () => {
     serviceType: provider.serviceType,
     serviceLabel: provider.serviceLabel ?? provider.serviceType,
     description: provider.description,
-    logoUrl: provider.logoUrl,
-    iconUrl: provider.iconUrl ?? provider.logoUrl,
+    logoUrl: normalizeMediaUrl(provider.logoUrl),
+    iconUrl: resolveUtilityIconUrl(provider.iconUrl),
     displayOrder: provider.displayOrder,
     /** ISO date-time (same shape as `createdAt`); null when unset. */
     expiryDate: provider.expiryDate,
