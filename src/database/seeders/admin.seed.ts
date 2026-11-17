@@ -32,6 +32,8 @@ export async function seedAdmin(prisma: PrismaClient): Promise<void> {
           status: UserStatus.ACTIVE,
           emailVerified: true,
           mobileVerified: true,
+          preferredCurrency: 'EUR',
+          country: 'Ireland',
         },
       });
 
@@ -45,6 +47,8 @@ export async function seedAdmin(prisma: PrismaClient): Promise<void> {
             status: 'active',
             verificationStatus: VerificationStatus.VERIFIED,
             onboardingStatus: TraderOnboardingStatus.APPROVED,
+            country: 'Ireland',
+            city: trader.city || 'Dublin',
             rejectionReason: null,
           },
         });
@@ -56,6 +60,8 @@ export async function seedAdmin(prisma: PrismaClient): Promise<void> {
             status: 'active',
             verificationStatus: VerificationStatus.VERIFIED,
             onboardingStatus: TraderOnboardingStatus.APPROVED,
+            country: 'Ireland',
+            city: 'Dublin',
           },
         });
       }

@@ -561,9 +561,18 @@ const assertMyJob = async (traderId: string, jobId: string) => {
  * Open marketplace (PUBLISHED + unassigned) is allowed; already-linked jobs too.
  */
 const assertJobForQuote = async (traderId: string, jobId: string) => {
+  const jobQuoteSelect = {
+    id: true,
+    status: true,
+    traderId: true,
+    offer: { select: { currencyCode: true } },
+    customer: { select: { preferredCurrency: true, country: true } },
+    address: { select: { country: true } },
+  } as const;
+
   const linked = await prisma.job.findFirst({
     where: { id: jobId, ...traderJobAccessWhere(traderId) },
-    select: { id: true, status: true, traderId: true },
+    select: jobQuoteSelect,
   });
   if (linked) {
     if (linked.traderId && linked.traderId !== traderId) {
@@ -581,7 +590,7 @@ const assertJobForQuote = async (traderId: string, jobId: string) => {
 
   const open = await prisma.job.findFirst({
     where: { id: jobId, status: JobStatus.PUBLISHED, traderId: null },
-    select: { id: true, status: true, traderId: true },
+    select: jobQuoteSelect,
   });
   if (!open) {
     throw new NotFoundError('Job not found or no longer available for quoting.');
@@ -2851,9 +2860,12 @@ export const upsertQuote = async (
 
   const traderCurrency =
     asBriskCurrency(body.currencyCode) ||
+    asBriskCurrency(target.offer?.currencyCode) ||
+    asBriskCurrency(target.customer?.preferredCurrency) ||
+    currencyCodeFromCountry(target.address?.country ?? target.customer?.country) ||
     asBriskCurrency(trader.user.preferredCurrency) ||
     currencyCodeFromCountry(trader.country ?? trader.user.country) ||
-    'GBP';
+    'EUR';
 
   const quote = existing
     ? await prisma.quote.update({
@@ -2923,6 +2935,9 @@ export const requestJob = async (
       siteVisitRequested: true,
       quoteType: true,
       siteVisitFee: true,
+      offer: { select: { currencyCode: true } },
+      customer: { select: { preferredCurrency: true, country: true } },
+      address: { select: { country: true } },
     },
   });
   if (!job) {
@@ -2981,9 +2996,12 @@ export const requestJob = async (
 
   const traderCurrency =
     asBriskCurrency(body?.currencyCode) ||
+    asBriskCurrency(job.offer?.currencyCode) ||
+    asBriskCurrency(job.customer?.preferredCurrency) ||
+    currencyCodeFromCountry(job.address?.country ?? job.customer?.country) ||
     asBriskCurrency(trader.user.preferredCurrency) ||
     currencyCodeFromCountry(trader.country ?? trader.user.country) ||
-    'GBP';
+    'EUR';
 
   const quote = existingQuote
     ? await prisma.quote.update({

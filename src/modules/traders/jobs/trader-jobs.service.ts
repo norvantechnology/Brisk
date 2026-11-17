@@ -891,10 +891,10 @@ const currencyForDiscoverJob = async (
   }
 ): Promise<{ currencyCode: string; currencySymbol: string }> => {
   const code =
-    asBriskCurrency(trader.user.preferredCurrency) ||
-    currencyCodeFromCountry(trader.user.country ?? trader.country) ||
     asBriskCurrency(job.customer?.preferredCurrency) ||
     currencyCodeFromCountry(job.address?.country ?? job.customer?.country) ||
+    asBriskCurrency(trader.user.preferredCurrency) ||
+    currencyCodeFromCountry(trader.user.country ?? trader.country) ||
     'EUR';
   const meta = await getCurrencyMeta(code);
   return { currencyCode: meta.code, currencySymbol: meta.symbol };
