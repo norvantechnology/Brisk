@@ -65,6 +65,7 @@ export const sendMessage = async (
       {
         message: req.body.message,
         imageUrl: req.body.imageUrl ?? null,
+        traderId: req.body.traderId ?? (req.query as any)?.traderId ?? null,
       }
     );
     sendResponse({

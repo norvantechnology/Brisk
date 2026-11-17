@@ -19,6 +19,7 @@ export const chatMessagesQuerySchema = z.object({
   query: z.object({
     page: z.coerce.number().int().min(1).optional().default(1),
     limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+    traderId: z.string().uuid().optional(),
   }),
 });
 
@@ -29,6 +30,7 @@ export const chatSendBodySchema = z.object({
       message: z.string().trim().max(4000).optional().default(''),
       /** Public URL from POST /uploads with purpose=chat_photo */
       imageUrl: z.string().url().max(2048).optional().nullable(),
+      traderId: z.string().uuid().optional(),
     })
     .superRefine((body, ctx) => {
       const text = (body.message ?? '').trim();

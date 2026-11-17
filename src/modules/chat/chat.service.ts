@@ -1,4 +1,4 @@
-import { JobStatus, Prisma, UserRole } from '@prisma/client';
+import { JobStatus, Prisma, QuoteStatus, TraderSiteVisitStatus, UserRole } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../utils/pagination';
@@ -27,6 +27,13 @@ type ChatJobAccess = {
   } | null;
 };
 
+type TraderChatProfile = {
+  id: string;
+  businessName: string | null;
+  userId: string;
+  user: { id: string; fullName: string; profilePhotoUrl: string | null };
+};
+
 const jobChatSelect = {
   id: true,
   jobRef: true,
@@ -44,9 +51,161 @@ const jobChatSelect = {
       user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
     },
   },
+  quotes: {
+    where: { status: { notIn: [QuoteStatus.REJECTED, QuoteStatus.EXPIRED] } },
+    orderBy: { updatedAt: 'desc' as const },
+    take: 5,
+    select: {
+      id: true,
+      status: true,
+      traderId: true,
+      trader: {
+        select: {
+          id: true,
+          businessName: true,
+          userId: true,
+          user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
+        },
+      },
+    },
+  },
+  siteVisitRequests: {
+    where: { status: { not: TraderSiteVisitStatus.CANCELLED } },
+    orderBy: { updatedAt: 'desc' as const },
+    take: 5,
+    select: {
+      id: true,
+      status: true,
+      traderId: true,
+      trader: {
+        select: {
+          id: true,
+          businessName: true,
+          userId: true,
+          user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
+        },
+      },
+    },
+  },
 } satisfies Prisma.JobSelect;
 
-const assertChatAccess = async (userId: string, role: UserRole, jobId: string): Promise<ChatJobAccess> => {
+const resolveTraderForJob = async (
+  job: {
+    id: string;
+    trader: TraderChatProfile | null;
+    quotes?: Array<{
+      id: string;
+      status: QuoteStatus;
+      traderId: string;
+      trader: TraderChatProfile;
+    }>;
+    siteVisitRequests?: Array<{
+      id: string;
+      status: TraderSiteVisitStatus;
+      traderId: string;
+      trader: TraderChatProfile;
+    }>;
+  },
+  userId: string,
+  role: UserRole,
+  explicitTraderId?: string | null
+): Promise<TraderChatProfile | null> => {
+  if (role === UserRole.TRADER) {
+    if (job.trader && job.trader.userId === userId) {
+      return job.trader;
+    }
+    const currentTrader = await prisma.trader.findFirst({
+      where: { userId },
+      select: {
+        id: true,
+        businessName: true,
+        userId: true,
+        user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
+      },
+    });
+    if (currentTrader) return currentTrader;
+  }
+
+  // Caller is Customer (or general counterpart lookup)
+  if (job.trader) return job.trader;
+
+  // 1. Explicit traderId if passed by client
+  if (explicitTraderId) {
+    const fromQuote = job.quotes?.find((q) => q.traderId === explicitTraderId)?.trader;
+    if (fromQuote) return fromQuote;
+    const fromVisit = job.siteVisitRequests?.find((s) => s.traderId === explicitTraderId)?.trader;
+    if (fromVisit) return fromVisit;
+    const direct = await prisma.trader.findUnique({
+      where: { id: explicitTraderId },
+      select: {
+        id: true,
+        businessName: true,
+        userId: true,
+        user: { select: { id: true, fullName: true, profilePhotoUrl: true } },
+      },
+    });
+    if (direct) return direct;
+  }
+
+  // 2. Accepted quote awaiting trader confirmation
+  const acceptedQuote = job.quotes?.find((q) => q.status === QuoteStatus.ACCEPTED);
+  if (acceptedQuote?.trader) return acceptedQuote.trader;
+
+  // 3. Last trader message in thread
+  const lastTraderMsg = await prisma.chatMessage.findFirst({
+    where: { jobId: job.id, sender: { role: UserRole.TRADER } },
+    orderBy: { sentAt: 'desc' },
+    select: {
+      sender: {
+        select: {
+          id: true,
+          fullName: true,
+          profilePhotoUrl: true,
+          traderProfile: { select: { id: true, businessName: true, userId: true } },
+        },
+      },
+    },
+  });
+  if (lastTraderMsg?.sender.traderProfile) {
+    return {
+      id: lastTraderMsg.sender.traderProfile.id,
+      businessName: lastTraderMsg.sender.traderProfile.businessName,
+      userId: lastTraderMsg.sender.id,
+      user: {
+        id: lastTraderMsg.sender.id,
+        fullName: lastTraderMsg.sender.fullName,
+        profilePhotoUrl: lastTraderMsg.sender.profilePhotoUrl,
+      },
+    };
+  }
+
+  // 4. Any pending / open quote from a trader
+  const pendingQuote = job.quotes?.find(
+    (q) => q.status !== QuoteStatus.REJECTED && q.status !== QuoteStatus.EXPIRED
+  );
+  if (pendingQuote?.trader) return pendingQuote.trader;
+
+  // 5. Any active site visit request
+  const activeVisit = job.siteVisitRequests?.find(
+    (s) => s.status !== TraderSiteVisitStatus.CANCELLED
+  );
+  if (activeVisit?.trader) return activeVisit.trader;
+
+  // 6. First quote on the job
+  if (job.quotes && job.quotes[0]?.trader) return job.quotes[0].trader;
+
+  // 7. First site visit request on the job
+  if (job.siteVisitRequests && job.siteVisitRequests[0]?.trader) return job.siteVisitRequests[0].trader;
+
+  return null;
+};
+
+const assertChatAccess = async (
+  userId: string,
+  role: UserRole,
+  jobId: string,
+  explicitTraderId?: string | null
+): Promise<ChatJobAccess> => {
   let where: Prisma.JobWhereInput = { id: jobId };
   if (role === UserRole.CUSTOMER) {
     where = { id: jobId, customerId: userId };
@@ -70,8 +229,12 @@ const assertChatAccess = async (userId: string, role: UserRole, jobId: string): 
     select: jobChatSelect,
   });
   if (!job) throw new NotFoundError('Conversation not found.');
+
+  const resolvedTrader = await resolveTraderForJob(job, userId, role, explicitTraderId);
+
   return {
     ...job,
+    trader: resolvedTrader,
     bookingId: job.booking?.id ?? null,
   };
 };
@@ -225,47 +388,50 @@ export const listConversations = async (
         });
   const unreadByJobId = new Map(unreadGrouped.map((g) => [g.jobId, g._count._all]));
 
-  const sorted = jobs
-    .map((j) => {
-      const last = j.chatMessages[0] ?? null;
-      const access: ChatJobAccess = { ...j, bookingId: j.booking?.id ?? null };
-      const preview =
-        last?.message?.trim() ||
-        (last?.imageUrl ? 'Photo' : null);
-      const unreadCount = unreadByJobId.get(j.id) ?? 0;
-      return {
-        conversationId: j.id,
-        jobId: j.id,
-        jobRef: j.jobRef,
-        title: j.title,
-        jobStatus: j.status,
-        counterpart: counterpartFor(access, userId, role),
-        lastMessage: last
-          ? {
-              id: last.id,
-              message: last.message,
-              imageUrl: last.imageUrl ?? null,
-              readAt: last.readAt ?? null,
-              preview,
-              sentAt: last.sentAt,
-              senderId: last.senderId,
-              senderName: last.sender.fullName,
-              senderRole: last.sender.role,
-              isMine: last.senderId === userId,
-            }
-          : null,
-        /** Total messages in the thread (not for the badge). */
-        messagesCount: j._count.chatMessages,
-        /** Badge count — only counterpart messages not yet read by this user. */
-        unreadCount,
-        updatedAt: last?.sentAt ?? null,
-      };
-    })
-    .sort((a, b) => {
-      const at = a.updatedAt?.getTime() ?? 0;
-      const bt = b.updatedAt?.getTime() ?? 0;
-      return bt - at;
-    });
+  const sorted = (
+    await Promise.all(
+      jobs.map(async (j) => {
+        const last = j.chatMessages[0] ?? null;
+        const resolvedTrader = await resolveTraderForJob(j, userId, role);
+        const access: ChatJobAccess = { ...j, trader: resolvedTrader, bookingId: j.booking?.id ?? null };
+        const preview =
+          last?.message?.trim() ||
+          (last?.imageUrl ? 'Photo' : null);
+        const unreadCount = unreadByJobId.get(j.id) ?? 0;
+        return {
+          conversationId: j.id,
+          jobId: j.id,
+          jobRef: j.jobRef,
+          title: j.title,
+          jobStatus: j.status,
+          counterpart: counterpartFor(access, userId, role),
+          lastMessage: last
+            ? {
+                id: last.id,
+                message: last.message,
+                imageUrl: last.imageUrl ?? null,
+                readAt: last.readAt ?? null,
+                preview,
+                sentAt: last.sentAt,
+                senderId: last.senderId,
+                senderName: last.sender.fullName,
+                senderRole: last.sender.role,
+                isMine: last.senderId === userId,
+              }
+            : null,
+          /** Total messages in the thread (not for the badge). */
+          messagesCount: j._count.chatMessages,
+          /** Badge count — only counterpart messages not yet read by this user. */
+          unreadCount,
+          updatedAt: last?.sentAt ?? null,
+        };
+      })
+    )
+  ).sort((a, b) => {
+    const at = a.updatedAt?.getTime() ?? 0;
+    const bt = b.updatedAt?.getTime() ?? 0;
+    return bt - at;
+  });
 
   const total = sorted.length;
   const items = sorted.slice((page - 1) * limit, page * limit);
@@ -285,9 +451,9 @@ export const listMessages = async (
   userId: string,
   role: UserRole,
   jobId: string,
-  query: ChatMessagesQuery
+  query: ChatMessagesQuery & { traderId?: string | null }
 ) => {
-  const job = await assertChatAccess(userId, role, jobId);
+  const job = await assertChatAccess(userId, role, jobId, query.traderId);
   const page = query.page;
   const limit = query.limit;
 
@@ -323,7 +489,7 @@ export const sendMessage = async (
   userId: string,
   role: UserRole,
   jobId: string,
-  input: { message?: string; imageUrl?: string | null }
+  input: { message?: string; imageUrl?: string | null; traderId?: string | null }
 ) => {
   const text = (input.message ?? '').trim();
   const imageUrl = input.imageUrl?.trim() || null;
@@ -334,7 +500,7 @@ export const sendMessage = async (
     throw new BadRequestError('imageUrl must be a valid http(s) URL from POST /uploads.');
   }
 
-  const job = await assertChatAccess(userId, role, jobId);
+  const job = await assertChatAccess(userId, role, jobId, input.traderId);
 
   const recipientUserId =
     role === UserRole.CUSTOMER
