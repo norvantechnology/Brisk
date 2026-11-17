@@ -612,7 +612,12 @@ export const removeDocument = async (
  */
 export const listTraderCategoriesWithState = async (traderId: string) => {
   const rows = await prisma.traderCategory.findMany({
-    where: { traderId },
+    where: {
+      traderId,
+      category: {
+        status: { equals: 'active', mode: 'insensitive' },
+      },
+    },
     orderBy: { createdAt: 'asc' },
     select: {
       isActive: true,
@@ -718,7 +723,10 @@ export const setTraderCategoryActive = async (
   let activatedCategoryName: string | null = null;
   if (isActive && !link.isActive) {
     const category = await prisma.category.findFirst({
-      where: { id: categoryId, status: 'active' },
+      where: {
+        id: categoryId,
+        status: { equals: 'active', mode: 'insensitive' },
+      },
       select: { id: true, name: true },
     });
     if (!category) {
@@ -771,7 +779,10 @@ export const saveCategories = async (
   const registration = await ensureRegistration(userId, trader.id, trader.traderType);
 
   const categories = await prisma.category.findMany({
-    where: { id: { in: input.categoryIds }, status: 'active' },
+    where: {
+      id: { in: input.categoryIds },
+      status: { equals: 'active', mode: 'insensitive' },
+    },
     select: { id: true, name: true },
   });
 
@@ -782,9 +793,10 @@ export const saveCategories = async (
   const selectedIds = [...new Set(input.categoryIds)];
 
   if (options?.allowAfterSubmit) {
-    // Profile: trades are never deleted. Selected → active; with `replace`, others → inactive.
-    // Default (replace) updates active categories to match exactly the selected list.
-    const replace = (input as { replace?: boolean }).replace !== false;
+    // Profile: trades are never deleted. Selected → active.
+    // Only deactivate omitted trades if `replace === true` is explicitly requested by caller.
+    // Default (merge) keeps previously active categories active.
+    const replace = (input as { replace?: boolean }).replace === true;
     const existingActiveIds = new Set(
       trader.categories.filter((c) => c.isActive).map((c) => c.categoryId)
     );
