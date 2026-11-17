@@ -124,6 +124,7 @@ export const getJobQuoteDetail = async (
       trader: {
         select: {
           id: true,
+          userId: true,
           businessName: true,
           bio: true,
           traderType: true,
@@ -139,10 +140,6 @@ export const getJobQuoteDetail = async (
           country: true,
           createdAt: true,
           user: { select: { fullName: true, profilePhotoUrl: true } },
-          categories: {
-            where: { isActive: true },
-            select: { category: { select: { id: true, name: true } } },
-          },
           _count: { select: { ratingsReceived: true } },
         },
       },
@@ -150,7 +147,7 @@ export const getJobQuoteDetail = async (
   });
   if (!quote) throw new NotFoundError('Quotation not found for this job.');
 
-  const [jobsCompleted, reviews, currency] = await Promise.all([
+  const [jobsCompleted, reviews, currency, lastChat] = await Promise.all([
     prisma.booking.count({ where: { traderId: quote.traderId, finishedAt: { not: null } } }),
     prisma.ratingReview.findMany({
       where: { traderId: quote.traderId },
@@ -159,7 +156,17 @@ export const getJobQuoteDetail = async (
       include: { customer: { select: { fullName: true, profilePhotoUrl: true } } },
     }),
     getCurrencyMeta(quote.currencyCode),
+    prisma.chatMessage.findFirst({
+      where: {
+        jobId,
+        senderId: { in: [customerId, quote.trader.userId] },
+      },
+      orderBy: { sentAt: 'desc' },
+      select: { message: true, imageUrl: true },
+    }),
   ]);
+
+  const chatMsg = lastChat ? (lastChat.message?.trim() || (lastChat.imageUrl ? 'Photo' : null)) : null;
 
   const job = quote.job;
   const isOpen = !job.traderId && (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
@@ -357,8 +364,7 @@ export const getJobQuoteDetail = async (
       jobsCompleted,
       isTopRated: t.topRated,
       isVerified,
-      badges: [t.topRated ? 'TOP RATED' : null, isVerified ? 'VERIFIED' : null].filter(Boolean),
-      categories: t.categories.map((c) => c.category),
+      chatMsg,
       memberSince: t.createdAt,
     },
     reviews: reviews.map((r) => ({

@@ -1404,8 +1404,7 @@ router.delete('/:id', ...customerOnly, validate(cancelJobSchema), controller.can
  *                   jobsCompleted: 8
  *                   isTopRated: false
  *                   isVerified: true
- *                   badges: [VERIFIED]
- *                   categories: [{ id: 3f0f23dd-dfa2-4606-9eed-acdc22534f0f, name: Plumbing Services }]
+ *                   chatMsg: "Hello, I can start tomorrow morning."
  *                   memberSince: '2026-09-12T09:30:00.000Z'
  *                 reviews:
  *                   - { id: 0b1c2d3e-0000-4000-8000-000000000001, rating: 5, review: Great work, createdAt: '2026-10-02T10:15:00.000Z', date: 'October 2, 2026', customerName: Sarah C., customerPhotoUrl: null }
