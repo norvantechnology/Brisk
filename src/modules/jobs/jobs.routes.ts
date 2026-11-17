@@ -1377,6 +1377,9 @@ router.delete('/:id', ...customerOnly, validate(cancelJobSchema), controller.can
  *                 amount: 120
  *                 currencyCode: EUR
  *                 currencySymbol: €
+ *                 totalAmount: 157.90
+ *                 formattedTotalAmount: '€ 157.90'
+ *                 paymentSummaryList: [{ label: 'Service Fee', amount: '€ 120.00' }, { label: 'Platform Fee', amount: '€ 10.00' }, { label: 'VAT', amount: '€ 27.90' }]
  *                 notes: Can replace the cartridge or fit a new mixer tap.
  *                 estimatedDays: null
  *                 status: PENDING
