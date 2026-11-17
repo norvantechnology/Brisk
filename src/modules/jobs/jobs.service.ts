@@ -1340,8 +1340,6 @@ export const listMyJobsByTab = async (
       subcategoryName: job.subcategory?.name ?? null,
       timeSlot: job.timeSlot ?? null,
       fixedTimeSlotLabel: resolveTimeSlotConfig(job.subcategory?.name).fixedTimeSlotLabel,
-      timeSlotConfig: resolveTimeSlotConfig(job.subcategory?.name).timeSlotConfig,
-      timeSlotOptions: resolveTimeSlotConfig(job.subcategory?.name).timeSlotOptions,
       /** true → open Reschedule Job sheet; submit via POST /jobs/{id}/reschedule (allowed until trader arrives) */
       canReschedule,
       /** Job classification requested by mobile (Dipen): Site Visit vs Direct */
