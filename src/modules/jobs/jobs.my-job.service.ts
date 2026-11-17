@@ -23,6 +23,8 @@ import {
   customerJobAmountSelect,
   customerHasFinalPaymentRequest,
   customerStatusBadgeFor,
+  computeInvoiceBreakdown,
+  computeTraderOfferDiscount,
   formatAddressLine,
   formatDisplayDay,
   money,
@@ -86,7 +88,39 @@ export const getJobQuoteDetail = async (
   const quote = await prisma.quote.findFirst({
     where: { id: quoteId, jobId, job: { customerId } },
     include: {
-      job: { select: { id: true, jobRef: true, title: true, status: true, traderId: true } },
+      job: {
+        select: {
+          id: true,
+          jobRef: true,
+          title: true,
+          status: true,
+          traderId: true,
+          siteVisitRequested: true,
+          siteVisitFee: true,
+          offerId: true,
+          offer: {
+            select: {
+              discountType: true,
+              discountValue: true,
+            },
+          },
+          booking: {
+            select: {
+              invoice: {
+                select: {
+                  serviceCharge: true,
+                  platformFee: true,
+                  traderOfferDiscount: true,
+                  promoDiscount: true,
+                  tax: true,
+                  totalAmount: true,
+                  status: true,
+                },
+              },
+            },
+          },
+        },
+      },
       trader: {
         select: {
           id: true,
@@ -99,6 +133,7 @@ export const getJobQuoteDetail = async (
           avgRating: true,
           topRated: true,
           verificationStatus: true,
+          isVatRegistered: true,
           city: true,
           county: true,
           country: true,
@@ -167,6 +202,120 @@ export const getJobQuoteDetail = async (
       ? `${customerMeta.symbol}${displayAmount} (approx ${currency.symbol}${originalAmount})`
       : `${customerMeta.symbol}${displayAmount}`;
 
+  const isSiteVisit = Boolean(job.siteVisitRequested);
+  const traderOfferDiscount = job.offer
+    ? computeTraderOfferDiscount(
+        displayAmount,
+        job.offer.discountType,
+        money(job.offer.discountValue)
+      )
+    : 0;
+
+  const inv = job.booking?.invoice;
+  const bd = inv
+    ? {
+        serviceCharge: money(inv.serviceCharge),
+        platformFee: money(inv.platformFee),
+        discount: round2(money(inv.traderOfferDiscount) + money(inv.promoDiscount)),
+        tax: money(inv.tax),
+        totalAmount: money(inv.totalAmount),
+        isPaid: inv.status === 'PAID',
+      }
+    : (() => {
+        const calculated = computeInvoiceBreakdown({
+          serviceCharge: displayAmount,
+          traderOfferDiscount,
+          promoDiscount: 0,
+          materialsTotal: 0,
+          siteVisitFee: isSiteVisit ? money(job.siteVisitFee ?? 0) : 0,
+          isTraderVatRegistered: t.isVatRegistered !== false,
+          currencyCode: customerCurrency,
+          purpose: isSiteVisit ? 'SITE_VISIT_FEE' : 'SERVICE',
+        });
+        return {
+          serviceCharge: calculated.serviceCharge,
+          platformFee: calculated.platformFee,
+          discount: round2(calculated.traderOfferDiscount + calculated.promoDiscount),
+          tax: calculated.tax,
+          totalAmount: calculated.totalAmount,
+          isPaid: false,
+        };
+      })();
+
+  const serviceFee = bd.serviceCharge;
+  const processingFee = bd.platformFee;
+  const discount = bd.discount;
+  const vatAmount = bd.tax;
+  const vatBase = serviceFee + processingFee - discount;
+  const vatPercentage = vatBase > 0 ? round2((vatAmount / vatBase) * 100) : 0;
+  const totalAmount = bd.totalAmount;
+  const totalPaid = bd.isPaid ? totalAmount : 0;
+  const amountDue = bd.isPaid ? 0 : totalAmount;
+  const paymentStatus = bd.isPaid ? 'PAID' : 'UNPAID';
+
+  const formatCur = (amt: number) => {
+    const isNegative = amt < 0;
+    const abs = Math.abs(amt);
+    return `${isNegative ? '-' : ''}${customerMeta.symbol} ${abs.toFixed(2)}`;
+  };
+
+  const paymentSummaryList = [
+    ...(serviceFee > 0
+      ? [
+          {
+            label: 'Service Fee',
+            amount: formatCur(serviceFee),
+          },
+        ]
+      : []),
+    ...(discount > 0
+      ? [
+          {
+            label: 'Discount',
+            amount: formatCur(-discount),
+          },
+        ]
+      : []),
+    ...(processingFee > 0
+      ? [
+          {
+            label: 'Platform Fee',
+            amount: formatCur(processingFee),
+          },
+        ]
+      : []),
+    ...(vatAmount > 0
+      ? [
+          {
+            label: 'VAT',
+            amount: formatCur(vatAmount),
+          },
+        ]
+      : []),
+  ];
+
+  const paymentSummary = {
+    serviceFee,
+    processingFee,
+    discount,
+    vatPercentage,
+    vatAmount,
+    totalPaid,
+    amountDue,
+    totalAmount,
+    formattedTotalAmount: formatCur(totalAmount),
+    paymentStatus,
+    currencyCode: customerCurrency,
+    currencySymbol: customerMeta.symbol,
+    cardBrand: null,
+    cardLast4: null,
+    baseRate: serviceFee,
+    platformFee: processingFee,
+    offerApplied: discount > 0 ? -discount : 0,
+    netPayout: totalAmount,
+    confirmedPayments: [],
+  };
+
   return {
     quoteId: quote.id,
     jobId: job.id,
@@ -181,6 +330,10 @@ export const getJobQuoteDetail = async (
     originalCurrencySymbol: currency.symbol,
     exchangeRate,
     displayPriceLabel,
+    totalAmount,
+    formattedTotalAmount: formatCur(totalAmount),
+    paymentSummary,
+    paymentSummaryList,
     notes: quote.notes,
     estimatedDays: quote.estimatedDays,
     status: quote.status,
