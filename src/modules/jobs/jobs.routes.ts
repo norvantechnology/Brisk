@@ -151,6 +151,10 @@ router.get(
  *         name: offerId
  *         schema: { type: string, format: uuid }
  *         description: Offer UUID (optional).
+ *       - in: query
+ *         name: traderId
+ *         schema: { type: string, format: uuid }
+ *         description: Trader UUID (optional). When passed, returns `categories` containing all categories and subcategories associated with this trader.
  *     responses:
  *       200:
  *         description: Simplified job form config fetched successfully.

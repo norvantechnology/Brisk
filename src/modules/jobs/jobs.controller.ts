@@ -279,6 +279,7 @@ export const getSimpleJobFormConfig = async (
       categoryId?: string;
       subcategoryId?: string;
       offerId?: string;
+      traderId?: string;
     });
     sendResponse({
       res,

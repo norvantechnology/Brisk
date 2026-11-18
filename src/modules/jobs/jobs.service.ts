@@ -27,7 +27,7 @@ import {
   resolveTimeSlotConfig,
   str,
 } from './jobs.form-config';
-import { resolveSubcategoryIconUrl } from '../categories/categories.serializers';
+import { resolveCategoryIconUrl, resolveSubcategoryIconUrl } from '../categories/categories.serializers';
 import type {
   CreateJobInput,
   PublishAddressObject,
@@ -3233,14 +3233,91 @@ export const getSimpleJobFormConfig = async (
     categoryId?: string;
     subcategoryId?: string;
     offerId?: string;
+    traderId?: string;
   }
 ) => {
   let offerApplied = false;
   let categoryId = query.categoryId ?? null;
   let subcategoryId = query.subcategoryId ?? null;
-  let traderId: string | null = null;
+  let traderId: string | null = query.traderId ?? null;
   let offerId = '';
   let offerDiscount = '';
+
+  type SimpleCategoryWithSubs = {
+    id: string;
+    name: string;
+    iconUrl: string;
+    subcategories: Array<{
+      id: string;
+      name: string;
+      iconUrl: string;
+    }>;
+  };
+
+  let traderCategories: SimpleCategoryWithSubs[] = [];
+
+  if (traderId) {
+    const trader = await prisma.trader.findUnique({
+      where: { id: traderId },
+      include: {
+        category: {
+          include: {
+            subcategories: {
+              where: { status: 'active' },
+              orderBy: { name: 'asc' },
+            },
+          },
+        },
+        categories: {
+          where: { isActive: true },
+          include: {
+            category: {
+              include: {
+                subcategories: {
+                  where: { status: 'active' },
+                  orderBy: { name: 'asc' },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (trader) {
+      const catMap = new Map<string, SimpleCategoryWithSubs>();
+
+      if (trader.category && trader.category.status === 'active') {
+        catMap.set(trader.category.id, {
+          id: trader.category.id,
+          name: trader.category.name,
+          iconUrl: resolveCategoryIconUrl(trader.category) ?? '',
+          subcategories: trader.category.subcategories.map((sub) => ({
+            id: sub.id,
+            name: sub.name,
+            iconUrl: resolveSubcategoryIconUrl(sub) ?? '',
+          })),
+        });
+      }
+
+      for (const tc of trader.categories) {
+        if (tc.category && tc.category.status === 'active' && !catMap.has(tc.category.id)) {
+          catMap.set(tc.category.id, {
+            id: tc.category.id,
+            name: tc.category.name,
+            iconUrl: resolveCategoryIconUrl(tc.category) ?? '',
+            subcategories: tc.category.subcategories.map((sub) => ({
+              id: sub.id,
+              name: sub.name,
+              iconUrl: resolveSubcategoryIconUrl(sub) ?? '',
+            })),
+          });
+        }
+      }
+
+      traderCategories = Array.from(catMap.values());
+    }
+  }
 
   if (query.offerId) {
     const offer = await prisma.offer.findUnique({
@@ -3317,6 +3394,7 @@ export const getSimpleJobFormConfig = async (
     qaFormSchema,
     quoteType: siteVisitEnabled ? 'ONSITE' : 'REMOTE',
     fixedTimeSlotLabel,
+    categories: traderCategories,
   };
 };
 
