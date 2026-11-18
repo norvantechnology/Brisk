@@ -265,7 +265,13 @@ const findNearbyDiscoverTraderUserIds = async (payload: JobRealtimePayload): Pro
 const broadcastMarketplaceJobToTraders = async (payload: JobRealtimePayload) => {
   if (payload.status !== 'PUBLISHED') return;
   // Assigned / direct-hire jobs are not Discover marketplace cards
-  if (payload.traderId) return;
+  if (payload.traderId && payload.traderId.trim() !== '') return;
+
+  const dbJob = await prisma.job.findUnique({
+    where: { id: payload.jobId },
+    select: { traderId: true },
+  });
+  if (dbJob?.traderId) return;
 
   try {
     const rooms = [roomTradersDiscover()];
@@ -396,17 +402,34 @@ export const emitJobPublished = (
     legacyData: payload,
     at: payload.at,
   });
-  void pushUserNotification([payload.traderUserId], {
-    type: 'DIRECT_JOB_RECEIVED',
-    title: 'New booking',
-    message: `A customer booked "${jobTitle}" with you.`,
-    data,
-    legacyEvent: RealtimeEvents.JOB_PUBLISHED,
-    legacyData: payload,
-    at: payload.at,
-  });
 
-  // Discover: notify nearby / category traders (fire-and-forget)
+  if (payload.traderId) {
+    void (async () => {
+      let targetUserId = payload.traderUserId;
+      if (!targetUserId && payload.traderId) {
+        const trader = await prisma.trader.findUnique({
+          where: { id: payload.traderId },
+          select: { userId: true },
+        });
+        targetUserId = trader?.userId ?? null;
+      }
+      if (targetUserId) {
+        await pushUserNotification([targetUserId], {
+          type: 'DIRECT_JOB_RECEIVED',
+          title: 'New direct job request',
+          message: `A customer sent you a direct job request: "${jobTitle}".`,
+          data,
+          legacyEvent: RealtimeEvents.JOB_PUBLISHED,
+          legacyData: payload,
+          at: payload.at,
+        });
+      }
+    })();
+    // Direct-hire job: do NOT broadcast to other traders in the marketplace!
+    return;
+  }
+
+  // Discover: notify nearby / category traders (fire-and-forget for open marketplace jobs only)
   void broadcastMarketplaceJobToTraders(payload);
 };
 

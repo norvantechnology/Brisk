@@ -4315,6 +4315,100 @@ const buildIncomingSheet = async (
   };
 };
 
+const directJobSelect = {
+  id: true,
+  jobRef: true,
+  title: true,
+  description: true,
+  city: true,
+  postcode: true,
+  latitude: true,
+  longitude: true,
+  siteVisitRequested: true,
+  quoteType: true,
+  customerId: true,
+  serviceCharge: true,
+  siteVisitFee: true,
+  maxBudget: true,
+  createdAt: true,
+  customer: {
+    select: {
+      fullName: true,
+      profilePhotoUrl: true,
+      mobileVerified: true,
+      emailVerified: true,
+      preferredCurrency: true,
+      country: true,
+    },
+  },
+  address: {
+    select: { city: true, county: true, country: true, latitude: true, longitude: true },
+  },
+};
+
+type DirectJobRow = Prisma.JobGetPayload<{ select: typeof directJobSelect }>;
+
+const buildIncomingSheetFromDirectJob = async (
+  trader: Awaited<ReturnType<typeof getTraderContext>>,
+  job: DirectJobRow,
+  originQuery?: OriginQuery
+) => {
+  const origin = resolveOrigin(trader, originQuery?.lat, originQuery?.lng);
+  void rememberTraderDeviceOrigin(trader.id, originQuery?.lat, originQuery?.lng);
+  const coords = resolveJobCoords(
+    {
+      id: job.id,
+      latitude: job.latitude ?? job.address?.latitude ?? null,
+      longitude: job.longitude ?? job.address?.longitude ?? null,
+    },
+    origin
+  );
+  const distanceKm = Math.round(haversineKm(origin, coords) * 10) / 10;
+  const currency = await resolveDiscoverCurrency({
+    customerPreferredCurrency: job.customer.preferredCurrency,
+    traderPreferredCurrency: trader.user.preferredCurrency,
+    jobCountry: job.address?.country ?? job.customer.country,
+    traderCountry: trader.user.country ?? trader.country,
+  });
+  const amount = money(
+    job.serviceCharge != null
+      ? job.serviceCharge
+      : job.siteVisitFee != null
+      ? job.siteVisitFee
+      : job.maxBudget != null
+      ? job.maxBudget
+      : 0
+  );
+
+  return {
+    id: job.id,
+    jobId: job.id,
+    quoteId: job.id,
+    jobRef: job.jobRef,
+    title: job.title,
+    description: job.description,
+    distanceKm,
+    distanceMiles: Math.round((distanceKm / KM_PER_MILE) * 10) / 10,
+    charges: amount,
+    quoteAmount: amount,
+    currencyCode: currency.currencyCode,
+    currencySymbol: currency.currencySymbol,
+    customer: {
+      fullName: job.customer.fullName,
+      profileImage: job.customer.profilePhotoUrl,
+      isVerifiedCustomer: Boolean(job.customer.mobileVerified || job.customer.emailVerified),
+    },
+    actions: { canAccept: true, canDecline: true },
+    assignmentStatus: 'CUSTOMER_ACCEPTED' as const,
+    isSiteVisit: job.siteVisitRequested || job.quoteType === JobQuoteType.ONSITE,
+    areaName: job.city || job.address?.city || job.postcode || null,
+    latitude: coords.lat,
+    longitude: coords.lng,
+    createdAt: job.createdAt,
+    acceptedAt: job.createdAt,
+  };
+};
+
 export const getIncomingForQuote = async (
   traderUserId: string,
   quoteId: string,
@@ -4339,7 +4433,23 @@ export const getIncomingForJob = async (
     where: { ...awaitingTraderConfirmationWhere(trader.id), OR: [{ jobId: id }, { id }] },
     include: incomingQuoteInclude,
   });
-  return quote ? buildIncomingSheet(trader, quote, originQuery) : null;
+  if (quote) {
+    return buildIncomingSheet(trader, quote, originQuery);
+  }
+
+  const directJob = await prisma.job.findFirst({
+    where: {
+      id,
+      traderId: trader.id,
+      status: JobStatus.PUBLISHED,
+    },
+    select: directJobSelect,
+  });
+  if (directJob) {
+    return buildIncomingSheetFromDirectJob(trader, directJob, originQuery);
+  }
+
+  return null;
 };
 
 /** Latest customer-accepted quotation awaiting this trader (re-open the sheet on app launch). */
@@ -4350,7 +4460,23 @@ export const getIncomingLatest = async (userId: string, originQuery?: OriginQuer
     orderBy: { updatedAt: 'desc' },
     include: incomingQuoteInclude,
   });
-  return quote ? buildIncomingSheet(trader, quote, originQuery) : null;
+  if (quote) {
+    return buildIncomingSheet(trader, quote, originQuery);
+  }
+
+  const directJob = await prisma.job.findFirst({
+    where: {
+      traderId: trader.id,
+      status: JobStatus.PUBLISHED,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: directJobSelect,
+  });
+  if (directJob) {
+    return buildIncomingSheetFromDirectJob(trader, directJob, originQuery);
+  }
+
+  return null;
 };
 
 /** View & Accept → job assigned to this trader and moves to My Jobs ACTIVE. */
@@ -4368,6 +4494,28 @@ export const declineIncomingJob = async (userId: string, jobId: string) => {
     include: incomingQuoteInclude,
   });
   if (!quote) {
+    const directJob = await prisma.job.findFirst({
+      where: { id: jobId, traderId: trader.id, status: JobStatus.PUBLISHED },
+    });
+    if (directJob) {
+      await prisma.job.update({
+        where: { id: directJob.id },
+        data: { status: JobStatus.CANCELLED },
+      });
+      emitJobDeclined({
+        jobId: directJob.id,
+        quoteId: directJob.id,
+        customerId: directJob.customerId,
+        traderId: trader.id,
+        traderName: trader.businessName || trader.user.fullName,
+        amount: money(
+          directJob.serviceCharge ?? directJob.siteVisitFee ?? directJob.maxBudget ?? 0
+        ),
+        currencyCode: 'EUR',
+        at: new Date().toISOString(),
+      });
+      return { jobId: directJob.id, quoteId: directJob.id, declined: true };
+    }
     throw new NotFoundError('This job is no longer waiting for your confirmation.', {
       code: 'NO_ACCEPTED_QUOTE',
     });
