@@ -426,6 +426,25 @@ const resolveDiscoverQuoteFlags = (params: {
   const isWaitingForCustomerConfirmation =
     isJobRequested && !isAssignedToThis && isOpenMarketplace;
 
+  const isDirectHireAwaitingAccept =
+    isAssignedToThis && params.jobStatus === JobStatus.PUBLISHED;
+
+  if (isDirectHireAwaitingAccept) {
+    return {
+      hasSubmittedQuote: false,
+      canUpdateQuote: false,
+      canSubmitQuote: false,
+      canRequestJob: true,
+      isJobRequested: false,
+      isWaitingForCustomerConfirmation: false,
+      assignmentStatus: 'CUSTOMER_ACCEPTED',
+      quoteId: quote?.id ?? null,
+      quoteAmount: quote ? money(quote.quotedAmount) : null,
+      quoteNotes: quote?.notes ?? null,
+      quoteStatus: quote?.status ?? null,
+    };
+  }
+
   if (isAssignedToThis && params.jobTraderId) {
     return {
       hasSubmittedQuote,
@@ -492,7 +511,7 @@ const resolvePrimaryActions = (
   quote: DiscoverQuoteState,
   needsReschedule = false
 ) => {
-  // Customer accepted this trader's quote → trader confirms via POST /traders/jobs/incoming/{id}/accept.
+  // Customer accepted this trader's quote or direct hire → trader confirms via POST /traders/jobs/incoming/{id}/accept.
   if (quote.assignmentStatus === 'CUSTOMER_ACCEPTED') {
     return {
       canSelectDateTime: false,
@@ -500,7 +519,7 @@ const resolvePrimaryActions = (
       canRequestReschedule: false,
       canSubmitQuote: false,
       canUpdateQuote: false,
-      canRequestJob: false,
+      canRequestJob: quote.canRequestJob ?? true,
       primaryAction: 'CONFIRM_JOB' as const,
     };
   }
@@ -2060,6 +2079,7 @@ export const listJobsQueue = async (
     queuedAt: Date;
     /** Customer accepted this trader's quote — trader must View & Accept. */
     awaitingTraderAccept: boolean;
+    isDirectHire?: boolean;
   };
 
   const byJob = new Map<string, QueueAcc>();
@@ -2112,7 +2132,8 @@ export const listJobsQueue = async (
         quote: null,
         visit: null,
         queuedAt: directJob.updatedAt,
-        awaitingTraderAccept: true,
+        awaitingTraderAccept: false,
+        isDirectHire: true,
       });
     }
   }
@@ -2179,22 +2200,26 @@ export const listJobsQueue = async (
                 : ('QUOTE_SENT' as const);
 
       const statusBadge =
-        queueKind === 'AWAITING_TRADER_ACCEPT'
-          ? (row.quote ? 'Awaiting Your Acceptance' : 'Direct Request')
-          : queueKind === 'QUOTE_SENT'
-            ? 'Quote Sent'
-            : queueKind === 'SITE_VISIT_CONFIRMED'
-              ? 'Site Visit Confirmed'
-              : queueKind === 'SITE_VISIT_COMPLETED'
-                ? 'Site Visit Completed'
-                : queueKind === 'SITE_VISIT_RESCHEDULED'
-                  ? 'Reschedule Requested'
-                  : 'Site Visit Requested';
+        row.isDirectHire
+          ? 'Direct Request'
+          : queueKind === 'AWAITING_TRADER_ACCEPT'
+            ? (row.quote ? 'Awaiting Your Acceptance' : 'Direct Request')
+            : queueKind === 'QUOTE_SENT'
+              ? 'Quote Sent'
+              : queueKind === 'SITE_VISIT_CONFIRMED'
+                ? 'Site Visit Confirmed'
+                : queueKind === 'SITE_VISIT_COMPLETED'
+                  ? 'Site Visit Completed'
+                  : queueKind === 'SITE_VISIT_RESCHEDULED'
+                    ? 'Reschedule Requested'
+                    : 'Site Visit Requested';
 
       const statusLabel =
-        queueKind === 'AWAITING_TRADER_ACCEPT'
-          ? (row.quote ? 'Customer accepted — tap View & Accept' : 'Direct job request — tap View & Accept')
-          : queueKind === 'SITE_VISIT_CONFIRMED'
+        row.isDirectHire
+          ? 'Direct job request — tap to view details'
+          : queueKind === 'AWAITING_TRADER_ACCEPT'
+            ? (row.quote ? 'Customer accepted — tap View & Accept' : 'Direct job request — tap View Details')
+            : queueKind === 'SITE_VISIT_CONFIRMED'
             ? 'Customer confirmed schedule — complete site visit'
             : queueKind === 'SITE_VISIT_COMPLETED'
               ? 'Site visit done — submit your quotation'
@@ -2280,24 +2305,28 @@ export const listJobsQueue = async (
                     ? 'WAITING_FOR_CUSTOMER'
                     : 'QUOTED',
         customerName: job.customer.fullName,
-        primaryAction: awaitingTraderAccept
-          ? ('CONFIRM_JOB' as const)
-          : isConfirmedSiteVisit
-            ? ('COMPLETE_SITE_VISIT' as const)
-            : isCompletedSiteVisitAwaitingQuote
-              ? ('SUBMIT_QUOTE' as const)
-              : isRescheduleRequiredSiteVisit
-                ? ('REQUEST_RESCHEDULE' as const)
-                : ('VIEW_DETAILS' as const),
-        primaryActionLabel: awaitingTraderAccept
-          ? 'View & Accept'
-          : isConfirmedSiteVisit
-            ? 'Complete Site Visit'
-            : isCompletedSiteVisitAwaitingQuote
-              ? 'Submit Quotation'
-              : isRescheduleRequiredSiteVisit
-                ? 'Reschedule Visit'
-                : 'View Details',
+        primaryAction: row.isDirectHire
+          ? ('VIEW_DETAILS' as const)
+          : awaitingTraderAccept
+            ? ('CONFIRM_JOB' as const)
+            : isConfirmedSiteVisit
+              ? ('COMPLETE_SITE_VISIT' as const)
+              : isCompletedSiteVisitAwaitingQuote
+                ? ('SUBMIT_QUOTE' as const)
+                : isRescheduleRequiredSiteVisit
+                  ? ('REQUEST_RESCHEDULE' as const)
+                  : ('VIEW_DETAILS' as const),
+        primaryActionLabel: row.isDirectHire
+          ? 'View Details'
+          : awaitingTraderAccept
+            ? 'View & Accept'
+            : isConfirmedSiteVisit
+              ? 'Complete Site Visit'
+              : isCompletedSiteVisitAwaitingQuote
+                ? 'Submit Quotation'
+                : isRescheduleRequiredSiteVisit
+                  ? 'Reschedule Visit'
+                  : 'View Details',
       };
     })
   );
