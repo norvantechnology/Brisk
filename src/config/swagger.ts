@@ -254,6 +254,16 @@ const options: swaggerJSDoc.Options = {
         description:
           'My Property + My Address tabs. Addresses CRUD, property meters/readings, utility subscriptions, MPRN/GPRN help tips with imageUrl. Auth: customer Bearer token.',
       },
+      {
+        name: 'Admin / Property Suppliers',
+        description:
+          'Admin CRUD for Property Listed Suppliers master data (Energy Suppliers, Broadband Suppliers, Waste Management), parent-child brand hierarchy, and Irish county coverage mapping.',
+      },
+      {
+        name: 'Property Suppliers',
+        description:
+          'Public / Customer directory of active property suppliers by category (Energy, Broadband, Waste Management) and Irish county coverage.',
+      },
       { name: 'Customer / Profile', description: 'Customer profile' },
       {
         name: 'Trader / Discover Jobs',
