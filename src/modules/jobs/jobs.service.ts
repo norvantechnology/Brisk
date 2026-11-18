@@ -3246,11 +3246,11 @@ export const getSimpleJobFormConfig = async (
   type SimpleCategoryWithSubs = {
     id: string;
     name: string;
-    iconUrl: string;
+    iconUrl: string | null;
     subcategories: Array<{
       id: string;
       name: string;
-      iconUrl: string;
+      iconUrl: string | null;
     }>;
   };
 
@@ -3288,28 +3288,30 @@ export const getSimpleJobFormConfig = async (
       const catMap = new Map<string, SimpleCategoryWithSubs>();
 
       if (trader.category && trader.category.status === 'active') {
+        const catIcon = resolveCategoryIconUrl(trader.category);
         catMap.set(trader.category.id, {
           id: trader.category.id,
           name: trader.category.name,
-          iconUrl: resolveCategoryIconUrl(trader.category) ?? '',
+          iconUrl: catIcon,
           subcategories: trader.category.subcategories.map((sub) => ({
             id: sub.id,
             name: sub.name,
-            iconUrl: resolveSubcategoryIconUrl(sub) ?? '',
+            iconUrl: resolveSubcategoryIconUrl(sub) || catIcon,
           })),
         });
       }
 
       for (const tc of trader.categories) {
         if (tc.category && tc.category.status === 'active' && !catMap.has(tc.category.id)) {
+          const catIcon = resolveCategoryIconUrl(tc.category);
           catMap.set(tc.category.id, {
             id: tc.category.id,
             name: tc.category.name,
-            iconUrl: resolveCategoryIconUrl(tc.category) ?? '',
+            iconUrl: catIcon,
             subcategories: tc.category.subcategories.map((sub) => ({
               id: sub.id,
               name: sub.name,
-              iconUrl: resolveSubcategoryIconUrl(sub) ?? '',
+              iconUrl: resolveSubcategoryIconUrl(sub) || catIcon,
             })),
           });
         }
