@@ -915,20 +915,11 @@ export const getAdminJobDetail = async (where: Prisma.JobWhereInput, notFoundMes
     title: job.title,
     status: job.status,
     updatedAt: job.updatedAt,
+    serviceCharge: job.serviceCharge,
+    traderId: job.traderId ?? job.trader?.id ?? null,
+    quotes: job.quotes,
     paymentRequests: job.paymentRequests,
-    booking: job.booking
-      ? {
-          invoice: job.booking.invoice
-            ? {
-                status: job.booking.invoice.status,
-                paymentRequestId: job.booking.invoice.paymentRequestId,
-                currencyCode: job.booking.invoice.currencyCode,
-                serviceCharge: job.booking.invoice.serviceCharge,
-                traderOfferDiscount: job.booking.invoice.traderOfferDiscount,
-              }
-            : null,
-        }
-      : null,
+    booking: job.booking,
     payouts: job.payouts,
   });
 

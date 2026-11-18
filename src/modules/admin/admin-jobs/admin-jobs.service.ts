@@ -278,6 +278,14 @@ const JOB_LIST_INCLUDE = {
     },
   },
   _count: { select: { quotes: true, siteVisitRequests: true } },
+  quotes: {
+    select: {
+      traderId: true,
+      quotedAmount: true,
+      currencyCode: true,
+      status: true,
+    },
+  },
   booking: {
     select: {
       id: true,
@@ -425,6 +433,9 @@ export const listAdminJobs = async (query: AdminJobsListQuery) => {
           title: job.title,
           status: job.status,
           updatedAt: job.updatedAt,
+          serviceCharge: job.serviceCharge,
+          traderId: job.traderId,
+          quotes: (job as any).quotes ?? [],
           paymentRequests: job.paymentRequests,
           booking: job.booking,
           payouts: job.payouts,
