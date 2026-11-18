@@ -2891,7 +2891,8 @@ export const upsertQuote = async (
         },
       });
 
-  if (isOpenJob) await notifyQuoteReceived(trader.id, jobId, quote, existing ? 'UPDATED' : 'NEW');
+  const isOpenOrDirect = !target.traderId || target.status === JobStatus.PUBLISHED;
+  if (isOpenOrDirect) await notifyQuoteReceived(trader.id, jobId, quote, existing ? 'UPDATED' : 'NEW');
 
   // Keep job PUBLISHED on Discover until customer confirms the trader.
   const isJobRequested = Boolean(quote.requestedAt);
@@ -2926,15 +2927,12 @@ export const requestJob = async (
 ) => {
   const trader = await getTraderContext(userId);
 
-  const directJob = await prisma.job.findFirst({
-    where: { id: jobId, traderId: trader.id, status: JobStatus.PUBLISHED },
-  });
-  if (directJob) {
-    return acceptIncomingJob(userId, jobId);
-  }
-
   const job = await prisma.job.findFirst({
-    where: { id: jobId, status: { in: [JobStatus.PUBLISHED, JobStatus.QUOTED] }, traderId: null },
+    where: {
+      id: jobId,
+      status: { in: [JobStatus.PUBLISHED, JobStatus.QUOTED] },
+      OR: [{ traderId: null }, { traderId: trader.id }],
+    },
     select: {
       id: true,
       customerId: true,
@@ -3055,18 +3053,11 @@ export const acceptJob = async (
 ) => {
   const trader = await getTraderContext(userId);
 
-  const directJob = await prisma.job.findFirst({
-    where: { id: jobId, traderId: trader.id, status: JobStatus.PUBLISHED },
-  });
-  if (directJob) {
-    return acceptIncomingJob(userId, jobId);
-  }
-
-  // Marketplace open job: Request only (may not be in My Jobs yet).
+  // Marketplace / Direct open job: Request only (may not be in My Jobs yet).
   const open = await prisma.job.findFirst({
     where: {
       id: jobId,
-      traderId: null,
+      OR: [{ traderId: null }, { traderId: trader.id }],
       status: { in: [JobStatus.PUBLISHED, JobStatus.QUOTED] },
     },
     select: { id: true },
@@ -3174,9 +3165,6 @@ export const confirmQuoteAssignment = async (params: {
   if (!job) {
     throw new NotFoundError('Job not found.');
   }
-  if (job.traderId) {
-    throw new ConflictError('A trader is already confirmed for this job.');
-  }
   if (!OPEN_FOR_QUOTES.includes(job.status)) {
     throw new BadRequestError('Job is not open for trader confirmation.');
   }
@@ -3185,11 +3173,18 @@ export const confirmQuoteAssignment = async (params: {
   if (!quote || quote.status === QuoteStatus.REJECTED || quote.status === QuoteStatus.EXPIRED) {
     throw new NotFoundError('Quote not found or no longer available.');
   }
+  if (job.traderId && job.traderId !== quote.traderId) {
+    throw new ConflictError('A trader is already confirmed for this job.');
+  }
 
   // Row lock on the job serialises this with the trader's View & Accept (assignAcceptedQuote).
   const previouslySelected = await prisma.$transaction(async (tx) => {
     const open = await tx.job.updateMany({
-      where: { id: job.id, traderId: null, status: { in: OPEN_FOR_QUOTES } },
+      where: {
+        id: job.id,
+        OR: [{ traderId: null }, { traderId: quote.traderId }],
+        status: { in: OPEN_FOR_QUOTES },
+      },
       data: { updatedAt: new Date() },
     });
     if (open.count === 0) {
@@ -3289,41 +3284,7 @@ const assignAcceptedQuote = async (traderId: string, jobId: string) => {
   if (!job) {
     throw new NotFoundError('Job not found.');
   }
-  if (job.traderId === traderId) {
-    if (job.status === JobStatus.PUBLISHED) {
-      const scheduledDate = job.scheduledDate ?? new Date();
-      const nextStatus = job.scheduledDate ? JobStatus.SCHEDULED : JobStatus.ACCEPTED;
-      await prisma.$transaction(async (tx) => {
-        await tx.job.update({
-          where: { id: job.id },
-          data: { status: nextStatus },
-        });
-        if (!job.booking) {
-          await tx.booking.create({
-            data: {
-              jobId: job.id,
-              traderId,
-              customerId: job.customerId,
-              scheduledDate,
-              status: BookingStatus.SCHEDULED,
-            },
-          });
-        }
-      });
-      emitJobStatusChanged({
-        jobId: job.id,
-        jobRef: job.jobRef ?? undefined,
-        status: nextStatus,
-        customerId: job.customerId,
-        traderId,
-        title: job.title,
-        actor: 'TRADER',
-        at: new Date().toISOString(),
-      });
-    }
-    return { job, alreadyAssigned: true };
-  }
-  if (job.traderId) {
+  if (job.traderId && job.traderId !== traderId) {
     throw new ConflictError('Job is already assigned to another trader.');
   }
   const quote = job.quotes[0];
@@ -3338,7 +3299,11 @@ const assignAcceptedQuote = async (traderId: string, jobId: string) => {
 
   await prisma.$transaction(async (tx) => {
     const claimed = await tx.job.updateMany({
-      where: { id: job.id, traderId: null, status: { in: OPEN_FOR_QUOTES } },
+      where: {
+        id: job.id,
+        OR: [{ traderId: null }, { traderId: quote.traderId }],
+        status: { in: OPEN_FOR_QUOTES },
+      },
       data: {
         traderId: quote.traderId,
         status: job.scheduledDate ? JobStatus.SCHEDULED : JobStatus.ACCEPTED,
@@ -4234,7 +4199,10 @@ const KM_PER_MILE = 1.609344;
 const awaitingTraderConfirmationWhere = (traderId: string): Prisma.QuoteWhereInput => ({
   traderId,
   status: QuoteStatus.ACCEPTED,
-  job: { traderId: null, status: { in: OPEN_FOR_QUOTES } },
+  job: {
+    status: { in: OPEN_FOR_QUOTES },
+    OR: [{ traderId: null }, { traderId }],
+  },
 });
 
 const incomingQuoteInclude = {

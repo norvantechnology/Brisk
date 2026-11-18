@@ -169,12 +169,12 @@ export const getJobQuoteDetail = async (
   const chatMsg = lastChat ? (lastChat.message?.trim() || (lastChat.imageUrl ? 'Photo' : null)) : null;
 
   const job = quote.job;
-  const isOpen = !job.traderId && (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
+  const isOpen = job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED;
   const selectionStatus =
-    job.traderId === quote.traderId && quote.status === QuoteStatus.ACCEPTED
-      ? 'CONFIRMED'
-      : quote.status === QuoteStatus.ACCEPTED && isOpen
-        ? 'AWAITING TRADER CONFIRMATION'
+    quote.status === QuoteStatus.ACCEPTED && isOpen
+      ? 'AWAITING TRADER CONFIRMATION'
+      : job.traderId === quote.traderId && quote.status === QuoteStatus.ACCEPTED
+        ? 'CONFIRMED'
         : quote.status;
   const t = quote.trader;
   const isVerified = t.verificationStatus === 'VERIFIED';

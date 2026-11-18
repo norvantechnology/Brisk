@@ -1463,15 +1463,15 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
     symbols.set(code, (await getCurrencyMeta(code)).symbol);
   }
   const isOpen =
-    !job.traderId && (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
+    job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED;
 
   const items = await Promise.all(
     quotes.map(async (q) => {
       const selectionStatus =
-        job.traderId === q.traderId && q.status === QuoteStatus.ACCEPTED
-          ? 'CONFIRMED'
-          : q.status === QuoteStatus.ACCEPTED && isOpen
-            ? 'AWAITING TRADER CONFIRMATION'
+        q.status === QuoteStatus.ACCEPTED && isOpen
+          ? 'AWAITING TRADER CONFIRMATION'
+          : job.traderId === q.traderId && q.status === QuoteStatus.ACCEPTED
+            ? 'CONFIRMED'
             : q.status;
 
       const originalAmount = money(q.quotedAmount);

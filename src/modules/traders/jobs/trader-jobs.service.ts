@@ -415,37 +415,19 @@ const resolveDiscoverQuoteFlags = (params: {
   hasActiveVisit?: boolean;
 }): DiscoverQuoteState => {
   const isAssignedToThis = params.jobTraderId === params.traderId;
-  const isOpenMarketplace =
-    params.jobStatus === JobStatus.PUBLISHED && params.jobTraderId == null;
+  const isAvailableForQuoting =
+    params.jobStatus === JobStatus.PUBLISHED &&
+    (params.jobTraderId == null || isAssignedToThis);
   const quote = params.quote ?? null;
   const hasSubmittedQuote = Boolean(quote);
   const isJobRequested = Boolean(quote?.requestedAt);
 
-  // Waiting = trader requested AND customer has not confirmed (still open marketplace).
+  // Waiting = trader requested AND customer has not confirmed.
   // This is NOT the Active / assigned job state.
   const isWaitingForCustomerConfirmation =
-    isJobRequested && !isAssignedToThis && isOpenMarketplace;
+    isJobRequested && isAvailableForQuoting;
 
-  const isDirectHireAwaitingAccept =
-    isAssignedToThis && params.jobStatus === JobStatus.PUBLISHED;
-
-  if (isDirectHireAwaitingAccept) {
-    return {
-      hasSubmittedQuote: false,
-      canUpdateQuote: false,
-      canSubmitQuote: false,
-      canRequestJob: true,
-      isJobRequested: false,
-      isWaitingForCustomerConfirmation: false,
-      assignmentStatus: 'CUSTOMER_ACCEPTED',
-      quoteId: quote?.id ?? null,
-      quoteAmount: quote ? money(quote.quotedAmount) : null,
-      quoteNotes: quote?.notes ?? null,
-      quoteStatus: quote?.status ?? null,
-    };
-  }
-
-  if (isAssignedToThis && params.jobTraderId) {
+  if (isAssignedToThis && params.jobTraderId && params.jobStatus !== JobStatus.PUBLISHED) {
     return {
       hasSubmittedQuote,
       canUpdateQuote: false,
@@ -470,7 +452,7 @@ const resolveDiscoverQuoteFlags = (params: {
     };
   }
 
-  if (quote.status === QuoteStatus.ACCEPTED && isOpenMarketplace) {
+  if (quote.status === QuoteStatus.ACCEPTED && isAvailableForQuoting) {
     return {
       hasSubmittedQuote: true,
       canUpdateQuote: false,
@@ -490,9 +472,9 @@ const resolveDiscoverQuoteFlags = (params: {
 
   return {
     hasSubmittedQuote: true,
-    canUpdateQuote: pending && isOpenMarketplace,
+    canUpdateQuote: pending && isAvailableForQuoting,
     canSubmitQuote: false,
-    canRequestJob: !isJobRequested && isOpenMarketplace && pending,
+    canRequestJob: !isJobRequested && isAvailableForQuoting && pending,
     isJobRequested,
     isWaitingForCustomerConfirmation,
     assignmentStatus: isWaitingForCustomerConfirmation
@@ -511,7 +493,7 @@ const resolvePrimaryActions = (
   quote: DiscoverQuoteState,
   needsReschedule = false
 ) => {
-  // Customer accepted this trader's quote or direct hire → trader confirms via POST /traders/jobs/incoming/{id}/accept.
+  // Customer accepted this trader's quote → trader confirms via POST /traders/jobs/incoming/{id}/accept.
   if (quote.assignmentStatus === 'CUSTOMER_ACCEPTED') {
     return {
       canSelectDateTime: false,
@@ -1036,13 +1018,11 @@ export const listDiscoverJobs = async (
   ];
   const where: Prisma.JobWhereInput = {
     status: JobStatus.PUBLISHED,
+    ...(excludedJobIds.length ? { id: { notIn: excludedJobIds } } : {}),
+    ...(categoryFilter ? { categoryId: categoryFilter } : {}),
     OR: [
       { traderId: trader.id },
-      {
-        traderId: null,
-        ...(excludedJobIds.length ? { id: { notIn: excludedJobIds } } : {}),
-        ...(categoryFilter ? { categoryId: categoryFilter } : {}),
-      },
+      { traderId: null },
     ],
     ...(createdAt ? { createdAt } : {}),
   };
@@ -1361,9 +1341,8 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
       ...quoteState,
       canRequestJob:
         !quoteState.isJobRequested &&
-        job.traderId !== trader.id &&
         job.status === JobStatus.PUBLISHED &&
-        job.traderId == null,
+        (job.traderId == null || job.traderId === trader.id),
     };
   }
   const actions = resolvePrimaryActions(isSiteVisit, siteVisit, quoteState, needsReschedule);
@@ -1961,13 +1940,17 @@ export const listJobsQueue = async (
 
   const openJobWhere: Prisma.JobWhereInput = {
     status: JobStatus.PUBLISHED,
-    traderId: null,
+    OR: [{ traderId: null }, { traderId: trader.id }],
     ...(search
       ? {
-        OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { jobRef: { contains: search, mode: 'insensitive' } },
-          { city: { contains: search, mode: 'insensitive' } },
+        AND: [
+          {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { jobRef: { contains: search, mode: 'insensitive' } },
+              { city: { contains: search, mode: 'insensitive' } },
+            ],
+          },
         ],
       }
       : {}),
@@ -2010,7 +1993,7 @@ export const listJobsQueue = async (
     job: { select: jobSelect },
   } satisfies Prisma.QuoteSelect;
 
-  const [pendingQuotes, acceptedQuotes, visits, directHireJobs] = await Promise.all([
+  const [pendingQuotes, acceptedQuotes, visits] = await Promise.all([
     // Waiting on customer (quote sent / request job)
     prisma.quote.findMany({
       where: {
@@ -2062,24 +2045,6 @@ export const listJobsQueue = async (
         },
       },
     }),
-    // Direct hire jobs assigned to this trader that are published & awaiting acceptance
-    prisma.job.findMany({
-      where: {
-        traderId: trader.id,
-        status: JobStatus.PUBLISHED,
-        ...(search
-          ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { jobRef: { contains: search, mode: 'insensitive' } },
-              { city: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-          : {}),
-      },
-      orderBy: [{ updatedAt: 'desc' }],
-      select: jobSelect,
-    }),
   ]);
 
   type QueueAcc = {
@@ -2089,7 +2054,6 @@ export const listJobsQueue = async (
     queuedAt: Date;
     /** Customer accepted this trader's quote — trader must View & Accept. */
     awaitingTraderAccept: boolean;
-    isDirectHire?: boolean;
   };
 
   const byJob = new Map<string, QueueAcc>();
@@ -2131,19 +2095,6 @@ export const listJobsQueue = async (
         visit: v,
         queuedAt,
         awaitingTraderAccept: false,
-      });
-    }
-  }
-
-  for (const directJob of directHireJobs) {
-    if (!byJob.has(directJob.id)) {
-      byJob.set(directJob.id, {
-        job: directJob,
-        quote: null,
-        visit: null,
-        queuedAt: directJob.updatedAt,
-        awaitingTraderAccept: false,
-        isDirectHire: true,
       });
     }
   }
@@ -2210,26 +2161,22 @@ export const listJobsQueue = async (
                 : ('QUOTE_SENT' as const);
 
       const statusBadge =
-        row.isDirectHire
-          ? 'Direct Request'
-          : queueKind === 'AWAITING_TRADER_ACCEPT'
-            ? (row.quote ? 'Awaiting Your Acceptance' : 'Direct Request')
-            : queueKind === 'QUOTE_SENT'
-              ? 'Quote Sent'
-              : queueKind === 'SITE_VISIT_CONFIRMED'
-                ? 'Site Visit Confirmed'
-                : queueKind === 'SITE_VISIT_COMPLETED'
-                  ? 'Site Visit Completed'
-                  : queueKind === 'SITE_VISIT_RESCHEDULED'
-                    ? 'Reschedule Requested'
-                    : 'Site Visit Requested';
+        queueKind === 'AWAITING_TRADER_ACCEPT'
+          ? (row.quote ? 'Awaiting Your Acceptance' : 'Direct Request')
+          : queueKind === 'QUOTE_SENT'
+            ? 'Quote Sent'
+            : queueKind === 'SITE_VISIT_CONFIRMED'
+              ? 'Site Visit Confirmed'
+              : queueKind === 'SITE_VISIT_COMPLETED'
+                ? 'Site Visit Completed'
+                : queueKind === 'SITE_VISIT_RESCHEDULED'
+                  ? 'Reschedule Requested'
+                  : 'Site Visit Requested';
 
       const statusLabel =
-        row.isDirectHire
-          ? 'Direct job request — tap to view details'
-          : queueKind === 'AWAITING_TRADER_ACCEPT'
-            ? (row.quote ? 'Customer accepted — tap View & Accept' : 'Direct job request — tap View Details')
-            : queueKind === 'SITE_VISIT_CONFIRMED'
+        queueKind === 'AWAITING_TRADER_ACCEPT'
+          ? (row.quote ? 'Customer accepted — tap View & Accept' : 'Customer accepted — tap View & Accept')
+          : queueKind === 'SITE_VISIT_CONFIRMED'
             ? 'Customer confirmed schedule — complete site visit'
             : queueKind === 'SITE_VISIT_COMPLETED'
               ? 'Site visit done — submit your quotation'
@@ -2315,28 +2262,24 @@ export const listJobsQueue = async (
                     ? 'WAITING_FOR_CUSTOMER'
                     : 'QUOTED',
         customerName: job.customer.fullName,
-        primaryAction: row.isDirectHire
-          ? ('VIEW_DETAILS' as const)
-          : awaitingTraderAccept
-            ? ('CONFIRM_JOB' as const)
-            : isConfirmedSiteVisit
-              ? ('COMPLETE_SITE_VISIT' as const)
-              : isCompletedSiteVisitAwaitingQuote
-                ? ('SUBMIT_QUOTE' as const)
-                : isRescheduleRequiredSiteVisit
-                  ? ('REQUEST_RESCHEDULE' as const)
-                  : ('VIEW_DETAILS' as const),
-        primaryActionLabel: row.isDirectHire
-          ? 'View Details'
-          : awaitingTraderAccept
-            ? 'View & Accept'
-            : isConfirmedSiteVisit
-              ? 'Complete Site Visit'
-              : isCompletedSiteVisitAwaitingQuote
-                ? 'Submit Quotation'
-                : isRescheduleRequiredSiteVisit
-                  ? 'Reschedule Visit'
-                  : 'View Details',
+        primaryAction: awaitingTraderAccept
+          ? ('CONFIRM_JOB' as const)
+          : isConfirmedSiteVisit
+            ? ('COMPLETE_SITE_VISIT' as const)
+            : isCompletedSiteVisitAwaitingQuote
+              ? ('SUBMIT_QUOTE' as const)
+              : isRescheduleRequiredSiteVisit
+                ? ('REQUEST_RESCHEDULE' as const)
+                : ('VIEW_DETAILS' as const),
+        primaryActionLabel: awaitingTraderAccept
+          ? 'View & Accept'
+          : isConfirmedSiteVisit
+            ? 'Complete Site Visit'
+            : isCompletedSiteVisitAwaitingQuote
+              ? 'Submit Quotation'
+              : isRescheduleRequiredSiteVisit
+                ? 'Reschedule Visit'
+                : 'View Details',
       };
     })
   );
@@ -2359,7 +2302,10 @@ const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> 
       where: {
         traderId,
         // Any quote history (PENDING/ACCEPTED/REJECTED/EXPIRED) = already engaged.
-        job: { status: JobStatus.PUBLISHED, traderId: null },
+        job: {
+          status: JobStatus.PUBLISHED,
+          OR: [{ traderId: null }, { traderId }],
+        },
       },
       select: { jobId: true },
     }),
@@ -2367,7 +2313,10 @@ const discoverQueueExcludedJobIds = async (traderId: string): Promise<string[]> 
       where: {
         traderId,
         status: { not: TraderSiteVisitStatus.CANCELLED },
-        job: { status: JobStatus.PUBLISHED, traderId: null },
+        job: {
+          status: JobStatus.PUBLISHED,
+          OR: [{ traderId: null }, { traderId }],
+        },
       },
       select: { jobId: true },
     }),
@@ -2389,7 +2338,10 @@ export const listWaitingJobs = async (userId: string) => {
         { status: QuoteStatus.PENDING, requestedAt: { not: null } },
         { status: QuoteStatus.ACCEPTED },
       ],
-      job: { status: JobStatus.PUBLISHED, traderId: null },
+      job: {
+        status: JobStatus.PUBLISHED,
+        OR: [{ traderId: null }, { traderId: trader.id }],
+      },
     },
     orderBy: [{ requestedAt: { sort: 'desc', nulls: 'last' } }, { updatedAt: 'desc' }],
     select: {
