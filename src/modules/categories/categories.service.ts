@@ -1,4 +1,4 @@
-import { DocumentRuleScope } from '@prisma/client';
+import { DocumentRuleScope, Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import {
@@ -14,6 +14,7 @@ const ACTIVE = 'active';
 export type AppCategoryFilters = {
   featured?: string;
   includeSubcategories?: string;
+  traderId?: string;
 };
 
 export type AppSubcategoryFilters = {
@@ -125,9 +126,15 @@ export const listActiveCategories = async (
   const includeSubs =
     filters.includeSubcategories === 'true' || filters.includeSubcategories === '1';
 
-  const where: { status: string; featured?: boolean } = { status: ACTIVE };
+  const where: Prisma.CategoryWhereInput = { status: ACTIVE };
   if (filters.featured === 'true') where.featured = true;
   if (filters.featured === 'false') where.featured = false;
+  if (filters.traderId) {
+    where.OR = [
+      { traders: { some: { id: filters.traderId } } },
+      { traderCategories: { some: { traderId: filters.traderId, isActive: true } } },
+    ];
+  }
 
   const docsMap = options?.traderUserId
     ? await buildTraderCategoryDocumentsMap(options.traderUserId)
