@@ -9,6 +9,7 @@ import { startDocumentExpiryReminderScheduler } from './services/document-expiry
 import { startPlatformSettingsSync } from './modules/settings/platform-settings.service';
 import { seedAdmin } from './database/seeders/admin.seed';
 import { seedPropertyModule } from './database/seeders/property.seed';
+import { seedPropertySuppliers } from './database/seeders/property-suppliers.seed';
 import 'dotenv/config';
 
 const startServer = async () => {
@@ -22,6 +23,11 @@ const startServer = async () => {
     await seedPropertyModule(prisma);
   } catch (err) {
     logger.warn('Initial property seed check skipped/failed', { err });
+  }
+  try {
+    await seedPropertySuppliers(prisma);
+  } catch (err) {
+    logger.warn('Initial property suppliers seed check skipped/failed', { err });
   }
   await startPlatformSettingsSync();
 

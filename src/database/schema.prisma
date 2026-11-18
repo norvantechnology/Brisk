@@ -561,6 +561,74 @@ model Subscription {
 }
 
 // ==========================================
+// PROPERTY LISTED SUPPLIERS (MASTER DATA)
+// ==========================================
+
+model PropertySupplierCategory {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String    @unique
+  code         String    @unique
+  description  String?
+  iconUrl      String?   @map("icon_url")
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  suppliers    PropertySupplier[]
+
+  @@map("property_supplier_categories")
+}
+
+model PropertySupplier {
+  id                  String    @id @default(uuid()) @db.Uuid
+  categoryId          String    @map("category_id") @db.Uuid
+  parentId            String?   @map("parent_id") @db.Uuid
+  name                String
+  slug                String    @unique
+  tradingName         String?   @map("trading_name")
+  logoUrl             String?   @map("logo_url")
+  iconUrl             String?   @map("icon_url")
+  websiteUrl          String?   @map("website_url")
+  contactPhone        String?   @map("contact_phone")
+  contactEmail        String?   @map("contact_email")
+  description         String?
+  typicalService      String?   @map("typical_service")
+  coverageSummary     String?   @map("coverage_summary")
+  providesElectricity Boolean   @default(false) @map("provides_electricity")
+  providesGas         Boolean   @default(false) @map("provides_gas")
+  displayOrder        Int       @default(0) @map("display_order")
+  isActive            Boolean   @default(true) @map("is_active")
+  metadata            Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  category            PropertySupplierCategory         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  parent              PropertySupplier?                @relation("SupplierHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children            PropertySupplier[]               @relation("SupplierHierarchy")
+  countyCoverages     PropertySupplierCountyCoverage[]
+
+  @@map("property_suppliers")
+}
+
+model PropertySupplierCountyCoverage {
+  id                  String           @id @default(uuid()) @db.Uuid
+  supplierId          String           @map("supplier_id") @db.Uuid
+  county              String
+  isDomesticCollector Boolean          @default(true) @map("is_domestic_collector")
+  notes               String?
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  supplier            PropertySupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, county])
+  @@index([county])
+  @@map("property_supplier_county_coverages")
+}
+
+// ==========================================
 // CATEGORIES & SUBCATEGORIES
 // ==========================================
 
