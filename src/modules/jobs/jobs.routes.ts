@@ -842,6 +842,14 @@ router.get('/:id', ...customerOnly, validate(jobIdParamSchema), controller.getJo
  *                     amount: € 10.00
  *                   - label: VAT
  *                     amount: € 10.00
+ *                 flowType: QUOTED
+ *                 hasQuotes: true
+ *                 quotesCount: 1
+ *                 quoteAmount: 120
+ *                 quotes:
+ *                   - id: 5f98bb2e-33ff-4e78-9e12-b9e76d05f32a
+ *                     amount: 120
+ *                     status: PENDING
  *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
  *                 receiptUrl: /payments/7c3d4e5f-0000-4000-8000-000000000004/receipt
  *                 canReview: true
@@ -909,6 +917,14 @@ router.get('/:id/details', ...customerOnly, validate(jobIdParamSchema), controll
  *                 paymentSummary: { serviceFee: 150, processingFee: 10, discount: 0, vatPercentage: 20, vatAmount: 32, totalPaid: 0, amountDue: 192, totalAmount: 192, formattedTotalAmount: '€ 192.00', paymentStatus: PENDING, currencyCode: EUR, currencySymbol: €, cardBrand: null, cardLast4: null, baseRate: 150, platformFee: 10, offerApplied: 0, netPayout: 192, confirmedPayments: [] }
  *                 invoiceId: null
  *                 invoiceNumber: null
+ *                 flowType: QUOTED
+ *                 hasQuotes: true
+ *                 quotesCount: 1
+ *                 quoteAmount: 120
+ *                 quotes:
+ *                   - id: 5f98bb2e-33ff-4e78-9e12-b9e76d05f32a
+ *                     amount: 120
+ *                     status: PENDING
  *                 downloadUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
  *                 invoiceUrl: /jobs/89d85512-3ff7-4fc7-a44a-2e594130d71c/invoice/download
  *                 receiptUrl: null

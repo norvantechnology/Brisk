@@ -1,4 +1,4 @@
-﻿// Auto-generated from 'My Property Listed suppliers (3).xlsx'
+// Auto-generated from 'My Property Listed suppliers (3).xlsx'
 
 export interface SeedSupplierCategory {
   name: string;

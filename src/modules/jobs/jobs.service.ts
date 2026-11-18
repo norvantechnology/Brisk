@@ -357,6 +357,31 @@ const jobInclude = {
       },
     },
   },
+  quotes: {
+    where: { status: { in: [QuoteStatus.ACCEPTED, QuoteStatus.PENDING] } },
+    orderBy: [{ status: 'asc' as const }, { updatedAt: 'desc' as const }],
+    take: 10,
+    select: {
+      id: true,
+      quotedAmount: true,
+      currencyCode: true,
+      status: true,
+      notes: true,
+      createdAt: true,
+      trader: {
+        select: {
+          id: true,
+          businessName: true,
+          profilePhotoUrl: true,
+          avgRating: true,
+          user: { select: { fullName: true, profilePhotoUrl: true } },
+        },
+      },
+    },
+  },
+  _count: {
+    select: { quotes: true },
+  },
 } satisfies Prisma.JobInclude;
 
 const formatSiteVisitDateKey = (d: Date): string => {
@@ -559,6 +584,27 @@ const serializeJob = (
       job.booking?.status ?? null,
       job.booking?.finishedAt ?? null
     ),
+    quotesCount: (job as any)._count?.quotes ?? ((job as any).quotes ? (job as any).quotes.length : 0),
+    hasQuotes: ((job as any)._count?.quotes ?? ((job as any).quotes ? (job as any).quotes.length : 0)) > 0,
+    quoteAmount: (job as any).quotes?.[0] ? money((job as any).quotes[0].quotedAmount) : null,
+    quotes: ((job as any).quotes ?? []).map((q: any) => ({
+      id: q.id,
+      quoteId: q.id,
+      amount: money(q.quotedAmount),
+      currencyCode: q.currencyCode,
+      status: q.status,
+      notes: q.notes,
+      createdAt: q.createdAt,
+      trader: q.trader
+        ? {
+            id: q.trader.id,
+            displayName: q.trader.businessName || q.trader.user?.fullName || 'Trader',
+            fullName: q.trader.user?.fullName || 'Trader',
+            profilePhotoUrl: q.trader.profilePhotoUrl ?? q.trader.user?.profilePhotoUrl ?? null,
+            avgRating: Number(q.trader.avgRating ?? 0),
+          }
+        : null,
+    })),
     scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : '',
     qaFormAnswers: job.qaFormAnswers ?? {},
     qaFormAnswerList: buildQaFormAnswerList(job.subcategory?.qaFormSchema, job.qaFormAnswers),
@@ -1075,8 +1121,8 @@ export const customerJobAmountSelect = {
   minBudget: true,
   maxBudget: true,
   quotes: {
-    where: { status: QuoteStatus.ACCEPTED },
-    orderBy: { updatedAt: 'desc' as const },
+    where: { status: { in: [QuoteStatus.ACCEPTED, QuoteStatus.PENDING] } },
+    orderBy: [{ status: 'asc' as const }, { updatedAt: 'desc' as const }],
     take: 1,
     select: { quotedAmount: true, currencyCode: true },
   },
@@ -1320,8 +1366,9 @@ export const listMyJobsByTab = async (
               { paymentRequested, hasPendingPartial }
             );
 
+    const isDirectOpen = job.traderId != null && job.status === JobStatus.PUBLISHED;
     const hasQuotes =
-      !job.traderId &&
+      (!job.traderId || isDirectOpen) &&
       (job._count?.quotes ?? 0) > 0 &&
       (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
 
@@ -1359,6 +1406,9 @@ export const listMyJobsByTab = async (
       isPartPayment,
       hasPendingPartial,
       flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : hasQuotes ? 'QUOTED' : null,
+      hasQuotes,
+      quotesCount: job._count?.quotes ?? 0,
+      quoteAmount: job.quotes[0] ? money(job.quotes[0].quotedAmount) : null,
       invoiceId,
       downloadUrl: finished && job.traderId ? `/jobs/${job.id}/invoice/download` : null,
     };
@@ -1740,7 +1790,12 @@ const buildCustomerJobView = async (
     !startedAt &&
     !finished;
 
-  const totalAmount = round2(totalPaid + amountDue) || round2(serviceFee + processingFee + vatAmount - discount);
+  const quoteEstimateAmount = (job as any).quotes?.[0] ? money((job as any).quotes[0].quotedAmount) : null;
+  const totalAmount =
+    round2(totalPaid + amountDue) ||
+    round2(serviceFee + processingFee + vatAmount - discount) ||
+    quoteEstimateAmount ||
+    0;
   const formatCur = (amt: number) => {
     const isNegative = amt < 0;
     const abs = Math.abs(amt);
@@ -1782,8 +1837,16 @@ const buildCustomerJobView = async (
       : []),
   ];
 
+  if (paymentSummaryList.length === 0 && quoteEstimateAmount != null) {
+    paymentSummaryList.push({
+      label: 'Quotation',
+      amount: formatCur(quoteEstimateAmount),
+    });
+  }
+
+  const isDirectOpen = job.traderId != null && job.status === JobStatus.PUBLISHED;
   const hasQuotes =
-    !job.traderId &&
+    (!job.traderId || isDirectOpen) &&
     quotesCount > 0 &&
     (job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED);
 
@@ -1820,6 +1883,27 @@ const buildCustomerJobView = async (
     hasPendingPartial,
     isPartPayment: requests.some((r) => r.type === 'PARTIAL'),
     flowType: hasPendingPartial ? 'INSTALLMENT_PAYMENT' : hasQuotes ? 'QUOTED' : null,
+    hasQuotes,
+    quotesCount,
+    quoteAmount: quoteEstimateAmount,
+    quotes: ((job as any).quotes ?? []).map((q: any) => ({
+      id: q.id,
+      quoteId: q.id,
+      amount: money(q.quotedAmount),
+      currencyCode: q.currencyCode,
+      status: q.status,
+      notes: q.notes,
+      createdAt: q.createdAt,
+      trader: q.trader
+        ? {
+            id: q.trader.id,
+            displayName: q.trader.businessName || q.trader.user?.fullName,
+            fullName: q.trader.user?.fullName,
+            profilePhotoUrl: q.trader.profilePhotoUrl ?? q.trader.user?.profilePhotoUrl ?? null,
+            avgRating: Number(q.trader.avgRating ?? 0),
+          }
+        : null,
+    })),
     completedAt: kind === 'COMPLETED' ? eventAt : null,
     cancelledAt: kind === 'CANCELLED' ? eventAt : null,
     cancellationReason: kind === 'CANCELLED' ? job.cancellationReason : null,
@@ -1956,6 +2040,10 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     isPartPayment: view.isPartPayment,
     hasPendingPartial: view.hasPendingPartial,
     flowType: view.flowType,
+    hasQuotes: view.hasQuotes,
+    quotesCount: view.quotesCount,
+    quoteAmount: view.quoteAmount,
+    quotes: view.quotes,
     downloadUrl: view.downloadUrl,
     receiptUrl: view.receiptUrl,
     canReview: view.canReview,
