@@ -413,12 +413,33 @@ export const emitJobPublished = (
         });
         targetUserId = trader?.userId ?? null;
       }
+
+      let customerName = 'A customer';
+      if (payload.customerId) {
+        const customer = await prisma.user.findUnique({
+          where: { id: payload.customerId },
+          select: { fullName: true },
+        });
+        if (customer?.fullName?.trim()) {
+          customerName = customer.fullName.trim();
+        }
+      }
+
       if (targetUserId) {
+        const notifTitle = 'New job assigned';
+        const notifMessage =
+          jobTitle && jobTitle !== 'your job'
+            ? `${customerName} has assigned a job to you: "${jobTitle}".`
+            : `${customerName} has assigned a job to you.`;
+
         await pushUserNotification([targetUserId], {
           type: 'DIRECT_JOB_RECEIVED',
-          title: 'New direct job request',
-          message: `A customer sent you a direct job request: "${jobTitle}".`,
-          data,
+          title: notifTitle,
+          message: notifMessage,
+          data: {
+            ...data,
+            customerName,
+          },
           legacyEvent: RealtimeEvents.JOB_PUBLISHED,
           legacyData: payload,
           at: payload.at,

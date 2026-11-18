@@ -112,11 +112,11 @@ const buildBadge = (
     quoteType: JobQuoteType | null;
     scheduledDate?: Date | null;
     booking?: { status: string } | null;
+    traderId?: string | null;
   },
   traderVisitStatus?: TraderSiteVisitStatus | null
 ): string | null => {
-  // Discover list badge: Reschedule | Site Visit | null only (never "Waiting").
-  // Waiting-for-customer is signaled via isWaitingForCustomerConfirmation / primaryAction.
+  if (job.traderId) return 'Direct Request';
   if (jobNeedsReschedule(job, traderVisitStatus)) return 'Reschedule';
   if (!isSiteVisitJob(job)) return null;
   return 'Site Visit';
@@ -291,16 +291,16 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
       ? [...row.slots].sort((a, b) => a.sortOrder - b.sortOrder)
       : row.visitDate && row.timeSlot
         ? [
-            {
-              id: row.id,
-              visitDate: row.visitDate,
-              timeSlot: row.timeSlot,
-              startTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].startTime,
-              endTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].endTime,
-              sortOrder: 0,
-              isSelected: true,
-            },
-          ]
+          {
+            id: row.id,
+            visitDate: row.visitDate,
+            timeSlot: row.timeSlot,
+            startTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].startTime,
+            endTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].endTime,
+            sortOrder: 0,
+            isSelected: true,
+          },
+        ]
         : [];
 
   const slots = slotRows.map((s) => ({
@@ -316,11 +316,11 @@ const toSiteVisitPayload = (row: SiteVisitRow | null) => {
     slotRows.find((s) => s.isSelected) ||
     (row.visitDate && row.timeSlot
       ? {
-          visitDate: row.visitDate,
-          timeSlot: row.timeSlot,
-          startTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].startTime,
-          endTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].endTime,
-        }
+        visitDate: row.visitDate,
+        timeSlot: row.timeSlot,
+        startTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].startTime,
+        endTime: SITE_VISIT_SLOT_DEFS[row.timeSlot].endTime,
+      }
       : slotRows[0]) ||
     null;
 
@@ -941,19 +941,19 @@ const DISCOVER_SORTS: Record<string, (row: DiscoverRow) => unknown> = {
 /** Newest first by default; pass `sortBy=distanceKm` for nearest-first. Ties → newest, then id. */
 const compareDiscoverRows =
   (sortBy: string | undefined, sortOrder: string | undefined) =>
-  (a: DiscoverRow, b: DiscoverRow): number => {
-    const key = sortBy && DISCOVER_SORTS[sortBy] ? sortBy : 'createdAt';
-    const keyOf = DISCOVER_SORTS[key];
-    // Default: newest (createdAt desc). Explicit distanceKm defaults to nearest (asc).
-    const dir = sortBy
-      ? resolveSortDir(sortOrder, key === 'distanceKm' ? 'asc' : 'desc')
-      : 'desc';
-    return (
-      compareValues(keyOf(a), keyOf(b), dir) ||
-      b.job.createdAt.getTime() - a.job.createdAt.getTime() ||
-      a.job.id.localeCompare(b.job.id)
-    );
-  };
+    (a: DiscoverRow, b: DiscoverRow): number => {
+      const key = sortBy && DISCOVER_SORTS[sortBy] ? sortBy : 'createdAt';
+      const keyOf = DISCOVER_SORTS[key];
+      // Default: newest (createdAt desc). Explicit distanceKm defaults to nearest (asc).
+      const dir = sortBy
+        ? resolveSortDir(sortOrder, key === 'distanceKm' ? 'asc' : 'desc')
+        : 'desc';
+      return (
+        compareValues(keyOf(a), keyOf(b), dir) ||
+        b.job.createdAt.getTime() - a.job.createdAt.getTime() ||
+        a.job.id.localeCompare(b.job.id)
+      );
+    };
 
 export const listDiscoverJobs = async (
   userId: string,
@@ -1004,11 +1004,11 @@ export const listDiscoverJobs = async (
 
   const filterIsDeactivated = query.categoryId
     ? Boolean(
-        await prisma.traderCategory.findFirst({
-          where: { traderId: trader.id, categoryId: query.categoryId, isActive: false },
-          select: { traderId: true },
-        })
-      )
+      await prisma.traderCategory.findFirst({
+        where: { traderId: trader.id, categoryId: query.categoryId, isActive: false },
+        select: { traderId: true },
+      })
+    )
     : false;
 
   const categoryFilter = query.categoryId
@@ -1036,16 +1036,26 @@ export const listDiscoverJobs = async (
   ];
   const where: Prisma.JobWhereInput = {
     status: JobStatus.PUBLISHED,
-    traderId: null,
-    ...(excludedJobIds.length ? { id: { notIn: excludedJobIds } } : {}),
-    ...(categoryFilter ? { categoryId: categoryFilter } : {}),
+    OR: [
+      { traderId: trader.id },
+      {
+        traderId: null,
+        ...(excludedJobIds.length ? { id: { notIn: excludedJobIds } } : {}),
+        ...(categoryFilter ? { categoryId: categoryFilter } : {}),
+      },
+    ],
     ...(createdAt ? { createdAt } : {}),
   };
 
   if (query.siteVisit) {
-    where.OR = [
-      { siteVisitRequested: true },
-      { quoteType: JobQuoteType.ONSITE },
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [
+          { siteVisitRequested: true },
+          { quoteType: JobQuoteType.ONSITE },
+        ],
+      },
     ];
   }
 
@@ -1084,7 +1094,7 @@ export const listDiscoverJobs = async (
       })
     )
   )
-    .filter((row) => row.distanceKm <= radiusKm)
+    .filter((row) => row.distanceKm <= radiusKm || row.job.traderId === trader.id)
     .sort(compareDiscoverRows(query.sortBy, query.sortOrder));
 
   const slice = withDistance.slice((page - 1) * limit, page * limit);
@@ -1093,43 +1103,43 @@ export const listDiscoverJobs = async (
   const [bookmarks, visits, quotes] = await Promise.all([
     jobIds.length
       ? prisma.traderJobBookmark.findMany({
-          where: { traderId: trader.id, jobId: { in: jobIds } },
-          select: { jobId: true },
-        })
+        where: { traderId: trader.id, jobId: { in: jobIds } },
+        select: { jobId: true },
+      })
       : Promise.resolve([] as { jobId: string }[]),
     jobIds.length
       ? prisma.traderSiteVisitRequest.findMany({
-          where: {
-            traderId: trader.id,
-            jobId: { in: jobIds },
-            status: { not: TraderSiteVisitStatus.CANCELLED },
-          },
-          select: { jobId: true, status: true },
-        })
+        where: {
+          traderId: trader.id,
+          jobId: { in: jobIds },
+          status: { not: TraderSiteVisitStatus.CANCELLED },
+        },
+        select: { jobId: true, status: true },
+      })
       : Promise.resolve([] as { jobId: string; status: TraderSiteVisitStatus }[]),
     jobIds.length
       ? prisma.quote.findMany({
-          where: { traderId: trader.id, jobId: { in: jobIds } },
-          select: {
-            id: true,
-            jobId: true,
-            quotedAmount: true,
-            notes: true,
-            status: true,
-            requestedAt: true,
-          },
-          orderBy: { createdAt: 'desc' },
-        })
+        where: { traderId: trader.id, jobId: { in: jobIds } },
+        select: {
+          id: true,
+          jobId: true,
+          quotedAmount: true,
+          notes: true,
+          status: true,
+          requestedAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      })
       : Promise.resolve(
-          [] as Array<{
-            id: string;
-            jobId: string;
-            quotedAmount: Prisma.Decimal;
-            notes: string | null;
-            status: string;
-            requestedAt: Date | null;
-          }>
-        ),
+        [] as Array<{
+          id: string;
+          jobId: string;
+          quotedAmount: Prisma.Decimal;
+          notes: string | null;
+          status: string;
+          requestedAt: Date | null;
+        }>
+      ),
   ]);
   const bookmarkedIds = new Set(bookmarks.map((b) => b.jobId));
   const visitByJob = new Map(visits.map((v) => [v.jobId, v.status]));
@@ -1395,12 +1405,12 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
   const siteVisitForDisplay =
     siteVisit.status === 'RESCHEDULE_REQUIRED' && scheduledDate
       ? {
-          ...siteVisit,
-          visitDate: formatVisitDateKey(scheduledDate),
-          timeSlot: displayTimeSlot,
-          startTime: displaySlotDef?.startTime ?? siteVisit.startTime,
-          endTime: displaySlotDef?.endTime ?? siteVisit.endTime,
-        }
+        ...siteVisit,
+        visitDate: formatVisitDateKey(scheduledDate),
+        timeSlot: displayTimeSlot,
+        startTime: displaySlotDef?.startTime ?? siteVisit.startTime,
+        endTime: displaySlotDef?.endTime ?? siteVisit.endTime,
+      }
       : siteVisit;
   const coords = resolveJobCoords(
     {
@@ -1415,34 +1425,34 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
 
   const categoryIconUrl = job.category
     ? resolveCategoryIconUrl({
-        iconName: job.category.iconName,
-        urlSlug: job.category.urlSlug,
-      })
+      iconName: job.category.iconName,
+      urlSlug: job.category.urlSlug,
+    })
     : null;
   const subcategoryIconUrl = job.subcategory
     ? resolveCategoryIconUrl({
-        iconName: null,
-        urlSlug: job.subcategory.urlSlug,
-      })
+      iconName: null,
+      urlSlug: job.subcategory.urlSlug,
+    })
     : null;
 
   const tags = [
     job.category
       ? {
-          label: job.category.name,
-          /** Fetchable icon URL for mobile (not a Lucide/name key). */
-          icon: categoryIconUrl,
-          iconUrl: categoryIconUrl,
-          iconName: job.category.iconName,
-        }
+        label: job.category.name,
+        /** Fetchable icon URL for mobile (not a Lucide/name key). */
+        icon: categoryIconUrl,
+        iconUrl: categoryIconUrl,
+        iconName: job.category.iconName,
+      }
       : null,
     job.subcategory
       ? {
-          label: job.subcategory.name,
-          icon: subcategoryIconUrl,
-          iconUrl: subcategoryIconUrl,
-          iconName: null as string | null,
-        }
+        label: job.subcategory.name,
+        icon: subcategoryIconUrl,
+        iconUrl: subcategoryIconUrl,
+        iconName: null as string | null,
+      }
       : null,
   ].filter(Boolean);
 
@@ -1454,8 +1464,8 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     isReschedule || siteVisit.status === 'RESCHEDULE_REQUIRED'
       ? ('RESCHEDULED_VISIT' as const)
       : siteVisit.status === 'PENDING' ||
-          siteVisit.status === 'CONFIRMED' ||
-          siteVisit.status === 'COMPLETED'
+        siteVisit.status === 'CONFIRMED' ||
+        siteVisit.status === 'COMPLETED'
         ? ('SCHEDULED_VISIT' as const)
         : null;
   // Figma "Accept Job for €X" — same action as Request Job; amount for button label.
@@ -1549,10 +1559,10 @@ export const getDiscoverJob = async (userId: string, jobId: string, query?: { la
     },
     subcategory: job.subcategory
       ? {
-          id: job.subcategory.id,
-          name: job.subcategory.name,
-          iconUrl: subcategoryIconUrl,
-        }
+        id: job.subcategory.id,
+        name: job.subcategory.name,
+        iconUrl: subcategoryIconUrl,
+      }
       : null,
     categoryName: job.category.name,
     subcategoryName: job.subcategory?.name ?? null,
@@ -1673,9 +1683,9 @@ export const getSiteVisitSlots = async (userId: string, jobId: string) => {
     selected:
       active && active.visitDate != null && active.timeSlot != null
         ? {
-            date: formatVisitDateKey(active.visitDate),
-            timeSlot: active.timeSlot,
-          }
+          date: formatVisitDateKey(active.visitDate),
+          timeSlot: active.timeSlot,
+        }
         : payload.slots[0]
           ? { date: payload.slots[0].date, timeSlot: payload.slots[0].timeSlot }
           : null,
@@ -1747,7 +1757,7 @@ const upsertSiteVisit = async (
 
   const nextStatus =
     mode === 'reschedule' ||
-    existing?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+      existing?.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
       ? TraderSiteVisitStatus.PENDING
       : existing?.status === TraderSiteVisitStatus.CONFIRMED
         ? TraderSiteVisitStatus.CONFIRMED
@@ -1954,12 +1964,12 @@ export const listJobsQueue = async (
     traderId: null,
     ...(search
       ? {
-          OR: [
-            { title: { contains: search, mode: 'insensitive' } },
-            { jobRef: { contains: search, mode: 'insensitive' } },
-            { city: { contains: search, mode: 'insensitive' } },
-          ],
-        }
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { jobRef: { contains: search, mode: 'insensitive' } },
+          { city: { contains: search, mode: 'insensitive' } },
+        ],
+      }
       : {}),
   };
 
@@ -2059,12 +2069,12 @@ export const listJobsQueue = async (
         status: JobStatus.PUBLISHED,
         ...(search
           ? {
-              OR: [
-                { title: { contains: search, mode: 'insensitive' } },
-                { jobRef: { contains: search, mode: 'insensitive' } },
-                { city: { contains: search, mode: 'insensitive' } },
-              ],
-            }
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { jobRef: { contains: search, mode: 'insensitive' } },
+              { city: { contains: search, mode: 'insensitive' } },
+            ],
+          }
           : {}),
       },
       orderBy: [{ updatedAt: 'desc' }],
@@ -2182,9 +2192,9 @@ export const listJobsQueue = async (
         isRescheduleRequiredSiteVisit;
       const isRescheduleRequest = Boolean(
         isRescheduleRequiredSiteVisit ||
-          (isPendingSiteVisit &&
-            visit &&
-            visit.updatedAt.getTime() - visit.createdAt.getTime() > 60_000)
+        (isPendingSiteVisit &&
+          visit &&
+          visit.updatedAt.getTime() - visit.createdAt.getTime() > 60_000)
       );
 
       const queueKind = awaitingTraderAccept
@@ -2247,13 +2257,13 @@ export const listJobsQueue = async (
       const scheduled =
         isSiteVisitQueue && (rescheduleVisitDate || visitPayload?.visitDate)
           ? {
-              visitDate: rescheduleVisitDate ?? visitPayload!.visitDate,
-              timeSlot: rescheduleTimeSlot ?? visitPayload?.timeSlot ?? null,
-              startTime:
-                rescheduleSlotDef?.startTime ?? visitPayload?.startTime ?? null,
-              endTime: rescheduleSlotDef?.endTime ?? visitPayload?.endTime ?? null,
-              slots: visitPayload?.slots ?? [],
-            }
+            visitDate: rescheduleVisitDate ?? visitPayload!.visitDate,
+            timeSlot: rescheduleTimeSlot ?? visitPayload?.timeSlot ?? null,
+            startTime:
+              rescheduleSlotDef?.startTime ?? visitPayload?.startTime ?? null,
+            endTime: rescheduleSlotDef?.endTime ?? visitPayload?.endTime ?? null,
+            slots: visitPayload?.slots ?? [],
+          }
           : null;
 
       return {

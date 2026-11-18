@@ -2926,6 +2926,13 @@ export const requestJob = async (
 ) => {
   const trader = await getTraderContext(userId);
 
+  const directJob = await prisma.job.findFirst({
+    where: { id: jobId, traderId: trader.id, status: JobStatus.PUBLISHED },
+  });
+  if (directJob) {
+    return acceptIncomingJob(userId, jobId);
+  }
+
   const job = await prisma.job.findFirst({
     where: { id: jobId, status: { in: [JobStatus.PUBLISHED, JobStatus.QUOTED] }, traderId: null },
     select: {
@@ -3047,6 +3054,13 @@ export const acceptJob = async (
   body?: { amount?: number }
 ) => {
   const trader = await getTraderContext(userId);
+
+  const directJob = await prisma.job.findFirst({
+    where: { id: jobId, traderId: trader.id, status: JobStatus.PUBLISHED },
+  });
+  if (directJob) {
+    return acceptIncomingJob(userId, jobId);
+  }
 
   // Marketplace open job: Request only (may not be in My Jobs yet).
   const open = await prisma.job.findFirst({

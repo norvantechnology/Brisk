@@ -118,6 +118,7 @@ export const resolveUserNotificationActionUrl = (
       if (jobId) return `/jobs/${jobId}/chat`;
       return null;
     case 'NEW_MATCHING_JOB':
+    case 'DIRECT_JOB_RECEIVED':
       if (jobId) return `/traders/jobs/discover/${jobId}`;
       return null;
     case 'QUOTE_RECEIVED':
@@ -125,7 +126,6 @@ export const resolveUserNotificationActionUrl = (
     case 'QUOTE_SELECTION_CANCELLED':
     case 'JOB_DECLINED':
     case 'JOB_PUBLISHED':
-    case 'DIRECT_JOB_RECEIVED':
     case 'JOB_STATUS_CHANGED':
     case 'JOB_RESCHEDULED':
     case 'JOB_COMPLETION_CONFIRMED':
