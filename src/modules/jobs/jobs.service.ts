@@ -2373,19 +2373,22 @@ export const publishJob = async (
     );
   }
 
-  if (traderId && (serviceChargeRaw == null || Number.isNaN(serviceChargeRaw))) {
-    throw new BadRequestError(
-      isSiteVisit
-        ? 'Site visit fee is required to publish.'
-        : 'Service charge (or maxBudget) is required for Direct Trader jobs.'
-    );
+  if (existing.offerId && traderId && (serviceChargeRaw == null || Number.isNaN(serviceChargeRaw))) {
+    throw new BadRequestError('Service charge is required for Direct Trader offer jobs.');
+  }
+
+  if (isSiteVisit && (siteVisitFeeRaw == null || Number.isNaN(siteVisitFeeRaw))) {
+    throw new BadRequestError('Site visit fee is required to publish.');
   }
 
   const result = await prisma.$transaction(
     async (tx) => {
     // Pay path → PAYMENT_PENDING until Payment Successful.
-    // No-pay path (waiting for quotes) → PUBLISHED (live).
-    const willCreateInvoice = Boolean(traderId && serviceChargeRaw != null);
+    // Direct hire or open marketplace → PUBLISHED (live).
+    const willCreateInvoice = Boolean(
+      (isSiteVisit && (siteVisitFeeRaw ?? 0) > 0) ||
+      (existing.offerId && traderId && serviceChargeRaw != null)
+    );
     const job = await tx.job.update({
       where: { id: jobId },
       data: {
@@ -3036,13 +3039,14 @@ export const getJobFormConfig = async (
     categoryId?: string;
     subcategoryId?: string;
     offerId?: string;
+    traderId?: string;
     entryPoint?: JobFormEntryPoint;
   }
 ) => {
   let offerApplied = false;
   let categoryId = query.categoryId ?? null;
   let subcategoryId = query.subcategoryId ?? null;
-  let traderId: string | null = null;
+  let traderId: string | null = query.traderId ?? null;
   let offerMeta: {
     id: string;
     title: string;

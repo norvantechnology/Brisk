@@ -166,8 +166,8 @@ router.get('/discover', validate(discoverJobsQuerySchema), controller.listDiscov
  *         open Site Visit Confirmation sheet → `POST /traders/jobs/mine/{id}/site-visit/complete`
  *         (`assignmentStatus: SITE_VISIT_CONFIRMED`, `primaryAction: COMPLETE_SITE_VISIT`,
  *         `canCompleteSiteVisit: true`)
- *       - `AWAITING_TRADER_ACCEPT` — customer accepted quote; trader must **View & Accept**
- *         (`assignmentStatus: CUSTOMER_ACCEPTED`, `primaryAction: CONFIRM_JOB`)
+ *       - `AWAITING_TRADER_ACCEPT` — customer accepted quote or sent direct job request; trader must **View & Accept**
+ *         (`assignmentStatus: CUSTOMER_ACCEPTED`, `primaryAction: CONFIRM_JOB`, `statusBadge: Direct Request` or `Awaiting Your Acceptance`)
  *
  *       Excluded: assigned My Jobs (`traderId` set), completed visits (back on Discover to quote).
  *       - Customer-pending → `primaryAction: VIEW_DETAILS` → `GET /traders/jobs/discover/{id}`

@@ -1954,6 +1954,7 @@ export const listJobsQueue = async (
     longitude: true,
     siteVisitRequested: true,
     quoteType: true,
+    serviceCharge: true,
     /** Customer's updated preferred schedule when visit is RESCHEDULE_REQUIRED. */
     scheduledDate: true,
     timeSlot: true,
@@ -1980,7 +1981,7 @@ export const listJobsQueue = async (
     job: { select: jobSelect },
   } satisfies Prisma.QuoteSelect;
 
-  const [pendingQuotes, acceptedQuotes, visits] = await Promise.all([
+  const [pendingQuotes, acceptedQuotes, visits, directHireJobs] = await Promise.all([
     // Waiting on customer (quote sent / request job)
     prisma.quote.findMany({
       where: {
@@ -2031,6 +2032,24 @@ export const listJobsQueue = async (
           },
         },
       },
+    }),
+    // Direct hire jobs assigned to this trader that are published & awaiting acceptance
+    prisma.job.findMany({
+      where: {
+        traderId: trader.id,
+        status: JobStatus.PUBLISHED,
+        ...(search
+          ? {
+              OR: [
+                { title: { contains: search, mode: 'insensitive' } },
+                { jobRef: { contains: search, mode: 'insensitive' } },
+                { city: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: jobSelect,
     }),
   ]);
 
@@ -2086,6 +2105,18 @@ export const listJobsQueue = async (
     }
   }
 
+  for (const directJob of directHireJobs) {
+    if (!byJob.has(directJob.id)) {
+      byJob.set(directJob.id, {
+        job: directJob,
+        quote: null,
+        visit: null,
+        queuedAt: directJob.updatedAt,
+        awaitingTraderAccept: true,
+      });
+    }
+  }
+
   const rows = [...byJob.values()].sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
   const total = rows.length;
   const pageRows = rows.slice((page - 1) * limit, page * limit);
@@ -2110,7 +2141,7 @@ export const listJobsQueue = async (
         traderCountry: trader.user.country ?? trader.country,
       });
 
-      const quoteAmount = quote ? money(quote.quotedAmount) : null;
+      const quoteAmount = quote ? money(quote.quotedAmount) : job.serviceCharge ? money(job.serviceCharge) : null;
       const visitPayload = visit ? toSiteVisitPayload(visit) : null;
       const visitStatus = visitPayload?.status ?? null;
       const isPendingSiteVisit =
@@ -2149,7 +2180,7 @@ export const listJobsQueue = async (
 
       const statusBadge =
         queueKind === 'AWAITING_TRADER_ACCEPT'
-          ? 'Awaiting Your Acceptance'
+          ? (row.quote ? 'Awaiting Your Acceptance' : 'Direct Request')
           : queueKind === 'QUOTE_SENT'
             ? 'Quote Sent'
             : queueKind === 'SITE_VISIT_CONFIRMED'
@@ -2162,7 +2193,7 @@ export const listJobsQueue = async (
 
       const statusLabel =
         queueKind === 'AWAITING_TRADER_ACCEPT'
-          ? 'Customer accepted — tap View & Accept'
+          ? (row.quote ? 'Customer accepted — tap View & Accept' : 'Direct job request — tap View & Accept')
           : queueKind === 'SITE_VISIT_CONFIRMED'
             ? 'Customer confirmed schedule — complete site visit'
             : queueKind === 'SITE_VISIT_COMPLETED'

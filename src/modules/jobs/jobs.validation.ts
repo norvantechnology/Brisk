@@ -61,6 +61,7 @@ export const jobFormConfigSchema = z.object({
     categoryId: uuid.optional(),
     subcategoryId: uuid.optional(),
     offerId: uuid.optional(),
+    traderId: uuid.optional(),
     entryPoint: z
       .enum(['OFFER', 'HOME_CATEGORY', 'HOME_SUBCATEGORY', 'DIRECT', 'TRADER_PROFILE'])
       .optional(),

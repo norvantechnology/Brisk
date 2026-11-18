@@ -84,6 +84,13 @@ const jobRescheduleAuth = [authMiddleware, roleMiddleware(['CUSTOMER', 'TRADER']
  *           Prefills category/subcategory/trader, sets `offerApplied=true`, builds offer banner.
  *           Does **not** claim the offer. 409 if offer already USED by this customer.
  *       - in: query
+ *         name: traderId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *         description: |
+ *           Trader UUID when initiating Direct Hire from home screen or trader profile.
+ *           Prefills `data.prefill.traderId`.
+ *       - in: query
  *         name: entryPoint
  *         required: false
  *         schema:

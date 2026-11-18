@@ -3275,7 +3275,40 @@ const assignAcceptedQuote = async (traderId: string, jobId: string) => {
   if (!job) {
     throw new NotFoundError('Job not found.');
   }
-  if (job.traderId === traderId) return { job, alreadyAssigned: true };
+  if (job.traderId === traderId) {
+    if (job.status === JobStatus.PUBLISHED) {
+      const scheduledDate = job.scheduledDate ?? new Date();
+      const nextStatus = job.scheduledDate ? JobStatus.SCHEDULED : JobStatus.ACCEPTED;
+      await prisma.$transaction(async (tx) => {
+        await tx.job.update({
+          where: { id: job.id },
+          data: { status: nextStatus },
+        });
+        if (!job.booking) {
+          await tx.booking.create({
+            data: {
+              jobId: job.id,
+              traderId,
+              customerId: job.customerId,
+              scheduledDate,
+              status: BookingStatus.SCHEDULED,
+            },
+          });
+        }
+      });
+      emitJobStatusChanged({
+        jobId: job.id,
+        jobRef: job.jobRef ?? undefined,
+        status: nextStatus,
+        customerId: job.customerId,
+        traderId,
+        title: job.title,
+        actor: 'TRADER',
+        at: new Date().toISOString(),
+      });
+    }
+    return { job, alreadyAssigned: true };
+  }
   if (job.traderId) {
     throw new ConflictError('Job is already assigned to another trader.');
   }

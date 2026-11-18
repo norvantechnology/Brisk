@@ -16,6 +16,7 @@ export const appCategoryListSchema = z.object({
   query: z.object({
     featured: z.enum(['true', 'false']).optional(),
     includeSubcategories: z.enum(['true', 'false', '1', '0']).optional(),
+    traderId: z.string().uuid('traderId must be a valid UUID.').optional(),
   }),
 });
 

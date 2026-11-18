@@ -52,6 +52,12 @@ export const subcategoriesRouter = Router();
  *         description: |
  *           Nest sub-categories under each category (`siteVisitEnabled`, `priceEnabled`, `qaFormSchema`).
  *           **Example:** `GET /categories?includeSubcategories=true`
+ *       - in: query
+ *         name: traderId
+ *         schema: { type: string, format: uuid }
+ *         description: |
+ *           Filter categories to only those associated with this trader (e.g. for Direct Hire category dropdown).
+ *           **Example:** `GET /categories?traderId=3fa85f64-5717-4562-b3fc-2c963f66afa6`
  *     responses:
  *       200:
  *         description: |
