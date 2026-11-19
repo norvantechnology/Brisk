@@ -134,9 +134,13 @@ export const listPublicOffers = async (
 
     const paidInvoicesWithPromo = await prisma.invoice.findMany({
       where: {
-        customerId: userId,
         status: InvoiceStatus.PAID,
         appliedPromoCode: { not: null },
+        OR: [
+          { booking: { customerId: userId } },
+          { paymentRequest: { customerId: userId } },
+          { payments: { some: { userId } } },
+        ],
       },
       select: { appliedPromoCode: true },
     });
