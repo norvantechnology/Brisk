@@ -4,6 +4,7 @@ import { roleMiddleware } from '../../middlewares/role.middleware';
 import { validate } from '../../middlewares/validate.middleware';
 import * as controller from './public-offers.controller';
 import {
+  claimPromoCodeSchema,
   offerIdParamSchema,
   promoListSchema,
   publicOfferFilterSchema,
@@ -458,6 +459,55 @@ router.post(
   roleMiddleware(['CUSTOMER']),
   validate(validatePromoSchema),
   controller.validatePromoCode
+);
+
+/**
+ * @swagger
+ * /offers/claim-code:
+ *   post:
+ *     summary: Claim a promotion code or offer into customer wallet
+ *     tags: ['Customer / Offers']
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       **Purpose:** Allows customers to enter a promo code (e.g. `PEST10BRISK`, `SUMMER20`)
+ *       in the Offers section and claim it into their personal wallet (`GET /trader-offers/claimed`).
+ *       Works for both Platform (Brisk) offers and Promotional Trader offers.
+ *       Idempotent: entering an already claimed active code returns 200 OK.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code]
+ *             properties:
+ *               code: { type: string, example: PEST10BRISK, description: "Promotional coupon code, offer code, or offer UUID" }
+ *               promoCode: { type: string, example: PEST10BRISK, description: "Alias for code" }
+ *     responses:
+ *       200:
+ *         description: Promotion code claimed successfully or already in wallet.
+ *       400:
+ *         description: Code not active, outside validity window, or invalid.
+ *       404:
+ *         description: Promo code or offer not found.
+ *       409:
+ *         description: Code has already been used on a completed job.
+ */
+router.post(
+  '/offers/claim-code',
+  authMiddleware,
+  roleMiddleware(['CUSTOMER']),
+  validate(claimPromoCodeSchema),
+  controller.claimPromoCode
+);
+
+router.post(
+  '/promo-codes/claim',
+  authMiddleware,
+  roleMiddleware(['CUSTOMER']),
+  validate(claimPromoCodeSchema),
+  controller.claimPromoCode
 );
 
 export default router;

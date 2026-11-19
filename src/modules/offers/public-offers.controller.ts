@@ -72,12 +72,19 @@ export const claimTraderOffer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await publicOffersService.claimOffer(req.user!.id, req.params.id, OfferType.TRADER);
+    const bodyCode = (req.body?.code ?? req.body?.promoCode) as string | undefined;
+    const data = await publicOffersService.claimOffer(
+      req.user!.id,
+      req.params.id,
+      OfferType.TRADER,
+      bodyCode
+    );
     sendResponse({
       res,
       statusCode: 200,
-      message:
-        'Offer prepared for job posting. No claim yet — offer is applied on Payment Successful.',
+      message: data.alreadyClaimed
+        ? 'This offer is already active in your wallet.'
+        : 'Trader offer claimed successfully.',
       data,
     });
   } catch (error) {
@@ -85,14 +92,20 @@ export const claimTraderOffer = async (
   }
 };
 
-/** Optional prefill for Figma "Accept Offer" — does not claim. */
+/** Optional prefill for Figma "Accept Offer" */
 export const acceptTraderOffer = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await publicOffersService.claimOffer(req.user!.id, req.params.id, OfferType.TRADER);
+    const bodyCode = (req.body?.code ?? req.body?.promoCode) as string | undefined;
+    const data = await publicOffersService.claimOffer(
+      req.user!.id,
+      req.params.id,
+      OfferType.TRADER,
+      bodyCode
+    );
     sendResponse({
       res,
       statusCode: 200,
@@ -111,11 +124,40 @@ export const claimBriskOffer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await publicOffersService.claimOffer(req.user!.id, req.params.id, OfferType.PLATFORM);
+    const bodyCode = (req.body?.code ?? req.body?.promoCode) as string | undefined;
+    const data = await publicOffersService.claimOffer(
+      req.user!.id,
+      req.params.id,
+      OfferType.PLATFORM,
+      bodyCode
+    );
     sendResponse({
       res,
       statusCode: 200,
-      message: 'Brisk offer claimed successfully.',
+      message: data.alreadyClaimed
+        ? 'This offer is already active in your wallet.'
+        : 'Brisk offer claimed successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const claimPromoCode = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const rawCode = (req.body?.code ?? req.body?.promoCode ?? req.query?.code ?? req.query?.promoCode) as string;
+    const data = await publicOffersService.claimOffer(req.user!.id, rawCode, undefined, rawCode);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: data.alreadyClaimed
+        ? 'This offer is already active in your wallet.'
+        : 'Promotion code claimed successfully.',
       data,
     });
   } catch (error) {

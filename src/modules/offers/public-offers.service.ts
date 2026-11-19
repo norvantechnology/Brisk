@@ -331,14 +331,61 @@ export const listApplicableOffersForCategory = async (
   );
 };
 
-export const getPublicOffer = async (id: string, userId?: string) => {
-  const offer = await prisma.offer.findUnique({
-    where: { id },
+const isUuid = (val: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+
+export const resolveOfferByIdOrCode = async (rawIdOrCode: string) => {
+  const trimmed = rawIdOrCode.trim();
+  if (!trimmed) {
+    throw new BadRequestError('Offer ID or promotion code is required.');
+  }
+
+  // 1. If it's a UUID, check Offer by ID
+  if (isUuid(trimmed)) {
+    const offerById = await prisma.offer.findUnique({
+      where: { id: trimmed },
+      include: publicInclude,
+    });
+    if (offerById) return offerById;
+  }
+
+  const normalizedCode = trimmed.toUpperCase();
+
+  // 2. Check PromoCode table (which links to offerId)
+  const promo = await prisma.promoCode.findFirst({
+    where: { code: { equals: normalizedCode, mode: 'insensitive' } },
+    include: { offer: { include: publicInclude } },
+  });
+  if (promo?.offer) {
+    return promo.offer;
+  }
+
+  // 3. Check Offer table by couponCode or offerCode
+  const offerByCode = await prisma.offer.findFirst({
+    where: {
+      OR: [
+        { couponCode: { equals: normalizedCode, mode: 'insensitive' } },
+        { offerCode: { equals: normalizedCode, mode: 'insensitive' } },
+        { couponCode: { equals: trimmed, mode: 'insensitive' } },
+        { offerCode: { equals: trimmed, mode: 'insensitive' } },
+      ],
+    },
     include: publicInclude,
   });
+
+  if (offerByCode) {
+    return offerByCode;
+  }
+
+  return null;
+};
+
+export const getPublicOffer = async (idOrCode: string, userId?: string) => {
+  const offer = await resolveOfferByIdOrCode(idOrCode);
   if (!offer) {
     throw new NotFoundError('Offer not found.');
   }
+  const id = offer.id;
 
   const claimFlags = userId ? await resolveClaimFlags(userId, id) : {
     claimed: false,
@@ -427,20 +474,25 @@ const resolveClaimFlags = async (userId: string, offerId: string) => {
 };
 
 /**
- * Accept Offer / optional prefill helper — **never claims** a trader offer.
- * Frontend can skip this and use GET /trader-offers/{id} + GET /jobs/form-config instead.
- * Offer is applied (claim → USED) only on payment confirm (or marketplace publish with no pay).
- * Platform (Brisk) offers still create a CLAIMED wallet row on /brisk-offers/{id}/claim.
+ * Claim an offer / promo code into the customer's wallet.
+ * Supports both UUIDs and promo code strings (e.g. PEST10BRISK).
+ * Applies to both Trader and Brisk (platform) offers.
  */
-export const claimOffer = async (userId: string, offerId: string, expectedType?: OfferType) => {
-  const offer = await prisma.offer.findUnique({
-    where: { id: offerId },
-    include: publicInclude,
-  });
+export const claimOffer = async (
+  userId: string,
+  offerIdOrCode: string,
+  expectedType?: OfferType,
+  bodyCode?: string
+) => {
+  const target = (bodyCode?.trim() || offerIdOrCode).trim();
+  const offer = await resolveOfferByIdOrCode(target);
   if (!offer) {
-    throw new NotFoundError('Offer not found.');
+    throw new NotFoundError('Invalid promotion code or offer not found.');
   }
-  if (expectedType && offer.offerType !== expectedType) {
+
+  const offerId = offer.id;
+  const isCodeLookup = !isUuid(target);
+  if (expectedType && offer.offerType !== expectedType && !isCodeLookup) {
     throw new BadRequestError(
       expectedType === OfferType.TRADER
         ? 'This endpoint is for trader-authored offers. Use POST /brisk-offers/:id/claim for platform offers.'
@@ -450,32 +502,24 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
 
   const status = effectiveStatus(offer.status, offer.validUntil);
   if (status !== OfferStatus.ACTIVE || offer.validFrom.getTime() > Date.now()) {
-    throw new BadRequestError('This offer is not currently available.');
+    throw new BadRequestError('This offer is not currently active or has expired.');
   }
 
-  const flags = await resolveClaimFlags(userId, offerId);
-  if (!flags.canApply) {
+  const existing = await prisma.offerClaim.findUnique({
+    where: { offerId_userId: { offerId, userId } },
+  });
+  if (existing && existing.status === OfferClaimStatus.USED) {
     throw new ConflictError('You have already used this offer.');
   }
 
-  const isPlatform = offer.offerType === OfferType.PLATFORM;
+  // Idempotent wallet claim
+  let alreadyClaimed = false;
+  let savedClaim = existing;
 
-  // Platform promo wallet only — trader Accept never writes a claim row.
-  let claim: {
-    id: string;
-    status: string;
-    claimedAt: string;
-    jobId: string;
-  } = { id: '', status: '', claimedAt: '', jobId: '' };
-
-  if (isPlatform) {
-    const existing = await prisma.offerClaim.findUnique({
-      where: { offerId_userId: { offerId, userId } },
-    });
-    if (existing && existing.status === OfferClaimStatus.USED) {
-      throw new ConflictError('You have already used this offer.');
-    }
-    const saved = existing
+  if (existing && existing.status === OfferClaimStatus.CLAIMED) {
+    alreadyClaimed = true;
+  } else {
+    savedClaim = existing
       ? await prisma.offerClaim.update({
           where: { id: existing.id },
           data: { status: OfferClaimStatus.CLAIMED, claimedAt: new Date(), usedAt: null },
@@ -483,25 +527,27 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
       : await prisma.offerClaim.create({
           data: { offerId, userId, status: OfferClaimStatus.CLAIMED },
         });
+
     if (!existing) {
       await prisma.offer.update({
         where: { id: offerId },
         data: { claimsCount: { increment: 1 } },
       });
     }
-    claim = {
-      id: saved.id,
-      status: saved.status,
-      claimedAt: saved.claimedAt ? saved.claimedAt.toISOString() : '',
-      jobId: saved.jobId ?? '',
-    };
   }
+
+  const claim = {
+    id: savedClaim?.id ?? '',
+    status: savedClaim?.status ?? OfferClaimStatus.CLAIMED,
+    claimedAt: savedClaim?.claimedAt ? savedClaim.claimedAt.toISOString() : new Date().toISOString(),
+    jobId: savedClaim?.jobId ?? '',
+  };
 
   const viewerCurrency = await resolveUserCurrency(userId);
   const resolvedOffer = await enrichOfferWithCurrency(
     {
       ...(await serializeOfferWithMeta(offer)),
-      claimed: false,
+      claimed: true,
       canApply: true,
     },
     viewerCurrency
@@ -510,6 +556,7 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
   const jobNav = buildOfferJobNavigation(offer, resolvedOffer);
 
   return {
+    alreadyClaimed,
     claim,
     offer: resolvedOffer,
     navigation: jobNav.navigation,
@@ -522,8 +569,7 @@ export const claimOffer = async (userId: string, offerId: string, expectedType?:
       claimRequiredApi: false,
       publishPath: 'POST /jobs/{jobId}/publish',
       confirmPaymentPath: 'POST /payments/{paymentId}/confirm',
-      note:
-        'No separate claim API for trader offers. Prefer GET /trader-offers/{id} jobFormConfig (cache on navigate). Accept is optional. Pass offerId on POST /jobs. Offer is claimed (USED) on Payment Successful.',
+      note: 'Offer claimed to wallet. Discount applies at job checkout / payment confirmation.',
     },
   };
 };

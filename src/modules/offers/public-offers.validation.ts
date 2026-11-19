@@ -27,7 +27,21 @@ export const publicOfferFilterSchema = z.object({
 
 export const offerIdParamSchema = z.object({
   params: z.object({
-    id: z.string().uuid(),
+    id: z.string().trim().min(1, 'Offer identifier or promo code is required'),
+  }),
+  body: z.object({
+    code: z.string().trim().optional(),
+    promoCode: z.string().trim().optional(),
+  }).optional(),
+});
+
+export const claimPromoCodeSchema = z.object({
+  body: z.object({
+    code: z.string().trim().min(1, 'Promo code is required').max(64).optional(),
+    promoCode: z.string().trim().min(1, 'Promo code is required').max(64).optional(),
+  }).refine((data) => Boolean(data.code || data.promoCode), {
+    message: 'Promo code is required (send "code" or "promoCode")',
+    path: ['code'],
   }),
 });
 
