@@ -1669,6 +1669,11 @@ const buildCustomerJobView = async (
 
   const { isSiteVisit, jobType, jobTypeLabel } = resolveJobType(job);
 
+  const hasPaymentRequests = requests.length > 0;
+  const invoiceMatchesRequest = Boolean(invoice && requests.some((r) => r.invoice?.id === invoice.id));
+  const upfrontInvoice = invoice && !invoiceMatchesRequest && invoice.status === InvoiceStatus.PAID ? invoice : null;
+  const unpaidInvoice = invoice && !invoiceMatchesRequest && invoice.status === InvoiceStatus.UNPAID ? invoice : null;
+
   const invoiceData = invoice
     ? {
         serviceCharge: money(invoice.serviceCharge),
@@ -1678,7 +1683,7 @@ const buildCustomerJobView = async (
         totalAmount: money(invoice.totalAmount),
         isPaid: invoice.status === InvoiceStatus.PAID,
       }
-    : (job.serviceCharge != null || (isSiteVisit && job.siteVisitFee != null))
+    : (!hasPaymentRequests && (job.serviceCharge != null || (isSiteVisit && job.siteVisitFee != null)))
       ? (() => {
           const bd = computeInvoiceBreakdown({
             serviceCharge: isSiteVisit ? money(job.siteVisitFee ?? 0) : money(job.serviceCharge ?? 0),
@@ -1701,26 +1706,47 @@ const buildCustomerJobView = async (
   const sum = (rows: typeof requests, pick: (r: (typeof requests)[number]) => Prisma.Decimal) =>
     rows.reduce((s, r) => s + money(pick(r)), 0);
 
-  const serviceFee = round2(
-    (invoiceData ? invoiceData.serviceCharge : 0) +
-      sum(requests, (r) => r.serviceCharge) +
-      sum(requests, (r) => r.materialsTotal) +
-      sum(requests, (r) => r.siteVisitFee)
+  const materialsTotal = sum(requests, (r) => r.materialsTotal);
+  const siteVisitFeePart = round2(
+    sum(requests, (r) => r.siteVisitFee) +
+      (upfrontInvoice && isSiteVisit ? money(upfrontInvoice.serviceCharge) : 0)
   );
-  const processingFee = round2(
-    (invoiceData ? invoiceData.platformFee : 0) + sum(requests, (r) => r.platformFee)
-  );
-  const discount = invoiceData ? invoiceData.discount : 0;
-  const vatAmount = round2((invoiceData ? invoiceData.tax : 0) + sum(requests, (r) => r.vatAmount));
+
+  const serviceFee = hasPaymentRequests
+    ? round2(
+        sum(requests, (r) => r.serviceCharge) +
+          (upfrontInvoice && !isSiteVisit ? money(upfrontInvoice.serviceCharge) : 0)
+      )
+    : round2(invoiceData ? invoiceData.serviceCharge : 0);
+
+  // Platform Fee is flat €10.00 (+VAT) per job — deduplicate across requests and booking invoice
+  const processingFee = (hasPaymentRequests || invoice)
+    ? Math.max(
+        invoice ? money(invoice.platformFee) : 0,
+        ...requests.map((r) => money(r.platformFee))
+      )
+    : (invoiceData ? invoiceData.platformFee : 0);
+
+  const discount = invoice
+    ? round2(money(invoice.traderOfferDiscount) + money(invoice.promoDiscount))
+    : (invoiceData ? invoiceData.discount : 0);
+
+  const vatAmount = hasPaymentRequests
+    ? round2(sum(requests, (r) => r.vatAmount) + (upfrontInvoice ? money(upfrontInvoice.tax) : 0))
+    : round2(invoice ? money(invoice.tax) : (invoiceData ? invoiceData.tax : 0));
+
   const paidRequests = requests.filter((r) => r.status === 'PAID');
+  const sentRequests = requests.filter((r) => r.status === 'SENT');
+
   const totalPaid = round2(
-    (invoiceData && invoiceData.isPaid ? invoiceData.totalAmount : 0) + sum(paidRequests, (r) => r.totalAmount)
+    (upfrontInvoice ? money(upfrontInvoice.totalAmount) : (invoice && invoice.status === InvoiceStatus.PAID && !hasPaymentRequests ? money(invoice.totalAmount) : 0)) +
+      sum(paidRequests, (r) => r.totalAmount)
   );
   const amountDue = round2(
-    (invoiceData && !invoiceData.isPaid ? invoiceData.totalAmount : 0) +
-      sum(requests.filter((r) => r.status === 'SENT'), (r) => r.totalAmount)
+    (unpaidInvoice ? money(unpaidInvoice.totalAmount) : (invoice && invoice.status === InvoiceStatus.UNPAID && !hasPaymentRequests ? money(invoice.totalAmount) : 0)) +
+      sum(sentRequests, (r) => r.totalAmount)
   );
-  const vatBase = serviceFee + processingFee - discount;
+  const vatBase = serviceFee + materialsTotal + processingFee - discount;
   const vatPercentage = vatBase > 0 ? round2((vatAmount / vatBase) * 100) : 0;
 
   let paymentStatus = 'UNPAID';
@@ -1761,7 +1787,34 @@ const buildCustomerJobView = async (
   );
   const pendingPartialRequest = requests.find((r) => r.type === 'PARTIAL' && r.status === 'SENT');
 
-  const confirmedPayments = paidRequests.map((r) => {
+  const upfrontPaidPayments =
+    upfrontInvoice && upfrontInvoice.payments
+      ? upfrontInvoice.payments
+          .filter((p) => p.status === 'COMPLETED' || p.paidAt != null)
+          .map((p) => {
+            const amt = money(p.amount);
+            const paidDate = p.paidAt ?? p.createdAt;
+            return {
+              id: p.id,
+              transactionId: p.transactionRef || `TXN-${p.id.replace(/-/g, '').slice(-6).toUpperCase()}`,
+              type: 'UPFRONT',
+              title: isSiteVisit ? 'Site Visit Fee' : 'Booking Deposit',
+              description: isSiteVisit ? 'Upfront site visit confirmation fee' : 'Initial booking payment',
+              amount: amt,
+              currencyCode: p.currencyCode || currencyCode,
+              currencySymbol,
+              formattedAmount: `${currencySymbol}${amt.toFixed(2)}`,
+              status: 'CONFIRMED',
+              paidAt: paidDate,
+              confirmedAt: paidDate,
+              confirmedDateLabel: paidDate ? `Confirmed on ${formatDisplayDay(paidDate)}` : null,
+              cardBrand: p.cardBrand,
+              cardLast4: p.cardLast4,
+            };
+          })
+      : [];
+
+  const requestConfirmedPayments = paidRequests.map((r) => {
     const amt = money(r.totalAmount);
     const paidDate = r.paidAt ?? r.createdAt;
     return {
@@ -1783,6 +1836,8 @@ const buildCustomerJobView = async (
     };
   });
 
+  const confirmedPayments = [...upfrontPaidPayments, ...requestConfirmedPayments];
+
   const canReschedule =
     !cancelled &&
     job.status !== JobStatus.COMPLETED &&
@@ -1791,9 +1846,10 @@ const buildCustomerJobView = async (
     !finished;
 
   const quoteEstimateAmount = (job as any).quotes?.[0] ? money((job as any).quotes[0].quotedAmount) : null;
+  const computedTotal = round2(serviceFee + materialsTotal + (isSiteVisit ? siteVisitFeePart : 0) + processingFee + vatAmount - discount);
   const totalAmount =
     round2(totalPaid + amountDue) ||
-    round2(serviceFee + processingFee + vatAmount - discount) ||
+    (computedTotal > 0 ? computedTotal : null) ||
     quoteEstimateAmount ||
     0;
   const formatCur = (amt: number) => {
@@ -1808,6 +1864,22 @@ const buildCustomerJobView = async (
           {
             label: 'Service Fee',
             amount: formatCur(serviceFee),
+          },
+        ]
+      : []),
+    ...(materialsTotal > 0
+      ? [
+          {
+            label: 'Materials',
+            amount: formatCur(materialsTotal),
+          },
+        ]
+      : []),
+    ...(siteVisitFeePart > 0 && !isSiteVisit
+      ? [
+          {
+            label: 'Site Visit Fee',
+            amount: formatCur(siteVisitFeePart),
           },
         ]
       : []),
