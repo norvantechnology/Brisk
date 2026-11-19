@@ -87,20 +87,37 @@ app.use(express.json());
 // Parse URL-encoded request body
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files (local storage — URLs stay stable when switching to S3/CDN)
-app.use('/uploads/files', express.static(getUploadRoot()));
+// Serve uploaded files with high-performance immutable HTTP caching headers (30 days)
+app.use(
+  '/uploads/files',
+  express.static(getUploadRoot(), {
+    maxAge: '30d',
+    immutable: true,
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    },
+  })
+);
 app.use('/uploads/files', (_req, res) => {
   res.status(404).json({ success: false, message: 'File not found.' });
 });
 
-// Public brand assets (email logo, etc.) — CORP cross-origin so Gmail/Outlook can load imgs
+// Public brand assets (email logo, etc.) — CORP cross-origin so Gmail/Outlook can load imgs with caching
 app.use(
   '/assets',
-  (_req, res, next) => {
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  },
-  express.static(path.join(__dirname, '../public'))
+  express.static(path.join(__dirname, '../public'), {
+    maxAge: '30d',
+    immutable: true,
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    },
+  })
 );
 
 // Mount Swagger Documentation UI

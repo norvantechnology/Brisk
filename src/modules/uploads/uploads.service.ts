@@ -2,6 +2,7 @@ import { BadRequestError, ForbiddenError } from '../../utils/errors';
 import { isPurposeAllowed, PURPOSE_CONFIG } from './uploads.config';
 import { deleteLocalUpload, saveLocalUpload } from './storage/local.storage';
 import { UploadActor, UploadPurpose } from './uploads.types';
+import { optimizeUploadedImage } from './image-optimizer.service';
 
 export const storeUpload = async (input: {
   file: Express.Multer.File;
@@ -38,13 +39,32 @@ export const storeUpload = async (input: {
 
   const ownerId = actor.id;
 
+  // Real-world upload-time optimization: compress and convert raster images to WebP without cropping
+  let bufferToSave = file.buffer;
+  let mimeTypeToSave = file.mimetype;
+  let originalNameToSave = file.originalname;
+
+  if (file.mimetype.startsWith('image/') && file.mimetype !== 'image/svg+xml') {
+    const optimized = await optimizeUploadedImage({
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      purpose,
+    });
+    if (optimized.wasOptimized) {
+      bufferToSave = optimized.buffer;
+      mimeTypeToSave = optimized.mimeType;
+      originalNameToSave = optimized.fileName;
+    }
+  }
+
   // Future: if env.UPLOAD_STORAGE === 's3' → s3.storage.ts (same return shape)
   return saveLocalUpload({
-    buffer: file.buffer,
+    buffer: bufferToSave,
     purpose,
     ownerId,
-    originalName: file.originalname,
-    mimeType: file.mimetype,
+    originalName: originalNameToSave,
+    mimeType: mimeTypeToSave,
     reqHost: input.reqHost,
   });
 };
