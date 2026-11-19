@@ -150,12 +150,12 @@ export const listPublicOffers = async (
         where: {
           offerType: OfferType.PLATFORM,
           OR: [
-            { couponCode: { in: usedPromoCodes, mode: 'insensitive' } },
-            { offerCode: { in: usedPromoCodes, mode: 'insensitive' } },
+            { couponCode: { in: usedPromoCodes } },
+            { offerCode: { in: usedPromoCodes } },
             {
               promoCodes: {
                 some: {
-                  code: { in: usedPromoCodes, mode: 'insensitive' },
+                  code: { in: usedPromoCodes },
                 },
               },
             },
@@ -168,13 +168,10 @@ export const listPublicOffers = async (
 
     if (usedOfferIds.size > 0) {
       const notInUsed: Prisma.OfferWhereInput = { id: { notIn: Array.from(usedOfferIds) } };
-      if (Array.isArray(where.AND)) {
-        where.AND.push(notInUsed);
-      } else if (where.AND) {
-        where.AND = [where.AND, notInUsed];
-      } else {
-        where.AND = [notInUsed];
-      }
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        notInUsed,
+      ];
     }
   }
 
