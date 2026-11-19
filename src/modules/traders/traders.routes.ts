@@ -46,8 +46,8 @@ router.use('/onboarding', onboardingRoutes);
  *
  *       **`data.featuredTraders` (Featured Trader)** — top verified, active traders ranked by real data:
  *       `topRated` first, then `avgRating`, `reviewsCount`, `jobsDoneCount`, newest. Size = `traderLimit`.
- *       Card mapping: name → `displayName`, subtitle → `category.name`, stars → `avgRating`,
- *       "(128)" → `reviewsCount`, "NEW TODAY" badge → `isNew` (joined today).
+ *       Card mapping: name → `displayName`, categories → `categories` list (each with `id`, `name`, `iconUrl`, `subcategories`),
+ *       stars → `avgRating`, "(128)" → `reviewsCount`, "NEW TODAY" badge → `isNew` (joined today).
  *       No hourly / "starts from" price is stored for traders, so none is returned.
  *       "Hire Now" → direct-trader job flow with `id` as `traderId`.
  *
@@ -87,10 +87,15 @@ router.use('/onboarding', onboardingRoutes);
  *                     fullName: Isaac Evans
  *                     businessName: null
  *                     profilePhotoUrl: https://api.brisk.ie/uploads/profile/isaac.jpg
- *                     category:
- *                       id: 7d3e9f10-2222-4b3c-8d4e-abcdef123456
- *                       name: Electrical & Wiring
- *                       iconUrl: https://api.brisk.ie/category-icons/electrical.svg
+ *                     categories:
+ *                       - id: 7d3e9f10-2222-4b3c-8d4e-abcdef123456
+ *                         name: Electrical & Wiring
+ *                         iconUrl: https://api.brisk.ie/uploads/files/category_icon/7d3e9f10/icon.svg
+ *                         subcategories:
+ *                           - id: 9f8e7d6c-5555-4a3b-2c1d-123456abcdef
+ *                             name: Lighting Installation
+ *                             urlSlug: lighting-installation
+ *                             iconUrl: https://api.brisk.ie/uploads/files/sub_icon/9f8e7d6c/icon.svg
  *                     avgRating: 4.9
  *                     reviewsCount: 128
  *                     topRated: true

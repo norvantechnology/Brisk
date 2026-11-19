@@ -515,12 +515,49 @@ export const listFeaturedTraders = async (
         city: true,
         createdAt: true,
         user: { select: { fullName: true, profilePhotoUrl: true } },
-        category: { select: { id: true, name: true, iconName: true, urlSlug: true } },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            iconName: true,
+            urlSlug: true,
+            subcategories: {
+              where: { status: 'active' },
+              orderBy: { name: 'asc' },
+              select: {
+                id: true,
+                name: true,
+                urlSlug: true,
+                iconUrl: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
         categories: {
           where: { isActive: true },
           orderBy: { createdAt: 'asc' },
-          take: 1,
-          select: { category: { select: { id: true, name: true, iconName: true, urlSlug: true } } },
+          select: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                iconName: true,
+                urlSlug: true,
+                subcategories: {
+                  where: { status: 'active' },
+                  orderBy: { name: 'asc' },
+                  select: {
+                    id: true,
+                    name: true,
+                    urlSlug: true,
+                    iconUrl: true,
+                    imageUrl: true,
+                  },
+                },
+              },
+            },
+          },
         },
         _count: { select: { ratingsReceived: true } },
       },
@@ -541,16 +578,41 @@ export const listFeaturedTraders = async (
 
   return {
     featuredTraders: rows.map((t) => {
-      const category = t.category ?? t.categories[0]?.category ?? null;
+      const categoryMap = new Map<string, NonNullable<typeof t.category>>();
+      if (t.category) {
+        categoryMap.set(t.category.id, t.category);
+      }
+      for (const item of t.categories) {
+        if (item.category && !categoryMap.has(item.category.id)) {
+          categoryMap.set(item.category.id, item.category);
+        }
+      }
+
+      let categories = Array.from(categoryMap.values()).map((c) => ({
+        id: c.id,
+        name: c.name,
+        iconUrl: resolveCategoryIconUrl(c),
+        subcategories: (c.subcategories || []).map((sub) => ({
+          id: sub.id,
+          name: sub.name,
+          urlSlug: sub.urlSlug,
+          iconUrl: resolveSubcategoryIconUrl(sub),
+        })),
+      }));
+
+      if (query.categoryId) {
+        categories = categories.sort((a, b) =>
+          a.id === query.categoryId ? -1 : b.id === query.categoryId ? 1 : 0
+        );
+      }
+
       return {
         id: t.id,
         displayName: t.businessName || t.user.fullName,
         fullName: t.user.fullName,
         businessName: t.businessName,
         profilePhotoUrl: t.profilePhotoUrl || t.user.profilePhotoUrl || null,
-        category: category
-          ? { id: category.id, name: category.name, iconUrl: resolveCategoryIconUrl(category) }
-          : null,
+        categories,
         avgRating: Number(t.avgRating),
         reviewsCount: t._count.ratingsReceived,
         topRated: t.topRated,
