@@ -1,4 +1,4 @@
-import { OfferClaimStatus, OfferStatus, OfferType } from '@prisma/client';
+import { InvoiceStatus, OfferClaimStatus, OfferStatus, OfferType, Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
 import { effectiveStatus, enrichOfferWithCurrency, offerInclude, serializeOfferWithMeta } from './offers.serializers';
@@ -120,6 +120,63 @@ export const listPublicOffers = async (
   const where = buildOfferWhere(
     normalizeOfferListFilters(query, { forceOfferType: kind, publicOnly: true })
   );
+
+  // For [GET] /brisk-offers: remove promo codes / offers that have been successfully used by this customer
+  if (kind === OfferType.PLATFORM && userId) {
+    const usedClaims = await prisma.offerClaim.findMany({
+      where: {
+        userId,
+        status: OfferClaimStatus.USED,
+      },
+      select: { offerId: true },
+    });
+    const usedOfferIds = new Set<string>(usedClaims.map((c) => c.offerId));
+
+    const paidInvoicesWithPromo = await prisma.invoice.findMany({
+      where: {
+        customerId: userId,
+        status: InvoiceStatus.PAID,
+        appliedPromoCode: { not: null },
+      },
+      select: { appliedPromoCode: true },
+    });
+
+    const usedPromoCodes = paidInvoicesWithPromo
+      .map((inv) => inv.appliedPromoCode?.trim().toUpperCase())
+      .filter((code): code is string => Boolean(code));
+
+    if (usedPromoCodes.length > 0) {
+      const matchingOffers = await prisma.offer.findMany({
+        where: {
+          offerType: OfferType.PLATFORM,
+          OR: [
+            { couponCode: { in: usedPromoCodes, mode: 'insensitive' } },
+            { offerCode: { in: usedPromoCodes, mode: 'insensitive' } },
+            {
+              promoCodes: {
+                some: {
+                  code: { in: usedPromoCodes, mode: 'insensitive' },
+                },
+              },
+            },
+          ],
+        },
+        select: { id: true },
+      });
+      matchingOffers.forEach((o) => usedOfferIds.add(o.id));
+    }
+
+    if (usedOfferIds.size > 0) {
+      const notInUsed: Prisma.OfferWhereInput = { id: { notIn: Array.from(usedOfferIds) } };
+      if (Array.isArray(where.AND)) {
+        where.AND.push(notInUsed);
+      } else if (where.AND) {
+        where.AND = [where.AND, notInUsed];
+      } else {
+        where.AND = [notInUsed];
+      }
+    }
+  }
 
   const [total, offers] = await Promise.all([
     prisma.offer.count({ where }),
