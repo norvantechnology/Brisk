@@ -29,6 +29,15 @@ const startServer = async () => {
   } catch (err) {
     logger.warn('Initial property suppliers seed check skipped/failed', { err });
   }
+  try {
+    const { syncAllSuppliersToUtilityProviders } = await import(
+      './modules/property/property-supplier-sync.service'
+    );
+    await syncAllSuppliersToUtilityProviders(prisma, true);
+    logger.info('Synced property listed suppliers with utility providers catalog.');
+  } catch (err) {
+    logger.warn('Initial property suppliers to utility providers sync check skipped/failed', { err });
+  }
   await startPlatformSettingsSync();
 
   await ensureUploadRoot();

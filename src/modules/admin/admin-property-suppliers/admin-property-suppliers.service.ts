@@ -8,6 +8,10 @@ import {
   ListPropertySuppliersQuery,
   CountyCoverageOverviewItem,
 } from './admin-property-suppliers.types';
+import {
+  syncSingleSupplierToUtilityProviders,
+  deactivateSupplierInUtilityProviders,
+} from '../../property/property-supplier-sync.service';
 
 const db = prisma as any;
 
@@ -533,6 +537,9 @@ export const createSupplier = async (input: CreatePropertySupplierInput) => {
     },
   });
 
+  // Automatically sync newly created supplier to utility providers
+  await syncSingleSupplierToUtilityProviders(supplier.id).catch(() => {});
+
   return {
     ...supplier,
     counties: (supplier.countyCoverages || []).map((c: any) => c.county),
@@ -640,6 +647,9 @@ export const updateSupplier = async (id: string, input: UpdatePropertySupplierIn
     },
   });
 
+  // Automatically sync updated supplier to utility providers
+  await syncSingleSupplierToUtilityProviders(updated.id).catch(() => {});
+
   return {
     ...updated,
     counties: (updated.countyCoverages || []).map((c: any) => c.county),
@@ -675,6 +685,9 @@ export const deleteSupplier = async (id: string) => {
       where: { id },
     });
   });
+
+  // Deactivate corresponding utility providers
+  await deactivateSupplierInUtilityProviders(id).catch(() => {});
 
   return { message: 'Property supplier deleted successfully.' };
 };

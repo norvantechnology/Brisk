@@ -3,6 +3,11 @@ import { prisma } from '../../config/database';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { normalizeMediaUrl } from '../categories/categories.serializers';
 import { parseFlexibleDate, type CreateAddressInput, type SubmitReadingInput, type UpdateAddressInput } from './property.validation';
+import {
+  syncAllSuppliersToUtilityProviders,
+  findMatchingPropertySupplier,
+  type PropertySupplierMatch,
+} from './property-supplier-sync.service';
 
 const PLACEHOLDER = 'https://cdn.brisk.ie/assets/placeholders';
 
@@ -562,21 +567,33 @@ const serializeSubscription = (
     };
   },
   meters: Array<{ meterType: string; mprnGprn: string }> = [],
-  addressRefs?: { mprnNumber?: string | null; gprnNumber?: string | null }
+  addressRefs?: { mprnNumber?: string | null; gprnNumber?: string | null },
+  matchedSupplier?: PropertySupplierMatch | null
 ) => {
   const refs = meterRefForService(sub.serviceType, meters, addressRefs);
-  const displayName = sub.customProviderName || sub.utilityProvider.name;
+  const displayName =
+    sub.customProviderName || matchedSupplier?.name || sub.utilityProvider.name;
+  const description =
+    matchedSupplier?.description ||
+    matchedSupplier?.typicalService ||
+    matchedSupplier?.coverageSummary ||
+    sub.utilityProvider.description;
+  const logoUrl = normalizeMediaUrl(matchedSupplier?.logoUrl || sub.utilityProvider.logoUrl);
+  const iconUrl = resolveUtilityIconUrl(matchedSupplier?.iconUrl || sub.utilityProvider.iconUrl);
+
   return {
     id: sub.id,
     serviceType: sub.serviceType,
     serviceLabel: sub.utilityProvider.serviceLabel ?? sub.serviceType,
     providerId: sub.utilityProvider.id,
+    supplierId: matchedSupplier?.id ?? sub.utilityProvider.id,
     name: displayName,
     providerName: displayName,
+    tradingName: matchedSupplier?.tradingName ?? null,
     customProviderName: sub.customProviderName ?? null,
-    description: sub.utilityProvider.description,
-    logoUrl: normalizeMediaUrl(sub.utilityProvider.logoUrl),
-    iconUrl: resolveUtilityIconUrl(sub.utilityProvider.iconUrl),
+    description,
+    logoUrl,
+    iconUrl,
     status: sub.status,
     /** ISO date-time (same shape as `createdAt`); null when unset. */
     expiryDate: sub.expiryDate,
@@ -585,13 +602,25 @@ const serializeSubscription = (
     gprnNumber: refs.gprnNumber,
     referenceNumber: refs.referenceNumber,
     referenceLabel: refs.referenceLabel,
+    category: matchedSupplier?.category
+      ? {
+          id: matchedSupplier.category.id,
+          name: matchedSupplier.category.name,
+          code: matchedSupplier.category.code,
+          slug: matchedSupplier.category.slug,
+        }
+      : null,
     utilityProvider: {
       ...sub.utilityProvider,
+      id: sub.utilityProvider.id,
+      supplierId: matchedSupplier?.id ?? sub.utilityProvider.id,
       name: displayName,
       providerName: displayName,
+      tradingName: matchedSupplier?.tradingName ?? null,
       customProviderName: sub.customProviderName ?? null,
-      logoUrl: normalizeMediaUrl(sub.utilityProvider.logoUrl),
-      iconUrl: resolveUtilityIconUrl(sub.utilityProvider.iconUrl),
+      description,
+      logoUrl,
+      iconUrl,
     },
   };
 };
@@ -643,22 +672,59 @@ export const getPropertyDetail = async (userId: string, id: string) => {
   const addressRefs = { mprnNumber, gprnNumber };
   const rawProviders = await listUtilityProviders();
 
-  const utilityProviderList = rawProviders.map((provider) => ({
-    ...provider,
-    logoUrl: normalizeMediaUrl(provider.logoUrl),
-    iconUrl: resolveUtilityIconUrl(provider.iconUrl),
-    providersCategory: rawProviders
-      .filter((other) => other.serviceType.toLowerCase() === provider.serviceType.toLowerCase())
-      .map((item) => ({
-        id: item.id,
-        name: item.name,
-        serviceType: item.serviceType,
-        serviceLabel: item.serviceLabel,
-        description: item.description,
-        logoUrl: normalizeMediaUrl(item.logoUrl),
-        iconUrl: resolveUtilityIconUrl(item.iconUrl),
-      })),
-  }));
+  // Load master property suppliers for enriching subscriptions & catalog
+  const propertySuppliers: PropertySupplierMatch[] = await (prisma as any).propertySupplier
+    .findMany({
+      where: { isActive: true },
+      include: {
+        category: {
+          select: { id: true, name: true, code: true, slug: true },
+        },
+      },
+    })
+    .catch(() => []);
+
+  const utilityProviderList = rawProviders.map((provider) => {
+    const matchedSupplier = findMatchingPropertySupplier(provider, propertySuppliers);
+    const displayName = matchedSupplier?.name || provider.name;
+    const logoUrl = normalizeMediaUrl(matchedSupplier?.logoUrl || provider.logoUrl);
+    const iconUrl = resolveUtilityIconUrl(matchedSupplier?.iconUrl || provider.iconUrl);
+    const description =
+      matchedSupplier?.description ||
+      matchedSupplier?.typicalService ||
+      matchedSupplier?.coverageSummary ||
+      provider.description;
+
+    return {
+      ...provider,
+      name: displayName,
+      supplierId: matchedSupplier?.id ?? provider.id,
+      tradingName: matchedSupplier?.tradingName ?? null,
+      logoUrl,
+      iconUrl,
+      description,
+      providersCategory: rawProviders
+        .filter((other) => other.serviceType.toLowerCase() === provider.serviceType.toLowerCase())
+        .map((item) => {
+          const otherMatch = findMatchingPropertySupplier(item, propertySuppliers);
+          return {
+            id: item.id,
+            supplierId: otherMatch?.id ?? item.id,
+            name: otherMatch?.name || item.name,
+            tradingName: otherMatch?.tradingName ?? null,
+            serviceType: item.serviceType,
+            serviceLabel: item.serviceLabel,
+            description:
+              otherMatch?.description ||
+              otherMatch?.typicalService ||
+              otherMatch?.coverageSummary ||
+              item.description,
+            logoUrl: normalizeMediaUrl(otherMatch?.logoUrl || item.logoUrl),
+            iconUrl: resolveUtilityIconUrl(otherMatch?.iconUrl || item.iconUrl),
+          };
+        }),
+    };
+  });
 
   return {
     id: property.id,
@@ -672,9 +738,10 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     /** GPRN from address / gas meter */
     gprnNumber,
     meters: property.meters.map(serializeMeter),
-    subscriptions: property.subscriptions.map((sub) =>
-      serializeSubscription(sub, property.meters, addressRefs)
-    ),
+    subscriptions: property.subscriptions.map((sub) => {
+      const matchedSupplier = findMatchingPropertySupplier(sub.utilityProvider, propertySuppliers);
+      return serializeSubscription(sub, property.meters, addressRefs, matchedSupplier);
+    }),
     utilityProviderList,
   };
 };
@@ -723,6 +790,9 @@ export const submitMeterReading = async (
 };
 
 export const listUtilityProviders = async () => {
+  // Ensure any newly added or updated PropertySupplier from admin panel is synced
+  await syncAllSuppliersToUtilityProviders(prisma);
+
   let providers = await prisma.utilityProvider.findMany({
     where: { isActive: true },
     orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
@@ -789,17 +859,58 @@ export const savePropertySubscriptions = async (
   const subItems = Array.isArray(input) ? null : input.subscriptions ?? null;
   const uniqueIds = [...new Set(rawProviderIds)];
 
-  const providers = uniqueIds.length
+  // Ensure suppliers are synced
+  await syncAllSuppliersToUtilityProviders(prisma);
+
+  let providers = uniqueIds.length
     ? await prisma.utilityProvider.findMany({
         where: { id: { in: uniqueIds } },
       })
     : [];
 
+  const providerMap = new Map<string, typeof providers[0]>();
+  for (const p of providers) {
+    providerMap.set(p.id, p);
+  }
+
+  // If any input IDs were not found as UtilityProvider, check if they are PropertySupplier IDs
   if (providers.length !== uniqueIds.length) {
     const foundIds = new Set(providers.map((p) => p.id));
     const missingIds = uniqueIds.filter((id) => !foundIds.has(id));
+
+    const suppliers: PropertySupplierMatch[] = await (prisma as any).propertySupplier
+      .findMany({
+        where: { id: { in: missingIds } },
+        include: { category: true },
+      })
+      .catch(() => []);
+
+    for (const sup of suppliers) {
+      const matchedP = await prisma.utilityProvider.findFirst({
+        where: {
+          OR: [
+            { id: sup.id },
+            { name: { equals: sup.name, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (matchedP) {
+        providerMap.set(sup.id, matchedP);
+        if (!providers.some((p) => p.id === matchedP.id)) {
+          providers.push(matchedP);
+        }
+      }
+    }
+  }
+
+  // Check if every input ID resolved to a valid provider
+  const resolvedAll = uniqueIds.every((id) => providerMap.has(id) || providers.some((p) => p.id === id));
+  if (!resolvedAll) {
+    const missingIds = uniqueIds.filter((id) => !providerMap.has(id) && !providers.some((p) => p.id === id));
     throw new BadRequestError(`Invalid or unknown utility provider ID(s): ${missingIds.join(', ')}`);
   }
+
+  const effectiveProviderIds = [...new Set(providers.map((p) => p.id))];
 
   await prisma.$transaction(async (tx) => {
     // Soft-cancel any active subscription whose provider is not in the checked list
@@ -807,8 +918,8 @@ export const savePropertySubscriptions = async (
       where: {
         propertyId,
         status: 'active',
-        ...(uniqueIds.length
-          ? { utilityProviderId: { notIn: uniqueIds } }
+        ...(effectiveProviderIds.length
+          ? { utilityProviderId: { notIn: effectiveProviderIds } }
           : {}),
       },
       data: { status: 'cancelled' },
@@ -816,7 +927,9 @@ export const savePropertySubscriptions = async (
 
     // Activate / create each checked provider
     for (const provider of providers) {
-      const customSub = subItems?.find((s) => s.providerId === provider.id);
+      const customSub = subItems?.find(
+        (s) => s.providerId === provider.id || providerMap.get(s.providerId)?.id === provider.id
+      );
       const expiryDate =
         customSub?.expiryDate !== undefined
           ? parseFlexibleDate(customSub.expiryDate)

@@ -14,6 +14,10 @@ import { listJobSiteVisits } from '../../site-visits/site-visits.service';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import { formatAddressLine, resolveUtilityIconUrl } from '../../property/property.service';
 import {
+  findMatchingPropertySupplier,
+  type PropertySupplierMatch,
+} from '../../property/property-supplier-sync.service';
+import {
   buildJobPayoutBalance,
   serializeJobPayoutBalance,
 } from '../../jobs/job-payout-balance';
@@ -591,21 +595,35 @@ export const getCustomerProperty = async (
         createdAt: r.createdAt,
       })),
     })),
-    subscriptions: property.subscriptions.map((s) => ({
-      id: s.id,
-      serviceType: s.serviceType,
-      serviceLabel: s.utilityProvider.serviceLabel ?? s.serviceType,
-      status: s.status,
-      accountNumber: s.accountNumber,
-      expiryDate: s.expiryDate,
-      provider: {
-        id: s.utilityProvider.id,
-        name: s.utilityProvider.name,
-        logoUrl: s.utilityProvider.logoUrl,
-        iconUrl: resolveUtilityIconUrl(s.utilityProvider.iconUrl),
-      },
-      createdAt: s.createdAt,
-    })),
+    subscriptions: await (async () => {
+      const suppliers: PropertySupplierMatch[] = await (prisma as any).propertySupplier
+        .findMany({
+          where: { isActive: true },
+          include: { category: true },
+        })
+        .catch(() => []);
+      return property.subscriptions.map((s) => {
+        const matched = findMatchingPropertySupplier(s.utilityProvider, suppliers);
+        return {
+          id: s.id,
+          serviceType: s.serviceType,
+          serviceLabel: s.utilityProvider.serviceLabel ?? s.serviceType,
+          status: s.status,
+          accountNumber: s.accountNumber,
+          expiryDate: s.expiryDate,
+          provider: {
+            id: s.utilityProvider.id,
+            supplierId: matched?.id ?? s.utilityProvider.id,
+            name: matched?.name || s.utilityProvider.name,
+            tradingName: matched?.tradingName ?? null,
+            logoUrl: matched?.logoUrl || s.utilityProvider.logoUrl,
+            iconUrl: resolveUtilityIconUrl(matched?.iconUrl || s.utilityProvider.iconUrl),
+            description: matched?.description || matched?.typicalService || s.utilityProvider.description,
+          },
+          createdAt: s.createdAt,
+        };
+      });
+    })(),
     jobsCount: property.address?.jobs.length ?? 0,
     jobs: (property.address?.jobs ?? []).map((j) => ({
       id: j.id,
