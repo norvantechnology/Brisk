@@ -557,8 +557,6 @@ const serializeJob = (
       ? 'SITE_VISIT_PAY_FEE'
       : 'PAYMENT_DETAILS';
 
-  const invoice = job.booking?.invoice;
-
   return {
   id: job.id,
     jobRef: str(job.jobRef),
