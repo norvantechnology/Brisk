@@ -339,7 +339,6 @@ export const listPublicOffers = async (
           if (usedOfferIds.has(offer.id)) return false;
           if (offer.couponCode && usedPromoCodes.has(offer.couponCode.trim().toUpperCase())) return false;
           if (offer.offerCode && usedPromoCodes.has(offer.offerCode.trim().toUpperCase())) return false;
-          if (offer.promoCodes?.some((pc) => usedPromoCodes.has(pc.code.trim().toUpperCase()))) return false;
           return true;
         })
       : rawOffers;
@@ -443,9 +442,6 @@ export const listApplicableOffersForCategory = async (
         blockedIds.add(offer.id);
       }
       if (offer.offerCode && usedPromoCodes.has(offer.offerCode.trim().toUpperCase())) {
-        blockedIds.add(offer.id);
-      }
-      if (offer.promoCodes?.some((pc) => usedPromoCodes.has(pc.code.trim().toUpperCase()))) {
         blockedIds.add(offer.id);
       }
     });
