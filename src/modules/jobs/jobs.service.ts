@@ -1485,6 +1485,7 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
       traderId: true,
       category: { select: { id: true, name: true } },
       subcategory: { select: { id: true, name: true } },
+      booking: { select: { invoice: { select: { status: true } } } },
     },
   });
   if (!job) throw new NotFoundError('Job not found.');
@@ -1529,12 +1530,13 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
 
   const items = await Promise.all(
     quotes.map(async (q) => {
+      const isInvoicePaid = job.booking?.invoice?.status === InvoiceStatus.PAID;
       const selectionStatus =
-        q.status === QuoteStatus.ACCEPTED && isOpen
-          ? 'AWAITING TRADER CONFIRMATION'
-          : job.traderId === q.traderId && q.status === QuoteStatus.ACCEPTED
-            ? 'CONFIRMED'
-            : q.status;
+        q.status === QuoteStatus.ACCEPTED
+          ? isInvoicePaid
+            ? 'COMPLETED'
+            : 'PAYMENT PENDING'
+          : 'ACCEPT QUOTE';
 
       const originalAmount = money(q.quotedAmount);
       const originalCurrency = q.currencyCode || 'EUR';
@@ -1598,7 +1600,7 @@ export const listJobQuotes = async (customerId: string, jobId: string) => {
     jobStatus: toDisplayStatus(job.status),
     assignedTraderId: job.traderId,
     awaitingTraderConfirmation: items.some(
-      (i) => i.selectionStatus === 'AWAITING TRADER CONFIRMATION'
+      (i) => i.selectionStatus === 'PAYMENT PENDING' || i.selectionStatus === 'AWAITING TRADER CONFIRMATION'
     ),
     job: {
       id: job.id,

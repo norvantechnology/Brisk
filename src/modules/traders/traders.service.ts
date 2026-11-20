@@ -434,10 +434,9 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
 
   return subcategories
     .map((s) => {
-      const subcategoryImage =
-        normalizeMediaUrl(s.imageUrl || s.bannerImageUrl) ||
-        resolveSubcategoryIconUrl(s);
       const categoryBanner = normalizeMediaUrl(s.category.bannerImageUrl);
+      const subcategoryBanner =
+        normalizeMediaUrl(s.bannerImageUrl || s.imageUrl) || categoryBanner;
       const categoryIcon = resolveCategoryIconUrl(s.category);
       const subcategoryIcon = resolveSubcategoryIconUrl(s);
 
@@ -445,18 +444,12 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
         id: s.id,
         subcategoryId: s.id,
         title: s.name,
-        urlSlug: s.urlSlug,
-        /** Subcategory's own service image representation */
-        imageUrl: subcategoryImage || categoryBanner,
-        bannerImageUrl: normalizeMediaUrl(s.bannerImageUrl || s.imageUrl) || categoryBanner,
+        imageUrl: subcategoryBanner,
         iconUrl: subcategoryIcon,
         category: {
           id: s.category.id,
           name: s.category.name,
-          urlSlug: s.category.urlSlug,
-          /** Parent category's own banner image representation */
           imageUrl: categoryBanner,
-          bannerImageUrl: categoryBanner,
           iconUrl: categoryIcon,
         },
         recentJobsCount: recentCounts.get(s.id) ?? 0,

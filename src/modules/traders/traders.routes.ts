@@ -109,16 +109,12 @@ router.use('/onboarding', onboardingRoutes);
  *                   - id: 5c1a2b3d-3333-4c5d-9e6f-abcdef654321
  *                     subcategoryId: 5c1a2b3d-3333-4c5d-9e6f-abcdef654321
  *                     title: Spring Garden Refresh
- *                     urlSlug: spring-garden-refresh
- *                     imageUrl: https://api.brisk.ie/uploads/files/subcategory_image/gardening.jpg
- *                     bannerImageUrl: https://api.brisk.ie/uploads/files/subcategory_image/gardening.jpg
- *                     iconUrl: https://api.brisk.ie/uploads/files/sub_icon/gardening.svg
+ *                     imageUrl: https://api.brisk.ie/uploads/files/category_banner/gardening.jpg
+ *                     iconUrl: https://api.brisk.ie/uploads/files/category_icon/gardening.svg
  *                     category:
  *                       id: 8e4f0a21-4444-4d6e-8f70-abcdef987654
  *                       name: Gardening
- *                       urlSlug: gardening
  *                       imageUrl: https://api.brisk.ie/uploads/files/category_banner/gardening.jpg
- *                       bannerImageUrl: https://api.brisk.ie/uploads/files/category_banner/gardening.jpg
  *                       iconUrl: https://api.brisk.ie/category-icons/gardening.svg
  *                     recentJobsCount: 14
  *                     totalJobsCount: 52

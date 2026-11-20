@@ -178,9 +178,7 @@ export const getJobQuoteDetail = async (
       ? isInvoicePaid
         ? 'COMPLETED'
         : 'PAYMENT PENDING'
-      : quote.status === QuoteStatus.PENDING
-        ? 'ACCEPT QUOTE'
-        : quote.status;
+      : 'ACCEPT QUOTE';
   const invoiceId = quote.status === QuoteStatus.ACCEPTED && inv ? inv.id : null;
   const t = quote.trader;
   const isVerified = t.verificationStatus === 'VERIFIED';
