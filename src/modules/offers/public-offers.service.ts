@@ -1,4 +1,4 @@
-import { InvoiceStatus, OfferClaimStatus, OfferStatus, OfferType, Prisma } from '@prisma/client';
+import { InvoiceStatus, JobStatus, OfferClaimStatus, OfferStatus, OfferType, Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors';
 import { effectiveStatus, enrichOfferWithCurrency, offerInclude, serializeOfferWithMeta } from './offers.serializers';
@@ -109,6 +109,164 @@ const buildOfferJobNavigation = (
   };
 };
 
+/**
+ * Returns all offer IDs and uppercase promo code strings that have been used
+ * by this customer across claims, jobs, bookings, and invoices.
+ */
+export const getUsedOffersAndPromoCodesForUser = async (userId: string) => {
+  const usedOfferIds = new Set<string>();
+  const usedPromoCodes = new Set<string>();
+
+  // 1. Claims marked USED or attached to a job
+  const claims = await prisma.offerClaim.findMany({
+    where: {
+      userId,
+      OR: [{ status: OfferClaimStatus.USED }, { jobId: { not: null } }],
+    },
+    select: { offerId: true },
+  });
+  claims.forEach((c) => {
+    if (c.offerId) usedOfferIds.add(c.offerId);
+  });
+
+  // 2. Jobs posted by this customer with an offer attached (active/completed jobs)
+  const jobs = await prisma.job.findMany({
+    where: {
+      customerId: userId,
+      offerId: { not: null },
+      status: { notIn: [JobStatus.DRAFT, JobStatus.CANCELLED] },
+    },
+    select: { offerId: true },
+  });
+  jobs.forEach((j) => {
+    if (j.offerId) usedOfferIds.add(j.offerId);
+  });
+
+  // 3. Invoices for this customer where a promo code was applied or promo discount was granted
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      status: { notIn: [InvoiceStatus.CANCELLED] },
+      OR: [{ appliedPromoCode: { not: null } }, { promoDiscount: { gt: 0 } }],
+      AND: [
+        {
+          OR: [
+            { booking: { customerId: userId } },
+            { booking: { job: { customerId: userId } } },
+            { paymentRequest: { customerId: userId } },
+            { paymentRequest: { job: { customerId: userId } } },
+            { payments: { some: { userId } } },
+          ],
+        },
+      ],
+    },
+    select: {
+      appliedPromoCode: true,
+      booking: {
+        select: {
+          job: {
+            select: { offerId: true },
+          },
+        },
+      },
+    },
+  });
+
+  invoices.forEach((inv) => {
+    const code = inv.appliedPromoCode?.trim().toUpperCase();
+    if (code) usedPromoCodes.add(code);
+    const jobOfferId = inv.booking?.job?.offerId;
+    if (jobOfferId) usedOfferIds.add(jobOfferId);
+  });
+
+  // 4. Expand: match collected usedPromoCodes to linked offer IDs and aliases
+  if (usedPromoCodes.size > 0) {
+    const codesList = Array.from(usedPromoCodes);
+
+    const [matchingPromoCodes, matchingOffers] = await Promise.all([
+      prisma.promoCode.findMany({
+        where: {
+          OR: [
+            { code: { in: codesList } },
+            ...codesList.map((c) => ({
+              code: { equals: c, mode: 'insensitive' as const },
+            })),
+          ],
+        },
+        select: { code: true, offerId: true },
+      }),
+      prisma.offer.findMany({
+        where: {
+          offerType: OfferType.PLATFORM,
+          OR: [
+            { couponCode: { in: codesList } },
+            { offerCode: { in: codesList } },
+            ...codesList.flatMap((c) => [
+              { couponCode: { equals: c, mode: 'insensitive' as const } },
+              { offerCode: { equals: c, mode: 'insensitive' as const } },
+              { title: { contains: c, mode: 'insensitive' as const } },
+            ]),
+            {
+              promoCodes: {
+                some: {
+                  OR: [
+                    { code: { in: codesList } },
+                    ...codesList.map((c) => ({
+                      code: { equals: c, mode: 'insensitive' as const },
+                    })),
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        select: { id: true, couponCode: true, offerCode: true },
+      }),
+    ]);
+
+    matchingPromoCodes.forEach((pc) => {
+      usedPromoCodes.add(pc.code.toUpperCase());
+      if (pc.offerId) usedOfferIds.add(pc.offerId);
+    });
+
+    matchingOffers.forEach((o) => {
+      usedOfferIds.add(o.id);
+      if (o.couponCode) usedPromoCodes.add(o.couponCode.toUpperCase());
+      if (o.offerCode) usedPromoCodes.add(o.offerCode.toUpperCase());
+    });
+  }
+
+  // 5. Expand: match collected usedOfferIds to all linked promo codes
+  if (usedOfferIds.size > 0) {
+    const offerIdsList = Array.from(usedOfferIds);
+    const [linkedOffers, linkedPromoCodes] = await Promise.all([
+      prisma.offer.findMany({
+        where: { id: { in: offerIdsList } },
+        select: {
+          id: true,
+          couponCode: true,
+          offerCode: true,
+          promoCodes: { select: { code: true } },
+        },
+      }),
+      prisma.promoCode.findMany({
+        where: { offerId: { in: offerIdsList } },
+        select: { code: true },
+      }),
+    ]);
+
+    linkedOffers.forEach((o) => {
+      if (o.couponCode) usedPromoCodes.add(o.couponCode.toUpperCase());
+      if (o.offerCode) usedPromoCodes.add(o.offerCode.toUpperCase());
+      o.promoCodes.forEach((pc) => usedPromoCodes.add(pc.code.toUpperCase()));
+    });
+    linkedPromoCodes.forEach((pc) => {
+      usedPromoCodes.add(pc.code.toUpperCase());
+    });
+  }
+
+  return { usedOfferIds, usedPromoCodes };
+};
+
 export const listPublicOffers = async (
   kind: OfferType,
   query: Record<string, unknown>,
@@ -121,65 +279,50 @@ export const listPublicOffers = async (
     normalizeOfferListFilters(query, { forceOfferType: kind, publicOnly: true })
   );
 
+  let usedOfferIds = new Set<string>();
+  let usedPromoCodes = new Set<string>();
+
   // For [GET] /brisk-offers: remove promo codes / offers that have been successfully used by this customer
   if (kind === OfferType.PLATFORM && userId) {
-    const usedClaims = await prisma.offerClaim.findMany({
-      where: {
-        userId,
-        status: OfferClaimStatus.USED,
-      },
-      select: { offerId: true },
-    });
-    const usedOfferIds = new Set<string>(usedClaims.map((c) => c.offerId));
+    const used = await getUsedOffersAndPromoCodesForUser(userId);
+    usedOfferIds = used.usedOfferIds;
+    usedPromoCodes = used.usedPromoCodes;
 
-    const paidInvoicesWithPromo = await prisma.invoice.findMany({
-      where: {
-        status: InvoiceStatus.PAID,
-        appliedPromoCode: { not: null },
-        OR: [
-          { booking: { customerId: userId } },
-          { paymentRequest: { customerId: userId } },
-          { payments: { some: { userId } } },
-        ],
-      },
-      select: { appliedPromoCode: true },
-    });
-
-    const usedPromoCodes = paidInvoicesWithPromo
-      .map((inv) => inv.appliedPromoCode?.trim().toUpperCase())
-      .filter((code): code is string => Boolean(code));
-
-    if (usedPromoCodes.length > 0) {
-      const matchingOffers = await prisma.offer.findMany({
-        where: {
-          offerType: OfferType.PLATFORM,
-          OR: [
-            { couponCode: { in: usedPromoCodes } },
-            { offerCode: { in: usedPromoCodes } },
-            {
-              promoCodes: {
-                some: {
-                  code: { in: usedPromoCodes },
-                },
-              },
+    const excludeOr: Prisma.OfferWhereInput[] = [];
+    if (usedOfferIds.size > 0) {
+      excludeOr.push({ id: { in: Array.from(usedOfferIds) } });
+    }
+    if (usedPromoCodes.size > 0) {
+      const codes = Array.from(usedPromoCodes);
+      excludeOr.push(
+        { couponCode: { in: codes } },
+        { offerCode: { in: codes } },
+        ...codes.flatMap((c) => [
+          { couponCode: { equals: c, mode: 'insensitive' as const } },
+          { offerCode: { equals: c, mode: 'insensitive' as const } },
+        ]),
+        {
+          promoCodes: {
+            some: {
+              OR: [
+                { code: { in: codes } },
+                ...codes.map((c) => ({ code: { equals: c, mode: 'insensitive' as const } })),
+              ],
             },
-          ],
-        },
-        select: { id: true },
-      });
-      matchingOffers.forEach((o) => usedOfferIds.add(o.id));
+          },
+        }
+      );
     }
 
-    if (usedOfferIds.size > 0) {
-      const notInUsed: Prisma.OfferWhereInput = { id: { notIn: Array.from(usedOfferIds) } };
+    if (excludeOr.length > 0) {
       where.AND = [
         ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-        notInUsed,
+        { NOT: { OR: excludeOr } },
       ];
     }
   }
 
-  const [total, offers] = await Promise.all([
+  const [total, rawOffers] = await Promise.all([
     prisma.offer.count({ where }),
     prisma.offer.findMany({
       where,
@@ -189,6 +332,17 @@ export const listPublicOffers = async (
       include: publicInclude,
     }),
   ]);
+
+  const offers =
+    kind === OfferType.PLATFORM && userId && (usedOfferIds.size > 0 || usedPromoCodes.size > 0)
+      ? rawOffers.filter((offer) => {
+          if (usedOfferIds.has(offer.id)) return false;
+          if (offer.couponCode && usedPromoCodes.has(offer.couponCode.trim().toUpperCase())) return false;
+          if (offer.offerCode && usedPromoCodes.has(offer.offerCode.trim().toUpperCase())) return false;
+          if (offer.promoCodes?.some((pc) => usedPromoCodes.has(pc.code.trim().toUpperCase()))) return false;
+          return true;
+        })
+      : rawOffers;
 
   const claimedIds = new Set<string>();
   const softClaimedIds = new Set<string>();
@@ -282,18 +436,19 @@ export const listApplicableOffersForCategory = async (
 
   const blockedIds = new Set<string>();
   if (userId) {
-    const claims = await prisma.offerClaim.findMany({
-      where: {
-        userId,
-        offerId: { in: offers.map((offer) => offer.id) },
-        OR: [
-          { status: OfferClaimStatus.USED },
-          { status: OfferClaimStatus.CLAIMED, jobId: { not: null } },
-        ],
-      },
-      select: { offerId: true },
+    const { usedOfferIds, usedPromoCodes } = await getUsedOffersAndPromoCodesForUser(userId);
+    usedOfferIds.forEach((id) => blockedIds.add(id));
+    offers.forEach((offer) => {
+      if (offer.couponCode && usedPromoCodes.has(offer.couponCode.trim().toUpperCase())) {
+        blockedIds.add(offer.id);
+      }
+      if (offer.offerCode && usedPromoCodes.has(offer.offerCode.trim().toUpperCase())) {
+        blockedIds.add(offer.id);
+      }
+      if (offer.promoCodes?.some((pc) => usedPromoCodes.has(pc.code.trim().toUpperCase()))) {
+        blockedIds.add(offer.id);
+      }
     });
-    claims.forEach((claim) => blockedIds.add(claim.offerId));
   }
 
   const viewerCurrency = userId ? await resolveUserCurrency(userId) : null;
@@ -610,7 +765,7 @@ export const listMyClaims = async (userId: string, offerType?: OfferType) => {
   };
 };
 
-export const listPromoCodes = async (categoryId?: string) => {
+export const listPromoCodes = async (categoryId?: string, userId?: string) => {
   const now = new Date();
   const codes = await prisma.promoCode.findMany({
     where: {
@@ -631,12 +786,24 @@ export const listPromoCodes = async (categoryId?: string) => {
     },
   });
 
-  const filtered = categoryId
+  let filtered = categoryId
     ? codes.filter((code) => {
         if (!code.categoryScope) return true;
         return code.categoryScope.split(',').includes(categoryId);
       })
     : codes;
+
+  if (userId) {
+    const { usedOfferIds, usedPromoCodes } = await getUsedOffersAndPromoCodesForUser(userId);
+    if (usedOfferIds.size > 0 || usedPromoCodes.size > 0) {
+      filtered = filtered.filter((code) => {
+        const codeUpper = code.code.trim().toUpperCase();
+        if (usedPromoCodes.has(codeUpper)) return false;
+        if (code.offerId && usedOfferIds.has(code.offerId)) return false;
+        return true;
+      });
+    }
+  }
 
   return {
     promoCodes: filtered.map((code) => ({

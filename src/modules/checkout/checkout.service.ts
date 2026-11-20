@@ -36,6 +36,7 @@ import {
 } from '../../services/stripe.service';
 import { computeInvoiceBreakdown, generateBookingRef } from '../jobs/jobs.service';
 import { generateInvoiceNumber } from '../jobs/job-payment-state';
+import { getUsedOffersAndPromoCodesForUser } from '../offers/public-offers.service';
 import {
   emitPaymentRequestPaidEvent,
   markPaymentRequestPaid,
@@ -318,9 +319,9 @@ const buildPromoTitle = (input: {
 };
 
 /** Payment Details → Brisk Offers bottom sheet items (promo codes). */
-const loadBriskOffersSheet = async (jobCategoryId?: string | null) => {
+const loadBriskOffersSheet = async (jobCategoryId?: string | null, userId?: string | null) => {
   const now = new Date();
-  const codes = await prisma.promoCode.findMany({
+  let codes = await prisma.promoCode.findMany({
     where: {
       active: true,
       validFrom: { lte: now },
@@ -332,6 +333,18 @@ const loadBriskOffersSheet = async (jobCategoryId?: string | null) => {
     },
     take: 50,
   });
+
+  if (userId) {
+    const { usedOfferIds, usedPromoCodes } = await getUsedOffersAndPromoCodesForUser(userId);
+    if (usedOfferIds.size > 0 || usedPromoCodes.size > 0) {
+      codes = codes.filter((code) => {
+        const codeUpper = code.code.trim().toUpperCase();
+        if (usedPromoCodes.has(codeUpper)) return false;
+        if (code.offerId && usedOfferIds.has(code.offerId)) return false;
+        return true;
+      });
+    }
+  }
 
   const categoryIds = Array.from(
     new Set(
@@ -724,7 +737,7 @@ export const getInvoice = async (userId: string, invoiceId: string) => {
   assertInvoiceOwner(invoice, userId);
   const consistent = await ensureInvoiceTotalsConsistent(invoice);
   const base = serializeInvoice(consistent);
-  const briskOffers = await loadBriskOffersSheet(invoiceContext(consistent).job.categoryId);
+  const briskOffers = await loadBriskOffersSheet(invoiceContext(consistent).job.categoryId, userId);
   return {
     ...base,
     briskOffers,

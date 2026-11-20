@@ -190,7 +190,7 @@ export const listPromoCodes = async (
 ): Promise<void> => {
   try {
     const categoryId = (req.query.categoryId ?? req.query.category_id) as string | undefined;
-    const data = await publicOffersService.listPromoCodes(categoryId);
+    const data = await publicOffersService.listPromoCodes(categoryId, req.user?.id);
     sendResponse({
       res,
       statusCode: 200,
