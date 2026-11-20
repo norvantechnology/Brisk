@@ -145,7 +145,7 @@ export const getUsedOffersAndPromoCodesForUser = async (userId: string) => {
   // 3. Invoices for this customer where a promo code was applied or promo discount was granted
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { notIn: [InvoiceStatus.CANCELLED] },
+      status: { not: InvoiceStatus.REFUNDED },
       OR: [{ appliedPromoCode: { not: null } }, { promoDiscount: { gt: 0 } }],
       AND: [
         {
@@ -317,7 +317,7 @@ export const listPublicOffers = async (
     if (excludeOr.length > 0) {
       where.AND = [
         ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-        { NOT: { OR: excludeOr } },
+        { NOT: excludeOr },
       ];
     }
   }
