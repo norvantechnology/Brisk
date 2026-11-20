@@ -940,15 +940,6 @@ const hasFinalPaymentRequest = (job: {
 const isPaidUpfrontInFull = (job: MyJobRow) =>
   job.booking?.invoice?.status === 'PAID' && !job.siteVisitRequested;
 
-/** Job status on finish — stays PAYMENT_PENDING until the customer has paid the full amount. */
-export const jobStatusAfterFinish = async (job: MyJobRow, traderId: string) => {
-  if (isPaidUpfrontInFull(job)) return JobStatus.COMPLETED;
-  const alreadyPaid = sumPaidAmount(await loadJobPaymentRequests(job.id, traderId));
-  return computePaymentBreakdown(job).totalAmount - alreadyPaid > 0
-    ? JobStatus.PAYMENT_PENDING
-    : JobStatus.COMPLETED;
-};
-
 type TraderContext = Awaited<ReturnType<typeof getTraderContext>>;
 
 const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderContext) => {
@@ -1403,7 +1394,6 @@ const myJobCardMapper =
     const alreadyPaidAmount = sumPaidAmount(job.paymentRequests);
     const breakdown = computePaymentBreakdown(job);
     const jobAmount = breakdown.totalAmount;
-    const remainingBalance = round2(Math.max(0, jobAmount - alreadyPaidAmount));
     const isPartialJob = hasAnyPartial || alreadyPaidAmount > 0;
 
     const cancelled = isJobCancelled(job.status, job.booking?.status ?? null);
