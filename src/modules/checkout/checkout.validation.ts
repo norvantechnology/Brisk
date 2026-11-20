@@ -24,7 +24,8 @@ export const applyPromoSchema = z.object({
 export const createPaymentIntentSchema = z.object({
   body: z
     .object({
-      invoiceId: uuid,
+      invoiceId: uuid.optional(),
+      quoteId: uuid.optional(),
       /** Optional on Payment Details Pay Now — defaults to CARD */
       method: z.nativeEnum(PaymentMethod).optional().default(PaymentMethod.CARD),
       billingType: z.nativeEnum(BillingType).optional().default(BillingType.INDIVIDUAL),
@@ -43,6 +44,13 @@ export const createPaymentIntentSchema = z.object({
         .optional(),
     })
     .superRefine((data, ctx) => {
+      if (!data.invoiceId && !data.quoteId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Either invoiceId or quoteId is required.',
+          path: ['invoiceId'],
+        });
+      }
       if (data.billingType === BillingType.COMPANY && !data.companyName) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

@@ -126,8 +126,8 @@ export const resolveJobType = (job: {
   };
 };
 
-const generateJobRef = () => `JOB-${randomBytes(2).toString('hex').toUpperCase()}`;
-const generateBookingRef = () => `BKG-${randomBytes(2).toString('hex').toUpperCase()}`;
+export const generateJobRef = () => `JOB-${randomBytes(2).toString('hex').toUpperCase()}`;
+export const generateBookingRef = () => `BKG-${randomBytes(2).toString('hex').toUpperCase()}`;
 
 export const formatAddressLine = (address: {
   houseNumber?: string | null;
@@ -557,6 +557,8 @@ const serializeJob = (
       ? 'SITE_VISIT_PAY_FEE'
       : 'PAYMENT_DETAILS';
 
+  const invoice = job.booking?.invoice;
+
   return {
   id: job.id,
     jobRef: str(job.jobRef),
@@ -586,6 +588,7 @@ const serializeJob = (
     maxBudget: job.maxBudget != null ? money(job.maxBudget) : null,
     siteVisitRequested: job.siteVisitRequested,
     siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
+    invoiceId: invoice?.id ?? null,
     ...resolveJobType(job),
   status: job.status,
     statusBadge: customerStatusBadgeFor(
@@ -2087,6 +2090,7 @@ export const getJobDetailsSummary = async (customerId: string, jobId: string) =>
     description: view.description,
     status: view.status,
     statusLabel: view.statusBadge,
+    invoiceId: view.invoiceId ?? job.booking?.invoice?.id ?? null,
     jobType: view.jobType,
     jobTypeLabel: view.jobTypeLabel,
     isSiteVisit: view.isSiteVisit,

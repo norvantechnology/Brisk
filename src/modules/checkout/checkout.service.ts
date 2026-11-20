@@ -1,5 +1,6 @@
 import { resolveJobPaymentDetails, formatPaymentMethodLabel, isKlarnaMethod } from '../jobs/job-payment-details';
 import {
+  BookingStatus,
   DiscountType,
   InvoiceStatus,
   JobQuoteType,
@@ -33,7 +34,7 @@ import {
   toMinorUnits,
   toPaymentError,
 } from '../../services/stripe.service';
-import { computeInvoiceBreakdown } from '../jobs/jobs.service';
+import { computeInvoiceBreakdown, generateBookingRef } from '../jobs/jobs.service';
 import {
   emitPaymentRequestPaidEvent,
   markPaymentRequestPaid,
@@ -910,8 +911,73 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
 };
 
 export const createPaymentIntent = async (userId: string, input: CreatePaymentIntentInput) => {
+  let targetInvoiceId = input.invoiceId;
+  if (!targetInvoiceId && input.quoteId) {
+    const quote = await prisma.quote.findUnique({
+      where: { id: input.quoteId },
+      include: {
+        job: {
+          include: {
+            booking: {
+              include: { invoice: true },
+            },
+          },
+        },
+      },
+    });
+    if (!quote) throw new NotFoundError('Quote not found.');
+    if (quote.job?.customerId !== userId) {
+      throw new ForbiddenError('You do not have access to this quote.');
+    }
+    targetInvoiceId = quote.job?.booking?.invoice?.id;
+    if (!targetInvoiceId && quote.job) {
+      const breakdown = computeInvoiceBreakdown({
+        serviceCharge: money(quote.quotedAmount),
+        traderOfferDiscount: 0,
+        currencyCode: quote.currencyCode || 'EUR',
+        purpose: 'SERVICE',
+      });
+      let bookingId = quote.job.booking?.id;
+      if (!bookingId) {
+        const b = await prisma.booking.create({
+          data: {
+            bookingRef: generateBookingRef(),
+            jobId: quote.job.id,
+            traderId: quote.traderId,
+            customerId: userId,
+            scheduledDate: quote.job.scheduledDate ?? new Date(),
+            status: BookingStatus.SCHEDULED,
+          },
+        });
+        bookingId = b.id;
+      }
+      const inv = await prisma.invoice.create({
+        data: {
+          invoiceNumber: generateInvoiceNumber(),
+          bookingId,
+          serviceCharge: breakdown.serviceCharge,
+          traderOfferDiscount: breakdown.traderOfferDiscount,
+          promoDiscount: breakdown.promoDiscount,
+          platformFee: breakdown.platformFee,
+          platformFeeVat: breakdown.platformFeeVat,
+          materialsTotal: breakdown.materialsTotal,
+          siteVisitFee: breakdown.siteVisitFee,
+          traderVatRate: breakdown.traderVatRate,
+          traderVatAmount: breakdown.traderVatAmount,
+          twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
+          tax: breakdown.tax,
+          totalAmount: breakdown.totalAmount,
+          currencyCode: breakdown.currencyCode,
+          status: InvoiceStatus.UNPAID,
+        },
+      });
+      targetInvoiceId = inv.id;
+    }
+  }
+  if (!targetInvoiceId) throw new NotFoundError('Invoice not found.');
+
   const invoice = await prisma.invoice.findUnique({
-    where: { id: input.invoiceId },
+    where: { id: targetInvoiceId },
     include: invoiceOwnershipInclude,
   });
   if (!invoice) throw new NotFoundError('Invoice not found.');

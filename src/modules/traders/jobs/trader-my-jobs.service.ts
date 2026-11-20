@@ -20,7 +20,11 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/er
 import { buildPaginationMeta } from '../../../utils/pagination';
 import { dateRangeWhere } from '../../../utils/list-filters';
 import { SITE_VISIT_SLOT_DEFS } from './trader-jobs.service';
-import { formatSlotClock } from '../../jobs/jobs.service';
+import {
+  computeInvoiceBreakdown,
+  formatSlotClock,
+  generateBookingRef,
+} from '../../jobs/jobs.service';
 import {
   buildListOrderBy,
   pageIdsByComputedKey,
@@ -2469,10 +2473,25 @@ export const arriveAtJob = async (userId: string, jobId: string) => {
   if (job.booking.finishedAt) {
     throw new ConflictError('Job already finished.');
   }
-  if (isAwaitingUpfrontPayment(job)) {
-    throw new BadRequestError('Customer has not completed payment for this job yet.', {
-      code: 'CUSTOMER_PAYMENT_PENDING',
+  const invoice = job.booking.invoice;
+  const isInvoiceUnpaid = invoice && invoice.status !== InvoiceStatus.PAID;
+  if (isAwaitingUpfrontPayment(job) || isInvoiceUnpaid) {
+    pushUserNotification(job.customerId, {
+      title: 'Trader Ready to Arrive — Payment Pending',
+      body: 'Your trader is ready to arrive, but payment is still pending. Please complete your payment so the trader can mark arrival and start the job.',
+      data: {
+        type: 'JOB_PAYMENT_PENDING',
+        jobId: job.id,
+        invoiceId: invoice?.id,
+      },
     });
+
+    throw new BadRequestError(
+      'The customer has not yet paid Brisk. Payment must be completed before you can mark arrival.',
+      {
+        code: 'CUSTOMER_PAYMENT_PENDING',
+      }
+    );
   }
 
   const now = new Date();
@@ -3146,7 +3165,11 @@ export const acceptJob = async (
   return getMyJobDetail(userId, jobId);
 };
 
-const OPEN_FOR_QUOTES: JobStatus[] = [JobStatus.PUBLISHED, JobStatus.QUOTED];
+const OPEN_FOR_QUOTES: JobStatus[] = [
+  JobStatus.PUBLISHED,
+  JobStatus.QUOTED,
+  JobStatus.PAYMENT_PENDING,
+];
 
 /**
  * Customer accepts a trader quotation. Job stays open (not assigned) until the trader taps
@@ -3178,14 +3201,18 @@ export const confirmQuoteAssignment = async (params: {
   }
 
   // Row lock on the job serialises this with the trader's View & Accept (assignAcceptedQuote).
-  const previouslySelected = await prisma.$transaction(async (tx) => {
+  const { previouslySelected, invoice } = await prisma.$transaction(async (tx) => {
     const open = await tx.job.updateMany({
       where: {
         id: job.id,
         OR: [{ traderId: null }, { traderId: quote.traderId }],
         status: { in: OPEN_FOR_QUOTES },
       },
-      data: { updatedAt: new Date() },
+      data: {
+        status: JobStatus.PAYMENT_PENDING,
+        serviceCharge: quote.quotedAmount,
+        updatedAt: new Date(),
+      },
     });
     if (open.count === 0) {
       throw new ConflictError('A trader is already confirmed for this job.');
@@ -3210,7 +3237,82 @@ export const confirmQuoteAssignment = async (params: {
         data: { status: QuoteStatus.PENDING },
       });
     }
-    return previous;
+
+    let b = await tx.booking.findUnique({
+      where: { jobId: job.id },
+      include: { invoice: true },
+    });
+    if (!b) {
+      b = await tx.booking.create({
+        data: {
+          bookingRef: generateBookingRef(),
+          jobId: job.id,
+          traderId: quote.traderId,
+          customerId: job.customerId,
+          scheduledDate: job.scheduledDate ?? new Date(),
+          status: BookingStatus.SCHEDULED,
+        },
+        include: { invoice: true },
+      });
+    } else if (b.traderId !== quote.traderId) {
+      b = await tx.booking.update({
+        where: { id: b.id },
+        data: { traderId: quote.traderId },
+        include: { invoice: true },
+      });
+    }
+
+    const quoteAmt = money(quote.quotedAmount);
+    const quoteCurrency = quote.currencyCode || 'EUR';
+    const breakdown = computeInvoiceBreakdown({
+      serviceCharge: quoteAmt,
+      traderOfferDiscount: 0,
+      currencyCode: quoteCurrency,
+      purpose: 'SERVICE',
+    });
+
+    let inv = b.invoice;
+    if (!inv) {
+      inv = await tx.invoice.create({
+        data: {
+          invoiceNumber: generateInvoiceNumber(),
+          bookingId: b.id,
+          serviceCharge: breakdown.serviceCharge,
+          traderOfferDiscount: breakdown.traderOfferDiscount,
+          promoDiscount: breakdown.promoDiscount,
+          platformFee: breakdown.platformFee,
+          platformFeeVat: breakdown.platformFeeVat,
+          materialsTotal: breakdown.materialsTotal,
+          siteVisitFee: breakdown.siteVisitFee,
+          traderVatRate: breakdown.traderVatRate,
+          traderVatAmount: breakdown.traderVatAmount,
+          twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
+          tax: breakdown.tax,
+          totalAmount: breakdown.totalAmount,
+          currencyCode: breakdown.currencyCode,
+          status: InvoiceStatus.UNPAID,
+        },
+      });
+    } else if (inv.status === InvoiceStatus.UNPAID) {
+      inv = await tx.invoice.update({
+        where: { id: inv.id },
+        data: {
+          serviceCharge: breakdown.serviceCharge,
+          platformFee: breakdown.platformFee,
+          platformFeeVat: breakdown.platformFeeVat,
+          materialsTotal: breakdown.materialsTotal,
+          siteVisitFee: breakdown.siteVisitFee,
+          traderVatRate: breakdown.traderVatRate,
+          traderVatAmount: breakdown.traderVatAmount,
+          twoThirdsRuleTriggered: breakdown.twoThirdsRuleTriggered,
+          tax: breakdown.tax,
+          totalAmount: breakdown.totalAmount,
+          currencyCode: breakdown.currencyCode,
+        },
+      });
+    }
+
+    return { previouslySelected: previous, booking: b, invoice: inv };
   });
 
   const at = new Date().toISOString();
@@ -3234,6 +3336,15 @@ export const confirmQuoteAssignment = async (params: {
   if (traderUser) {
     const sheet = await getIncomingForQuote(traderUser.userId, quote.id);
     if (sheet) emitJobAccept(traderUser.userId, { ...sheet, at });
+    pushUserNotification(traderUser.userId, {
+      title: 'Quotation Accepted!',
+      body: `A customer accepted your quotation for "${job.title}".`,
+      data: {
+        type: 'JOB_QUOTE_ACCEPTED',
+        jobId: job.id,
+        quoteId: quote.id,
+      },
+    });
   }
 
   const customer = await prisma.user.findUnique({
@@ -3260,9 +3371,12 @@ export const confirmQuoteAssignment = async (params: {
     jobId: job.id,
     traderId: quote.traderId,
     quoteId: quote.id,
-    status: job.status.replace(/_/g, ' '),
+    invoiceId: invoice?.id ?? null,
+    selectionStatus: 'PAYMENT PENDING' as const,
+    status: 'PAYMENT PENDING',
     assignmentStatus: 'AWAITING TRADER CONFIRMATION' as const,
     amount: displayAmount,
+    totalAmount: invoice ? money(invoice.totalAmount) : displayAmount,
     currencyCode: customerCurrency,
     originalAmount,
     originalCurrencyCode: originalCurrency,

@@ -1,5 +1,6 @@
 import {
   BookingStatus,
+  InvoiceStatus,
   JobStatus,
   Prisma,
   QuoteStatus,
@@ -170,12 +171,17 @@ export const getJobQuoteDetail = async (
 
   const job = quote.job;
   const isOpen = job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED;
+  const inv = job.booking?.invoice;
+  const isInvoicePaid = inv?.status === InvoiceStatus.PAID;
   const selectionStatus =
-    quote.status === QuoteStatus.ACCEPTED && isOpen
-      ? 'AWAITING TRADER CONFIRMATION'
-      : job.traderId === quote.traderId && quote.status === QuoteStatus.ACCEPTED
-        ? 'CONFIRMED'
+    quote.status === QuoteStatus.ACCEPTED
+      ? isInvoicePaid
+        ? 'COMPLETED'
+        : 'PAYMENT PENDING'
+      : quote.status === QuoteStatus.PENDING
+        ? 'ACCEPT QUOTE'
         : quote.status;
+  const invoiceId = quote.status === QuoteStatus.ACCEPTED && inv ? inv.id : null;
   const t = quote.trader;
   const isVerified = t.verificationStatus === 'VERIFIED';
 
@@ -218,7 +224,6 @@ export const getJobQuoteDetail = async (
       )
     : 0;
 
-  const inv = job.booking?.invoice;
   const bd = inv
     ? {
         serviceCharge: money(inv.serviceCharge),
@@ -315,6 +320,7 @@ export const getJobQuoteDetail = async (
     estimatedDays: quote.estimatedDays,
     status: quote.status,
     selectionStatus,
+    invoiceId,
     canAccept: isOpen && quote.status === QuoteStatus.PENDING,
     requestedAt: quote.requestedAt,
     createdAt: quote.createdAt,
