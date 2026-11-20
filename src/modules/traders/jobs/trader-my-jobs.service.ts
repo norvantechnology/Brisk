@@ -2476,9 +2476,10 @@ export const arriveAtJob = async (userId: string, jobId: string) => {
   const invoice = job.booking.invoice;
   const isInvoiceUnpaid = invoice && invoice.status !== InvoiceStatus.PAID;
   if (isAwaitingUpfrontPayment(job) || isInvoiceUnpaid) {
-    pushUserNotification(job.customerId, {
+    pushUserNotification([job.customerId], {
+      type: 'JOB_PAYMENT_PENDING',
       title: 'Trader Ready to Arrive — Payment Pending',
-      body: 'Your trader is ready to arrive, but payment is still pending. Please complete your payment so the trader can mark arrival and start the job.',
+      message: 'Your trader is ready to arrive, but payment is still pending. Please complete your payment so the trader can mark arrival and start the job.',
       data: {
         type: 'JOB_PAYMENT_PENDING',
         jobId: job.id,
@@ -3336,9 +3337,10 @@ export const confirmQuoteAssignment = async (params: {
   if (traderUser) {
     const sheet = await getIncomingForQuote(traderUser.userId, quote.id);
     if (sheet) emitJobAccept(traderUser.userId, { ...sheet, at });
-    pushUserNotification(traderUser.userId, {
+    pushUserNotification([traderUser.userId], {
+      type: 'JOB_QUOTE_ACCEPTED',
       title: 'Quotation Accepted!',
-      body: `A customer accepted your quotation for "${job.title}".`,
+      message: `A customer accepted your quotation for "${job.title}".`,
       data: {
         type: 'JOB_QUOTE_ACCEPTED',
         jobId: job.id,

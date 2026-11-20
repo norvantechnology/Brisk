@@ -35,6 +35,7 @@ import {
   toPaymentError,
 } from '../../services/stripe.service';
 import { computeInvoiceBreakdown, generateBookingRef } from '../jobs/jobs.service';
+import { generateInvoiceNumber } from '../jobs/job-payment-state';
 import {
   emitPaymentRequestPaidEvent,
   markPaymentRequestPaid,

@@ -109,6 +109,7 @@ export const getJobQuoteDetail = async (
             select: {
               invoice: {
                 select: {
+                  id: true,
                   serviceCharge: true,
                   platformFee: true,
                   traderOfferDiscount: true,

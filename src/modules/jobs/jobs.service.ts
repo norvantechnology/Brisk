@@ -588,7 +588,6 @@ const serializeJob = (
     maxBudget: job.maxBudget != null ? money(job.maxBudget) : null,
     siteVisitRequested: job.siteVisitRequested,
     siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
-    invoiceId: invoice?.id ?? null,
     ...resolveJobType(job),
   status: job.status,
     statusBadge: customerStatusBadgeFor(
