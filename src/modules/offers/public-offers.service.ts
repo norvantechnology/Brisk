@@ -168,13 +168,20 @@ export const getUsedOffersAndPromoCodesForUser = async (userId: string) => {
           },
         },
       },
+      paymentRequest: {
+        select: {
+          job: {
+            select: { offerId: true },
+          },
+        },
+      },
     },
   });
 
   invoices.forEach((inv) => {
     const code = inv.appliedPromoCode?.trim().toUpperCase();
     if (code) usedPromoCodes.add(code);
-    const jobOfferId = inv.booking?.job?.offerId;
+    const jobOfferId = inv.booking?.job?.offerId ?? inv.paymentRequest?.job?.offerId;
     if (jobOfferId) usedOfferIds.add(jobOfferId);
   });
 
