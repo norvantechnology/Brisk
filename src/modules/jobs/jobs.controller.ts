@@ -368,6 +368,49 @@ export const listCustomerSiteVisitRequestJobs = async (
   }
 };
 
+export const getSiteVisitProposal = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getCustomerSiteVisitProposal(
+      req.user!.id,
+      req.params.id,
+      req.params.requestId
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit proposal retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSiteVisitRequestById = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await jobsService.getCustomerSiteVisitProposalById(
+      req.user!.id,
+      req.params.requestId
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Site visit proposal retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const confirmSiteVisitProposal = async (
   req: AuthenticatedRequest,
   res: Response,

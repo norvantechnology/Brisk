@@ -216,6 +216,12 @@ export const siteVisitProposalParamSchema = z.object({
   }),
 });
 
+export const siteVisitRequestIdParamSchema = z.object({
+  params: z.object({
+    requestId: uuid,
+  }),
+});
+
 /** Confirm site visit — `slotId` required when the trader proposed slots. */
 export const confirmSiteVisitBodySchema = z.object({
   params: z.object({

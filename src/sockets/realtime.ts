@@ -850,9 +850,13 @@ export const emitSiteVisitUpdate = (input: {
         jobId: input.jobId,
         jobTitle,
         siteVisitRequestId: input.requestId,
+        requestId: input.requestId,
         traderName: input.traderName ?? null,
         visitDate: input.visitDate ?? null,
         timeSlot: input.timeSlot ?? null,
+        screen: 'SITE_VISIT_PROPOSAL',
+        actionUrl: `/jobs/${input.jobId}/site-visits/${input.requestId}`,
+        route: `/jobs/${input.jobId}/site-visits/${input.requestId}`,
       },
     });
   })();

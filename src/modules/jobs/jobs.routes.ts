@@ -14,6 +14,7 @@ import {
   updateJobSchema,
   acceptJobQuoteSchema,
   siteVisitProposalParamSchema,
+  siteVisitRequestIdParamSchema,
   confirmSiteVisitBodySchema,
   cancelJobSchema,
   createJobDisputeSchema,
@@ -574,6 +575,31 @@ router.get(
   '/site-visit-requests',
   ...customerOnly,
   controller.listCustomerSiteVisitRequestJobs
+);
+
+/**
+ * @swagger
+ * /jobs/site-visit-requests/{requestId}:
+ *   get:
+ *     summary: Single site visit request proposal with job & property context
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Site visit proposal detail with trader, slots and property context
+ *       404:
+ *         description: Proposal not found
+ */
+router.get(
+  '/site-visit-requests/:requestId',
+  ...customerOnly,
+  validate(siteVisitRequestIdParamSchema),
+  controller.getSiteVisitRequestById
 );
 
 /**
@@ -1709,6 +1735,35 @@ router.post('/:id/confirm-completion', ...customerOnly, validate(jobIdParamSchem
  */
 router.post('/:id/disputes', ...customerOnly, validate(createJobDisputeSchema), controller.createJobDispute);
 router.get('/:id/disputes', ...customerOnly, validate(jobIdParamSchema), controller.listJobDisputes);
+
+/**
+ * @swagger
+ * /jobs/{id}/site-visits/{requestId}:
+ *   get:
+ *     summary: Get single trader site-visit proposal detail for a job
+ *     tags: ['Customer / Jobs']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Proposal detail with slots, trader, and full job address context
+ *       404:
+ *         description: Proposal or job not found
+ */
+router.get(
+  '/:id/site-visits/:requestId',
+  ...customerOnly,
+  validate(siteVisitProposalParamSchema),
+  controller.getSiteVisitProposal
+);
 
 /**
  * @swagger

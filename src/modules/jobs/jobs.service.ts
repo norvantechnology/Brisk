@@ -490,6 +490,7 @@ const serializeSiteVisitProposal = (v: SiteVisitRequestRow) => {
         }
       : null,
     status: v.status,
+    isRescheduled: v.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
     visitDate: selected?.date ?? (v.visitDate ? formatSiteVisitDateKey(v.visitDate) : null),
     timeSlot: selected?.timeSlot ?? v.timeSlot,
     startTime: selected?.startTime ?? null,
@@ -497,8 +498,12 @@ const serializeSiteVisitProposal = (v: SiteVisitRequestRow) => {
     slots,
     slotCount: slots.length,
     updatedAt: v.updatedAt.toISOString(),
-    canConfirm: v.status === TraderSiteVisitStatus.PENDING,
-    canReject: v.status === TraderSiteVisitStatus.PENDING,
+    canConfirm:
+      v.status === TraderSiteVisitStatus.PENDING ||
+      v.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
+    canReject:
+      v.status === TraderSiteVisitStatus.PENDING ||
+      v.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
   };
 };
 
@@ -509,6 +514,9 @@ const serializeSiteVisitProposal = (v: SiteVisitRequestRow) => {
 const serializeCustomerSiteVisitTrader = (v: SiteVisitRequestRow) => {
   const slotRows = buildSiteVisitSlotRows(v);
   const traderName = v.trader?.businessName || v.trader?.user?.fullName || null;
+  const isOpen =
+    v.status === TraderSiteVisitStatus.PENDING ||
+    v.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED;
 
   return {
     requestId: v.id,
@@ -525,14 +533,15 @@ const serializeCustomerSiteVisitTrader = (v: SiteVisitRequestRow) => {
         }
       : null,
     status: v.status,
+    isRescheduled: v.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
     slots: slotRows.map((s) => ({
       id: s.id,
       date: formatSiteVisitSlotLabel(s.visitDate, s.startTime, s.endTime),
       isSelected: s.isSelected,
     })),
     updatedAt: v.updatedAt.toISOString(),
-    canConfirm: v.status === TraderSiteVisitStatus.PENDING,
-    canReject: v.status === TraderSiteVisitStatus.PENDING,
+    canConfirm: isOpen,
+    canReject: isOpen,
   };
 };
 
@@ -2954,39 +2963,167 @@ const getOwnedPendingSiteVisitRequest = async (
 /**
  * Customer home + bottom sheet — `data` is a job array (mobile JSON shape).
  * Each job includes `traders[]` with display slots for Accept/Decline.
+ * Includes complete address and property references so mobile never loops to My Property.
  */
 export const listCustomerSiteVisitRequestJobs = async (customerId: string) => {
   const jobs = await prisma.job.findMany({
     where: {
       customerId,
       status: { notIn: [JobStatus.CANCELLED, JobStatus.COMPLETED] },
-      siteVisitRequests: { some: { status: TraderSiteVisitStatus.PENDING } },
+      siteVisitRequests: {
+        some: {
+          status: {
+            in: [
+              TraderSiteVisitStatus.PENDING,
+              TraderSiteVisitStatus.RESCHEDULE_REQUIRED,
+            ],
+          },
+        },
+      },
     },
     orderBy: { updatedAt: 'desc' },
-    select: {
-      id: true,
-      jobRef: true,
-      title: true,
-      description: true,
-      updatedAt: true,
+    include: {
+      address: {
+        include: {
+          property: true,
+        },
+      },
+      category: { select: { id: true, name: true } },
+      subcategory: {
+        select: {
+          id: true,
+          name: true,
+          siteVisitEnabled: true,
+          siteVisitFee: true,
+          priceEnabled: true,
+          priceEnteredBy: true,
+          qaFormSchema: true,
+        },
+      },
       siteVisitRequests: jobInclude.siteVisitRequests,
     },
   });
 
   return jobs.map((job) => {
-    const traders = (job.siteVisitRequests ?? []).map(serializeCustomerSiteVisitTrader);
-    const pendingCount = traders.filter((t) => t.status === TraderSiteVisitStatus.PENDING).length;
+    const activeRequests = (job.siteVisitRequests ?? []).filter(
+      (r) =>
+        r.status === TraderSiteVisitStatus.PENDING ||
+        r.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+    );
+    const traders = activeRequests.map(serializeCustomerSiteVisitTrader);
+    const pendingCount = traders.length;
     const subtitle =
       job.description?.trim().split(/\n/)[0]?.trim().slice(0, 120) || null;
+
+    const property = job.address?.property ?? null;
+    const formattedAddress = job.address
+      ? formatAddressLine(job.address)
+      : [job.addressLine, job.city, job.postcode].filter(Boolean).join(', ') || null;
+
+    const addressPayload = job.address
+      ? {
+          id: job.address.id,
+          label: str(job.address.label ?? job.address.addressType),
+          addressType: str(job.address.addressType),
+          houseNumber: str(job.address.houseNumber),
+          addressLine1: str(job.address.addressLine1),
+          addressLine2: str(job.address.addressLine2),
+          city: str(job.address.city),
+          county: str(job.address.county),
+          eircode: str(job.address.eircode),
+          country: str(job.address.country),
+          latitude: job.address.latitude ?? 0,
+          longitude: job.address.longitude ?? 0,
+          isDefault: job.address.isDefault,
+          propertyId: property?.id ?? null,
+          property: property
+            ? {
+                id: property.id,
+                propertyName: property.propertyName,
+                fullAddress: formatAddressLine(property),
+              }
+            : null,
+        }
+      : job.addressLine || job.city
+        ? {
+            id: job.addressId ?? '',
+            label: 'Home',
+            addressType: 'Home',
+            houseNumber: '',
+            addressLine1: str(job.addressLine),
+            addressLine2: '',
+            city: str(job.city),
+            county: '',
+            eircode: str(job.postcode),
+            country: 'Ireland',
+            latitude: job.latitude ?? 0,
+            longitude: job.longitude ?? 0,
+            isDefault: false,
+            propertyId: null,
+            property: null,
+          }
+        : null;
+
+    const propertyPayload = property
+      ? {
+          id: property.id,
+          propertyName: property.propertyName,
+          fullAddress: formatAddressLine(property),
+          city: property.city,
+          county: property.county,
+          eircode: property.eircode,
+        }
+      : null;
+
+    const serviceAddress = {
+      address: formattedAddress,
+      lat: job.latitude ?? job.address?.latitude ?? null,
+      lng: job.longitude ?? job.address?.longitude ?? null,
+      mapImageUrl: job.address?.mapImageUrl ?? null,
+    };
+
     return {
       id: job.id,
       jobId: job.id,
       jobRef: job.jobRef ?? null,
       title: job.title,
       subtitle,
+      description: job.description,
+      status: job.status,
+      jobType: 'SITE_VISIT',
+      jobTypeLabel: 'Site Visit',
+      isSiteVisit: true,
       requestCount: pendingCount,
       maxApplicants: MAX_SITE_VISIT_APPLICANTS,
       updatedAt: job.updatedAt.toISOString(),
+      scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : null,
+      timeSlot: job.timeSlot ?? null,
+      siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
+      quoteType: job.quoteType ?? JobQuoteType.ONSITE,
+      categoryId: job.categoryId,
+      categoryName: job.category?.name ?? null,
+      category: job.category ? { id: job.category.id, name: job.category.name } : null,
+      subcategoryId: job.subcategoryId ?? null,
+      subcategoryName: job.subcategory?.name ?? null,
+      subcategory: job.subcategory
+        ? {
+            id: job.subcategory.id,
+            name: job.subcategory.name,
+            siteVisitEnabled: job.subcategory.siteVisitEnabled,
+            siteVisitFee:
+              job.subcategory.siteVisitFee != null ? money(job.subcategory.siteVisitFee) : 0,
+          }
+        : null,
+      addressId: job.addressId ?? job.address?.id ?? null,
+      propertyId: property?.id ?? null,
+      addressLine: job.addressLine ?? job.address?.addressLine1 ?? null,
+      city: job.city ?? job.address?.city ?? null,
+      postcode: job.postcode ?? job.address?.eircode ?? null,
+      latitude: job.latitude ?? job.address?.latitude ?? 0,
+      longitude: job.longitude ?? job.address?.longitude ?? 0,
+      address: addressPayload,
+      property: propertyPayload,
+      serviceAddress,
       traders,
     };
   });
@@ -3021,7 +3158,7 @@ const notifyTraderSiteVisit = async (
 /**
  * Customer confirms a trader's proposed site-visit slot.
  * Pass `slotId` from `slots[]` (required when the trader proposed slots).
- * PENDING → CONFIRMED; that slot becomes `isSelected: true` for the customer.
+ * PENDING / RESCHEDULE_REQUIRED → CONFIRMED; chosen slot becomes `isSelected: true`.
  */
 export const confirmSiteVisitProposal = async (
   customerId: string,
@@ -3036,8 +3173,11 @@ export const confirmSiteVisitProposal = async (
   if (request.status === TraderSiteVisitStatus.COMPLETED) {
     throw new ConflictError('Site visit is already completed.');
   }
-  if (request.status !== TraderSiteVisitStatus.PENDING) {
-    throw new BadRequestError('Only a pending site-visit proposal can be confirmed.');
+  if (
+    request.status !== TraderSiteVisitStatus.PENDING &&
+    request.status !== TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+  ) {
+    throw new BadRequestError('Only a pending or rescheduled site-visit proposal can be confirmed.');
   }
 
   const slots = request.slots ?? [];
@@ -3115,6 +3255,23 @@ export const confirmSiteVisitProposal = async (
       },
     });
 
+    const existingBooking = await tx.booking.findUnique({
+      where: { jobId },
+      select: { id: true, status: true },
+    });
+    if (existingBooking) {
+      await tx.booking.update({
+        where: { id: existingBooking.id },
+        data: {
+          scheduledDate: scheduledDateWithTime,
+          status:
+            existingBooking.status === BookingStatus.RESCHEDULED
+              ? BookingStatus.SCHEDULED
+              : existingBooking.status,
+        },
+      });
+    }
+
     return row;
   });
 
@@ -3135,7 +3292,7 @@ export const confirmSiteVisitProposal = async (
 
 /**
  * Customer rejects a trader's proposed site-visit date/time.
- * PENDING → RESCHEDULE_REQUIRED.
+ * PENDING / RESCHEDULE_REQUIRED → RESCHEDULE_REQUIRED.
  * Keeps visitDate/timeSlot so trader Discover shows the rejected date as reschedule context.
  */
 export const rejectSiteVisitProposal = async (
@@ -3144,9 +3301,6 @@ export const rejectSiteVisitProposal = async (
   requestId: string
 ) => {
   const { request } = await getOwnedPendingSiteVisitRequest(customerId, jobId, requestId);
-  if (request.status === TraderSiteVisitStatus.RESCHEDULE_REQUIRED) {
-    throw new ConflictError('Site visit already requires reschedule.');
-  }
   if (request.status === TraderSiteVisitStatus.CONFIRMED) {
     throw new BadRequestError(
       'Confirmed site visits cannot be rejected here. Ask trader to reschedule.'
@@ -3155,8 +3309,11 @@ export const rejectSiteVisitProposal = async (
   if (request.status === TraderSiteVisitStatus.COMPLETED) {
     throw new ConflictError('Site visit is already completed.');
   }
-  if (request.status !== TraderSiteVisitStatus.PENDING) {
-    throw new BadRequestError('Only a pending site-visit proposal can be rejected.');
+  if (
+    request.status !== TraderSiteVisitStatus.PENDING &&
+    request.status !== TraderSiteVisitStatus.RESCHEDULE_REQUIRED
+  ) {
+    throw new BadRequestError('Only a pending or rescheduled site-visit proposal can be rejected.');
   }
 
   const updated = await prisma.traderSiteVisitRequest.update({
@@ -3187,6 +3344,151 @@ export const rejectSiteVisitProposal = async (
     visitDate: updated.visitDate,
     timeSlot: updated.timeSlot,
   };
+};
+
+/**
+ * Single site visit proposal detail for Customer app navigation & deep links.
+ * Returns proposal slots + trader details + full parent job address/property context.
+ */
+export const getCustomerSiteVisitProposal = async (
+  customerId: string,
+  jobId: string,
+  requestId: string
+) => {
+  const { job, request } = await getOwnedPendingSiteVisitRequest(customerId, jobId, requestId);
+  const fullJob = await prisma.job.findUnique({
+    where: { id: jobId },
+    include: {
+      address: {
+        include: { property: true },
+      },
+      category: { select: { id: true, name: true } },
+      subcategory: {
+        select: {
+          id: true,
+          name: true,
+          siteVisitEnabled: true,
+          siteVisitFee: true,
+        },
+      },
+      siteVisitRequests: {
+        where: { id: requestId },
+        include: {
+          slots: { orderBy: { sortOrder: 'asc' } },
+          trader: {
+            select: {
+              id: true,
+              businessName: true,
+              profilePhotoUrl: true,
+              avgRating: true,
+              topRated: true,
+              verificationStatus: true,
+              user: { select: { fullName: true, profilePhotoUrl: true } },
+              _count: { select: { ratingsReceived: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const visit = fullJob?.siteVisitRequests?.[0] ?? request;
+  const traderSerialized = serializeCustomerSiteVisitTrader(visit as any);
+  const property = fullJob?.address?.property ?? null;
+  const formattedAddress = fullJob?.address
+    ? formatAddressLine(fullJob.address)
+    : [fullJob?.addressLine, fullJob?.city, fullJob?.postcode].filter(Boolean).join(', ') || null;
+
+  return {
+    ...traderSerialized,
+    jobId: job.id,
+    jobRef: job.jobRef ?? null,
+    title: job.title,
+    description: job.description,
+    status: job.status,
+    jobType: 'SITE_VISIT',
+    jobTypeLabel: 'Site Visit',
+    isSiteVisit: true,
+    scheduledDate: job.scheduledDate ? job.scheduledDate.toISOString() : null,
+    timeSlot: job.timeSlot ?? null,
+    siteVisitFee: job.siteVisitFee != null ? money(job.siteVisitFee) : 0,
+    quoteType: job.quoteType ?? JobQuoteType.ONSITE,
+    categoryId: job.categoryId,
+    categoryName: fullJob?.category?.name ?? null,
+    category: fullJob?.category ?? null,
+    subcategoryId: job.subcategoryId ?? null,
+    subcategoryName: fullJob?.subcategory?.name ?? null,
+    subcategory: fullJob?.subcategory ?? null,
+    addressId: job.addressId ?? fullJob?.address?.id ?? null,
+    propertyId: property?.id ?? null,
+    addressLine: job.addressLine ?? fullJob?.address?.addressLine1 ?? null,
+    city: job.city ?? fullJob?.address?.city ?? null,
+    postcode: job.postcode ?? fullJob?.address?.eircode ?? null,
+    latitude: job.latitude ?? fullJob?.address?.latitude ?? 0,
+    longitude: job.longitude ?? fullJob?.address?.longitude ?? 0,
+    address: fullJob?.address
+      ? {
+          id: fullJob.address.id,
+          label: str(fullJob.address.label ?? fullJob.address.addressType),
+          addressType: str(fullJob.address.addressType),
+          houseNumber: str(fullJob.address.houseNumber),
+          addressLine1: str(fullJob.address.addressLine1),
+          addressLine2: str(fullJob.address.addressLine2),
+          city: str(fullJob.address.city),
+          county: str(fullJob.address.county),
+          eircode: str(fullJob.address.eircode),
+          country: str(fullJob.address.country),
+          latitude: fullJob.address.latitude ?? 0,
+          longitude: fullJob.address.longitude ?? 0,
+          isDefault: fullJob.address.isDefault,
+          propertyId: property?.id ?? null,
+          property: property
+            ? {
+                id: property.id,
+                propertyName: property.propertyName,
+                fullAddress: formatAddressLine(property),
+              }
+            : null,
+        }
+      : null,
+    property: property
+      ? {
+          id: property.id,
+          propertyName: property.propertyName,
+          fullAddress: formatAddressLine(property),
+          city: property.city,
+          county: property.county,
+          eircode: property.eircode,
+        }
+      : null,
+    serviceAddress: {
+      address: formattedAddress,
+      lat: job.latitude ?? fullJob?.address?.latitude ?? null,
+      lng: job.longitude ?? fullJob?.address?.longitude ?? null,
+      mapImageUrl: fullJob?.address?.mapImageUrl ?? null,
+    },
+  };
+};
+
+/**
+ * Customer lookup for a site visit proposal by requestId alone.
+ */
+export const getCustomerSiteVisitProposalById = async (
+  customerId: string,
+  requestId: string
+) => {
+  const reqRow = await prisma.traderSiteVisitRequest.findFirst({
+    where: {
+      id: requestId,
+      job: { customerId },
+      status: { not: TraderSiteVisitStatus.CANCELLED },
+    },
+    select: { jobId: true },
+  });
+  if (!reqRow || !reqRow.jobId) {
+    throw new NotFoundError('Site visit proposal not found.');
+  }
+  return getCustomerSiteVisitProposal(customerId, reqRow.jobId, requestId);
 };
 
 /**

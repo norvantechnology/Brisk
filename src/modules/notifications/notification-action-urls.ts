@@ -132,7 +132,12 @@ export const resolveUserNotificationActionUrl = (
     case 'NEW_REVIEW':
     case 'DISPUTE_UPDATE':
     case 'SITE_VISIT_REQUESTED':
-    case 'SITE_VISIT_RESCHEDULED':
+    case 'SITE_VISIT_RESCHEDULED': {
+      const requestId = str(data.siteVisitRequestId) || str(data.requestId);
+      if (jobId && requestId) return `/jobs/${jobId}/site-visits/${requestId}`;
+      if (jobId) return `/jobs/${jobId}`;
+      return null;
+    }
     case 'SITE_VISIT_CONFIRMED':
     case 'SITE_VISIT_RESCHEDULE_REQUESTED':
     case 'PAYMENT_REQUESTED':
