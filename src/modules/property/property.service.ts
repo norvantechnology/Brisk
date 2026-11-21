@@ -758,7 +758,7 @@ export const getPropertyDetail = async (userId: string, id: string) => {
         providersCategory: providersForService,
       };
     })
-    .filter(Boolean);
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   return {
     id: property.id,
