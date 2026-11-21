@@ -106,6 +106,15 @@ export const findMatchingPropertySupplier = (
     }
   }
 
+  // 5. Special fallback for legacy Dublin City Council placeholder
+  if (pNorm === 'dublincitycouncil' || /dublin\s*city\s*council/i.test(pName)) {
+    const wasteSupplier =
+      suppliers.find(
+        (s) => s.category?.code?.toUpperCase() === 'WASTE_MANAGEMENT' && s.displayOrder === 1
+      ) || suppliers.find((s) => s.category?.code?.toUpperCase() === 'WASTE_MANAGEMENT');
+    if (wasteSupplier) return wasteSupplier;
+  }
+
   return null;
 };
 
@@ -146,6 +155,60 @@ export const syncAllSuppliersToUtilityProviders = async (
 
     const existingProviders = await db.utilityProvider.findMany();
     const existingById = new Map<string, any>(existingProviders.map((p: any) => [p.id, p]));
+
+    // Handle legacy Dublin City Council migration to top active waste management supplier (Panda)
+    const dccProvider = existingProviders.find(
+      (p: any) =>
+        p.name.trim().toLowerCase() === 'dublin city council' &&
+        p.serviceType.toLowerCase() === 'bins'
+    );
+    const topWasteSupplier =
+      suppliers.find(
+        (s) => s.category?.code?.toUpperCase() === 'WASTE_MANAGEMENT' && s.displayOrder === 1
+      ) || suppliers.find((s) => s.category?.code?.toUpperCase() === 'WASTE_MANAGEMENT');
+
+    if (dccProvider && topWasteSupplier) {
+      const pandaProvider = existingProviders.find(
+        (p: any) =>
+          p.serviceType.toLowerCase() === 'bins' &&
+          (p.id === topWasteSupplier.id ||
+            p.name.trim().toLowerCase() === topWasteSupplier.name.trim().toLowerCase())
+      );
+
+      if (pandaProvider && pandaProvider.id !== dccProvider.id) {
+        // Point existing subscriptions from Dublin City Council to Panda
+        await db.subscription.updateMany({
+          where: { utilityProviderId: dccProvider.id },
+          data: { utilityProviderId: pandaProvider.id },
+        }).catch(() => {});
+        // Deactivate old DCC provider
+        await db.utilityProvider.update({
+          where: { id: dccProvider.id },
+          data: { isActive: false },
+        }).catch(() => {});
+        const dccIdx = existingProviders.findIndex((p: any) => p.id === dccProvider.id);
+        if (dccIdx !== -1) existingProviders.splice(dccIdx, 1);
+        existingById.delete(dccProvider.id);
+      } else {
+        // Update DCC row directly to Panda
+        const targetDesc =
+          topWasteSupplier.coverageSummary || topWasteSupplier.typicalService || topWasteSupplier.description || null;
+        await db.utilityProvider.update({
+          where: { id: dccProvider.id },
+          data: {
+            name: topWasteSupplier.name,
+            serviceLabel: 'Bins',
+            description: targetDesc,
+            logoUrl: topWasteSupplier.logoUrl || null,
+            iconUrl: topWasteSupplier.iconUrl || null,
+            displayOrder: topWasteSupplier.displayOrder ?? 1,
+            isActive: true,
+          },
+        }).catch(() => {});
+        dccProvider.name = topWasteSupplier.name;
+        dccProvider.description = targetDesc;
+      }
+    }
 
     for (const supplier of suppliers) {
       const services: Array<{ serviceType: string; serviceLabel: string }> = [];
@@ -245,6 +308,60 @@ export const syncSingleSupplierToUtilityProviders = async (
 
     const existingProviders = await db.utilityProvider.findMany();
     const existingById = new Map<string, any>(existingProviders.map((p: any) => [p.id, p]));
+
+    // Handle legacy Dublin City Council migration to top active waste management supplier (Panda)
+    const dccProvider = existingProviders.find(
+      (p: any) =>
+        p.name.trim().toLowerCase() === 'dublin city council' &&
+        p.serviceType.toLowerCase() === 'bins'
+    );
+    const topWasteSupplier =
+      suppliers.find(
+        (s) => s.category?.code?.toUpperCase() === 'WASTE_MANAGEMENT' && s.displayOrder === 1
+      ) || suppliers.find((s) => s.category?.code?.toUpperCase() === 'WASTE_MANAGEMENT');
+
+    if (dccProvider && topWasteSupplier) {
+      const pandaProvider = existingProviders.find(
+        (p: any) =>
+          p.serviceType.toLowerCase() === 'bins' &&
+          (p.id === topWasteSupplier.id ||
+            p.name.trim().toLowerCase() === topWasteSupplier.name.trim().toLowerCase())
+      );
+
+      if (pandaProvider && pandaProvider.id !== dccProvider.id) {
+        // Point existing subscriptions from Dublin City Council to Panda
+        await db.subscription.updateMany({
+          where: { utilityProviderId: dccProvider.id },
+          data: { utilityProviderId: pandaProvider.id },
+        }).catch(() => {});
+        // Deactivate old DCC provider
+        await db.utilityProvider.update({
+          where: { id: dccProvider.id },
+          data: { isActive: false },
+        }).catch(() => {});
+        const dccIdx = existingProviders.findIndex((p: any) => p.id === dccProvider.id);
+        if (dccIdx !== -1) existingProviders.splice(dccIdx, 1);
+        existingById.delete(dccProvider.id);
+      } else {
+        // Update DCC row directly to Panda
+        const targetDesc =
+          topWasteSupplier.coverageSummary || topWasteSupplier.typicalService || topWasteSupplier.description || null;
+        await db.utilityProvider.update({
+          where: { id: dccProvider.id },
+          data: {
+            name: topWasteSupplier.name,
+            serviceLabel: 'Bins',
+            description: targetDesc,
+            logoUrl: topWasteSupplier.logoUrl || null,
+            iconUrl: topWasteSupplier.iconUrl || null,
+            displayOrder: topWasteSupplier.displayOrder ?? 1,
+            isActive: true,
+          },
+        }).catch(() => {});
+        dccProvider.name = topWasteSupplier.name;
+        dccProvider.description = targetDesc;
+      }
+    }
     const result: any[] = [];
 
     const services: Array<{ serviceType: string; serviceLabel: string }> = [];

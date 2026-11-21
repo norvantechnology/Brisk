@@ -684,7 +684,8 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     })
     .catch(() => []);
 
-  const utilityProviderList = rawProviders.map((provider) => {
+  // Enrich all available providers with master supplier data
+  const enrichedProviders = rawProviders.map((provider) => {
     const matchedSupplier = findMatchingPropertySupplier(provider, propertySuppliers);
     const displayName = matchedSupplier?.name || provider.name;
     const logoUrl = normalizeMediaUrl(matchedSupplier?.logoUrl || provider.logoUrl);
@@ -696,35 +697,68 @@ export const getPropertyDetail = async (userId: string, id: string) => {
       provider.description;
 
     return {
-      ...provider,
-      name: displayName,
+      id: provider.id,
       supplierId: matchedSupplier?.id ?? provider.id,
+      name: displayName,
       tradingName: matchedSupplier?.tradingName ?? null,
+      serviceType: provider.serviceType,
+      serviceLabel: provider.serviceLabel ?? provider.serviceType,
+      description,
       logoUrl,
       iconUrl,
-      description,
-      providersCategory: rawProviders
-        .filter((other) => other.serviceType.toLowerCase() === provider.serviceType.toLowerCase())
-        .map((item) => {
-          const otherMatch = findMatchingPropertySupplier(item, propertySuppliers);
-          return {
-            id: item.id,
-            supplierId: otherMatch?.id ?? item.id,
-            name: otherMatch?.name || item.name,
-            tradingName: otherMatch?.tradingName ?? null,
-            serviceType: item.serviceType,
-            serviceLabel: item.serviceLabel,
-            description:
-              otherMatch?.description ||
-              otherMatch?.typicalService ||
-              otherMatch?.coverageSummary ||
-              item.description,
-            logoUrl: normalizeMediaUrl(otherMatch?.logoUrl || item.logoUrl),
-            iconUrl: resolveUtilityIconUrl(otherMatch?.iconUrl || item.iconUrl),
-          };
-        }),
+      displayOrder: provider.displayOrder,
+      expiryDate: provider.expiryDate,
     };
   });
+
+  // Track customer's active subscription for each service type
+  const activeSubsByService = new Map<string, typeof property.subscriptions[0]>();
+  for (const sub of property.subscriptions) {
+    if (sub.status === 'active') {
+      activeSubsByService.set(sub.serviceType.toLowerCase(), sub);
+    }
+  }
+
+  // Canonical ordering of service category cards
+  const standardServiceTypes = ['electricity', 'gas', 'bins', 'broadband', 'insurance'];
+  const allServiceTypes = [
+    ...new Set([
+      ...standardServiceTypes,
+      ...enrichedProviders.map((p) => p.serviceType.toLowerCase()),
+    ]),
+  ];
+
+  // Produce exactly 1 card item per distinct service category with all providers in providersCategory
+  const utilityProviderList = allServiceTypes
+    .map((sType) => {
+      const seenIds = new Set<string>();
+      const providersForService = enrichedProviders
+        .filter((p) => p.serviceType.toLowerCase() === sType)
+        .filter((p) => {
+          if (seenIds.has(p.id)) return false;
+          seenIds.add(p.id);
+          return true;
+        })
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+
+      if (providersForService.length === 0) return null;
+
+      // Select active provider if customer is subscribed, else default to first
+      const activeSub = activeSubsByService.get(sType);
+      let primaryProvider = activeSub
+        ? providersForService.find((p) => p.id === activeSub.utilityProviderId)
+        : null;
+
+      if (!primaryProvider) {
+        primaryProvider = providersForService[0];
+      }
+
+      return {
+        ...primaryProvider,
+        providersCategory: providersForService,
+      };
+    })
+    .filter(Boolean);
 
   return {
     id: property.id,
@@ -924,6 +958,23 @@ export const savePropertySubscriptions = async (
       },
       data: { status: 'cancelled' },
     });
+
+    // Also soft-cancel any previous active subscription of the same serviceType whose provider was replaced
+    const activatedServices = [...new Set(providers.map((p) => p.serviceType.toLowerCase()))];
+    for (const sType of activatedServices) {
+      const allowedIdsForService = providers
+        .filter((p) => p.serviceType.toLowerCase() === sType)
+        .map((p) => p.id);
+      await tx.subscription.updateMany({
+        where: {
+          propertyId,
+          status: 'active',
+          serviceType: { equals: sType, mode: 'insensitive' },
+          utilityProviderId: { notIn: allowedIdsForService },
+        },
+        data: { status: 'cancelled' },
+      });
+    }
 
     // Activate / create each checked provider
     for (const provider of providers) {
