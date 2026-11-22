@@ -303,7 +303,7 @@ const statusBadgeFor = (
       case 'PAYMENT_REQUEST_PENDING':
         return 'Payment Request Pending';
       case 'AWAITING_PAYMENT':
-        return 'Awaiting Customer Payment';
+        return 'Awaiting Brisk Payment';
       case 'COMPLETED':
         return 'Completed';
       case 'CANCELLED':
@@ -902,6 +902,8 @@ type PaymentSummarySource = {
     invoice?: {
       serviceCharge: Prisma.Decimal;
       platformFee: Prisma.Decimal;
+      platformFeeVat: Prisma.Decimal;
+      traderVatAmount: Prisma.Decimal;
       traderOfferDiscount: Prisma.Decimal;
       promoDiscount: Prisma.Decimal;
       tax: Prisma.Decimal;
@@ -2005,23 +2007,34 @@ const buildSubmitPaymentSummary = (job: PaymentSummarySource) => {
     : 0;
   const baseRate = invoice ? money(invoice.serviceCharge) : breakdown.serviceCharge;
   const platformFee = invoice ? money(invoice.platformFee) : breakdown.platformFee;
+  const platformFeeVat = invoice ? money(invoice.platformFeeVat) : breakdown.platformFeeVat;
   const materialCost = breakdown.materialsTotal;
   const vatRate = Math.round(breakdown.vatRate * 100);
-  const vatAmount = invoice ? money(invoice.tax) : breakdown.vatAmount;
+
+  // Trader VAT only (13.5% / 23% on their service charge — excludes platform fee VAT)
+  const traderVatAmount = invoice ? money(invoice.traderVatAmount) : breakdown.traderVatAmount;
   const totalAmount = invoice ? money(invoice.totalAmount) : breakdown.totalAmount;
+
+  // Net payout = what Brisk transfers to the trader (gross total minus Brisk's platform fee + its VAT)
+  const platformFeeGross = round2(platformFee + platformFeeVat);
+  const netPayout = round2(totalAmount - platformFeeGross - offerDiscount);
 
   return {
     baseRate,
     materialCost,
     materialsTotal: materialCost,
     platformFee,
+    platformFeeVat,
+    platformFeeGross,
     offerApplied: offerDiscount > 0 ? -offerDiscount : 0,
     siteVisitFee: breakdown.siteVisitFee,
     vatRate,
     vatPercentage: vatRate,
-    vatAmount,
+    // Trader-facing VAT is only the trader's own VAT (not platform fee VAT)
+    vatAmount: traderVatAmount,
     totalAmount,
-    netPayout: totalAmount,
+    // Net amount Brisk will transfer to the trader after deducting platform fee
+    netPayout,
   };
 };
 
@@ -2059,16 +2072,23 @@ const buildPaymentSummaryDetails = (
   if (summary.materialsTotal > 0) {
     rows.push(line('Materials', summary.materialsTotal));
   }
-  rows.push(line('Platform Fee', summary.platformFee));
-  rows.push(line('Offer Applied', summary.offerApplied));
   if (summary.siteVisitFee > 0) {
     rows.push(line('Site Visit Fee', summary.siteVisitFee));
   }
-  rows.push(
-    line(`VAT (${summary.vatPercentage}%)`, summary.vatAmount, {
-      percentage: summary.vatPercentage,
-    })
-  );
+  if (summary.offerApplied < 0) {
+    rows.push(line('Offer Applied', summary.offerApplied));
+  }
+  if (summary.vatAmount > 0) {
+    rows.push(
+      line(`VAT (${summary.vatPercentage}%)`, summary.vatAmount, {
+        percentage: summary.vatPercentage,
+      })
+    );
+  }
+  // Show Brisk Platform Fee as a deduction — clarifies what Brisk takes vs what trader earns
+  if (summary.platformFee > 0) {
+    rows.push(line('Brisk Platform Fee', -summary.platformFeeGross));
+  }
   return rows;
 };
 
@@ -2830,6 +2850,63 @@ const notifyQuoteReceived = async (
 };
 
 /** Customer inbox: trader sent a payment request (full / partial / site visit fee). */
+/**
+ * Notify Brisk admin that a trader has submitted a payment request.
+ * In the new flow, Brisk is responsible for paying the trader — the customer is NOT involved.
+ * We also send the trader a confirmation push notification.
+ */
+const notifyBriskPaymentRequest = async (
+  traderId: string,
+  pr: {
+    id: string;
+    invoiceId: string;
+    jobId: string;
+    customerId: string;
+    type: TraderPaymentRequestType;
+    totalAmount: Prisma.Decimal | number;
+    currencyCode: string;
+  },
+  job: { title: string; jobRef?: string | null }
+) => {
+  const trader = await prisma.trader.findUnique({
+    where: { id: traderId },
+    select: {
+      businessName: true,
+      userId: true,
+      user: { select: { fullName: true } },
+    },
+  });
+  const traderName = trader?.businessName || trader?.user.fullName || 'Trader';
+  const amount = money(pr.totalAmount);
+
+  // Push notification to the trader confirming Brisk has received their payment request
+  if (trader?.userId) {
+    pushUserNotification(trader.userId, {
+      title: 'Payment Request Received by Brisk',
+      body: `Your payment request of ${amount} ${pr.currencyCode} for "${job.title}" has been received. Brisk will process and transfer your payment shortly.`,
+      data: {
+        type: 'BRISK_PAYMENT_REQUEST_RECEIVED',
+        jobId: pr.jobId,
+        paymentRequestId: pr.id,
+      },
+    });
+  }
+
+  // Log to Brisk admin socket channel (admin dashboard real-time feed)
+  emitPaymentRequested({
+    // Route to admin/Brisk internal channel rather than customer
+    customerId: pr.customerId,
+    jobId: pr.jobId,
+    invoiceId: pr.invoiceId,
+    type: pr.type,
+    amount,
+    currencyCode: pr.currencyCode,
+    traderName,
+  });
+};
+
+/** @deprecated Previously notified the customer. Kept for site-visit fee requests which still use
+ * the old customer-facing flow. For FULL_JOB requests use notifyBriskPaymentRequest instead. */
 const notifyPaymentRequested = async (
   traderId: string,
   pr: {
@@ -4174,14 +4251,24 @@ export const requestPayment = async (userId: string, jobId: string) => {
 
   const paymentRequest = await prisma.$transaction(async (tx) => {
     const pr = await createPaymentRequest(tx, data);
+    // Job moves to COMPLETED immediately — Brisk is now responsible for paying the trader.
+    // The customer should not be shown a "Payment Pending" screen; the job is done from their perspective.
     await tx.job.update({
       where: { id: jobId },
-      data: { status: JobStatus.PAYMENT_PENDING },
+      data: { status: JobStatus.COMPLETED },
     });
+    // Also mark booking as completed if it exists
+    if (job.booking?.id) {
+      await tx.booking.update({
+        where: { id: job.booking.id },
+        data: { status: BookingStatus.COMPLETED },
+      });
+    }
     return pr;
   });
 
-  await notifyPaymentRequested(trader.id, paymentRequest);
+  // Notify Brisk admin that the trader has submitted a payment request (not the customer).
+  await notifyBriskPaymentRequest(trader.id, paymentRequest, job);
 
   return {
     paymentRequestId: paymentRequest.id,

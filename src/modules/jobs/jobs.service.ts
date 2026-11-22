@@ -80,8 +80,9 @@ export const customerStatusBadgeFor = (
     return 'Partial Payment';
   }
   if (isAwaitingUpfrontPayment({ status, booking: { finishedAt } })) return 'Payment Pending';
-  // Work finished, trader has not sent the payment request yet — not Payment Pending.
-  if (status === JobStatus.PAYMENT_PENDING && finishedAt && !opts?.paymentRequested) {
+  // Work finished — in the new Brisk-pays-trader flow, job moves to COMPLETED when trader
+  // submits payment request. Customer should never see "Payment Pending" for post-work payment.
+  if (status === JobStatus.PAYMENT_PENDING && finishedAt) {
     return 'Work Completed';
   }
   if (status === JobStatus.PAYMENT_PENDING) return 'Payment Pending';

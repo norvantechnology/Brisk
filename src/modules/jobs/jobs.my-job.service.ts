@@ -174,11 +174,12 @@ export const getJobQuoteDetail = async (
   const isOpen = job.status === JobStatus.PUBLISHED || job.status === JobStatus.QUOTED;
   const inv = job.booking?.invoice;
   const isInvoicePaid = inv?.status === InvoiceStatus.PAID;
+  const isJobCompleted = job.status === JobStatus.COMPLETED;
   const selectionStatus =
     quote.status === QuoteStatus.ACCEPTED
-      ? isInvoicePaid
+      ? isInvoicePaid || isJobCompleted
         ? 'COMPLETED'
-        : 'PAYMENT PENDING'
+        : 'ACCEPT QUOTE'
       : 'ACCEPT QUOTE';
   const invoiceId = quote.status === QuoteStatus.ACCEPTED && inv ? inv.id : null;
   const t = quote.trader;
