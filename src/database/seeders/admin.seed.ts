@@ -77,6 +77,27 @@ export async function seedAdmin(prisma: PrismaClient): Promise<void> {
     logger.warn('Failed to activate brisktrader@gmail.com', { err });
   }
 
+  // Ensure test images are set on General plumbing subcategory for Trending Now testing
+  try {
+    const testImageUrl =
+      'https://api.brisk.ie/uploads/files/category_banner/afea3952-2e23-4d03-ba6c-89f74ecadd62/1794916681514-47evd8nt.png';
+    await prisma.subcategory.updateMany({
+      where: {
+        OR: [
+          { id: '5970bb98-a91d-45e2-9752-fa732c12072d' },
+          { name: { equals: 'General plumbing', mode: 'insensitive' } },
+        ],
+      },
+      data: {
+        trendingImageUrl: testImageUrl,
+        bannerImageUrl: testImageUrl,
+      },
+    });
+    logger.info('Updated General plumbing subcategory with test trendingImageUrl.');
+  } catch (err) {
+    logger.warn('Failed to update General plumbing trendingImageUrl', err);
+  }
+
   const admins = [
     {
       fullName: 'System Super Admin',
