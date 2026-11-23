@@ -275,7 +275,9 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *                 success: { type: boolean, example: true }
  *                 message: { type: string }
  *                 data:
- *                   $ref: '#/components/schemas/TraderIncomingJob'
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/TraderIncomingJob'
  *             example:
  *               success: true
  *               message: Incoming job retrieved successfully.
@@ -346,7 +348,9 @@ router.get('/incoming/latest', validate(incomingLatestQuerySchema), controller.g
  *                 success: { type: boolean, example: true }
  *                 message: { type: string }
  *                 data:
- *                   $ref: '#/components/schemas/TraderIncomingJob'
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/TraderIncomingJob'
  *             examples:
  *               waiting:
  *                 value: { success: true, message: Incoming job retrieved successfully., data: { jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc, quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2, title: Kitchen Sink Leak, charges: 120, currencySymbol: €, actions: { canAccept: true, canDecline: true } } }

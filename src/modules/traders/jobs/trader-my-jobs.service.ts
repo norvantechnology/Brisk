@@ -4446,6 +4446,7 @@ const awaitingTraderConfirmationWhere = (traderId: string): Prisma.QuoteWhereInp
   job: {
     status: { in: OPEN_FOR_QUOTES },
     OR: [{ traderId: null }, { traderId }],
+    booking: null,
   },
 });
 
@@ -4678,31 +4679,48 @@ export const getIncomingForJob = async (
   return null;
 };
 
-/** Latest customer-accepted quotation awaiting this trader (re-open the sheet on app launch). */
+/** All customer-accepted quotations awaiting this trader where no other trader is assigned. */
 export const getIncomingLatest = async (userId: string, originQuery?: OriginQuery) => {
   const trader = await getTraderContext(userId);
-  const quote = await prisma.quote.findFirst({
+
+  // 1. All quotes where customer accepted this trader's quote and job is not assigned to anyone else
+  const quotes = await prisma.quote.findMany({
     where: awaitingTraderConfirmationWhere(trader.id),
     orderBy: { updatedAt: 'desc' },
     include: incomingQuoteInclude,
   });
-  if (quote) {
-    return buildIncomingSheet(trader, quote, originQuery);
-  }
 
-  const directJob = await prisma.job.findFirst({
+  // 2. All direct jobs published to this trader where no booking exists yet
+  const directJobs = await prisma.job.findMany({
     where: {
       traderId: trader.id,
-      status: JobStatus.PUBLISHED,
+      status: { in: OPEN_FOR_QUOTES },
+      booking: null,
     },
     orderBy: { createdAt: 'desc' },
     select: directJobSelect,
   });
-  if (directJob) {
-    return buildIncomingSheetFromDirectJob(trader, directJob, originQuery);
+
+  const quoteSheets = await Promise.all(
+    quotes.map((q) => buildIncomingSheet(trader, q, originQuery))
+  );
+
+  const directJobSheets = await Promise.all(
+    directJobs.map((j) => buildIncomingSheetFromDirectJob(trader, j, originQuery))
+  );
+
+  // Combine and deduplicate by jobId
+  const seenJobIds = new Set<string>();
+  const allEligibleJobs: Array<NonNullable<typeof quoteSheets[0]>> = [];
+
+  for (const sheet of [...quoteSheets, ...directJobSheets]) {
+    if (sheet && !seenJobIds.has(sheet.jobId)) {
+      seenJobIds.add(sheet.jobId);
+      allEligibleJobs.push(sheet);
+    }
   }
 
-  return null;
+  return allEligibleJobs;
 };
 
 /** View & Accept → job assigned to this trader and moves to My Jobs ACTIVE. */

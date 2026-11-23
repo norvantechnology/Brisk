@@ -541,8 +541,8 @@ export const getIncomingLatest = async (
     sendResponse({
       res,
       statusCode: 200,
-      message: data
-        ? 'Incoming job retrieved successfully.'
+      message: data.length > 0
+        ? 'Incoming jobs retrieved successfully.'
         : 'No incoming jobs available.',
       data,
     });
