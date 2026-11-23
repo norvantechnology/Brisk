@@ -486,9 +486,8 @@ const mapMeterReadings = (
   readings: any[]
 ) => {
   const isElectricity = meter.meterType === 'electricity';
-  const unit = meter.unitLabel ?? (isElectricity ? 'kWh' : 'm³');
 
-  return readings.map((r) => {
+  return readings.map((r, index) => {
     const rawVal = Number(r.readingValue);
     const formattedValue = isElectricity
       ? rawVal.toLocaleString('en-IE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
@@ -500,20 +499,9 @@ const mapMeterReadings = (
         : new Date(r.readingDate).toISOString();
 
     return {
-      id: r.id,
-      meterId: r.meterId,
-      readingValue: rawVal,
-      nightReadingValue: r.nightReadingValue != null ? Number(r.nightReadingValue) : null,
-      readingType: r.readingType ?? 'standard',
-      readingDate: isoDate,
-      date: isoDate,
-      dateSubmitted: isoDate,
       reading: formattedValue,
-      formattedReadingValue: formattedValue,
-      formattedReading: `${formattedValue} ${unit}`,
-      unit,
-      status: r.status,
-      photoUrl: r.photoUrl ?? null,
+      date: isoDate,
+      isLatest: index === 0,
     };
   });
 };
@@ -562,30 +550,14 @@ const serializeMeter = (meter: {
     latestReading: formattedLastVal ? `${formattedLastVal} ${unit}` : null,
     latestReadingText: formattedLastVal ? `Latest Reading: ${formattedLastVal} ${unit}` : 'No readings submitted yet',
     totalReadingsText: `Total Readings: ${totalReadings}`,
-    historyHeaders: {
-      reading: `Reading (${unit})`,
-      dateSubmitted: 'Date Submitted',
-    },
     lastReading: last
       ? {
-          value: rawLastVal!,
-          nightReadingValue: last.nightReadingValue != null ? Number(last.nightReadingValue) : null,
-          readingType: last.readingType ?? 'standard',
-          formatted: `${formattedLastVal} ${unit}`,
-          formattedValue: formattedLastVal!,
+          reading: formattedLastVal!,
           date:
             last.readingDate instanceof Date
               ? last.readingDate.toISOString()
               : new Date(last.readingDate).toISOString(),
-          readingDate:
-            last.readingDate instanceof Date
-              ? last.readingDate.toISOString()
-              : new Date(last.readingDate).toISOString(),
-          dateSubmitted:
-            last.readingDate instanceof Date
-              ? last.readingDate.toISOString()
-              : new Date(last.readingDate).toISOString(),
-          status: last.status,
+          isLatest: true,
         }
       : null,
   };
@@ -976,23 +948,20 @@ export const submitMeterReading = async (
   const refreshed = await getOwnedProperty(userId, propertyId);
   meter = refreshed.meters.find((item) => item.id === meter!.id)!;
 
+  const isElectricity = meter.meterType === 'electricity';
+  const rawReadingVal = Number(reading.readingValue);
+  const formattedVal = isElectricity
+    ? rawReadingVal.toLocaleString('en-IE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+    : rawReadingVal.toLocaleString('en-IE');
+
   return {
     reading: {
-      id: reading.id,
-      meterId: reading.meterId,
-      readingValue: Number(reading.readingValue),
-      nightReadingValue: reading.nightReadingValue != null ? Number(reading.nightReadingValue) : null,
-      readingType: reading.readingType ?? 'standard',
-      readingDate:
-        reading.readingDate instanceof Date
-          ? reading.readingDate.toISOString()
-          : new Date(reading.readingDate).toISOString(),
+      reading: formattedVal,
       date:
         reading.readingDate instanceof Date
           ? reading.readingDate.toISOString()
           : new Date(reading.readingDate).toISOString(),
-      status: reading.status,
-      photoUrl: reading.photoUrl,
+      isLatest: true,
     },
     meter: serializeMeter(meter),
   };
@@ -1038,23 +1007,6 @@ export const getMeterReadings = async (
     orderBy: { readingDate: 'desc' },
   });
 
-  const allMeters = await Promise.all(
-    property.meters.map(async (m) => {
-      const mReadings = await (prisma as any).meterReading.findMany({
-        where: { meterId: m.id },
-        orderBy: { readingDate: 'desc' },
-      });
-      return {
-        ...serializeMeter({
-          ...m,
-          readings: mReadings.slice(0, 1),
-          _count: { readings: mReadings.length },
-        }),
-        readings: mapMeterReadings(m, mReadings),
-      };
-    })
-  );
-
   return {
     meter: serializeMeter({
       ...meter,
@@ -1062,7 +1014,6 @@ export const getMeterReadings = async (
       _count: { readings: readings.length },
     }),
     readings: mapMeterReadings(meter, readings),
-    meters: allMeters,
   };
 };
 
