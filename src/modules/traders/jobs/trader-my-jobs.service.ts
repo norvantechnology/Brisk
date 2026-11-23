@@ -3462,6 +3462,44 @@ export const confirmQuoteAssignment = async (params: {
 };
 
 /**
+ * Verifies that the trader has all required category certificates/documents uploaded and approved
+ * before they can accept or undertake a job in this category.
+ */
+export const assertTraderCategoryCertified = async (traderId: string, categoryId: string) => {
+  if (!categoryId) return;
+  const requiredRules = await prisma.documentRule.findMany({
+    where: {
+      scope: 'CATEGORY',
+      categoryId,
+      required: true,
+    },
+    select: { id: true, name: true },
+  });
+
+  if (requiredRules.length === 0) return;
+
+  const approvedDocs = await prisma.traderDocument.findMany({
+    where: {
+      traderId,
+      documentRuleId: { in: requiredRules.map((r) => r.id) },
+      status: 'APPROVED',
+    },
+    select: { documentRuleId: true },
+  });
+
+  const approvedRuleIds = new Set(approvedDocs.map((d) => d.documentRuleId));
+  const missing = requiredRules.filter((r) => !approvedRuleIds.has(r.id));
+
+  if (missing.length > 0) {
+    const missingNames = missing.map((m) => m.name).join(', ');
+    throw new BadRequestError(
+      `You cannot accept or undertake jobs in this category until your required certificate(s) (${missingNames}) have been uploaded and approved by Admin.`,
+      { code: 'CATEGORY_CERTIFICATES_REQUIRED', categoryId, missingCertificates: missing.map((m) => m.name) }
+    );
+  }
+};
+
+/**
  * Trader taps View & Accept on a customer-accepted quote → assign job, create booking,
  * reject the other open quotes, job moves to My Jobs ACTIVE.
  */
@@ -3476,6 +3514,10 @@ const assignAcceptedQuote = async (traderId: string, jobId: string) => {
   if (!job) {
     throw new NotFoundError('Job not found.');
   }
+  // Enforce category certificate approval: traders must not be able to accept or undertake
+  // jobs in a category until required documentation is uploaded and approved.
+  await assertTraderCategoryCertified(traderId, job.categoryId);
+
   if (job.traderId && job.traderId !== traderId) {
     throw new ConflictError('Job is already assigned to another trader.');
   }

@@ -425,6 +425,7 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
       featured: true,
       imageUrl: true,
       bannerImageUrl: true,
+      trendingImageUrl: true,
       iconUrl: true,
       category: {
         select: { id: true, name: true, iconName: true, urlSlug: true, bannerImageUrl: true },
@@ -436,7 +437,7 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
     .map((s) => {
       const categoryBanner = normalizeMediaUrl(s.category.bannerImageUrl);
       const subcategoryBanner =
-        normalizeMediaUrl(s.bannerImageUrl || s.imageUrl) || categoryBanner;
+        normalizeMediaUrl(s.trendingImageUrl || s.bannerImageUrl || s.imageUrl) || categoryBanner;
       const categoryIcon = resolveCategoryIconUrl(s.category);
       const subcategoryIcon = resolveSubcategoryIconUrl(s);
 

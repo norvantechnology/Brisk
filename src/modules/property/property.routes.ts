@@ -6,6 +6,7 @@ import * as controller from './property.controller';
 import {
   addressIdParamSchema,
   createAddressSchema,
+  getReadingsQuerySchema,
   propertyIdParamSchema,
   removeSubscriptionSchema,
   saveSubscriptionsSchema,
@@ -227,6 +228,36 @@ router.get('/properties', ...customerOnly, controller.listProperties);
  *           - `utilityProviderList[]` (available utility provider catalog from GET /utility-providers)
  */
 router.get('/properties/:id', ...customerOnly, validate(propertyIdParamSchema), controller.getPropertyDetail);
+
+/**
+ * @swagger
+ * /properties/{id}/readings:
+ *   get:
+ *     summary: Get electricity or gas meter readings history
+ *     tags: ['Customer / Property']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: meterId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: meterType
+ *         schema: { type: string, enum: [electricity, gas] }
+ *     responses:
+ *       200:
+ *         description: Meter detail with full reading history.
+ */
+router.get(
+  '/properties/:id/readings',
+  ...customerOnly,
+  validate(getReadingsQuerySchema),
+  controller.getMeterReadings
+);
 
 /**
  * @swagger

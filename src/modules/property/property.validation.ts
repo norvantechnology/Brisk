@@ -12,8 +12,20 @@ const addressBodySchema = z.object({
   county: z.string().trim().optional(),
   eircode: z.string().trim().optional(),
   country: z.string().trim().optional(),
-  mprnNumber: z.string().trim().optional(),
-  gprnNumber: z.string().trim().optional(),
+  mprnNumber: z
+    .string()
+    .trim()
+    .regex(/^10\d{9}$/, 'MPRN must be exactly 11 digits and start with 10.')
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  gprnNumber: z
+    .string()
+    .trim()
+    .regex(/^\d{7}$/, 'GPRN must be exactly 7 digits.')
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   utnNumber: z.string().trim().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
@@ -50,10 +62,15 @@ export const submitReadingSchema = z.object({
   body: z.object({
     meterId: z.string().uuid().optional(),
     meterType: z.enum(['electricity', 'gas']).optional(),
-    readingValue: z.coerce.number().positive('Reading must be greater than 0.'),
+    readingValue: z.coerce.number().positive('Reading must be greater than 0.').optional(),
+    // Day & Night dual readings for Day/Night meters (MC: 02, etc.)
+    dayReadingValue: z.coerce.number().positive('Day reading must be greater than 0.').optional(),
+    nightReadingValue: z.coerce.number().positive('Night reading must be greater than 0.').optional(),
     photoUrl: z.string().url().optional().or(z.literal('')).transform((v) => v || undefined),
   }).refine((data) => data.meterId || data.meterType, {
     message: 'Provide meterId or meterType.',
+  }).refine((data) => data.readingValue !== undefined || data.dayReadingValue !== undefined, {
+    message: 'Provide readingValue (for single meter) or dayReadingValue (for day/night meter).',
   }),
 });
 
@@ -110,6 +127,14 @@ export const flexibleDateSchema = z
   .nullable()
   .optional();
 
+export const getReadingsQuerySchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  query: z.object({
+    meterId: z.string().uuid().optional(),
+    meterType: z.enum(['electricity', 'gas']).optional(),
+  }),
+});
+
 export const saveSubscriptionsSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
   body: z
@@ -126,6 +151,18 @@ export const saveSubscriptionsSchema = z.object({
             accountNumber: z.string().trim().max(100).nullable().optional(),
             serviceType: z.string().optional(),
             categoryId: z.string().optional(),
+            mcType: z.string().trim().max(50).nullable().optional(),
+            dgType: z.string().trim().max(50).nullable().optional(),
+            tariffType: z.string().trim().max(100).nullable().optional(),
+            unitRate: z.coerce.number().nullable().optional(),
+            standingCharge: z.coerce.number().nullable().optional(),
+            monthlyCost: z.coerce.number().nullable().optional(),
+            chargingStructure: z.string().trim().max(100).nullable().optional(),
+            chargingCost: z.coerce.number().nullable().optional(),
+            binDetails: z.any().optional(),
+            billDocumentUrl: z.string().url().nullable().optional().or(z.literal('')),
+            mprnNumber: z.string().trim().nullable().optional(),
+            gprnNumber: z.string().trim().nullable().optional(),
           })
         )
         .optional(),

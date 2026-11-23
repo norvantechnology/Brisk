@@ -17,7 +17,7 @@ export const isAwaitingUpfrontPayment = (job: {
   booking?: { finishedAt?: Date | null } | null;
 }): boolean => job.status === JobStatus.PAYMENT_PENDING && !job.booking?.finishedAt;
 
-export const JOB_PLATFORM_FEE = 10;
+export const JOB_PLATFORM_FEE_RATE = 0.10; // 10% platform fee
 export const PLATFORM_FEE_VAT_RATE = 0.23; // 23% Irish Standard VAT
 export const TRADER_STANDARD_VAT_RATE = 0.135; // 13.5% Irish Reduced VAT for construction & repair
 export const TRADER_HIGH_VAT_RATE = 0.23; // 23% Irish VAT when materials exceed two-thirds test
@@ -59,8 +59,8 @@ export const buildJobPaymentBreakdown = (input: {
       : TRADER_STANDARD_VAT_RATE;
   const traderVatAmount = round2(traderNet * traderVatRate);
 
-  // Platform Fee (Brisk's own supply: €10.00 + 23% VAT = €12.30 gross)
-  const platformFee = input.siteVisitOnly ? 0 : JOB_PLATFORM_FEE;
+  // Platform Fee (Brisk's own supply: 10% of traderNet + 23% Irish Standard VAT)
+  const platformFee = input.siteVisitOnly ? 0 : round2(traderNet * JOB_PLATFORM_FEE_RATE);
   const platformFeeVat = input.siteVisitOnly ? 0 : round2(platformFee * PLATFORM_FEE_VAT_RATE);
   const platformFeeGross = round2(platformFee + platformFeeVat);
 

@@ -146,6 +146,24 @@ export const getPropertyDetail = async (
   }
 };
 
+export const getMeterReadings = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await propertyService.getMeterReadings(req.user!.id, req.params.id, req.query as any);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Meter readings retrieved successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const submitMeterReading = async (
   req: AuthenticatedRequest,
   res: Response,

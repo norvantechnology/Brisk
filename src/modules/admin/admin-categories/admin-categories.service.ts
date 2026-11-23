@@ -430,10 +430,11 @@ export const createSubcategory = async (adminId: string, adminLabel: string, inp
     throw new NotFoundError('Parent Category not found.');
   }
 
-  const { qaFormSchema, image, icon, bannerImage, ...rest } = input;
+  const { qaFormSchema, image, icon, bannerImage, trendingImage, ...rest } = input;
   const resolvedImageUrl = input.imageUrl !== undefined ? input.imageUrl : image;
   const resolvedIconUrl = input.iconUrl !== undefined ? input.iconUrl : icon;
   const resolvedBannerImageUrl = input.bannerImageUrl !== undefined ? input.bannerImageUrl : bannerImage;
+  const resolvedTrendingImageUrl = input.trendingImageUrl !== undefined ? input.trendingImageUrl : trendingImage;
 
   const subcategory = await prisma.subcategory.create({
     data: {
@@ -441,6 +442,7 @@ export const createSubcategory = async (adminId: string, adminLabel: string, inp
       ...(resolvedImageUrl !== undefined ? { imageUrl: resolvedImageUrl } : {}),
       ...(resolvedIconUrl !== undefined ? { iconUrl: resolvedIconUrl } : {}),
       ...(resolvedBannerImageUrl !== undefined ? { bannerImageUrl: resolvedBannerImageUrl } : {}),
+      ...(resolvedTrendingImageUrl !== undefined ? { trendingImageUrl: resolvedTrendingImageUrl } : {}),
       qaFormSchema: qaFormSchema === null ? Prisma.JsonNull : qaFormSchema ?? undefined,
     },
     include: {
@@ -487,10 +489,11 @@ export const updateSubcategory = async (
     if (!parentCategory) throw new NotFoundError('Parent Category not found.');
   }
 
-  const { qaFormSchema, image, icon, bannerImage, ...rest } = input;
+  const { qaFormSchema, image, icon, bannerImage, trendingImage, ...rest } = input;
   const resolvedImageUrl = input.imageUrl !== undefined ? input.imageUrl : image;
   const resolvedIconUrl = input.iconUrl !== undefined ? input.iconUrl : icon;
   const resolvedBannerImageUrl = input.bannerImageUrl !== undefined ? input.bannerImageUrl : bannerImage;
+  const resolvedTrendingImageUrl = input.trendingImageUrl !== undefined ? input.trendingImageUrl : trendingImage;
 
   const updatedSubcategory = await prisma.subcategory.update({
     where: { id },
@@ -499,6 +502,7 @@ export const updateSubcategory = async (
       ...(resolvedImageUrl !== undefined ? { imageUrl: resolvedImageUrl } : {}),
       ...(resolvedIconUrl !== undefined ? { iconUrl: resolvedIconUrl } : {}),
       ...(resolvedBannerImageUrl !== undefined ? { bannerImageUrl: resolvedBannerImageUrl } : {}),
+      ...(resolvedTrendingImageUrl !== undefined ? { trendingImageUrl: resolvedTrendingImageUrl } : {}),
       ...(qaFormSchema !== undefined
         ? { qaFormSchema: qaFormSchema === null ? Prisma.JsonNull : qaFormSchema }
         : {}),

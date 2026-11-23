@@ -173,6 +173,7 @@ const getOwnedProperty = async (userId: string, id: string) => {
       meters: {
         include: {
           readings: { orderBy: { readingDate: 'desc' }, take: 1 },
+          _count: { select: { readings: true } },
         },
       },
       subscriptions: {
@@ -485,10 +486,20 @@ const serializeMeter = (meter: {
   meterType: string;
   mprnGprn: string;
   unitLabel: string | null;
-  readings: Array<{ readingValue: Prisma.Decimal; readingDate: Date; status: string }>;
+  readings: Array<{
+    id?: string;
+    readingValue: Prisma.Decimal;
+    nightReadingValue?: Prisma.Decimal | null;
+    readingType?: string | null;
+    readingDate: Date;
+    status: string;
+    photoUrl?: string | null;
+  }>;
+  _count?: { readings: number };
 }) => {
   const last = meter.readings[0];
   const isElectricity = meter.meterType === 'electricity';
+  const totalReadings = meter._count?.readings ?? (meter.readings ? meter.readings.length : 0);
   return {
     id: meter.id,
     meterType: meter.meterType,
@@ -500,9 +511,12 @@ const serializeMeter = (meter: {
       : 'Submit your gas reading',
     /** Tooltip for meter (i) icon — embedded so no separate help-tips API call needed */
     helpTip: helpTipByMeterType(meter.meterType),
+    totalReadings,
     lastReading: last
       ? {
           value: Number(last.readingValue),
+          nightReadingValue: last.nightReadingValue != null ? Number(last.nightReadingValue) : null,
+          readingType: last.readingType ?? 'standard',
           formatted: `${Number(last.readingValue).toLocaleString('en-IE')}${
             meter.unitLabel ?? (isElectricity ? ' kWh' : 'm³')
           }`,
@@ -598,6 +612,17 @@ const serializeSubscription = (
     /** ISO date-time (same shape as `createdAt`); null when unset. */
     expiryDate: sub.expiryDate,
     accountNumber: (sub as { accountNumber?: string | null }).accountNumber ?? null,
+    mcType: (sub as any).mcType ?? null,
+    dgType: (sub as any).dgType ?? null,
+    tariffType: (sub as any).tariffType ?? null,
+    unitRate: (sub as any).unitRate != null ? Number((sub as any).unitRate) : null,
+    standingCharge: (sub as any).standingCharge != null ? Number((sub as any).standingCharge) : null,
+    monthlyCost: (sub as any).monthlyCost != null ? Number((sub as any).monthlyCost) : null,
+    chargingStructure: (sub as any).chargingStructure ?? null,
+    chargingCost: (sub as any).chargingCost != null ? Number((sub as any).chargingCost) : null,
+    binDetails: (sub as any).binDetails ?? null,
+    billDocumentUrl: (sub as any).billDocumentUrl ?? null,
+    vatRate: ['electricity', 'gas'].includes(sub.serviceType.toLowerCase()) ? 0.09 : 0.23,
     mprnNumber: refs.mprnNumber,
     gprnNumber: refs.gprnNumber,
     referenceNumber: refs.referenceNumber,
@@ -796,11 +821,35 @@ export const submitMeterReading = async (
     throw new NotFoundError('Meter not found for this property.');
   }
 
-  const reading = await prisma.meterReading.create({
+  const primaryValue = input.readingValue ?? input.dayReadingValue;
+  if (primaryValue === undefined || primaryValue === null) {
+    throw new BadRequestError('Reading value is required.');
+  }
+
+  // Enforce new reading >= last reading
+  const last = meter.readings[0];
+  if (last && primaryValue < Number(last.readingValue)) {
+    throw new BadRequestError(
+      `New reading (${primaryValue}) cannot be less than your previous reading (${Number(last.readingValue)}).`
+    );
+  }
+  if (
+    input.nightReadingValue !== undefined &&
+    last?.nightReadingValue &&
+    input.nightReadingValue < Number(last.nightReadingValue)
+  ) {
+    throw new BadRequestError(
+      `New night reading (${input.nightReadingValue}) cannot be less than your previous night reading (${Number(last.nightReadingValue)}).`
+    );
+  }
+
+  const reading = await (prisma as any).meterReading.create({
     data: {
       meterId: meter.id,
       userId,
-      readingValue: input.readingValue,
+      readingValue: primaryValue,
+      nightReadingValue: input.nightReadingValue !== undefined ? input.nightReadingValue : null,
+      readingType: input.dayReadingValue !== undefined ? 'day_night' : 'standard',
       photoUrl: input.photoUrl,
       status: 'accepted',
       readingDate: new Date(),
@@ -815,11 +864,64 @@ export const submitMeterReading = async (
       id: reading.id,
       meterId: reading.meterId,
       readingValue: Number(reading.readingValue),
+      nightReadingValue: reading.nightReadingValue != null ? Number(reading.nightReadingValue) : null,
+      readingType: reading.readingType ?? 'standard',
       readingDate: reading.readingDate,
       status: reading.status,
       photoUrl: reading.photoUrl,
     },
     meter: serializeMeter(meter),
+  };
+};
+
+export const getMeterReadings = async (
+  userId: string,
+  propertyId: string,
+  query: { meterId?: string; meterType?: string }
+) => {
+  await ensureCustomer(userId);
+  const property = await getOwnedProperty(userId, propertyId);
+
+  const meter = query.meterId
+    ? property.meters.find((item) => item.id === query.meterId)
+    : query.meterType
+    ? property.meters.find((item) => item.meterType === query.meterType)
+    : property.meters[0];
+
+  if (!meter) {
+    throw new NotFoundError('Meter not found for this property.');
+  }
+
+  const readings = await (prisma as any).meterReading.findMany({
+    where: { meterId: meter.id },
+    orderBy: { readingDate: 'desc' },
+  });
+
+  const isElectricity = meter.meterType === 'electricity';
+  const unit = meter.unitLabel ?? (isElectricity ? 'kWh' : 'm³');
+
+  return {
+    meter: serializeMeter({
+      ...meter,
+      readings: readings.slice(0, 1),
+      _count: { readings: readings.length },
+    }),
+    readings: readings.map((r: any) => ({
+      id: r.id,
+      meterId: r.meterId,
+      readingValue: Number(r.readingValue),
+      nightReadingValue: r.nightReadingValue != null ? Number(r.nightReadingValue) : null,
+      readingType: r.readingType ?? 'standard',
+      readingDate: r.readingDate,
+      formattedReading: `${Number(r.readingValue).toLocaleString('en-IE')} ${unit}`,
+      formattedDate: new Date(r.readingDate).toLocaleDateString('en-IE', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+      status: r.status,
+      photoUrl: r.photoUrl ?? null,
+    })),
   };
 };
 
@@ -880,6 +982,18 @@ export const savePropertySubscriptions = async (
           customProviderName?: string | null;
           expiryDate?: string | Date | number | null;
           accountNumber?: string | null;
+          mcType?: string | null;
+          dgType?: string | null;
+          tariffType?: string | null;
+          unitRate?: number | null;
+          standingCharge?: number | null;
+          monthlyCost?: number | null;
+          chargingStructure?: string | null;
+          chargingCost?: number | null;
+          binDetails?: any;
+          billDocumentUrl?: string | null;
+          mprnNumber?: string | null;
+          gprnNumber?: string | null;
         }>;
       }
 ) => {
@@ -995,7 +1109,7 @@ export const savePropertySubscriptions = async (
           ? (customSub.customProviderName?.trim() || null)
           : undefined;
 
-      await tx.subscription.upsert({
+      await (tx as any).subscription.upsert({
         where: {
           propertyId_utilityProviderId: {
             propertyId,
@@ -1010,6 +1124,16 @@ export const savePropertySubscriptions = async (
           accountNumber,
           expiryDate,
           customProviderName: customProviderName ?? null,
+          mcType: customSub?.mcType ?? null,
+          dgType: customSub?.dgType ?? null,
+          tariffType: customSub?.tariffType ?? null,
+          unitRate: customSub?.unitRate != null ? customSub.unitRate : null,
+          standingCharge: customSub?.standingCharge != null ? customSub.standingCharge : null,
+          monthlyCost: customSub?.monthlyCost != null ? customSub.monthlyCost : null,
+          chargingStructure: customSub?.chargingStructure ?? null,
+          chargingCost: customSub?.chargingCost != null ? customSub.chargingCost : null,
+          binDetails: customSub?.binDetails ?? undefined,
+          billDocumentUrl: customSub?.billDocumentUrl ?? null,
         },
         update: {
           status: 'active',
@@ -1017,8 +1141,22 @@ export const savePropertySubscriptions = async (
           ...(customSub?.expiryDate !== undefined ? { expiryDate } : {}),
           ...(customSub?.accountNumber !== undefined ? { accountNumber } : {}),
           ...(customProviderName !== undefined ? { customProviderName } : {}),
+          ...(customSub?.mcType !== undefined ? { mcType: customSub.mcType } : {}),
+          ...(customSub?.dgType !== undefined ? { dgType: customSub.dgType } : {}),
+          ...(customSub?.tariffType !== undefined ? { tariffType: customSub.tariffType } : {}),
+          ...(customSub?.unitRate !== undefined ? { unitRate: customSub.unitRate } : {}),
+          ...(customSub?.standingCharge !== undefined ? { standingCharge: customSub.standingCharge } : {}),
+          ...(customSub?.monthlyCost !== undefined ? { monthlyCost: customSub.monthlyCost } : {}),
+          ...(customSub?.chargingStructure !== undefined ? { chargingStructure: customSub.chargingStructure } : {}),
+          ...(customSub?.chargingCost !== undefined ? { chargingCost: customSub.chargingCost } : {}),
+          ...(customSub?.binDetails !== undefined ? { binDetails: customSub.binDetails } : {}),
+          ...(customSub?.billDocumentUrl !== undefined ? { billDocumentUrl: customSub.billDocumentUrl } : {}),
         },
       });
+
+      if (customSub?.mprnNumber || customSub?.gprnNumber) {
+        await syncMetersFromAddress(propertyId, customSub.mprnNumber, customSub.gprnNumber);
+      }
     }
   });
 

@@ -79,6 +79,8 @@ export interface CreateSubcategoryInput {
   image?: string | null;
   bannerImageUrl?: string | null;
   bannerImage?: string | null;
+  trendingImageUrl?: string | null;
+  trendingImage?: string | null;
   iconUrl?: string | null;
   icon?: string | null;
   featured?: boolean;
@@ -100,6 +102,8 @@ export interface UpdateSubcategoryInput {
   image?: string | null;
   bannerImageUrl?: string | null;
   bannerImage?: string | null;
+  trendingImageUrl?: string | null;
+  trendingImage?: string | null;
   iconUrl?: string | null;
   icon?: string | null;
   featured?: boolean;

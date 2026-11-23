@@ -884,7 +884,31 @@ export const deleteTrader = async (adminId: string, adminLabel: string, id: stri
     throw new NotFoundError('Trader not found.');
   }
 
-  await prisma.user.delete({ where: { id: trader.userId } });
+  try {
+    // Attempt full user/trader deletion
+    await prisma.user.delete({ where: { id: trader.userId } });
+  } catch (_err) {
+    // If foreign key constraints (jobs, bookings, payouts) prevent hard delete, gracefully soft-delete
+    await prisma.$transaction(async (tx) => {
+      await tx.trader.update({
+        where: { id },
+        data: {
+          status: 'inactive',
+          verificationStatus: VerificationStatus.REJECTED,
+          rejectionReason: 'Account deleted by administrator.',
+        },
+      });
+      await tx.user.update({
+        where: { id: trader.userId },
+        data: {
+          status: UserStatus.INACTIVE,
+          email: `deleted_${Date.now()}_${trader.user.email}`,
+          phoneNumber: `deleted_${Date.now()}_${trader.user.phoneNumber || ''}`,
+          tokenVersion: { increment: 1 },
+        },
+      });
+    });
+  }
 
   await prisma.auditLog.create({
     data: {

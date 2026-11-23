@@ -501,14 +501,16 @@ model Meter {
 }
 
 model MeterReading {
-  id           String   @id @default(uuid()) @db.Uuid
-  meterId      String   @map("meter_id") @db.Uuid
-  userId       String   @map("user_id") @db.Uuid
-  readingValue Decimal  @map("reading_value") @db.Decimal(10, 2)
-  readingDate  DateTime @default(now()) @map("reading_date")
-  photoUrl     String?  @map("photo_url")
-  status       String   @default("pending") // pending | accepted | rejected
-  createdAt    DateTime @default(now()) @map("created_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  meterId           String   @map("meter_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  readingValue      Decimal  @map("reading_value") @db.Decimal(10, 2)
+  nightReadingValue Decimal? @map("night_reading_value") @db.Decimal(10, 2)
+  readingType       String?  @default("standard") @map("reading_type") // standard | day_night
+  readingDate       DateTime @default(now()) @map("reading_date")
+  photoUrl          String?  @map("photo_url")
+  status            String   @default("pending") // pending | accepted | rejected
+  createdAt         DateTime @default(now()) @map("created_at")
 
   // Relationships
   meter Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
@@ -549,6 +551,17 @@ model Subscription {
   customProviderName String?  @map("custom_provider_name")
   /// Copied from provider on create when set; ISO datetime in API (same shape as createdAt).
   expiryDate        DateTime? @map("expiry_date")
+  // Bill / Plan details (Electricity, Gas, Broadband, Bins)
+  mcType            String?   @map("mc_type")
+  dgType            String?   @map("dg_type")
+  tariffType        String?   @map("tariff_type")
+  unitRate          Decimal?  @map("unit_rate") @db.Decimal(10, 4)
+  standingCharge    Decimal?  @map("standing_charge") @db.Decimal(10, 4)
+  monthlyCost       Decimal?  @map("monthly_cost") @db.Decimal(10, 2)
+  chargingStructure String?   @map("charging_structure")
+  chargingCost      Decimal?  @map("charging_cost") @db.Decimal(10, 2)
+  binDetails        Json?     @map("bin_details")
+  billDocumentUrl   String?   @map("bill_document_url")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -669,6 +682,7 @@ model Subcategory {
   status             String                      @default("active") // active | inactive
   imageUrl           String?                     @map("image_url")
   bannerImageUrl     String?                     @map("banner_image_url")
+  trendingImageUrl   String?                     @map("trending_image_url")
   iconUrl            String?                     @map("icon_url")
   /// Admin toggle: site visit required / available for this service
   siteVisitEnabled   Boolean                     @default(false) @map("site_visit_enabled")

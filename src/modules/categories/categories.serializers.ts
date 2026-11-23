@@ -176,6 +176,7 @@ export const serializeSubcategory = (
   status: sub.status,
   imageUrl: normalizeMediaUrl(sub.imageUrl),
   bannerImageUrl: normalizeMediaUrl(sub.bannerImageUrl),
+  trendingImageUrl: normalizeMediaUrl((sub as any).trendingImageUrl),
   iconUrl: resolveSubcategoryIconUrl(sub),
   siteVisitEnabled: sub.siteVisitEnabled,
   /** Site-visit fee set on this subcategory. Null = not set; job form falls back to admin setting `site_visit.default_fee`. */

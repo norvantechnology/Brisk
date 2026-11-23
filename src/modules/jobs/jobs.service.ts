@@ -198,9 +198,10 @@ export const computeInvoiceBreakdown = (input: {
       : 0.135;
   const traderVatAmount = round2(traderNet * traderVatRate);
 
-  // Platform Fee (Brisk's own supply: €10.00 + 23% VAT = €12.30 gross)
-  const platformFee = isSiteVisit ? 0 : 10.0;
-  const platformFeeVat = isSiteVisit ? 0 : 2.3;
+  // Platform Fee (Brisk's own supply: 10% of traderNet + 23% Irish Standard VAT)
+  const platformFeeRate = 0.10;
+  const platformFee = isSiteVisit ? 0 : round2(traderNet * platformFeeRate);
+  const platformFeeVat = isSiteVisit ? 0 : round2(platformFee * 0.23);
   const platformFeeGross = round2(platformFee + platformFeeVat);
 
   const tax = round2(traderVatAmount + platformFeeVat);
@@ -2001,10 +2002,11 @@ const buildCustomerJobView = async (
     timeSlot: job.timeSlot,
     address: {
       fullAddress: job.address ? formatAddressLine(job.address) : job.addressLine,
-      city: job.city,
-      eircode: job.postcode,
-      latitude: job.latitude,
-      longitude: job.longitude,
+      city: job.address?.city ?? job.city,
+      county: job.address?.county ?? null,
+      eircode: job.address?.eircode ?? job.postcode,
+      latitude: job.address?.latitude ?? job.latitude,
+      longitude: job.address?.longitude ?? job.longitude,
       mapImageUrl: job.address?.mapImageUrl ?? null,
     },
     trader: job.trader
@@ -3780,6 +3782,39 @@ export const getSimpleJobFormConfig = async (
               iconUrl: resolveSubcategoryIconUrl(sub) || catIcon,
             })),
           });
+        }
+      }
+
+      // Only display categories and subcategories that the selected trader is registered and authorised to undertake
+      const categoryIds = Array.from(catMap.keys());
+      if (categoryIds.length > 0) {
+        const requiredRules = await prisma.documentRule.findMany({
+          where: {
+            scope: 'CATEGORY',
+            categoryId: { in: categoryIds },
+            required: true,
+          },
+          select: { id: true, categoryId: true },
+        });
+
+        if (requiredRules.length > 0) {
+          const approvedDocs = await prisma.traderDocument.findMany({
+            where: {
+              traderId,
+              documentRuleId: { in: requiredRules.map((r) => r.id) },
+              status: 'APPROVED',
+            },
+            select: { documentRuleId: true },
+          });
+          const approvedRuleIds = new Set(approvedDocs.map((d) => d.documentRuleId));
+
+          for (const catId of categoryIds) {
+            const rulesForCat = requiredRules.filter((r) => r.categoryId === catId);
+            const hasMissingApprovedDocs = rulesForCat.some((r) => !approvedRuleIds.has(r.id));
+            if (hasMissingApprovedDocs) {
+              catMap.delete(catId);
+            }
+          }
         }
       }
 
