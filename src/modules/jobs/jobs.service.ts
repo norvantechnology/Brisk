@@ -3752,8 +3752,10 @@ export const getSimpleJobFormConfig = async (
   let traderCategories: SimpleCategoryWithSubs[] = [];
 
   if (traderId) {
-    const trader = await prisma.trader.findUnique({
-      where: { id: traderId },
+    const trader = await prisma.trader.findFirst({
+      where: {
+        OR: [{ id: traderId }, { userId: traderId }],
+      },
       include: {
         category: {
           include: {
@@ -3812,36 +3814,30 @@ export const getSimpleJobFormConfig = async (
         }
       }
 
-      // Only display categories and subcategories that the selected trader is registered and authorised to undertake
-      const categoryIds = Array.from(catMap.keys());
-      if (categoryIds.length > 0) {
-        const requiredRules = await prisma.documentRule.findMany({
-          where: {
-            scope: 'CATEGORY',
-            categoryId: { in: categoryIds },
-            required: true,
-          },
-          select: { id: true, categoryId: true },
-        });
-
-        if (requiredRules.length > 0) {
-          const approvedDocs = await prisma.traderDocument.findMany({
-            where: {
-              traderId,
-              documentRuleId: { in: requiredRules.map((r) => r.id) },
-              status: 'APPROVED',
+      // If the trader has no category assigned yet, fallback to all active categories
+      if (catMap.size === 0) {
+        const allCategories = await prisma.category.findMany({
+          where: { status: 'active' },
+          orderBy: { displayOrder: 'asc' },
+          include: {
+            subcategories: {
+              where: { status: 'active' },
+              orderBy: { name: 'asc' },
             },
-            select: { documentRuleId: true },
+          },
+        });
+        for (const cat of allCategories) {
+          const catIcon = resolveCategoryIconUrl(cat);
+          catMap.set(cat.id, {
+            id: cat.id,
+            name: cat.name,
+            iconUrl: catIcon,
+            subcategories: cat.subcategories.map((sub) => ({
+              id: sub.id,
+              name: sub.name,
+              iconUrl: resolveSubcategoryIconUrl(sub) || catIcon,
+            })),
           });
-          const approvedRuleIds = new Set(approvedDocs.map((d) => d.documentRuleId));
-
-          for (const catId of categoryIds) {
-            const rulesForCat = requiredRules.filter((r) => r.categoryId === catId);
-            const hasMissingApprovedDocs = rulesForCat.some((r) => !approvedRuleIds.has(r.id));
-            if (hasMissingApprovedDocs) {
-              catMap.delete(catId);
-            }
-          }
         }
       }
 
