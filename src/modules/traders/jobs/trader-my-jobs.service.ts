@@ -4445,8 +4445,14 @@ const awaitingTraderConfirmationWhere = (traderId: string): Prisma.QuoteWhereInp
   status: QuoteStatus.ACCEPTED,
   job: {
     status: { in: OPEN_FOR_QUOTES },
-    OR: [{ traderId: null }, { traderId }],
-    booking: null,
+    AND: [
+      {
+        OR: [{ traderId: null }, { traderId }],
+      },
+      {
+        OR: [{ booking: null }, { booking: { traderId } }],
+      },
+    ],
   },
 });
 
@@ -4690,12 +4696,12 @@ export const getIncomingLatest = async (userId: string, originQuery?: OriginQuer
     include: incomingQuoteInclude,
   });
 
-  // 2. All direct jobs published to this trader where no booking exists yet
+  // 2. All direct jobs published to this trader where no other trader is assigned or booked
   const directJobs = await prisma.job.findMany({
     where: {
       traderId: trader.id,
       status: { in: OPEN_FOR_QUOTES },
-      booking: null,
+      OR: [{ booking: null }, { booking: { traderId: trader.id } }],
     },
     orderBy: { createdAt: 'desc' },
     select: directJobSelect,

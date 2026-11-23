@@ -280,29 +280,29 @@ router.get('/mine', validate(myJobsListQuerySchema), controller.listMyJobs);
  *                     $ref: '#/components/schemas/TraderIncomingJob'
  *             example:
  *               success: true
- *               message: Incoming job retrieved successfully.
+ *               message: Incoming jobs retrieved successfully.
  *               data:
- *                 id: 0100839a-7364-4d00-9323-a2b6e44d81bc
- *                 jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc
- *                 quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2
- *                 jobRef: BRK-1042
- *                 title: Kitchen Sink Leak
- *                 description: Water leaking under the sink, needs urgent fix.
- *                 distanceKm: 2.4
- *                 distanceMiles: 1.5
- *                 charges: 120
- *                 quoteAmount: 120
- *                 currencyCode: EUR
- *                 currencySymbol: €
- *                 customer: { fullName: Sarah Jenkins, profileImage: null, isVerifiedCustomer: true }
- *                 actions: { canAccept: true, canDecline: true }
- *                 assignmentStatus: CUSTOMER_ACCEPTED
- *                 isSiteVisit: false
- *                 areaName: Dublin
- *                 latitude: 53.36
- *                 longitude: -6.25
- *                 createdAt: '2026-10-02T09:00:00.000Z'
- *                 acceptedAt: '2026-10-02T10:15:00.000Z'
+ *                 - id: 0100839a-7364-4d00-9323-a2b6e44d81bc
+ *                   jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc
+ *                   quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2
+ *                   jobRef: BRK-1042
+ *                   title: Kitchen Sink Leak
+ *                   description: Water leaking under the sink, needs urgent fix.
+ *                   distanceKm: 2.4
+ *                   distanceMiles: 1.5
+ *                   charges: 120
+ *                   quoteAmount: 120
+ *                   currencyCode: EUR
+ *                   currencySymbol: €
+ *                   customer: { fullName: Sarah Jenkins, profileImage: null, isVerifiedCustomer: true }
+ *                   actions: { canAccept: true, canDecline: true }
+ *                   assignmentStatus: CUSTOMER_ACCEPTED
+ *                   isSiteVisit: false
+ *                   areaName: Dublin
+ *                   latitude: 53.36
+ *                   longitude: -6.25
+ *                   createdAt: '2026-10-02T09:00:00.000Z'
+ *                   acceptedAt: '2026-10-02T10:15:00.000Z'
  */
 router.get('/incoming/latest', validate(incomingLatestQuerySchema), controller.getIncomingLatest);
 
@@ -348,9 +348,7 @@ router.get('/incoming/latest', validate(incomingLatestQuerySchema), controller.g
  *                 success: { type: boolean, example: true }
  *                 message: { type: string }
  *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/TraderIncomingJob'
+ *                   $ref: '#/components/schemas/TraderIncomingJob'
  *             examples:
  *               waiting:
  *                 value: { success: true, message: Incoming job retrieved successfully., data: { jobId: 0100839a-7364-4d00-9323-a2b6e44d81bc, quoteId: 6c6f92ce-1da9-401b-8722-95ccac9f8dd2, title: Kitchen Sink Leak, charges: 120, currencySymbol: €, actions: { canAccept: true, canDecline: true } } }
