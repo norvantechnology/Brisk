@@ -943,17 +943,8 @@ export const deleteTrader = async (adminId: string, adminLabel: string, id: stri
 
   // Execute deletion of trader and underlying user account
   await prisma.$transaction(async (tx) => {
-    await tx.savedTrader.deleteMany({ where: { traderId: id } });
-    await tx.traderJobBookmark.deleteMany({ where: { traderId: id } });
-    await tx.traderSiteVisitRequest.deleteMany({ where: { traderId: id } });
-    await tx.traderDeviceLocation.deleteMany({ where: { traderId: id } });
-    await tx.traderPayoutMethod.deleteMany({ where: { traderId: id } });
-    await tx.traderCategory.deleteMany({ where: { traderId: id } });
-    await tx.traderDocument.deleteMany({ where: { traderId: id } });
-    await tx.traderRegistration.deleteMany({ where: { traderId: id } });
     await tx.deviceToken.deleteMany({ where: { userId: trader.userId } });
     await tx.notification.deleteMany({ where: { userId: trader.userId } });
-    await tx.trader.delete({ where: { id } });
     await tx.user.delete({ where: { id: trader.userId } });
   });
 
