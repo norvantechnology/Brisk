@@ -548,8 +548,6 @@ const serializeMeter = (meter: {
     helpTip: helpTipByMeterType(meter.meterType),
     totalReadings,
     latestReading: formattedLastVal ? `${formattedLastVal} ${unit}` : null,
-    latestReadingText: formattedLastVal ? `Latest Reading: ${formattedLastVal} ${unit}` : 'No readings submitted yet',
-    totalReadingsText: `Total Readings: ${totalReadings}`,
     lastReading: last
       ? {
           reading: formattedLastVal!,
