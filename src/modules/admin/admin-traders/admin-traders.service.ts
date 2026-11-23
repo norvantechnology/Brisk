@@ -903,7 +903,6 @@ export const deleteTrader = async (adminId: string, adminLabel: string, id: stri
         data: {
           status: UserStatus.INACTIVE,
           email: `deleted_${Date.now()}_${trader.user.email}`,
-          phoneNumber: `deleted_${Date.now()}_${trader.user.phoneNumber || ''}`,
           tokenVersion: { increment: 1 },
         },
       });

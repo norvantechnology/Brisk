@@ -1394,7 +1394,7 @@ const myJobCardMapper =
         p.status !== TraderPaymentRequestStatus.CANCELLED
     );
     const alreadyPaidAmount = sumPaidAmount(job.paymentRequests);
-    const breakdown = computePaymentBreakdown(job);
+    const breakdown = computePaymentBreakdown(job as any);
     const jobAmount = breakdown.totalAmount;
     const isPartialJob = hasAnyPartial || alreadyPaidAmount > 0;
 
@@ -1493,7 +1493,7 @@ const myJobCardMapper =
     })();
 
     // Same totals + labeled rows as GET .../payment-request (dynamic Payment Summary UI).
-    const paymentSummary = buildSubmitPaymentSummary(job);
+    const paymentSummary = buildSubmitPaymentSummary(job as any);
     const currency = await resolveDiscoverCurrency({
       customerPreferredCurrency: job.customer.preferredCurrency,
       traderPreferredCurrency: traderCurrency.preferredCurrency,
@@ -2881,7 +2881,7 @@ const notifyBriskPaymentRequest = async (
 
   // Push notification to the trader confirming Brisk has received their payment request
   if (trader?.userId) {
-    pushUserNotification(trader.userId, {
+    pushUserNotification([trader.userId], {
       title: 'Payment Request Received by Brisk',
       body: `Your payment request of ${amount} ${pr.currencyCode} for "${job.title}" has been received. Brisk will process and transfer your payment shortly.`,
       data: {
@@ -3494,7 +3494,7 @@ export const assertTraderCategoryCertified = async (traderId: string, categoryId
     const missingNames = missing.map((m) => m.name).join(', ');
     throw new BadRequestError(
       `You cannot accept or undertake jobs in this category until your required certificate(s) (${missingNames}) have been uploaded and approved by Admin.`,
-      { code: 'CATEGORY_CERTIFICATES_REQUIRED', categoryId, missingCertificates: missing.map((m) => m.name) }
+      { code: 'CATEGORY_CERTIFICATES_REQUIRED', data: { categoryId, missingCertificates: missing.map((m) => m.name) } }
     );
   }
 };
