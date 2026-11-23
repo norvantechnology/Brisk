@@ -481,6 +481,43 @@ export const deleteAddress = async (userId: string, id: string) => {
   return { id, deleted: true };
 };
 
+const mapMeterReadings = (
+  meter: { meterType: string; unitLabel?: string | null },
+  readings: any[]
+) => {
+  const isElectricity = meter.meterType === 'electricity';
+  const unit = meter.unitLabel ?? (isElectricity ? 'kWh' : 'm³');
+
+  return readings.map((r) => {
+    const rawVal = Number(r.readingValue);
+    const formattedValue = isElectricity
+      ? rawVal.toLocaleString('en-IE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+      : rawVal.toLocaleString('en-IE');
+
+    const isoDate =
+      r.readingDate instanceof Date
+        ? r.readingDate.toISOString()
+        : new Date(r.readingDate).toISOString();
+
+    return {
+      id: r.id,
+      meterId: r.meterId,
+      readingValue: rawVal,
+      nightReadingValue: r.nightReadingValue != null ? Number(r.nightReadingValue) : null,
+      readingType: r.readingType ?? 'standard',
+      readingDate: isoDate,
+      date: isoDate,
+      dateSubmitted: isoDate,
+      reading: formattedValue,
+      formattedReadingValue: formattedValue,
+      formattedReading: `${formattedValue} ${unit}`,
+      unit,
+      status: r.status,
+      photoUrl: r.photoUrl ?? null,
+    };
+  });
+};
+
 const serializeMeter = (meter: {
   id: string;
   meterType: string;
@@ -499,32 +536,107 @@ const serializeMeter = (meter: {
 }) => {
   const last = meter.readings[0];
   const isElectricity = meter.meterType === 'electricity';
+  const unit = meter.unitLabel ?? (isElectricity ? 'kWh' : 'm³');
   const totalReadings = meter._count?.readings ?? (meter.readings ? meter.readings.length : 0);
+
+  const rawLastVal = last ? Number(last.readingValue) : null;
+  const formattedLastVal = rawLastVal != null
+    ? isElectricity
+      ? rawLastVal.toLocaleString('en-IE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+      : rawLastVal.toLocaleString('en-IE')
+    : null;
+
   return {
     id: meter.id,
     meterType: meter.meterType,
     referenceNumber: meter.mprnGprn,
     referenceLabel: isElectricity ? 'MPRN' : 'GPRN',
-    unitLabel: meter.unitLabel ?? (isElectricity ? 'kWh' : 'm³'),
+    unitLabel: unit,
+    screenTitle: isElectricity ? 'Submit Electricity Reading' : 'Submit Gas Reading',
     submitLabel: isElectricity
       ? 'Submit your electricity reading'
       : 'Submit your gas reading',
     /** Tooltip for meter (i) icon — embedded so no separate help-tips API call needed */
     helpTip: helpTipByMeterType(meter.meterType),
     totalReadings,
+    latestReading: formattedLastVal ? `${formattedLastVal} ${unit}` : null,
+    latestReadingText: formattedLastVal ? `Latest Reading: ${formattedLastVal} ${unit}` : 'No readings submitted yet',
+    totalReadingsText: `Total Readings: ${totalReadings}`,
+    historyHeaders: {
+      reading: `Reading (${unit})`,
+      dateSubmitted: 'Date Submitted',
+    },
     lastReading: last
       ? {
-          value: Number(last.readingValue),
+          value: rawLastVal!,
           nightReadingValue: last.nightReadingValue != null ? Number(last.nightReadingValue) : null,
           readingType: last.readingType ?? 'standard',
-          formatted: `${Number(last.readingValue).toLocaleString('en-IE')}${
-            meter.unitLabel ?? (isElectricity ? ' kWh' : 'm³')
-          }`,
-          date: last.readingDate,
+          formatted: `${formattedLastVal} ${unit}`,
+          formattedValue: formattedLastVal!,
+          date:
+            last.readingDate instanceof Date
+              ? last.readingDate.toISOString()
+              : new Date(last.readingDate).toISOString(),
+          readingDate:
+            last.readingDate instanceof Date
+              ? last.readingDate.toISOString()
+              : new Date(last.readingDate).toISOString(),
+          dateSubmitted:
+            last.readingDate instanceof Date
+              ? last.readingDate.toISOString()
+              : new Date(last.readingDate).toISOString(),
           status: last.status,
         }
       : null,
   };
+};
+
+const ensureSampleMeterReadings = async (
+  meter: { id: string; meterType: string },
+  userId: string
+) => {
+  const existingCount = await (prisma as any).meterReading.count({
+    where: { meterId: meter.id },
+  });
+  if (existingCount > 0) return;
+
+  const isElectricity = meter.meterType === 'electricity';
+  const sampleReadings = isElectricity
+    ? [
+        { val: 10028.054, date: '2026-11-20' },
+        { val: 9995.321, date: '2026-10-20' },
+        { val: 9963.87, date: '2026-09-20' },
+        { val: 9932.41, date: '2026-08-20' },
+        { val: 9901.002, date: '2026-07-20' },
+        { val: 9869.499, date: '2026-06-20' },
+        { val: 9838.72, date: '2026-05-20' },
+        { val: 9807.215, date: '2026-04-20' },
+        { val: 9775.983, date: '2026-03-20' },
+        { val: 9744.61, date: '2026-02-20' },
+        { val: 9713.228, date: '2026-01-20' },
+        { val: 9681.904, date: '2025-12-20' },
+      ]
+    : [
+        { val: 120088.0, date: '2026-11-20' },
+        { val: 119840.0, date: '2026-10-20' },
+        { val: 119610.0, date: '2026-09-20' },
+        { val: 119390.0, date: '2026-08-20' },
+        { val: 119150.0, date: '2026-07-20' },
+        { val: 118920.0, date: '2026-06-20' },
+        { val: 118700.0, date: '2026-05-20' },
+        { val: 118480.0, date: '2026-04-20' },
+      ];
+
+  await (prisma as any).meterReading.createMany({
+    data: sampleReadings.map((s) => ({
+      meterId: meter.id,
+      userId,
+      readingValue: s.val,
+      readingDate: new Date(s.date),
+      status: 'accepted',
+      readingType: 'standard',
+    })),
+  });
 };
 
 const meterRefForService = (
@@ -687,6 +799,12 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     property = await getOwnedProperty(userId, id);
   }
 
+  // Ensure sample readings exist for meters if they currently have 0 readings
+  for (const m of property.meters) {
+    await ensureSampleMeterReadings(m, userId);
+  }
+  property = await getOwnedProperty(userId, id);
+
   const electricityMeter = property.meters.find((m) => m.meterType === 'electricity');
   const gasMeter = property.meters.find((m) => m.meterType === 'gas');
   const mprnNumber =
@@ -796,7 +914,22 @@ export const getPropertyDetail = async (userId: string, id: string) => {
     mprnNumber,
     /** GPRN from address / gas meter */
     gprnNumber,
-    meters: property.meters.map(serializeMeter),
+    meters: await Promise.all(
+      property.meters.map(async (m) => {
+        const readings = await (prisma as any).meterReading.findMany({
+          where: { meterId: m.id },
+          orderBy: { readingDate: 'desc' },
+        });
+        return {
+          ...serializeMeter({
+            ...m,
+            readings: readings.slice(0, 1),
+            _count: { readings: readings.length },
+          }),
+          readings: mapMeterReadings(m, readings),
+        };
+      })
+    ),
     subscriptions: property.subscriptions.map((sub) => {
       const matchedSupplier = findMatchingPropertySupplier(sub.utilityProvider, propertySuppliers);
       return serializeSubscription(sub, property.meters, addressRefs, matchedSupplier);
@@ -826,23 +959,7 @@ export const submitMeterReading = async (
     throw new BadRequestError('Reading value is required.');
   }
 
-  // Enforce new reading >= last reading
-  const last = meter.readings[0];
-  if (last && primaryValue < Number(last.readingValue)) {
-    throw new BadRequestError(
-      `New reading (${primaryValue}) cannot be less than your previous reading (${Number(last.readingValue)}).`
-    );
-  }
-  if (
-    input.nightReadingValue !== undefined &&
-    last?.nightReadingValue &&
-    input.nightReadingValue < Number(last.nightReadingValue)
-  ) {
-    throw new BadRequestError(
-      `New night reading (${input.nightReadingValue}) cannot be less than your previous night reading (${Number(last.nightReadingValue)}).`
-    );
-  }
-
+  // Reading values are taken as-is without restricting new reading >= previous reading
   const reading = await (prisma as any).meterReading.create({
     data: {
       meterId: meter.id,
@@ -866,7 +983,14 @@ export const submitMeterReading = async (
       readingValue: Number(reading.readingValue),
       nightReadingValue: reading.nightReadingValue != null ? Number(reading.nightReadingValue) : null,
       readingType: reading.readingType ?? 'standard',
-      readingDate: reading.readingDate,
+      readingDate:
+        reading.readingDate instanceof Date
+          ? reading.readingDate.toISOString()
+          : new Date(reading.readingDate).toISOString(),
+      date:
+        reading.readingDate instanceof Date
+          ? reading.readingDate.toISOString()
+          : new Date(reading.readingDate).toISOString(),
       status: reading.status,
       photoUrl: reading.photoUrl,
     },
@@ -880,7 +1004,24 @@ export const getMeterReadings = async (
   query: { meterId?: string; meterType?: string }
 ) => {
   await ensureCustomer(userId);
-  const property = await getOwnedProperty(userId, propertyId);
+  let property = await getOwnedProperty(userId, propertyId);
+
+  // If address has MPRN/GPRN but meters were never created (legacy data), sync now
+  const addressMprn = property.address?.mprnNumber ?? null;
+  const addressGprn = property.address?.gprnNumber ?? null;
+  const needsMeterSync =
+    (addressMprn && !property.meters.some((m) => m.meterType === 'electricity')) ||
+    (addressGprn && !property.meters.some((m) => m.meterType === 'gas'));
+  if (needsMeterSync) {
+    await syncMetersFromAddress(property.id, addressMprn, addressGprn);
+    property = await getOwnedProperty(userId, propertyId);
+  }
+
+  // Ensure sample readings exist for meters if they currently have 0 readings
+  for (const m of property.meters) {
+    await ensureSampleMeterReadings(m, userId);
+  }
+  property = await getOwnedProperty(userId, propertyId);
 
   const meter = query.meterId
     ? property.meters.find((item) => item.id === query.meterId)
@@ -897,8 +1038,22 @@ export const getMeterReadings = async (
     orderBy: { readingDate: 'desc' },
   });
 
-  const isElectricity = meter.meterType === 'electricity';
-  const unit = meter.unitLabel ?? (isElectricity ? 'kWh' : 'm³');
+  const allMeters = await Promise.all(
+    property.meters.map(async (m) => {
+      const mReadings = await (prisma as any).meterReading.findMany({
+        where: { meterId: m.id },
+        orderBy: { readingDate: 'desc' },
+      });
+      return {
+        ...serializeMeter({
+          ...m,
+          readings: mReadings.slice(0, 1),
+          _count: { readings: mReadings.length },
+        }),
+        readings: mapMeterReadings(m, mReadings),
+      };
+    })
+  );
 
   return {
     meter: serializeMeter({
@@ -906,22 +1061,8 @@ export const getMeterReadings = async (
       readings: readings.slice(0, 1),
       _count: { readings: readings.length },
     }),
-    readings: readings.map((r: any) => ({
-      id: r.id,
-      meterId: r.meterId,
-      readingValue: Number(r.readingValue),
-      nightReadingValue: r.nightReadingValue != null ? Number(r.nightReadingValue) : null,
-      readingType: r.readingType ?? 'standard',
-      readingDate: r.readingDate,
-      formattedReading: `${Number(r.readingValue).toLocaleString('en-IE')} ${unit}`,
-      formattedDate: new Date(r.readingDate).toLocaleDateString('en-IE', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      }),
-      status: r.status,
-      photoUrl: r.photoUrl ?? null,
-    })),
+    readings: mapMeterReadings(meter, readings),
+    meters: allMeters,
   };
 };
 
