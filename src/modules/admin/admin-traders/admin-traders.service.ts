@@ -1,6 +1,8 @@
 import {
   ActorType,
+  JobStatus,
   Prisma,
+  QuoteStatus,
   TraderOnboardingStatus,
   TraderType,
   UserRole,
@@ -9,7 +11,7 @@ import {
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../../config/database';
-import { ConflictError, NotFoundError } from '../../../utils/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/errors';
 import { describePersonalId } from '../../traders/personal-id';
 import { buildListOrderBy, compareValues, resolveSortDir, type SortDir } from '../../../utils/list-sort';
 import {
@@ -884,30 +886,76 @@ export const deleteTrader = async (adminId: string, adminLabel: string, id: stri
     throw new NotFoundError('Trader not found.');
   }
 
-  try {
-    // Attempt full user/trader deletion
-    await prisma.user.delete({ where: { id: trader.userId } });
-  } catch (_err) {
-    // If foreign key constraints (jobs, bookings, payouts) prevent hard delete, gracefully soft-delete
-    await prisma.$transaction(async (tx) => {
-      await tx.trader.update({
-        where: { id },
-        data: {
-          status: 'inactive',
-          verificationStatus: VerificationStatus.REJECTED,
-          rejectionReason: 'Account deleted by administrator.',
-        },
-      });
-      await tx.user.update({
-        where: { id: trader.userId },
-        data: {
-          status: UserStatus.INACTIVE,
-          email: `deleted_${Date.now()}_${trader.user.email}`,
-          tokenVersion: { increment: 1 },
-        },
-      });
-    });
+  // 1. Business Rule: A trader cannot be deleted if they have any ongoing/active jobs
+  const ongoingJobsCount = await prisma.job.count({
+    where: {
+      traderId: id,
+      status: {
+        in: [
+          JobStatus.ACCEPTED,
+          JobStatus.SCHEDULED,
+          JobStatus.IN_PROGRESS,
+          JobStatus.PAYMENT_PENDING,
+        ],
+      },
+    },
+  });
+  if (ongoingJobsCount > 0) {
+    throw new BadRequestError(
+      `Cannot delete trader: Trader has ${ongoingJobsCount} ongoing/active job(s).`
+    );
   }
+
+  // 2. Business Rule: A trader cannot be deleted if any of their quotations have been accepted by a customer
+  const acceptedQuotesCount = await prisma.quote.count({
+    where: {
+      traderId: id,
+      status: QuoteStatus.ACCEPTED,
+    },
+  });
+  if (acceptedQuotesCount > 0) {
+    throw new BadRequestError(
+      `Cannot delete trader: Trader has ${acceptedQuotesCount} quotation(s) accepted by a customer.`
+    );
+  }
+
+  // 3. Business Rule: A trader cannot be deleted if they have submitted any quotations
+  const submittedQuotesCount = await prisma.quote.count({
+    where: {
+      traderId: id,
+    },
+  });
+  if (submittedQuotesCount > 0) {
+    throw new BadRequestError(
+      `Cannot delete trader: Trader has submitted ${submittedQuotesCount} quotation(s).`
+    );
+  }
+
+  // 4. Business Rule: Cannot delete if the trader is assigned to any past jobs
+  const totalJobsCount = await prisma.job.count({
+    where: { traderId: id },
+  });
+  if (totalJobsCount > 0) {
+    throw new BadRequestError(
+      `Cannot delete trader: Trader is associated with ${totalJobsCount} job(s).`
+    );
+  }
+
+  // Execute deletion of trader and underlying user account
+  await prisma.$transaction(async (tx) => {
+    await tx.savedTrader.deleteMany({ where: { traderId: id } });
+    await tx.traderJobBookmark.deleteMany({ where: { traderId: id } });
+    await tx.traderSiteVisitRequest.deleteMany({ where: { traderId: id } });
+    await tx.traderDeviceLocation.deleteMany({ where: { traderId: id } });
+    await tx.traderPayoutMethod.deleteMany({ where: { traderId: id } });
+    await tx.traderCategory.deleteMany({ where: { traderId: id } });
+    await tx.traderDocument.deleteMany({ where: { traderId: id } });
+    await tx.traderRegistration.deleteMany({ where: { traderId: id } });
+    await tx.deviceToken.deleteMany({ where: { userId: trader.userId } });
+    await tx.notification.deleteMany({ where: { userId: trader.userId } });
+    await tx.trader.delete({ where: { id } });
+    await tx.user.delete({ where: { id: trader.userId } });
+  });
 
   await prisma.auditLog.create({
     data: {

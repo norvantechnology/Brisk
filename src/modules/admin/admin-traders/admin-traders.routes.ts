@@ -821,10 +821,14 @@ router.patch(
  * @swagger
  * /admin/traders/{id}:
  *   delete:
- *     summary: Delete trader (trash action)
+ *     summary: Delete trader account with confirmation
  *     description: |
- *       Permanently deletes the trader user account (cascade removes trader profile).
- *       Irreversible — confirm in UI before calling.
+ *       Permanently deletes the trader account and associated user profile.
+ *       
+ *       **Business Validation Rules:**
+ *       - Cannot be deleted if the trader has any ongoing or active jobs (`ACCEPTED`, `SCHEDULED`, `IN_PROGRESS`, `PAYMENT_PENDING`).
+ *       - Cannot be deleted if any of their quotations have been accepted by a customer.
+ *       - Cannot be deleted if the trader has submitted any quotations.
  *     tags: ['Admin / Traders']
  *     security:
  *       - bearerAuth: []
@@ -835,13 +839,20 @@ router.patch(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Deleted.
+ *         description: Trader deleted successfully.
  *         content:
  *           application/json:
  *             example:
  *               success: true
  *               message: Trader deleted successfully.
  *               data: null
+ *       400:
+ *         description: Deletion restricted due to business rules (ongoing jobs, accepted quotes, or submitted quotes).
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Cannot delete trader: Trader has 2 ongoing/active job(s)."
  *       401:
  *         description: Unauthorized.
  *       404:
