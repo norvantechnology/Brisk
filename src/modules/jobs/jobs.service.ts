@@ -3814,35 +3814,35 @@ export const getSimpleJobFormConfig = async (
         }
       }
 
-      // If the trader has no category assigned yet, fallback to all active categories
-      if (catMap.size === 0) {
-        const allCategories = await prisma.category.findMany({
-          where: { status: 'active' },
-          orderBy: { displayOrder: 'asc' },
-          include: {
-            subcategories: {
-              where: { status: 'active' },
-              orderBy: { name: 'asc' },
-            },
-          },
-        });
-        for (const cat of allCategories) {
-          const catIcon = resolveCategoryIconUrl(cat);
-          catMap.set(cat.id, {
-            id: cat.id,
-            name: cat.name,
-            iconUrl: catIcon,
-            subcategories: cat.subcategories.map((sub) => ({
-              id: sub.id,
-              name: sub.name,
-              iconUrl: resolveSubcategoryIconUrl(sub) || catIcon,
-            })),
-          });
-        }
-      }
-
       traderCategories = Array.from(catMap.values());
     }
+  }
+
+  // If no categories found for the trader (or trader has none assigned yet), fallback to all active categories
+  if (traderCategories.length === 0) {
+    const allCategories = await prisma.category.findMany({
+      where: { status: 'active' },
+      orderBy: { displayOrder: 'asc' },
+      include: {
+        subcategories: {
+          where: { status: 'active' },
+          orderBy: { name: 'asc' },
+        },
+      },
+    });
+    traderCategories = allCategories.map((cat) => {
+      const catIcon = resolveCategoryIconUrl(cat);
+      return {
+        id: cat.id,
+        name: cat.name,
+        iconUrl: catIcon,
+        subcategories: cat.subcategories.map((sub) => ({
+          id: sub.id,
+          name: sub.name,
+          iconUrl: resolveSubcategoryIconUrl(sub) || catIcon,
+        })),
+      };
+    });
   }
 
   if (query.offerId) {
