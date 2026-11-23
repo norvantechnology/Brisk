@@ -129,6 +129,7 @@ type SubcategoryRow = Pick<
   | 'status'
   | 'imageUrl'
   | 'bannerImageUrl'
+  | 'trendingImageUrl'
   | 'iconUrl'
   | 'siteVisitEnabled'
   | 'siteVisitFee'

@@ -17,6 +17,7 @@ export const PURPOSE_CONFIG: Record<UploadPurpose, PurposeConfig> = {
     visibility: 'private',
   },
   category_banner: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
+  subcategory_banner: { maxBytes: 5 * 1024 * 1024, allowedMime: /^image\//, visibility: 'public' },
   category_icon: {
     maxBytes: 5 * 1024 * 1024,
     allowedMime: /^(image\/(png|jpe?g|webp|gif|svg\+xml)|image\/svg)/i,

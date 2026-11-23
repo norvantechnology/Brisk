@@ -430,11 +430,22 @@ export const createSubcategory = async (adminId: string, adminLabel: string, inp
     throw new NotFoundError('Parent Category not found.');
   }
 
-  const { qaFormSchema, image, icon, bannerImage, trendingImage, ...rest } = input;
-  const resolvedImageUrl = input.imageUrl !== undefined ? input.imageUrl : image;
-  const resolvedIconUrl = input.iconUrl !== undefined ? input.iconUrl : icon;
-  const resolvedBannerImageUrl = input.bannerImageUrl !== undefined ? input.bannerImageUrl : bannerImage;
-  const resolvedTrendingImageUrl = input.trendingImageUrl !== undefined ? input.trendingImageUrl : trendingImage;
+  const {
+    qaFormSchema,
+    image,
+    icon,
+    bannerImage,
+    trendingImage,
+    imageUrl,
+    iconUrl,
+    bannerImageUrl,
+    trendingImageUrl,
+    ...rest
+  } = input;
+  const resolvedImageUrl = imageUrl !== undefined ? imageUrl : image;
+  const resolvedIconUrl = iconUrl !== undefined ? iconUrl : icon;
+  const resolvedBannerImageUrl = bannerImageUrl !== undefined ? bannerImageUrl : bannerImage;
+  const resolvedTrendingImageUrl = trendingImageUrl !== undefined ? trendingImageUrl : trendingImage;
 
   const subcategory = await prisma.subcategory.create({
     data: {
@@ -489,11 +500,22 @@ export const updateSubcategory = async (
     if (!parentCategory) throw new NotFoundError('Parent Category not found.');
   }
 
-  const { qaFormSchema, image, icon, bannerImage, trendingImage, ...rest } = input;
-  const resolvedImageUrl = input.imageUrl !== undefined ? input.imageUrl : image;
-  const resolvedIconUrl = input.iconUrl !== undefined ? input.iconUrl : icon;
-  const resolvedBannerImageUrl = input.bannerImageUrl !== undefined ? input.bannerImageUrl : bannerImage;
-  const resolvedTrendingImageUrl = input.trendingImageUrl !== undefined ? input.trendingImageUrl : trendingImage;
+  const {
+    qaFormSchema,
+    image,
+    icon,
+    bannerImage,
+    trendingImage,
+    imageUrl,
+    iconUrl,
+    bannerImageUrl,
+    trendingImageUrl,
+    ...rest
+  } = input;
+  const resolvedImageUrl = imageUrl !== undefined ? imageUrl : image;
+  const resolvedIconUrl = iconUrl !== undefined ? iconUrl : icon;
+  const resolvedBannerImageUrl = bannerImageUrl !== undefined ? bannerImageUrl : bannerImage;
+  const resolvedTrendingImageUrl = trendingImageUrl !== undefined ? trendingImageUrl : trendingImage;
 
   const updatedSubcategory = await prisma.subcategory.update({
     where: { id },

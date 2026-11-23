@@ -288,6 +288,10 @@ router.delete('/categories/:id', validate(idParamSchema), categoryAdminControlle
  *                     urlSlug: leak-repair
  *                     featured: false
  *                     status: active
+ *                     imageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair.jpg'
+ *                     bannerImageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
+ *                     trendingImageUrl: null
+ *                     iconUrl: 'https://api.brisk.ie/uploads/icons/leak-repair.svg'
  *                     siteVisitEnabled: true
  *                     siteVisitFee: 25
  *                     priceEnabled: true
@@ -352,6 +356,21 @@ router.get('/subcategories/dropdown', categoryAdminController.listSubcategoriesD
  *               serviceType: { type: string, example: 'Repair' }
  *               code: { type: string, example: 'PLUMB-LEAK' }
  *               urlSlug: { type: string, example: 'leak-repair-pipework' }
+ *               bannerImageUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
+ *                 description: Sub-category banner image URL from POST /uploads (purpose=subcategory_banner or category_banner). Alias bannerImage.
+ *               imageUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair.jpg'
+ *                 description: Sub-category card image URL. Alias image.
+ *               iconUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/icons/leak-repair.svg'
+ *                 description: Sub-category icon URL. Alias icon.
  *               featured: { type: boolean, example: true }
  *               status: { type: string, enum: [active, inactive], example: 'active' }
  *               siteVisitEnabled:
@@ -406,6 +425,32 @@ router.get('/subcategories/dropdown', categoryAdminController.listSubcategoriesD
  *     responses:
  *       201:
  *         description: Sub-Category created successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Sub-Category created successfully.
+ *               data:
+ *                 id: 8a44f8fb-1598-40c9-a658-7f3db5748f14
+ *                 categoryId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+ *                 name: Leak Repair & Pipework
+ *                 serviceType: Repair
+ *                 code: PLUMB-LEAK
+ *                 urlSlug: leak-repair-pipework
+ *                 featured: true
+ *                 status: active
+ *                 imageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair.jpg'
+ *                 bannerImageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
+ *                 trendingImageUrl: null
+ *                 iconUrl: 'https://api.brisk.ie/uploads/icons/leak-repair.svg'
+ *                 siteVisitEnabled: true
+ *                 siteVisitFee: 25
+ *                 priceEnabled: true
+ *                 priceEnteredBy: CUSTOMER
+ *                 qaFormSchema: []
+ *                 parentCategory: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Plumbing, categoryCode: CAT-0001 }
+ *                 createdAt: '2026-05-01T09:00:00.000Z'
+ *                 updatedAt: '2026-09-01T09:00:00.000Z'
  */
 router.post('/sub-categories', validate(createSubcategorySchema), categoryAdminController.createSubcategory);
 router.post('/subcategories', validate(createSubcategorySchema), categoryAdminController.createSubcategory);
@@ -426,6 +471,33 @@ router.post('/subcategories', validate(createSubcategorySchema), categoryAdminCo
  *     responses:
  *       200:
  *         description: Sub-Category detail retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Sub-Category retrieved successfully.
+ *               data:
+ *                 id: 8a44f8fb-1598-40c9-a658-7f3db5748f14
+ *                 categoryId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+ *                 name: Leak Repair
+ *                 serviceType: Repair
+ *                 code: SUB-0001
+ *                 urlSlug: leak-repair
+ *                 featured: false
+ *                 status: active
+ *                 imageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair.jpg'
+ *                 bannerImageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
+ *                 trendingImageUrl: null
+ *                 iconUrl: 'https://api.brisk.ie/uploads/icons/leak-repair.svg'
+ *                 siteVisitEnabled: true
+ *                 siteVisitFee: 25
+ *                 priceEnabled: true
+ *                 priceEnteredBy: TRADER
+ *                 qaFormSchema: []
+ *                 parentCategory: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Plumbing, categoryCode: CAT-0001 }
+ *                 jobsCount: 9
+ *                 createdAt: '2026-05-01T09:00:00.000Z'
+ *                 updatedAt: '2026-09-01T09:00:00.000Z'
  *       404:
  *         description: Sub-Category not found.
  */
@@ -456,6 +528,21 @@ router.get('/subcategories/:id', validate(idParamSchema), categoryAdminControlle
  *               serviceType: { type: string }
  *               code: { type: string }
  *               urlSlug: { type: string }
+ *               bannerImageUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
+ *                 description: Sub-category banner image URL (or null to remove).
+ *               imageUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair.jpg'
+ *                 description: Sub-category card image URL (or null to remove).
+ *               iconUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/icons/leak-repair.svg'
+ *                 description: Sub-category icon URL (or null to remove).
  *               featured: { type: boolean }
  *               status: { type: string, enum: [active, inactive] }
  *               siteVisitEnabled: { type: boolean, description: Enable/disable site visit }
@@ -470,6 +557,32 @@ router.get('/subcategories/:id', validate(idParamSchema), categoryAdminControlle
  *     responses:
  *       200:
  *         description: Sub-Category updated successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Sub-Category updated successfully.
+ *               data:
+ *                 id: 8a44f8fb-1598-40c9-a658-7f3db5748f14
+ *                 categoryId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+ *                 name: Leak Repair & Pipework
+ *                 serviceType: Repair
+ *                 code: PLUMB-LEAK
+ *                 urlSlug: leak-repair-pipework
+ *                 featured: true
+ *                 status: active
+ *                 imageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair.jpg'
+ *                 bannerImageUrl: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
+ *                 trendingImageUrl: null
+ *                 iconUrl: 'https://api.brisk.ie/uploads/icons/leak-repair.svg'
+ *                 siteVisitEnabled: true
+ *                 siteVisitFee: 25
+ *                 priceEnabled: true
+ *                 priceEnteredBy: TRADER
+ *                 qaFormSchema: []
+ *                 parentCategory: { id: 7c9e6679-7425-40de-944b-e07fc1f90ae7, name: Plumbing, categoryCode: CAT-0001 }
+ *                 createdAt: '2026-05-01T09:00:00.000Z'
+ *                 updatedAt: '2026-09-01T09:00:00.000Z'
  *       404:
  *         description: Sub-Category not found.
  */

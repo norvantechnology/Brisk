@@ -34,6 +34,7 @@ interface PurposeDimensionConfig {
 const DIMENSION_CONFIG: Record<string, PurposeDimensionConfig> = {
   // Large Hero Banners & Backgrounds (Full HD maximum boundary)
   category_banner: { maxWidth: 1920, maxHeight: 1080, quality: 85 },
+  subcategory_banner: { maxWidth: 1920, maxHeight: 1080, quality: 85 },
   offer_banner: { maxWidth: 1920, maxHeight: 1080, quality: 85 },
   cms_section_bg: { maxWidth: 1920, maxHeight: 1080, quality: 85 },
   cms_section_fg: { maxWidth: 1920, maxHeight: 1080, quality: 85 },

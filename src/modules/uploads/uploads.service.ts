@@ -19,7 +19,7 @@ export const storeUpload = async (input: {
     const traderOnboardingHint =
       actor.kind === 'user' &&
       actor.role === 'TRADER' &&
-      (purpose === 'category_banner' || purpose === 'category_icon')
+      (purpose === 'category_banner' || purpose === 'subcategory_banner' || purpose === 'category_icon')
         ? ' Use purpose "trader_document" for trader onboarding documents.'
         : '';
     throw new ForbiddenError(

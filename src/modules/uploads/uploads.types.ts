@@ -3,6 +3,7 @@ export const UPLOAD_PURPOSES = [
   'trader_cover',
   'trader_document',
   'category_banner',
+  'subcategory_banner',
   'category_icon',
   'offer_banner',
   'loyalty_image',

@@ -109,6 +109,8 @@ const subcategoryBodyBase = {
   image: optionalImageInput,
   bannerImageUrl: optionalImageInput,
   bannerImage: optionalImageInput,
+  trendingImageUrl: optionalImageInput,
+  trendingImage: optionalImageInput,
   iconUrl: optionalImageInput,
   icon: optionalImageInput,
   featured: z.boolean().optional().default(false),
