@@ -19,6 +19,8 @@ import {
 } from '../../services/currency.service';
 import { emitSiteVisitUpdate, pushUserNotification } from '../../sockets/realtime';
 import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
+import { getPlatformSetting } from '../settings/platform-settings.service';
+import { logger } from '../../utils/logger';
 import { resolveTimeSlotConfig } from './jobs.form-config';
 import {
   customerJobAmountSelect,
@@ -1053,7 +1055,70 @@ export const confirmJobCompletion = async (customerId: string, jobId: string) =>
     payload: { ...data, traderId: job.trader.id },
   }).catch(() => undefined);
 
+  // Credit dynamic loyalty points to customer for completed job
+  void awardCustomerJobLoyaltyPoints(customerId, jobId);
+
   return getJobProgress(customerId, jobId);
+};
+
+export const awardCustomerJobLoyaltyPoints = async (customerId: string, jobId: string) => {
+  try {
+    // Prevent duplicate points award for the same completed job
+    const existingTx = await prisma.loyaltyTransaction.findFirst({
+      where: { reason: { contains: `[job:${jobId}]` } },
+    });
+    if (existingTx) return;
+
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      include: {
+        booking: { include: { invoice: true } },
+      },
+    });
+    if (!job) return;
+
+    const currencyCode = (job.booking?.invoice?.currencyCode || 'EUR').toUpperCase();
+    const jobTotal = money(job.booking?.invoice?.totalAmount ?? job.serviceCharge ?? 0);
+    if (jobTotal <= 0) return;
+
+    const pointsPerUnit =
+      currencyCode === 'GBP'
+        ? Number(getPlatformSetting('pricing.loyalty.points_per_gbp'))
+        : Number(getPlatformSetting('pricing.loyalty.points_per_eur'));
+
+    const pointsEarned = Math.round(jobTotal * pointsPerUnit);
+    if (pointsEarned <= 0) return;
+
+    let account = await prisma.loyaltyAccount.findUnique({ where: { userId: customerId } });
+    if (!account) {
+      account = await prisma.loyaltyAccount.create({
+        data: { userId: customerId, pointsBalance: 0 },
+      });
+    }
+
+    await prisma.$transaction([
+      prisma.loyaltyAccount.update({
+        where: { id: account.id },
+        data: { pointsBalance: { increment: pointsEarned } },
+      }),
+      prisma.loyaltyTransaction.create({
+        data: {
+          loyaltyAccountId: account.id,
+          pointsChange: pointsEarned,
+          reason: `Earned ${pointsEarned} BRISK loyalty points for completed job "${job.title}" [job:${job.id}]`,
+        },
+      }),
+    ]);
+
+    await pushUserNotification([customerId], {
+      type: 'LOYALTY_POINTS_EARNED',
+      title: 'Loyalty Points Earned!',
+      message: `You earned ${pointsEarned} BRISK loyalty points for completing "${job.title}".`,
+      data: { jobId, pointsEarned },
+    });
+  } catch (error) {
+    logger.error(`Failed to award loyalty points for job ${jobId}:`, error);
+  }
 };
 
 // ---------------------------------------------------------------------------

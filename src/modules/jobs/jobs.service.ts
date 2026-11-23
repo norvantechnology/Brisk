@@ -28,6 +28,7 @@ import {
   str,
 } from './jobs.form-config';
 import { resolveCategoryIconUrl, resolveSubcategoryIconUrl } from '../categories/categories.serializers';
+import { getPlatformSetting } from '../settings/platform-settings.service';
 import type {
   CreateJobInput,
   PublishAddressObject,
@@ -190,18 +191,44 @@ export const computeInvoiceBreakdown = (input: {
   // Two-Thirds Rule (Irish Revenue): If materials (excl. VAT) exceed two-thirds of total trader price
   const twoThirdsRuleTriggered = traderNet > 0 && materialsTotal / traderNet > 2 / 3;
 
+  const currencyCode = (input.currencyCode ?? 'EUR').toUpperCase();
+  const isGbp = currencyCode === 'GBP';
+
+  // Dynamic VAT Tax rates from Admin Settings (or currency/country-wise)
   const isVatReg = input.isTraderVatRegistered !== false;
+  const traderStandardVatRate =
+    (isGbp
+      ? (getPlatformSetting('pricing.vat.uk_standard_rate') as number)
+      : (getPlatformSetting('pricing.vat.trader_standard_rate') as number)) / 100;
+  const traderTwoThirdsVatRate =
+    (isGbp
+      ? (getPlatformSetting('pricing.vat.uk_standard_rate') as number)
+      : (getPlatformSetting('pricing.vat.trader_two_thirds_rate') as number)) / 100;
+
   const traderVatRate = !isVatReg
     ? 0
     : twoThirdsRuleTriggered
-      ? 0.23
-      : 0.135;
+      ? traderTwoThirdsVatRate
+      : traderStandardVatRate;
   const traderVatAmount = round2(traderNet * traderVatRate);
 
-  // Platform Fee (Brisk's own supply: 10% of traderNet + 23% Irish Standard VAT)
-  const platformFeeRate = 0.10;
-  const platformFee = isSiteVisit ? 0 : round2(traderNet * platformFeeRate);
-  const platformFeeVat = isSiteVisit ? 0 : round2(platformFee * 0.23);
+  // Dynamic Platform Fee from Admin Settings (supports PERCENTAGE or FIXED, EUR or GBP)
+  const feeType = (getPlatformSetting('pricing.platform_fee.type') as string) || 'PERCENTAGE';
+  const platformFeeGrossPart = isSiteVisit
+    ? 0
+    : feeType === 'FIXED'
+      ? isGbp
+        ? (getPlatformSetting('pricing.platform_fee.fixed_gbp') as number)
+        : (getPlatformSetting('pricing.platform_fee.fixed_eur') as number)
+      : round2(traderNet * ((getPlatformSetting('pricing.platform_fee.percentage') as number) / 100));
+
+  const platformFeeVatRate =
+    (isGbp
+      ? (getPlatformSetting('pricing.vat.uk_standard_rate') as number)
+      : (getPlatformSetting('pricing.vat.platform_fee_rate') as number)) / 100;
+
+  const platformFee = round2(platformFeeGrossPart);
+  const platformFeeVat = isSiteVisit ? 0 : round2(platformFee * platformFeeVatRate);
   const platformFeeGross = round2(platformFee + platformFeeVat);
 
   const tax = round2(traderVatAmount + platformFeeVat);

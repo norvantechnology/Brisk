@@ -1,6 +1,11 @@
 export type PlatformSettingType = 'number' | 'integer' | 'boolean' | 'string';
 export type PlatformSettingUnit = 'CURRENCY' | 'KM' | 'DAYS';
-export type PlatformSettingGroup = 'SITE_VISIT' | 'JOBS';
+export type PlatformSettingGroup =
+  | 'SITE_VISIT'
+  | 'JOBS'
+  | 'PRICING_FEES'
+  | 'PRICING_LOYALTY'
+  | 'PRICING_VAT';
 
 export interface PlatformSettingDefinition {
   group: PlatformSettingGroup;
@@ -28,6 +33,21 @@ export const PLATFORM_SETTING_GROUPS: Record<
     label: 'Jobs',
     description: 'Job discovery and matching defaults.',
     sortOrder: 2,
+  },
+  PRICING_FEES: {
+    label: 'Platform Fees',
+    description: 'Brisk platform commission fee configuration (percentage or fixed, EUR/GBP).',
+    sortOrder: 3,
+  },
+  PRICING_LOYALTY: {
+    label: 'Loyalty Points',
+    description: 'BRISK points conversion rates earned per EUR or GBP.',
+    sortOrder: 4,
+  },
+  PRICING_VAT: {
+    label: 'VAT Tax',
+    description: 'Configurable VAT rates for trader services and platform fees.',
+    sortOrder: 5,
   },
 };
 
@@ -70,6 +90,118 @@ export const PLATFORM_SETTING_DEFINITIONS = {
     max: 1000,
     unit: 'KM',
     sortOrder: 1,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Pricing: BRISK Platform Fees
+  // ---------------------------------------------------------------------------
+  'pricing.platform_fee.type': {
+    group: 'PRICING_FEES',
+    label: 'Platform Fee Type',
+    description: 'Calculate platform fee as a percentage of trader net or as a fixed amount (PERCENTAGE | FIXED).',
+    type: 'string',
+    defaultValue: 'PERCENTAGE',
+    sortOrder: 1,
+  },
+  'pricing.platform_fee.percentage': {
+    group: 'PRICING_FEES',
+    label: 'Platform Fee Percentage',
+    description: 'Percentage of trader net charged as platform fee when type is PERCENTAGE (e.g. 10.0 for 10%).',
+    type: 'number',
+    defaultValue: 10.0,
+    min: 0,
+    max: 100,
+    sortOrder: 2,
+  },
+  'pricing.platform_fee.fixed_eur': {
+    group: 'PRICING_FEES',
+    label: 'Fixed Platform Fee (EUR)',
+    description: 'Fixed platform fee amount charged for EUR jobs when type is FIXED.',
+    type: 'number',
+    defaultValue: 10.0,
+    min: 0,
+    max: 100000,
+    unit: 'CURRENCY',
+    sortOrder: 3,
+  },
+  'pricing.platform_fee.fixed_gbp': {
+    group: 'PRICING_FEES',
+    label: 'Fixed Platform Fee (GBP)',
+    description: 'Fixed platform fee amount charged for GBP jobs when type is FIXED.',
+    type: 'number',
+    defaultValue: 8.5,
+    min: 0,
+    max: 100000,
+    unit: 'CURRENCY',
+    sortOrder: 4,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Pricing: BRISK Loyalty Points
+  // ---------------------------------------------------------------------------
+  'pricing.loyalty.points_per_eur': {
+    group: 'PRICING_LOYALTY',
+    label: 'Loyalty Points Earned per EUR',
+    description: 'Number of BRISK loyalty points earned per 1 EUR on completed jobs (e.g. 1 EUR = 10 points).',
+    type: 'integer',
+    defaultValue: 10,
+    min: 0,
+    max: 10000,
+    sortOrder: 1,
+  },
+  'pricing.loyalty.points_per_gbp': {
+    group: 'PRICING_LOYALTY',
+    label: 'Loyalty Points Earned per GBP',
+    description: 'Number of BRISK loyalty points earned per 1 GBP on completed jobs (e.g. 1 GBP = 12 points).',
+    type: 'integer',
+    defaultValue: 12,
+    min: 0,
+    max: 10000,
+    sortOrder: 2,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Pricing: VAT Tax Configuration
+  // ---------------------------------------------------------------------------
+  'pricing.vat.trader_standard_rate': {
+    group: 'PRICING_VAT',
+    label: 'Trader Standard Reduced VAT Rate (%)',
+    description: 'Standard VAT percentage applied to VAT-registered trader services in Ireland (e.g. 13.5%).',
+    type: 'number',
+    defaultValue: 13.5,
+    min: 0,
+    max: 100,
+    sortOrder: 1,
+  },
+  'pricing.vat.trader_two_thirds_rate': {
+    group: 'PRICING_VAT',
+    label: 'Trader Two-Thirds Rule Standard VAT Rate (%)',
+    description: 'Standard VAT percentage applied when materials exceed 2/3 of total cost in Ireland (e.g. 23.0%).',
+    type: 'number',
+    defaultValue: 23.0,
+    min: 0,
+    max: 100,
+    sortOrder: 2,
+  },
+  'pricing.vat.platform_fee_rate': {
+    group: 'PRICING_VAT',
+    label: 'Platform Fee VAT Rate (%)',
+    description: 'Standard VAT percentage applied to Brisk platform fee in Ireland (e.g. 23.0%).',
+    type: 'number',
+    defaultValue: 23.0,
+    min: 0,
+    max: 100,
+    sortOrder: 3,
+  },
+  'pricing.vat.uk_standard_rate': {
+    group: 'PRICING_VAT',
+    label: 'UK Standard VAT Rate (%)',
+    description: 'Standard VAT percentage applied to UK/GBP services and platform fees (e.g. 20.0%).',
+    type: 'number',
+    defaultValue: 20.0,
+    min: 0,
+    max: 100,
+    sortOrder: 4,
   },
 } as const satisfies Record<string, PlatformSettingDefinition>;
 

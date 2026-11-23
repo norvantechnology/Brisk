@@ -38,6 +38,7 @@ import adminOffersRoutes from './modules/admin/admin-offers/admin-offers.routes'
 import adminLoyaltyRoutes from './modules/admin/admin-loyalty/admin-loyalty.routes';
 import adminCurrencyRoutes from './modules/admin/admin-currency/admin-currency.routes';
 import adminSettingsRoutes from './modules/admin/admin-settings/admin-settings.routes';
+import adminPricingRoutes from './modules/admin/admin-pricing/admin-pricing.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import adminNotificationsRoutes from './modules/admin/admin-notifications/admin-notifications.routes';
 import publicOffersRoutes from './modules/offers/public-offers.routes';
@@ -143,6 +144,7 @@ app.use('/admin', adminOffersRoutes);
 app.use('/admin', adminLoyaltyRoutes);
 app.use('/admin', adminCurrencyRoutes);
 app.use('/admin', adminSettingsRoutes);
+app.use('/admin/pricing', adminPricingRoutes);
 app.use('/admin', adminLocationsRoutes);
 app.use('/admin', adminPropertySuppliersRoutes);
 app.use('/admin/cms', adminCmsRoutes);
