@@ -361,6 +361,11 @@ router.get('/subcategories/dropdown', categoryAdminController.listSubcategoriesD
  *                 nullable: true
  *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
  *                 description: Sub-category banner image URL from POST /uploads (purpose=subcategory_banner or category_banner). Alias bannerImage.
+ *               trendingImageUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair-trending.jpg'
+ *                 description: Second image upload for Trending Now. Only appears when subcategory is featured in Trending Now. Alias trendingImage.
  *               imageUrl:
  *                 type: string
  *                 nullable: true
@@ -533,6 +538,11 @@ router.get('/subcategories/:id', validate(idParamSchema), categoryAdminControlle
  *                 nullable: true
  *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair-banner.jpg'
  *                 description: Sub-category banner image URL (or null to remove).
+ *               trendingImageUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 'https://api.brisk.ie/uploads/subcategories/leak-repair-trending.jpg'
+ *                 description: Trending Now image URL (only shown when featured in Trending Now, or null to remove). Alias trendingImage.
  *               imageUrl:
  *                 type: string
  *                 nullable: true
