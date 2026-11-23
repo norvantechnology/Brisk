@@ -436,8 +436,10 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
   return subcategories
     .map((s) => {
       const categoryBanner = normalizeMediaUrl(s.category.bannerImageUrl);
+      const trendingImageUrl = normalizeMediaUrl(s.trendingImageUrl);
+      const bannerImageUrl = normalizeMediaUrl(s.bannerImageUrl);
       const subcategoryBanner =
-        normalizeMediaUrl(s.trendingImageUrl || s.bannerImageUrl || s.imageUrl) || categoryBanner;
+        trendingImageUrl || bannerImageUrl || normalizeMediaUrl(s.imageUrl) || categoryBanner;
       const categoryIcon = resolveCategoryIconUrl(s.category);
       const subcategoryIcon = resolveSubcategoryIconUrl(s);
 
@@ -446,6 +448,8 @@ const listTrendingJobs = async (limit: number, categoryId?: string) => {
         subcategoryId: s.id,
         title: s.name,
         imageUrl: subcategoryBanner,
+        trendingImageUrl,
+        bannerImageUrl,
         iconUrl: subcategoryIcon,
         category: {
           id: s.category.id,

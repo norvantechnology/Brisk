@@ -109,7 +109,9 @@ router.use('/onboarding', onboardingRoutes);
  *                   - id: 5c1a2b3d-3333-4c5d-9e6f-abcdef654321
  *                     subcategoryId: 5c1a2b3d-3333-4c5d-9e6f-abcdef654321
  *                     title: Spring Garden Refresh
- *                     imageUrl: https://api.brisk.ie/uploads/files/category_banner/gardening.jpg
+ *                     imageUrl: https://api.brisk.ie/uploads/files/subcategory_trending/gardening-trending.jpg
+ *                     trendingImageUrl: https://api.brisk.ie/uploads/files/subcategory_trending/gardening-trending.jpg
+ *                     bannerImageUrl: https://api.brisk.ie/uploads/files/subcategory_banner/gardening-banner.jpg
  *                     iconUrl: https://api.brisk.ie/uploads/files/category_icon/gardening.svg
  *                     category:
  *                       id: 8e4f0a21-4444-4d6e-8f70-abcdef987654
