@@ -2882,10 +2882,10 @@ const notifyBriskPaymentRequest = async (
   // Push notification to the trader confirming Brisk has received their payment request
   if (trader?.userId) {
     pushUserNotification([trader.userId], {
+      type: 'BRISK_PAYMENT_REQUEST_RECEIVED',
       title: 'Payment Request Received by Brisk',
-      body: `Your payment request of ${amount} ${pr.currencyCode} for "${job.title}" has been received. Brisk will process and transfer your payment shortly.`,
+      message: `Your payment request of ${amount} ${pr.currencyCode} for "${job.title}" has been received. Brisk will process and transfer your payment shortly.`,
       data: {
-        type: 'BRISK_PAYMENT_REQUEST_RECEIVED',
         jobId: pr.jobId,
         paymentRequestId: pr.id,
       },
