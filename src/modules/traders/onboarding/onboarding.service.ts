@@ -103,7 +103,7 @@ const buildDocumentRequirementsWithUploads = async (
       const required = enriched.filter((d) => d.required);
       const uploadedRequired = required.filter((d) => d.uploadStatus === 'UPLOADED');
       const documentUpload =
-        required.length > 0 && uploadedRequired.length >= required.length;
+        required.length === 0 || (required.length > 0 && uploadedRequired.length >= required.length);
       return {
         categoryId: group.categoryId,
         categoryName: group.categoryName,
@@ -1107,15 +1107,16 @@ export const submitOnboarding = async (userId: string) => {
     }
   }
 
-  const categoryIds = trader.categories.map((item) => item.categoryId);
+  // Only entity verification documents (Proof of ID, etc.) are mandatory for onboarding submission.
+  // Category certificates are optional at onboarding and enforced per category when accepting/undertaking jobs.
   const { complete, missing } = await validateRequiredDocumentsUploaded(
     trader.id,
     registration.entityType,
-    categoryIds
+    []
   );
 
   if (!complete) {
-    throw new BadRequestError(`Upload all required documents before submitting. Missing: ${missing.join(', ')}`);
+    throw new BadRequestError(`Upload all required verification documents before submitting. Missing: ${missing.join(', ')}`);
   }
 
   await prisma.$transaction([

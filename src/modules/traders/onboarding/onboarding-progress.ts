@@ -103,7 +103,7 @@ export const resolveOnboardingScreenKey = async (
       : 'sole_trader_document_verification';
   }
 
-  const { complete } = await validateRequiredDocumentsUploaded(trader.id, entityType, categoryIds);
+  const { complete } = await validateRequiredDocumentsUploaded(trader.id, entityType, []);
   if (!complete) {
     return entityType === TraderType.COMPANY
       ? 'company_document_verification'
@@ -140,9 +140,6 @@ export const resolveCurrentStep = async (
 
   const categoryIds = trader.categories.map((c) => c.categoryId);
   if (!categoryIds.length) return ONBOARDING_STEPS.CATEGORIES;
-
-  const allDocs = await validateRequiredDocumentsUploaded(trader.id, entityType, categoryIds);
-  if (!allDocs.complete) return ONBOARDING_STEPS.CATEGORY_DOCUMENTS;
 
   return ONBOARDING_STEPS.SERVICE_RADIUS;
 };
