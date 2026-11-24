@@ -2179,10 +2179,11 @@ const buildOutcomePaymentSummaryList = (
     });
   }
 
-  if (summary.platformFee > 0) {
+  const platformFeeDeduction = summary.platformFeeGross > 0 ? summary.platformFeeGross : summary.platformFee;
+  if (platformFeeDeduction > 0) {
     list.push({
       label: 'Platform Fee',
-      amount: format(summary.platformFee),
+      amount: `-${format(platformFeeDeduction)}`,
     });
   }
 
