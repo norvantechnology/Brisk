@@ -23,7 +23,7 @@ export const ADMIN_TRADER_SORT_FIELDS = [
   'joinedAt',
 ] as const;
 
-const traderAccountStatus = z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']);
+const traderAccountStatus = z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED', 'DELETED']);
 const traderType = z.enum(['SOLO', 'COMPANY']);
 const verificationStatus = z.nativeEnum(VerificationStatus);
 

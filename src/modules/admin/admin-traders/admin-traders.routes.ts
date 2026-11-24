@@ -821,14 +821,13 @@ router.patch(
  * @swagger
  * /admin/traders/{id}:
  *   delete:
- *     summary: Delete trader account with confirmation
+ *     summary: Soft delete trader account with confirmation
  *     description: |
- *       Permanently deletes the trader account and associated user profile.
+ *       Soft deletes the trader account and deactivates the associated user profile.
+ *       The trader's records, past jobs, and history are preserved for future restoration.
  *       
  *       **Business Validation Rules:**
  *       - Cannot be deleted if the trader has any ongoing or active jobs (`ACCEPTED`, `SCHEDULED`, `IN_PROGRESS`, `PAYMENT_PENDING`).
- *       - Cannot be deleted if any of their quotations have been accepted by a customer.
- *       - Cannot be deleted if the trader has submitted any quotations.
  *     tags: ['Admin / Traders']
  *     security:
  *       - bearerAuth: []
@@ -847,7 +846,7 @@ router.patch(
  *               message: Trader deleted successfully.
  *               data: null
  *       400:
- *         description: Deletion restricted due to business rules (ongoing jobs, accepted quotes, or submitted quotes).
+ *         description: Deletion restricted due to business rules (ongoing jobs).
  *         content:
  *           application/json:
  *             example:
@@ -859,5 +858,38 @@ router.patch(
  *         description: Trader not found.
  */
 router.delete('/traders/:id', validate(traderIdParamSchema), controller.deleteTrader);
+
+/**
+ * @swagger
+ * /admin/traders/{id}/restore:
+ *   post:
+ *     summary: Restore a soft-deleted trader account
+ *     description: |
+ *       Restores a previously soft-deleted trader account and reactivates their user profile (`status: ACTIVE`).
+ *     tags: ['Admin / Traders']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Trader restored successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Trader restored successfully.
+ *               data:
+ *                 id: 58e8f827-671c-4866-9aaf-aa7cc4e6d397
+ *                 status: ACTIVE
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Trader not found.
+ */
+router.post('/traders/:id/restore', validate(traderIdParamSchema), controller.restoreTrader);
 
 export default router;

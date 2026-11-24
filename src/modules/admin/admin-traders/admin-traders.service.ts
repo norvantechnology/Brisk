@@ -67,6 +67,8 @@ const toDbTraderStatus = (status: TraderAccountStatus): string => {
       return 'suspended';
     case 'PENDING':
       return 'pending';
+    case 'DELETED':
+      return 'deleted';
     default:
       return 'active';
   }
@@ -74,6 +76,7 @@ const toDbTraderStatus = (status: TraderAccountStatus): string => {
 
 const toApiTraderStatus = (traderStatus: string, userStatus: UserStatus): TraderAccountStatus => {
   const normalized = traderStatus.toLowerCase();
+  if (normalized === 'deleted') return 'DELETED';
   if (normalized === 'suspended' || userStatus === UserStatus.SUSPENDED) return 'SUSPENDED';
   if (normalized === 'inactive' || userStatus === UserStatus.INACTIVE || userStatus === UserStatus.BLOCKED) {
     return 'INACTIVE';
@@ -184,7 +187,7 @@ export const getTraderDirectoryStats = async (filters: TraderStatsFilters = {}) 
 
   const [totalTraders, activeTraders, suspendedTraders, pendingVerification, newTraders, ratingAgg] =
     await Promise.all([
-      prisma.trader.count(),
+      prisma.trader.count({ where: { status: { not: 'deleted' } } }),
       prisma.trader.count({
         where: {
           status: 'active',
@@ -329,14 +332,16 @@ export const listTraders = async (filters: TraderListFilters) => {
 
   if (filters.status) {
     const statusClause: Prisma.TraderWhereInput =
-      filters.status === 'SUSPENDED'
-        ? { OR: [{ status: 'suspended' }, { user: { status: UserStatus.SUSPENDED } }] }
-        : filters.status === 'PENDING'
-          ? { OR: [{ status: 'pending' }, { user: { status: UserStatus.PENDING } }] }
-          : {
-              status: toDbTraderStatus(filters.status),
-              user: { status: toUserStatus(filters.status) },
-            };
+      filters.status === 'DELETED'
+        ? { status: 'deleted' }
+        : filters.status === 'SUSPENDED'
+          ? { OR: [{ status: 'suspended' }, { user: { status: UserStatus.SUSPENDED } }] }
+          : filters.status === 'PENDING'
+            ? { OR: [{ status: 'pending' }, { user: { status: UserStatus.PENDING } }] }
+            : {
+                status: toDbTraderStatus(filters.status),
+                user: { status: toUserStatus(filters.status) },
+              };
 
     if (where.OR) {
       where.AND = [{ OR: where.OR }, statusClause];
@@ -344,6 +349,8 @@ export const listTraders = async (filters: TraderListFilters) => {
     } else {
       Object.assign(where, statusClause);
     }
+  } else {
+    where.status = { not: 'deleted' };
   }
 
   if (filters.pendingApproval) {
@@ -906,46 +913,20 @@ export const deleteTrader = async (adminId: string, adminLabel: string, id: stri
     );
   }
 
-  // 2. Business Rule: A trader cannot be deleted if any of their quotations have been accepted by a customer
-  const acceptedQuotesCount = await prisma.quote.count({
-    where: {
-      traderId: id,
-      status: QuoteStatus.ACCEPTED,
-    },
-  });
-  if (acceptedQuotesCount > 0) {
-    throw new BadRequestError(
-      `Cannot delete trader: Trader has ${acceptedQuotesCount} quotation(s) accepted by a customer.`
-    );
-  }
-
-  // 3. Business Rule: A trader cannot be deleted if they have submitted any quotations
-  const submittedQuotesCount = await prisma.quote.count({
-    where: {
-      traderId: id,
-    },
-  });
-  if (submittedQuotesCount > 0) {
-    throw new BadRequestError(
-      `Cannot delete trader: Trader has submitted ${submittedQuotesCount} quotation(s).`
-    );
-  }
-
-  // 4. Business Rule: Cannot delete if the trader is assigned to any past jobs
-  const totalJobsCount = await prisma.job.count({
-    where: { traderId: id },
-  });
-  if (totalJobsCount > 0) {
-    throw new BadRequestError(
-      `Cannot delete trader: Trader is associated with ${totalJobsCount} job(s).`
-    );
-  }
-
-  // Execute deletion of trader and underlying user account
+  // Soft delete trader and deactivate user account
   await prisma.$transaction(async (tx) => {
     await tx.deviceToken.deleteMany({ where: { userId: trader.userId } });
-    await tx.notification.deleteMany({ where: { userId: trader.userId } });
-    await tx.user.delete({ where: { id: trader.userId } });
+    await (tx.trader as any).update({
+      where: { id },
+      data: {
+        status: 'deleted',
+        deletedAt: new Date(),
+      },
+    });
+    await tx.user.update({
+      where: { id: trader.userId },
+      data: { status: UserStatus.INACTIVE },
+    });
   });
 
   await prisma.auditLog.create({
@@ -956,7 +937,46 @@ export const deleteTrader = async (adminId: string, adminLabel: string, id: stri
       actorLabel: adminLabel,
       subjectType: 'Trader',
       subjectId: id,
-      description: `Deleted trader "${trader.user.fullName}" (${trader.traderCode || id}).`,
+      description: `Soft-deleted trader "${trader.user.fullName}" (${trader.traderCode || id}).`,
     },
   });
+};
+
+export const restoreTrader = async (adminId: string, adminLabel: string, id: string) => {
+  const trader = await prisma.trader.findUnique({
+    where: { id },
+    include: { user: true },
+  });
+  if (!trader) {
+    throw new NotFoundError('Trader not found.');
+  }
+
+  // Restore trader and reactivate user account
+  await prisma.$transaction(async (tx) => {
+    await (tx.trader as any).update({
+      where: { id },
+      data: {
+        status: 'active',
+        deletedAt: null,
+      },
+    });
+    await tx.user.update({
+      where: { id: trader.userId },
+      data: { status: UserStatus.ACTIVE },
+    });
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      eventType: 'TRADER_RESTORED',
+      actorType: ActorType.ADMIN,
+      actorId: adminId,
+      actorLabel: adminLabel,
+      subjectType: 'Trader',
+      subjectId: id,
+      description: `Restored trader "${trader.user.fullName}" (${trader.traderCode || id}).`,
+    },
+  });
+
+  return getTraderById(id);
 };

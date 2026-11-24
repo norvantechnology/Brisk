@@ -186,3 +186,23 @@ export const deleteTrader = async (
     next(error);
   }
 };
+
+export const restoreTrader = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const adminId = req.adminUser!.id;
+    const adminLabel = `${req.adminUser!.fullName} (${req.adminUser!.role})`;
+    const data = await service.restoreTrader(adminId, adminLabel, req.params.id);
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Trader restored successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -1,4 +1,4 @@
-export type TraderAccountStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'SUSPENDED';
+export type TraderAccountStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'SUSPENDED' | 'DELETED';
 
 export type TraderVerificationFilter = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
 
