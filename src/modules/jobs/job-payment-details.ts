@@ -1,4 +1,4 @@
-import { InvoiceStatus, PaymentMethod, PaymentStatus, Prisma, TraderPaymentRequestStatus } from '@prisma/client';
+import { InvoiceStatus, PaymentMethod, PaymentStatus, Prisma, TraderPaymentRequestStatus, TraderPaymentRequestType } from '@prisma/client';
 
 const money = (v: Prisma.Decimal | number | null | undefined): number => (v == null ? 0 : Number(v));
 const round2 = (n: number): number => Math.round(n * 100) / 100;
