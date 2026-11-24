@@ -3839,7 +3839,7 @@ export const getSimpleJobFormConfig = async (
   }
 
   // If no categories found for the trader (or trader has none assigned yet), fallback to all active categories
-  if (traderCategories.length === 0) {
+  if (traderId && traderCategories.length === 0) {
     const allCategories = await prisma.category.findMany({
       where: { status: 'active' },
       orderBy: { displayOrder: 'asc' },
