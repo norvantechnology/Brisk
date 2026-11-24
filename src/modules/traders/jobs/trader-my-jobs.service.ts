@@ -2821,6 +2821,10 @@ const buildPaymentRequestScreenPayload = async (
     currency_code: currency.currencyCode,
     paymentDetails,
     paymentSummaryList: buildOutcomePaymentSummaryList(paymentSummary, currency),
+    paymentSummary: {
+      ...buildOutcomePaymentSummary(job, currency),
+      paymentSummaryList: buildOutcomePaymentSummaryList(paymentSummary, currency),
+    },
     paymentStatus,
     isPartPayment: isPartialJob,
     isPartialJob,
