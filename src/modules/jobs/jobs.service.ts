@@ -1758,7 +1758,7 @@ const buildCustomerJobView = async (
   const serviceFee = hasPaymentRequests
     ? (isUpfrontFullCovered
         ? round2(
-            money(upfrontInvoice.serviceCharge) +
+            money(upfrontInvoice?.serviceCharge) +
               sum(requests.filter((r) => r.type !== 'FULL_JOB'), (r) => r.serviceCharge)
           )
         : round2(
@@ -1782,7 +1782,7 @@ const buildCustomerJobView = async (
   const vatAmount = hasPaymentRequests
     ? (isUpfrontFullCovered
         ? round2(
-            money(upfrontInvoice.tax) +
+            money(upfrontInvoice?.tax) +
               sum(requests.filter((r) => r.type !== 'FULL_JOB'), (r) => r.vatAmount)
           )
         : round2(sum(requests, (r) => r.vatAmount) + (upfrontInvoice ? money(upfrontInvoice.tax) : 0)))
