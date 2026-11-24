@@ -1788,6 +1788,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
     paymentMethodLabel: resolvedDetailPayments.paymentMethodLabel,
     isKlarna: resolvedDetailPayments.isKlarna,
     paymentDetails: resolvedDetailPayments,
+    paymentSummaryList: buildOutcomePaymentSummaryList(buildSubmitPaymentSummary(job), currency),
     /** Boolean flag for Active-list FE routing (same meaning as list `siteVisit`). */
     isSiteVisit: Boolean(job.siteVisitRequested || job.siteVisitRequests[0]),
     /**
