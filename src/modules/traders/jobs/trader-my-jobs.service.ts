@@ -47,6 +47,7 @@ import {
   emitQuoteReceived,
   pushUserNotification,
 } from '../../../sockets/realtime';
+import { createAdminNotifications } from '../../admin/admin-notifications/admin-notifications.service';
 import * as chatService from '../../chat/chat.service';
 import {
   buildJobPaymentBreakdown,
@@ -101,6 +102,19 @@ const sumPaidAmount = (
       .filter((r) => r.status === TraderPaymentRequestStatus.PAID)
       .reduce((s, r) => s + money(r.totalAmount), 0)
   );
+
+const getJobPaidAmount = (job: {
+  paymentRequests?: { status: TraderPaymentRequestStatus; totalAmount: Prisma.Decimal | number }[] | null;
+  booking?: { invoice?: { status: string; totalAmount: Prisma.Decimal | number } | null } | null;
+  siteVisitRequested?: boolean | null;
+}) => {
+  const requestsPaid = sumPaidAmount(job.paymentRequests ?? []);
+  const upfrontPaid =
+    job.booking?.invoice?.status === InvoiceStatus.PAID && !job.siteVisitRequested
+      ? money(job.booking.invoice.totalAmount)
+      : 0;
+  return round2(requestsPaid + upfrontPaid);
+};
 
 const resolvePartialPaymentStatus = (
   jobAmount: number,
@@ -657,7 +671,7 @@ const buildActions = (job: MyJobRow, traderId: string) => {
   const isInProgress =
     job.status === JobStatus.IN_PROGRESS || booking?.status === BookingStatus.IN_PROGRESS;
 
-  const alreadyPaidAmount = sumPaidAmount(job.paymentRequests);
+  const alreadyPaidAmount = getJobPaidAmount(job);
   const hasOpenPartial = job.paymentRequests.some(
     (p) =>
       p.type === TraderPaymentRequestType.PARTIAL &&
@@ -961,15 +975,20 @@ const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderConte
       // fallback
     }
   }
+  const offerDiscount = round2(
+    money(job.booking?.invoice?.traderOfferDiscount) +
+    money(job.booking?.invoice?.promoDiscount)
+  );
   const breakdown = buildJobPaymentBreakdown({
     quotePrice,
     materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
     siteVisitFee: money(job.siteVisitFee),
     isTraderVatRegistered: trader.isVatRegistered ?? true,
+    traderOfferDiscount: offerDiscount,
   });
 
   const requests = await loadJobPaymentRequests(job.id, trader.id);
-  const alreadyPaid = sumPaidAmount(requests);
+  const alreadyPaid = getJobPaidAmount({ ...job, paymentRequests: requests });
   const remainingBalance = round2(Math.max(0, breakdown.totalAmount - alreadyPaid));
 
   let serviceCharge = breakdown.serviceCharge;
@@ -981,7 +1000,7 @@ const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderConte
   let vatAmount = breakdown.vatAmount;
   let totalAmount = breakdown.totalAmount;
 
-  if (alreadyPaid > 0) {
+  if (!isPaidUpfrontInFull(job) && alreadyPaid > 0) {
     totalAmount = remainingBalance;
     serviceCharge = remainingBalance;
     materialsTotal = 0;
@@ -1038,9 +1057,17 @@ const createPaymentRequestInvoice = (tx: Prisma.TransactionClient, request: Trad
 
 const createPaymentRequest = async (
   tx: Prisma.TransactionClient,
-  data: Prisma.TraderPaymentRequestUncheckedCreateInput
+  data: Prisma.TraderPaymentRequestUncheckedCreateInput,
+  existingPaidInvoiceId?: string | null
 ) => {
   const request = await tx.traderPaymentRequest.create({ data });
+  if (existingPaidInvoiceId) {
+    const invoice = await tx.invoice.update({
+      where: { id: existingPaidInvoiceId },
+      data: { paymentRequestId: request.id },
+    });
+    return { ...request, invoiceId: invoice.id };
+  }
   const invoice = await createPaymentRequestInvoice(tx, request);
   return { ...request, invoiceId: invoice.id };
 };
@@ -1393,7 +1420,7 @@ const myJobCardMapper =
         p.type === TraderPaymentRequestType.PARTIAL &&
         p.status !== TraderPaymentRequestStatus.CANCELLED
     );
-    const alreadyPaidAmount = sumPaidAmount(job.paymentRequests);
+    const alreadyPaidAmount = getJobPaidAmount(job);
     const breakdown = computePaymentBreakdown(job as any);
     const jobAmount = breakdown.totalAmount;
     const isPartialJob = hasAnyPartial || alreadyPaidAmount > 0;
@@ -1685,7 +1712,7 @@ export const getMyJobDetail = async (userId: string, jobId: string) => {
       p.type === TraderPaymentRequestType.PARTIAL &&
       p.status !== TraderPaymentRequestStatus.CANCELLED
   );
-  const alreadyPaidAmount = sumPaidAmount(job.paymentRequests);
+  const alreadyPaidAmount = getJobPaidAmount(job);
   const detailBreakdown = computePaymentBreakdown(job);
   const jobAmount = detailBreakdown.totalAmount;
   const paymentStatus = resolvePartialPaymentStatus(
@@ -1976,7 +2003,7 @@ const resolvePaymentStatusLabel = (job: MyJobRow): string => {
   const latestPayment = invoice?.payments?.[0];
   if (latestPayment?.status === 'COMPLETED') return 'PAID';
   if (latestPayment?.status === 'FAILED') return 'FAILED';
-  const alreadyPaid = sumPaidAmount(job.paymentRequests);
+  const alreadyPaid = getJobPaidAmount(job);
   const breakdown = computePaymentBreakdown(job);
   if (alreadyPaid >= breakdown.totalAmount && breakdown.totalAmount > 0) return 'PAID';
   if (alreadyPaid > 0) return 'PARTIALLY_PAID';
@@ -2015,9 +2042,16 @@ const buildSubmitPaymentSummary = (job: PaymentSummarySource) => {
   const traderVatAmount = invoice ? money(invoice.traderVatAmount) : breakdown.traderVatAmount;
   const totalAmount = invoice ? money(invoice.totalAmount) : breakdown.totalAmount;
 
-  // Net payout = what Brisk transfers to the trader (gross total minus Brisk's platform fee + its VAT)
+  // Net payout = what Brisk transfers to the trader (Base - Offer + Materials + Site Visit + Trader VAT - Platform Fee Gross)
   const platformFeeGross = round2(platformFee + platformFeeVat);
-  const netPayout = round2(totalAmount - platformFeeGross - offerDiscount);
+  const netPayout = round2(
+    baseRate -
+      offerDiscount +
+      materialCost +
+      breakdown.siteVisitFee +
+      traderVatAmount -
+      platformFeeGross
+  );
 
   return {
     baseRate,
@@ -2746,7 +2780,7 @@ const buildPaymentRequestScreenPayload = async (
       : 'COMPLETED') as FlowStatus;
 
   const requests = job.paymentRequests ?? [];
-  const alreadyPaid = sumPaidAmount(requests);
+  const alreadyPaid = getJobPaidAmount(job);
   const breakdown = computePaymentBreakdown(job);
   const jobAmount = breakdown.totalAmount;
   const remainingBalance = round2(Math.max(0, jobAmount - alreadyPaid));
@@ -2755,7 +2789,11 @@ const buildPaymentRequestScreenPayload = async (
       p.type === TraderPaymentRequestType.PARTIAL &&
       p.status !== TraderPaymentRequestStatus.CANCELLED
   );
-  const isPartialJob = hasAnyPartial || alreadyPaid > 0;
+  const isPartialJob = (hasAnyPartial || alreadyPaid > 0) && !isPaidUpfrontInFull(job);
+  const displayTotal =
+    remainingBalance > 0 && alreadyPaid > 0 && !isPaidUpfrontInFull(job)
+      ? remainingBalance
+      : paymentSummary.netPayout;
 
   // Flat shape for Payment Request UI — do not nest location / paymentSummary (breaks mobile parsers).
   return {
@@ -2772,13 +2810,16 @@ const buildPaymentRequestScreenPayload = async (
         : 'Completed',
     completedAt,
     fullAddress: formatFullAddress(job),
-    totalAmount: remainingBalance > 0 && alreadyPaid > 0 ? remainingBalance : paymentSummary.totalAmount,
+    totalAmount: displayTotal,
     jobAmount,
     alreadyPaid,
     remainingBalance,
+    netPayout: paymentSummary.netPayout,
+    payoutAmount: paymentSummary.netPayout,
     currency_symbol: currency.currencySymbol,
     currency_code: currency.currencyCode,
     paymentDetails,
+    paymentSummaryList: buildOutcomePaymentSummaryList(paymentSummary, currency),
     paymentStatus,
     isPartPayment: isPartialJob,
     isPartialJob,
@@ -2891,6 +2932,23 @@ const notifyBriskPaymentRequest = async (
       },
     });
   }
+
+  // Create persistent notification in Admin Portal
+  await createAdminNotifications({
+    type: 'TRADER_PAYOUT_REQUESTED',
+    title: `Payment Requested by ${traderName}`,
+    message: `${traderName} requested payment of €${amount.toFixed(2)} for job "${job.title}" (${job.jobRef ?? ''}).`,
+    actionUrl: `/jobs/${pr.jobId}`,
+    payload: {
+      jobId: pr.jobId,
+      jobRef: job.jobRef,
+      paymentRequestId: pr.id,
+      invoiceId: pr.invoiceId,
+      amount,
+      traderId,
+      traderName,
+    },
+  }).catch(() => undefined);
 
   // Log to Brisk admin socket channel (admin dashboard real-time feed)
   emitPaymentRequested({
@@ -4252,7 +4310,7 @@ export const requestPayment = async (userId: string, jobId: string) => {
   );
 
   const requests = await loadJobPaymentRequests(job.id, trader.id);
-  const alreadyPaid = sumPaidAmount(requests);
+  const alreadyPaid = getJobPaidAmount({ ...job, paymentRequests: requests });
   const fullBreakdown = computePaymentBreakdown(job);
   const remainingBalance = round2(Math.max(0, fullBreakdown.totalAmount - alreadyPaid));
 
@@ -4276,9 +4334,14 @@ export const requestPayment = async (userId: string, jobId: string) => {
       where: { paymentRequestId: existing.id },
       select: { id: true },
     });
+    const screenPayload = await buildPaymentRequestScreenPayload(job, {
+      preferredCurrency: trader.user.preferredCurrency,
+      country: trader.country,
+    });
     return {
+      ...screenPayload,
       paymentRequestId: existing.id,
-      invoiceId: invoice?.id ?? null,
+      invoiceId: invoice?.id ?? job.booking?.invoice?.id ?? null,
       jobRef: job.jobRef,
       ...fullBreakdown,
       totalAmount: money(existing.totalAmount),
@@ -4291,8 +4354,13 @@ export const requestPayment = async (userId: string, jobId: string) => {
 
   const { breakdown, data, alreadyPaid: paidSoFar } = await buildFullJobPaymentRequestData(job, trader);
 
+  const upfrontPaidInvoiceId =
+    isPaidUpfrontInFull(job) && job.booking?.invoice?.id
+      ? job.booking.invoice.id
+      : null;
+
   const paymentRequest = await prisma.$transaction(async (tx) => {
-    const pr = await createPaymentRequest(tx, data);
+    const pr = await createPaymentRequest(tx, data, upfrontPaidInvoiceId);
     // Job moves to COMPLETED immediately — Brisk is now responsible for paying the trader.
     // The customer should not be shown a "Payment Pending" screen; the job is done from their perspective.
     await tx.job.update({
@@ -4312,7 +4380,22 @@ export const requestPayment = async (userId: string, jobId: string) => {
   // Notify Brisk admin that the trader has submitted a payment request (not the customer).
   await notifyBriskPaymentRequest(trader.id, paymentRequest, job);
 
+  const screenPayload = await buildPaymentRequestScreenPayload(
+    {
+      ...job,
+      paymentRequests: [
+        ...(job.paymentRequests ?? []),
+        paymentRequest as unknown as (typeof job.paymentRequests)[number],
+      ],
+    },
+    {
+      preferredCurrency: trader.user.preferredCurrency,
+      country: trader.country,
+    }
+  );
+
   return {
+    ...screenPayload,
     paymentRequestId: paymentRequest.id,
     invoiceId: paymentRequest.invoiceId,
     jobRef: job.jobRef,

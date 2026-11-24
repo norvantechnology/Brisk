@@ -1752,11 +1752,19 @@ const buildCustomerJobView = async (
       (upfrontInvoice && isSiteVisit ? money(upfrontInvoice.serviceCharge) : 0)
   );
 
+  const fullJobRequest = requests.find((r) => r.type === 'FULL_JOB');
+  const isUpfrontFullCovered = Boolean(upfrontInvoice && !isSiteVisit && fullJobRequest);
+
   const serviceFee = hasPaymentRequests
-    ? round2(
-        sum(requests, (r) => r.serviceCharge) +
-          (upfrontInvoice && !isSiteVisit ? money(upfrontInvoice.serviceCharge) : 0)
-      )
+    ? (isUpfrontFullCovered
+        ? round2(
+            money(upfrontInvoice.serviceCharge) +
+              sum(requests.filter((r) => r.type !== 'FULL_JOB'), (r) => r.serviceCharge)
+          )
+        : round2(
+            sum(requests, (r) => r.serviceCharge) +
+              (upfrontInvoice && !isSiteVisit ? money(upfrontInvoice.serviceCharge) : 0)
+          ))
     : round2(invoiceData ? invoiceData.serviceCharge : 0);
 
   // Platform Fee is flat €10.00 (+VAT) per job — deduplicate across requests and booking invoice
@@ -1772,7 +1780,12 @@ const buildCustomerJobView = async (
     : (invoiceData ? invoiceData.discount : 0);
 
   const vatAmount = hasPaymentRequests
-    ? round2(sum(requests, (r) => r.vatAmount) + (upfrontInvoice ? money(upfrontInvoice.tax) : 0))
+    ? (isUpfrontFullCovered
+        ? round2(
+            money(upfrontInvoice.tax) +
+              sum(requests.filter((r) => r.type !== 'FULL_JOB'), (r) => r.vatAmount)
+          )
+        : round2(sum(requests, (r) => r.vatAmount) + (upfrontInvoice ? money(upfrontInvoice.tax) : 0)))
     : round2(invoice ? money(invoice.tax) : (invoiceData ? invoiceData.tax : 0));
 
   const paidRequests = requests.filter((r) => r.status === 'PAID');
@@ -1780,11 +1793,17 @@ const buildCustomerJobView = async (
 
   const totalPaid = round2(
     (upfrontInvoice ? money(upfrontInvoice.totalAmount) : (invoice && invoice.status === InvoiceStatus.PAID && !hasPaymentRequests ? money(invoice.totalAmount) : 0)) +
-      sum(paidRequests, (r) => r.totalAmount)
+      sum(
+        paidRequests.filter((r) => !(isUpfrontFullCovered && r.type === 'FULL_JOB')),
+        (r) => r.totalAmount
+      )
   );
   const amountDue = round2(
     (unpaidInvoice ? money(unpaidInvoice.totalAmount) : (invoice && invoice.status === InvoiceStatus.UNPAID && !hasPaymentRequests ? money(invoice.totalAmount) : 0)) +
-      sum(sentRequests, (r) => r.totalAmount)
+      sum(
+        sentRequests.filter((r) => !(isUpfrontFullCovered && r.type === 'FULL_JOB')),
+        (r) => r.totalAmount
+      )
   );
   const vatBase = serviceFee + materialsTotal + processingFee - discount;
   const vatPercentage = vatBase > 0 ? round2((vatAmount / vatBase) * 100) : 0;
@@ -2588,8 +2607,9 @@ export const publishJob = async (
     // Pay path → PAYMENT_PENDING until Payment Successful.
     // Direct hire or open marketplace → PUBLISHED (live).
     const willCreateInvoice = Boolean(
-      (isSiteVisit && (siteVisitFeeRaw ?? 0) > 0) ||
-      (existing.offerId && traderId && serviceChargeRaw != null)
+      traderId &&
+        ((isSiteVisit && (siteVisitFeeRaw ?? 0) > 0) ||
+          (existing.offerId && serviceChargeRaw != null))
     );
     const job = await tx.job.update({
       where: { id: jobId },

@@ -224,6 +224,9 @@ export const resolveJobPaymentDetails = (job: JobPaymentSource | null | undefine
   if (job.paymentRequests && Array.isArray(job.paymentRequests)) {
     for (const r of job.paymentRequests) {
       if (r.status !== TraderPaymentRequestStatus.CANCELLED && r.status !== 'CANCELLED') {
+        if (upfrontInvoice?.status === InvoiceStatus.PAID && r.type === TraderPaymentRequestType.FULL_JOB) {
+          continue;
+        }
         totalAmount += money(r.totalAmount);
       }
     }
