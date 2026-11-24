@@ -2,7 +2,6 @@ import {
   ActorType,
   JobStatus,
   Prisma,
-  QuoteStatus,
   TraderOnboardingStatus,
   TraderType,
   UserRole,
