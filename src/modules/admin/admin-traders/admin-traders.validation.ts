@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 import { VerificationStatus } from '@prisma/client';
 import { sortByParam, sortOrderParam } from '../../../utils/list-sort';
@@ -69,10 +70,10 @@ export const traderFilterSchema = z.object({
     sortBy: sortByParam(ADMIN_TRADER_SORT_FIELDS),
     sortOrder: sortOrderParam,
   })
-  .refine((q) => q.minRating === undefined || q.maxRating === undefined || q.minRating <= q.maxRating, {
-    message: 'minRating cannot be greater than maxRating.',
-    path: ['minRating'],
-  }),
+    .refine((q) => q.minRating === undefined || q.maxRating === undefined || q.minRating <= q.maxRating, {
+      message: 'minRating cannot be greater than maxRating.',
+      path: ['minRating'],
+    }),
 });
 
 /** Optional date window for newTraders on GET /admin/traders/stats. */
