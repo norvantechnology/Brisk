@@ -22,59 +22,51 @@ export async function seedAdmin(prisma: PrismaClient): Promise<void> {
 
   // Ensure brisktrader@gmail.com is fully active and verified
   try {
-    const user = await prisma.user.findFirst({
-      where: { email: { equals: 'brisktrader@gmail.com', mode: 'insensitive' } },
-    });
-    if (user) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          status: UserStatus.ACTIVE,
-          emailVerified: true,
-          mobileVerified: true,
-          preferredCurrency: 'EUR',
-          country: 'Ireland',
-        },
+    const passwordHash = await bcrypt.hash('Password1!', 10);
+    const traderEmails = ['brisktrader@gmail.com', 'dipen@gmail.com', 'trader@brisk.com'];
+    for (const email of traderEmails) {
+      const user = await prisma.user.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
       });
-
-      const trader = await prisma.trader.findUnique({
-        where: { userId: user.id },
-      });
-      if (trader) {
-        await prisma.trader.update({
-          where: { id: trader.id },
+      if (user) {
+        await prisma.user.update({
+          where: { id: user.id },
           data: {
-            status: 'active',
-            verificationStatus: VerificationStatus.VERIFIED,
-            onboardingStatus: TraderOnboardingStatus.APPROVED,
+            passwordHash,
+            status: UserStatus.ACTIVE,
+            emailVerified: true,
+            mobileVerified: true,
+            preferredCurrency: 'EUR',
             country: 'Ireland',
-            city: trader.city || 'Dublin',
-            rejectionReason: null,
           },
         });
-      } else {
-        await prisma.trader.create({
-          data: {
-            userId: user.id,
-            businessName: user.fullName || 'Brisk Trader',
-            status: 'active',
-            verificationStatus: VerificationStatus.VERIFIED,
-            onboardingStatus: TraderOnboardingStatus.APPROVED,
-            country: 'Ireland',
-            city: 'Dublin',
-          },
+
+        const trader = await prisma.trader.findUnique({
+          where: { userId: user.id },
+        });
+        if (trader) {
+          await prisma.trader.update({
+            where: { id: trader.id },
+            data: {
+              status: 'active',
+              verificationStatus: VerificationStatus.VERIFIED,
+              onboardingStatus: TraderOnboardingStatus.APPROVED,
+              country: 'Ireland',
+              city: trader.city || 'Dublin',
+              rejectionReason: null,
+            },
+          });
+        }
+
+        await prisma.traderRegistration.updateMany({
+          where: { userId: user.id },
+          data: { status: 'approved' },
         });
       }
-
-      await prisma.traderRegistration.updateMany({
-        where: { userId: user.id },
-        data: { status: 'approved' },
-      });
-
-      logger.info('✅ brisktrader@gmail.com account verified and activated.');
     }
+    logger.info('✅ Test traders verified and password set to Password1!.');
   } catch (err) {
-    logger.warn('Failed to activate brisktrader@gmail.com', { err });
+    logger.warn('Failed to ensure test traders active', err);
   }
 
   // Ensure test images are set on General plumbing subcategory for Trending Now testing
