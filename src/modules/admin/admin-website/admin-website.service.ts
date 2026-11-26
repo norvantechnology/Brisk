@@ -490,6 +490,7 @@ export type ArticleInput = {
   author_role?: string | null;
   reading_time?: string | null;
   publish_date?: string | null;
+  scheduled_publish_at?: string | null;
   publish_status: string;
   is_featured: boolean;
   seo_title?: string | null;
@@ -585,6 +586,23 @@ export const createArticle = async (
   const publishedAt = parsePublishDate(input.publish_date, status, true);
   const isFeatured = input.is_featured;
 
+  let scheduledPublishAt: Date | null = null;
+  if (status === CmsPublishStatus.SCHEDULED) {
+    if (input.scheduled_publish_at) {
+      const parsed = new Date(input.scheduled_publish_at);
+      if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
+        throw new BadRequestError('scheduled_publish_at must be a valid future date/time.');
+      }
+      scheduledPublishAt = parsed;
+    } else if (publishedAt && publishedAt.getTime() > Date.now()) {
+      scheduledPublishAt = publishedAt;
+    } else {
+      throw new BadRequestError('scheduled_publish_at is required for scheduled articles.');
+    }
+  } else if (status === CmsPublishStatus.PUBLISHED) {
+    scheduledPublishAt = null;
+  }
+
   const post = await prisma.$transaction(async (tx) => {
     if (isFeatured) {
       await tx.cmsBlogPost.updateMany({
@@ -605,6 +623,7 @@ export const createArticle = async (
         authorRole: input.author_role ?? null,
         readingTime: input.reading_time ?? null,
         publishedAt,
+        scheduledPublishAt,
         status,
         isFeatured,
         seoTitle: input.seo_title ?? null,
@@ -661,6 +680,25 @@ export const updateArticle = async (
 
   const publishedAt = parsePublishDate(input.publish_date, status, true);
 
+  let scheduledPublishAt: Date | null | undefined = undefined;
+  if (status === CmsPublishStatus.SCHEDULED) {
+    if (input.scheduled_publish_at) {
+      const parsed = new Date(input.scheduled_publish_at);
+      if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
+        throw new BadRequestError('scheduled_publish_at must be a valid future date/time.');
+      }
+      scheduledPublishAt = parsed;
+    } else if (publishedAt && publishedAt.getTime() > Date.now()) {
+      scheduledPublishAt = publishedAt;
+    } else if ((existing as any).scheduledPublishAt && (existing as any).scheduledPublishAt.getTime() > Date.now()) {
+      scheduledPublishAt = (existing as any).scheduledPublishAt;
+    } else {
+      throw new BadRequestError('scheduled_publish_at is required for scheduled articles.');
+    }
+  } else if (status === CmsPublishStatus.PUBLISHED || status === CmsPublishStatus.DRAFT) {
+    scheduledPublishAt = null;
+  }
+
   const post = await prisma.$transaction(async (tx) => {
     if (input.is_featured) {
       await tx.cmsBlogPost.updateMany({
@@ -682,6 +720,7 @@ export const updateArticle = async (
         authorRole: input.author_role ?? null,
         readingTime: input.reading_time ?? null,
         publishedAt,
+        ...(scheduledPublishAt !== undefined ? { scheduledPublishAt } : {}),
         status,
         isFeatured: input.is_featured,
         seoTitle: input.seo_title ?? null,
@@ -878,6 +917,79 @@ export const removeArticleCoverImage = async (
   return serializeArticle(post);
 };
 
+export const scheduleArticle = async (
+  adminId: string,
+  adminLabel: string,
+  id: string,
+  scheduledPublishAtStr: string
+) => {
+  const existing = await prisma.cmsBlogPost.findFirst({
+    where: { id, ...notDeletedPosts },
+  });
+  if (!existing) {
+    throw new NotFoundError('Blog article not found.');
+  }
+
+  const scheduledPublishAt = new Date(scheduledPublishAtStr);
+  if (Number.isNaN(scheduledPublishAt.getTime()) || scheduledPublishAt.getTime() <= Date.now()) {
+    throw new BadRequestError('scheduled_publish_at must be a valid future date/time.');
+  }
+
+  const post = await prisma.cmsBlogPost.update({
+    where: { id },
+    data: {
+      status: CmsPublishStatus.SCHEDULED,
+      scheduledPublishAt,
+      publishedAt: null,
+    },
+    include: articleInclude,
+  });
+
+  await writeAudit(
+    'WEBSITE_BLOG_ARTICLE_SCHEDULED',
+    adminId,
+    adminLabel,
+    'CmsBlogPost',
+    post.id,
+    `Scheduled blog article "${post.title}" for ${scheduledPublishAt.toISOString()}.`
+  );
+
+  return serializeArticle(post);
+};
+
+export const cancelArticleSchedule = async (
+  adminId: string,
+  adminLabel: string,
+  id: string
+) => {
+  const existing = await prisma.cmsBlogPost.findFirst({
+    where: { id, ...notDeletedPosts },
+  });
+  if (!existing) {
+    throw new NotFoundError('Blog article not found.');
+  }
+
+  const post = await prisma.cmsBlogPost.update({
+    where: { id },
+    data: {
+      status: CmsPublishStatus.DRAFT,
+      scheduledPublishAt: null,
+    },
+    include: articleInclude,
+  });
+
+  await writeAudit(
+    'WEBSITE_BLOG_ARTICLE_SCHEDULE_CANCELLED',
+    adminId,
+    adminLabel,
+    'CmsBlogPost',
+    post.id,
+    `Cancelled schedule for blog article "${post.title}". Moved to draft.`
+  );
+
+  return serializeArticle(post);
+};
+
 export const bulkUpdateArticleStatus = async (
   adminId: string,
   adminLabel: string,
@@ -950,6 +1062,7 @@ export type SectionInput = {
   graphic_image_url?: string | null;
   icon?: string | null;
   publishing_status: string;
+  scheduled_publish_at?: string | null;
   cta_button_text?: string | null;
   cta_url?: string | null;
   sort_order: number;
@@ -1073,6 +1186,21 @@ export const createSection = async (
   }
 
   const status = fromApiPublishStatus(input.publishing_status);
+  let scheduledPublishAt: Date | null = null;
+  let publishedAt: Date | null = null;
+
+  if (status === CmsPublishStatus.SCHEDULED) {
+    if (!input.scheduled_publish_at) {
+      throw new BadRequestError('scheduled_publish_at is required for scheduled sections.');
+    }
+    const parsed = new Date(input.scheduled_publish_at);
+    if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
+      throw new BadRequestError('scheduled_publish_at must be a valid future date/time.');
+    }
+    scheduledPublishAt = parsed;
+  } else if (status === CmsPublishStatus.PUBLISHED) {
+    publishedAt = new Date();
+  }
 
   let guide;
   try {
@@ -1087,6 +1215,8 @@ export const createSection = async (
         graphicImageUrl: input.graphic_image_url ?? null,
         iconName: input.icon ?? null,
         status,
+        scheduledPublishAt,
+        publishedAt,
         ctaButtonText: input.cta_button_text ?? null,
         ctaUrl: input.cta_url ?? null,
         sortOrder: input.sort_order,
@@ -1174,6 +1304,27 @@ export const updateSection = async (
   }
 
   const status = fromApiPublishStatus(input.publishing_status);
+  let scheduledPublishAt: Date | null | undefined = undefined;
+  let publishedAt: Date | null | undefined = undefined;
+
+  if (status === CmsPublishStatus.SCHEDULED) {
+    if (input.scheduled_publish_at) {
+      const parsed = new Date(input.scheduled_publish_at);
+      if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
+        throw new BadRequestError('scheduled_publish_at must be a valid future date/time.');
+      }
+      scheduledPublishAt = parsed;
+    } else if ((existing as any).scheduledPublishAt && (existing as any).scheduledPublishAt.getTime() > Date.now()) {
+      scheduledPublishAt = (existing as any).scheduledPublishAt;
+    } else {
+      throw new BadRequestError('scheduled_publish_at is required for scheduled sections.');
+    }
+  } else if (status === CmsPublishStatus.PUBLISHED) {
+    scheduledPublishAt = null;
+    publishedAt = (existing as any).publishedAt ?? new Date();
+  } else if (status === CmsPublishStatus.DRAFT) {
+    scheduledPublishAt = null;
+  }
 
   const guide = await prisma.$transaction(async (tx) => {
     if (input.content_blocks) {
@@ -1202,6 +1353,8 @@ export const updateSection = async (
           : {}),
         iconName: input.icon ?? null,
         status,
+        ...(scheduledPublishAt !== undefined ? { scheduledPublishAt } : {}),
+        ...(publishedAt !== undefined ? { publishedAt } : {}),
         ctaButtonText: input.cta_button_text ?? null,
         ctaUrl: input.cta_url ?? null,
         sortOrder: input.sort_order,
@@ -1280,6 +1433,89 @@ export const updateSectionStatus = async (
     'CmsKnowledgeGuide',
     guide.id,
     `Set Knowledge Hub section status to ${publishingStatus}: "${guide.title}".`
+  );
+
+  return serializeSection(guide);
+};
+
+export const scheduleSection = async (
+  adminId: string,
+  adminLabel: string,
+  id: string,
+  scheduledPublishAtStr: string
+) => {
+  const existing = await prisma.cmsKnowledgeGuide.findFirst({
+    where: { id, ...notDeletedGuides },
+  });
+  if (!existing) {
+    throw new NotFoundError('Knowledge Hub section not found.');
+  }
+
+  const scheduledPublishAt = new Date(scheduledPublishAtStr);
+  if (Number.isNaN(scheduledPublishAt.getTime()) || scheduledPublishAt.getTime() <= Date.now()) {
+    throw new BadRequestError('scheduled_publish_at must be a valid future date/time.');
+  }
+
+  const guide = await prisma.cmsKnowledgeGuide.update({
+    where: { id },
+    data: {
+      status: CmsPublishStatus.SCHEDULED,
+      scheduledPublishAt,
+      publishedAt: null,
+    },
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      subcategory: { select: { id: true, name: true, slug: true } },
+      blocks: { orderBy: { sortOrder: 'asc' } },
+      _count: { select: { blocks: true } },
+    },
+  });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_SECTION_SCHEDULED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeGuide',
+    guide.id,
+    `Scheduled Knowledge Hub section "${guide.title}" for ${scheduledPublishAt.toISOString()}.`
+  );
+
+  return serializeSection(guide);
+};
+
+export const cancelSectionSchedule = async (
+  adminId: string,
+  adminLabel: string,
+  id: string
+) => {
+  const existing = await prisma.cmsKnowledgeGuide.findFirst({
+    where: { id, ...notDeletedGuides },
+  });
+  if (!existing) {
+    throw new NotFoundError('Knowledge Hub section not found.');
+  }
+
+  const guide = await prisma.cmsKnowledgeGuide.update({
+    where: { id },
+    data: {
+      status: CmsPublishStatus.DRAFT,
+      scheduledPublishAt: null,
+    },
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      subcategory: { select: { id: true, name: true, slug: true } },
+      blocks: { orderBy: { sortOrder: 'asc' } },
+      _count: { select: { blocks: true } },
+    },
+  });
+
+  await writeAudit(
+    'WEBSITE_KNOWLEDGE_SECTION_SCHEDULE_CANCELLED',
+    adminId,
+    adminLabel,
+    'CmsKnowledgeGuide',
+    guide.id,
+    `Cancelled schedule for Knowledge Hub section "${guide.title}". Moved to draft.`
   );
 
   return serializeSection(guide);

@@ -1736,6 +1736,8 @@ model CmsKnowledgeGuide {
   ctaUrl          String?          @map("cta_url")
   sortOrder       Int              @default(0) @map("sort_order")
   status          CmsPublishStatus @default(DRAFT)
+  scheduledPublishAt DateTime?     @map("scheduled_publish_at")
+  publishedAt     DateTime?        @map("published_at")
   seoTitle        String?          @map("seo_title")
   seoDescription  String?          @map("seo_description") @db.Text
   deletedAt       DateTime?        @map("deleted_at")
@@ -1797,6 +1799,7 @@ model CmsBlogPost {
   authorRole         String?          @map("author_role")
   readingTime        String?          @map("reading_time")
   publishedAt        DateTime?        @map("published_at")
+  scheduledPublishAt DateTime?        @map("scheduled_publish_at")
   status             CmsPublishStatus @default(DRAFT)
   isFeatured         Boolean          @default(false) @map("is_featured")
   seoTitle           String?          @map("seo_title")

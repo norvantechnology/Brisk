@@ -71,14 +71,23 @@ const livePublishWhere = (): Prisma.CmsBlogPostWhereInput => ({
     { status: CmsPublishStatus.PUBLISHED },
     {
       status: CmsPublishStatus.SCHEDULED,
-      publishedAt: { lte: new Date() },
+      OR: [
+        { scheduledPublishAt: { lte: new Date() } },
+        { publishedAt: { lte: new Date() } },
+      ],
     },
   ],
 });
 
 const liveGuideWhere = (): Prisma.CmsKnowledgeGuideWhereInput => ({
   deletedAt: null,
-  status: CmsPublishStatus.PUBLISHED,
+  OR: [
+    { status: CmsPublishStatus.PUBLISHED },
+    {
+      status: CmsPublishStatus.SCHEDULED,
+      scheduledPublishAt: { lte: new Date() },
+    },
+  ],
 });
 
 const blogCategorySelect = {

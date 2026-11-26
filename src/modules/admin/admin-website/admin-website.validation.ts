@@ -156,6 +156,7 @@ const articleBodyBase = {
   author_role: z.string().max(150).optional().nullable(),
   reading_time: z.string().max(50).optional().nullable(),
   publish_date: z.string().optional().nullable(),
+  scheduled_publish_at: z.string().optional().nullable(),
   publish_status: publishStatusEnum,
   is_featured: z.boolean(),
   seo_title: z.string().max(255).optional().nullable(),
@@ -175,6 +176,13 @@ export const patchArticleStatusSchema = z.object({
   params: z.object({ id: uuid }),
   body: z.object({
     publish_status: publishStatusEnum,
+  }),
+});
+
+export const scheduleContentSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({
+    scheduled_publish_at: z.string().min(1, 'scheduled_publish_at date/time is required.'),
   }),
 });
 
@@ -256,6 +264,7 @@ const sectionBodyBase = {
   /** Icon name or uploaded media URL (cms_item_icon / similar). Alias: section_icon. */
   icon: mediaIconOrUrl,
   publishing_status: publishStatusEnum,
+  scheduled_publish_at: z.string().optional().nullable(),
   cta_button_text: z.string().max(100).optional().nullable(),
   cta_url: z.string().max(500).optional().nullable(),
   sort_order: z.number().int().min(0),

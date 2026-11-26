@@ -16,6 +16,7 @@ import {
   reorderBlocksSchema,
   bulkSectionStatusSchema,
   bulkSectionDeleteSchema,
+  scheduleContentSchema,
   listKnowledgeCategoriesQuerySchema,
   createKnowledgeCategorySchema,
   updateKnowledgeCategorySchema,
@@ -862,6 +863,113 @@ router.patch(
   '/sections/:id/status',
   validate(patchSectionStatusSchema),
   controller.patchSectionStatus
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/sections/{id}/schedule:
+ *   post:
+ *     summary: Schedule a Knowledge Hub section for future publishing
+ *     description: Sets status to SCHEDULED and sets scheduled_publish_at. Auto-published when date/time arrives.
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scheduled_publish_at]
+ *             properties:
+ *               scheduled_publish_at:
+ *                 type: string
+ *                 format: date-time
+ *                 example: '2026-12-05T10:00:00.000Z'
+ *     responses:
+ *       200:
+ *         description: Knowledge Hub section scheduled successfully.
+ *   patch:
+ *     summary: Reschedule a Knowledge Hub section to a different date/time
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scheduled_publish_at]
+ *             properties:
+ *               scheduled_publish_at:
+ *                 type: string
+ *                 format: date-time
+ *                 example: '2026-12-10T14:30:00.000Z'
+ *     responses:
+ *       200:
+ *         description: Knowledge Hub section rescheduled successfully.
+ *   delete:
+ *     summary: Cancel a scheduled Knowledge Hub section (reverts to draft)
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Scheduled Knowledge Hub section cancelled and moved back to draft.
+ */
+router.post(
+  '/sections/:id/schedule',
+  validate(scheduleContentSchema),
+  controller.scheduleSection
+);
+router.patch(
+  '/sections/:id/schedule',
+  validate(scheduleContentSchema),
+  controller.scheduleSection
+);
+router.delete(
+  '/sections/:id/schedule',
+  validate(idParamSchema),
+  controller.cancelSectionSchedule
+);
+
+/**
+ * @swagger
+ * /admin/knowledge-hub/sections/{id}/cancel-schedule:
+ *   post:
+ *     summary: Cancel a scheduled Knowledge Hub section (alias for DELETE schedule, reverts to draft)
+ *     tags: ['Admin / Website / Knowledge Hub']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Scheduled Knowledge Hub section cancelled and moved back to draft.
+ */
+router.post(
+  '/sections/:id/cancel-schedule',
+  validate(idParamSchema),
+  controller.cancelSectionSchedule
 );
 
 /**

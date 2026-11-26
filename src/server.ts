@@ -6,6 +6,7 @@ import { logger } from './utils/logger';
 import { ensureUploadRoot } from './modules/uploads/storage/local.storage';
 import { initSocketServer } from './sockets/socket-server';
 import { startDocumentExpiryReminderScheduler } from './services/document-expiry-reminder.service';
+import { startContentScheduler } from './modules/admin/admin-website/content-scheduler.service';
 import { startPlatformSettingsSync } from './modules/settings/platform-settings.service';
 import { seedAdmin } from './database/seeders/admin.seed';
 import { seedPropertyModule } from './database/seeders/property.seed';
@@ -52,6 +53,7 @@ const startServer = async () => {
     );
     logger.info('Realtime: Socket.IO available at /socket.io');
     startDocumentExpiryReminderScheduler();
+    startContentScheduler();
   });
 
   const shutdown = async (signal: string) => {

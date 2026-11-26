@@ -12,6 +12,7 @@ import {
   coverImageSchema,
   bulkArticleStatusSchema,
   bulkArticleDeleteSchema,
+  scheduleContentSchema,
 } from './admin-website.validation';
 
 const router = Router();
@@ -276,6 +277,97 @@ router.delete('/:id', validate(idParamSchema), controller.deleteArticle);
  *         description: Blog article status updated successfully.
  */
 router.patch('/:id/status', validate(patchArticleStatusSchema), controller.patchArticleStatus);
+
+/**
+ * @swagger
+ * /admin/blog/articles/{id}/schedule:
+ *   post:
+ *     summary: Schedule a blog article for future publishing
+ *     description: Sets status to SCHEDULED and sets scheduled_publish_at. Auto-published when date/time arrives.
+ *     tags: ['Admin / Website / Blog Articles']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scheduled_publish_at]
+ *             properties:
+ *               scheduled_publish_at:
+ *                 type: string
+ *                 format: date-time
+ *                 example: '2026-12-05T10:00:00.000Z'
+ *     responses:
+ *       200:
+ *         description: Blog article scheduled successfully.
+ *   patch:
+ *     summary: Reschedule a blog article to a different date/time
+ *     tags: ['Admin / Website / Blog Articles']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scheduled_publish_at]
+ *             properties:
+ *               scheduled_publish_at:
+ *                 type: string
+ *                 format: date-time
+ *                 example: '2026-12-10T14:30:00.000Z'
+ *     responses:
+ *       200:
+ *         description: Blog article rescheduled successfully.
+ *   delete:
+ *     summary: Cancel a scheduled blog article (reverts to draft)
+ *     tags: ['Admin / Website / Blog Articles']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Scheduled blog article cancelled and moved back to draft.
+ */
+router.post('/:id/schedule', validate(scheduleContentSchema), controller.scheduleArticle);
+router.patch('/:id/schedule', validate(scheduleContentSchema), controller.scheduleArticle);
+router.delete('/:id/schedule', validate(idParamSchema), controller.cancelArticleSchedule);
+
+/**
+ * @swagger
+ * /admin/blog/articles/{id}/cancel-schedule:
+ *   post:
+ *     summary: Cancel a scheduled blog article (alias for DELETE schedule, reverts to draft)
+ *     tags: ['Admin / Website / Blog Articles']
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Scheduled blog article cancelled and moved back to draft.
+ */
+router.post('/:id/cancel-schedule', validate(idParamSchema), controller.cancelArticleSchedule);
 
 /**
  * @swagger
