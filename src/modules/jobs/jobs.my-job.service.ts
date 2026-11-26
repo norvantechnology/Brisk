@@ -101,6 +101,8 @@ export const getJobQuoteDetail = async (
           traderId: true,
           siteVisitRequested: true,
           siteVisitFee: true,
+          categoryId: true,
+          subcategoryId: true,
           offerId: true,
           offer: {
             select: {
