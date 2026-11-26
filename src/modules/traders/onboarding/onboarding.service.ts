@@ -815,9 +815,9 @@ export const saveCategories = async (
 
   if (options?.allowAfterSubmit) {
     // Profile: trades are never deleted. Selected → active.
-    // Only deactivate omitted trades if `replace === true` is explicitly requested by caller.
-    // Default (merge) keeps previously active categories active.
-    const replace = (input as { replace?: boolean }).replace === true;
+    // Default (replace !== false) deactivates omitted trades so selection matches categoryIds.
+    // Pass replace: false explicitly for merge mode without deactivating unselected trades.
+    const replace = (input as { replace?: boolean }).replace !== false;
     const existingActiveIds = new Set(
       trader.categories.filter((c) => c.isActive).map((c) => c.categoryId)
     );
