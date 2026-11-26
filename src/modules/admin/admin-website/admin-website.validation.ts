@@ -176,6 +176,7 @@ export const patchArticleStatusSchema = z.object({
   params: z.object({ id: uuid }),
   body: z.object({
     publish_status: publishStatusEnum,
+    publish_date: z.string().optional().nullable(),
   }),
 });
 
@@ -264,6 +265,7 @@ const sectionBodyBase = {
   /** Icon name or uploaded media URL (cms_item_icon / similar). Alias: section_icon. */
   icon: mediaIconOrUrl,
   publishing_status: publishStatusEnum,
+  publish_date: z.string().optional().nullable(),
   scheduled_publish_at: z.string().optional().nullable(),
   cta_button_text: z.string().max(100).optional().nullable(),
   cta_url: z.string().max(500).optional().nullable(),
@@ -286,6 +288,7 @@ export const patchSectionStatusSchema = z.object({
   params: z.object({ id: uuid }),
   body: z.object({
     publishing_status: publishStatusEnum,
+    publish_date: z.string().optional().nullable(),
   }),
 });
 

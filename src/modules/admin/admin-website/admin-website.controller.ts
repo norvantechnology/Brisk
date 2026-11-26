@@ -317,59 +317,13 @@ export const patchArticleStatus = async (
       adminId,
       adminLabel,
       req.params.id,
-      req.body.publish_status
+      req.body.publish_status,
+      req.body.publish_date
     );
     sendResponse({
       res,
       statusCode: 200,
       message: 'Blog article status updated successfully.',
-      data: article,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const scheduleArticle = async (
-  req: AuthenticatedAdminRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { adminId, adminLabel } = adminContext(req);
-    const article = await websiteService.scheduleArticle(
-      adminId,
-      adminLabel,
-      req.params.id,
-      req.body.scheduled_publish_at
-    );
-    sendResponse({
-      res,
-      statusCode: 200,
-      message: 'Blog article scheduled successfully.',
-      data: article,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const cancelArticleSchedule = async (
-  req: AuthenticatedAdminRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { adminId, adminLabel } = adminContext(req);
-    const article = await websiteService.cancelArticleSchedule(
-      adminId,
-      adminLabel,
-      req.params.id
-    );
-    sendResponse({
-      res,
-      statusCode: 200,
-      message: 'Scheduled blog article cancelled and moved back to draft.',
       data: article,
     });
   } catch (error) {
@@ -613,59 +567,13 @@ export const patchSectionStatus = async (
       adminId,
       adminLabel,
       req.params.id,
-      req.body.publishing_status
+      req.body.publishing_status,
+      req.body.publish_date
     );
     sendResponse({
       res,
       statusCode: 200,
       message: 'Knowledge Hub section status updated successfully.',
-      data: section,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const scheduleSection = async (
-  req: AuthenticatedAdminRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { adminId, adminLabel } = adminContext(req);
-    const section = await websiteService.scheduleSection(
-      adminId,
-      adminLabel,
-      req.params.id,
-      req.body.scheduled_publish_at
-    );
-    sendResponse({
-      res,
-      statusCode: 200,
-      message: 'Knowledge Hub section scheduled successfully.',
-      data: section,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const cancelSectionSchedule = async (
-  req: AuthenticatedAdminRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { adminId, adminLabel } = adminContext(req);
-    const section = await websiteService.cancelSectionSchedule(
-      adminId,
-      adminLabel,
-      req.params.id
-    );
-    sendResponse({
-      res,
-      statusCode: 200,
-      message: 'Scheduled Knowledge Hub section cancelled and moved back to draft.',
       data: section,
     });
   } catch (error) {

@@ -16,7 +16,6 @@ import {
   reorderBlocksSchema,
   bulkSectionStatusSchema,
   bulkSectionDeleteSchema,
-  scheduleContentSchema,
   listKnowledgeCategoriesQuerySchema,
   createKnowledgeCategorySchema,
   updateKnowledgeCategorySchema,
@@ -309,6 +308,16 @@ router.get('/sections', validate(listSectionsQuerySchema), controller.listSectio
  *                 short_description: "An introduction to how Brisk connects customers and traders."
  *                 publishing_status: "draft"
  *                 sort_order: 2
+ *             scheduledSection:
+ *               summary: Create a scheduled section (auto-published at publish_date)
+ *               value:
+ *                 category_id: "e076d231-b0da-46cb-b60d-8aa9fbb8ce26"
+ *                 section_title: "Winter Energy Saving Guide"
+ *                 slug: "winter-energy-saving-guide"
+ *                 short_description: "Guide to optimizing home energy consumption during winter."
+ *                 publishing_status: "scheduled"
+ *                 publish_date: "2026-12-05T10:00:00.000Z"
+ *                 sort_order: 3
  *     responses:
  *       201:
  *         description: Knowledge Hub section created successfully.
@@ -855,6 +864,7 @@ router.delete('/sections/:id', validate(idParamSchema), controller.deleteSection
  *             required: [publishing_status]
  *             properties:
  *               publishing_status: { type: string, enum: [draft, scheduled, published, archived] }
+ *               publish_date: { type: string, format: date-time, example: '2026-12-05T10:00:00.000Z', description: 'Required when scheduling to a future date/time.' }
  *     responses:
  *       200:
  *         description: Knowledge Hub section status updated successfully.
@@ -863,113 +873,6 @@ router.patch(
   '/sections/:id/status',
   validate(patchSectionStatusSchema),
   controller.patchSectionStatus
-);
-
-/**
- * @swagger
- * /admin/knowledge-hub/sections/{id}/schedule:
- *   post:
- *     summary: Schedule a Knowledge Hub section for future publishing
- *     description: Sets status to SCHEDULED and sets scheduled_publish_at. Auto-published when date/time arrives.
- *     tags: ['Admin / Website / Knowledge Hub']
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [scheduled_publish_at]
- *             properties:
- *               scheduled_publish_at:
- *                 type: string
- *                 format: date-time
- *                 example: '2026-12-05T10:00:00.000Z'
- *     responses:
- *       200:
- *         description: Knowledge Hub section scheduled successfully.
- *   patch:
- *     summary: Reschedule a Knowledge Hub section to a different date/time
- *     tags: ['Admin / Website / Knowledge Hub']
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [scheduled_publish_at]
- *             properties:
- *               scheduled_publish_at:
- *                 type: string
- *                 format: date-time
- *                 example: '2026-12-10T14:30:00.000Z'
- *     responses:
- *       200:
- *         description: Knowledge Hub section rescheduled successfully.
- *   delete:
- *     summary: Cancel a scheduled Knowledge Hub section (reverts to draft)
- *     tags: ['Admin / Website / Knowledge Hub']
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200:
- *         description: Scheduled Knowledge Hub section cancelled and moved back to draft.
- */
-router.post(
-  '/sections/:id/schedule',
-  validate(scheduleContentSchema),
-  controller.scheduleSection
-);
-router.patch(
-  '/sections/:id/schedule',
-  validate(scheduleContentSchema),
-  controller.scheduleSection
-);
-router.delete(
-  '/sections/:id/schedule',
-  validate(idParamSchema),
-  controller.cancelSectionSchedule
-);
-
-/**
- * @swagger
- * /admin/knowledge-hub/sections/{id}/cancel-schedule:
- *   post:
- *     summary: Cancel a scheduled Knowledge Hub section (alias for DELETE schedule, reverts to draft)
- *     tags: ['Admin / Website / Knowledge Hub']
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200:
- *         description: Scheduled Knowledge Hub section cancelled and moved back to draft.
- */
-router.post(
-  '/sections/:id/cancel-schedule',
-  validate(idParamSchema),
-  controller.cancelSectionSchedule
 );
 
 /**
