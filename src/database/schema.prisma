@@ -658,6 +658,12 @@ model Category {
   displayOrder    Int      @default(0) @map("display_order")
   status          String   @default("active") // active | inactive
   featured        Boolean  @default(false)
+  /// Custom pricing configuration: overrides global default platform fee when enabled
+  customPricingEnabled    Boolean  @default(false) @map("custom_pricing_enabled")
+  customPricingType       String?  @map("custom_pricing_type") // PERCENTAGE | FIXED
+  customPricingPercentage Decimal? @map("custom_pricing_percentage") @db.Decimal(5, 2)
+  customPricingFixedEur   Decimal? @map("custom_pricing_fixed_eur") @db.Decimal(10, 2)
+  customPricingFixedGbp   Decimal? @map("custom_pricing_fixed_gbp") @db.Decimal(10, 2)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -695,6 +701,12 @@ model Subcategory {
   priceEnteredBy     SubcategoryPriceEnteredBy   @default(CUSTOMER) @map("price_entered_by")
   /// Admin-built Q&A form schema (JSON). Mobile apps render these fields when posting a job.
   qaFormSchema       Json?                       @map("qa_form_schema")
+  /// Custom pricing configuration: overrides category and global default platform fee when enabled
+  customPricingEnabled    Boolean                 @default(false) @map("custom_pricing_enabled")
+  customPricingType       String?                 @map("custom_pricing_type") // PERCENTAGE | FIXED
+  customPricingPercentage Decimal?                @map("custom_pricing_percentage") @db.Decimal(5, 2)
+  customPricingFixedEur   Decimal?                @map("custom_pricing_fixed_eur") @db.Decimal(10, 2)
+  customPricingFixedGbp   Decimal?                @map("custom_pricing_fixed_gbp") @db.Decimal(10, 2)
   createdAt          DateTime                    @default(now()) @map("created_at")
   updatedAt          DateTime                    @updatedAt @map("updated_at")
 

@@ -28,3 +28,40 @@ export const updatePricingConfigSchema = z.object({
 });
 
 export type UpdatePricingConfigInput = z.infer<typeof updatePricingConfigSchema>['body'];
+
+export const customPricingBodySchema = z.object({
+  enabled: z.boolean(),
+  type: z.enum(['PERCENTAGE', 'FIXED']).optional(),
+  percentage: z.coerce.number().min(0).max(100).nullable().optional(),
+  fixedEur: z.coerce.number().min(0).nullable().optional(),
+  fixedGbp: z.coerce.number().min(0).nullable().optional(),
+});
+
+export type CustomPricingBodyInput = z.infer<typeof customPricingBodySchema>;
+
+export const updateCategoryPricingSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid Category ID format.'),
+  }),
+  body: customPricingBodySchema,
+});
+
+export const updateSubcategoryPricingSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid Subcategory ID format.'),
+  }),
+  body: customPricingBodySchema,
+});
+
+export const listCustomPricingQuerySchema = z.object({
+  query: z.object({
+    page: z.coerce.number().int().min(1).optional().default(1),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+    search: z.string().optional(),
+    categoryId: z.string().uuid('Invalid Category ID format.').optional(),
+    customOnly: z.coerce.boolean().optional(),
+  }),
+});
+
+export type ListCustomPricingQueryInput = z.infer<typeof listCustomPricingQuerySchema>['query'];
+

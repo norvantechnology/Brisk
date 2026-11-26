@@ -20,6 +20,7 @@ import {
 import { emitSiteVisitUpdate, pushUserNotification } from '../../sockets/realtime';
 import { createAdminNotifications } from '../admin/admin-notifications/admin-notifications.service';
 import { getPlatformSetting } from '../settings/platform-settings.service';
+import { resolvePricingRuleForJob } from '../admin/admin-pricing/pricing-resolver.service';
 import { logger } from '../../utils/logger';
 import { resolveTimeSlotConfig } from './jobs.form-config';
 import {
@@ -226,6 +227,13 @@ export const getJobQuoteDetail = async (
       )
     : 0;
 
+  const pricingRule = !inv
+    ? await resolvePricingRuleForJob({
+        subcategoryId: job.subcategoryId,
+        categoryId: job.categoryId,
+      })
+    : null;
+
   const bd = inv
     ? {
         serviceCharge: money(inv.serviceCharge),
@@ -244,6 +252,7 @@ export const getJobQuoteDetail = async (
           isTraderVatRegistered: t.isVatRegistered !== false,
           currencyCode: customerCurrency,
           purpose: isSiteVisit ? 'SITE_VISIT_FEE' : 'SERVICE',
+          pricingRule,
         });
         return {
           serviceCharge: calculated.serviceCharge,

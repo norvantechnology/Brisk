@@ -29,6 +29,7 @@ import {
 } from './jobs.form-config';
 import { resolveCategoryIconUrl, resolveSubcategoryIconUrl } from '../categories/categories.serializers';
 import { getPlatformSetting } from '../settings/platform-settings.service';
+import { resolvePricingRuleForJob } from '../admin/admin-pricing/pricing-resolver.service';
 import type {
   CreateJobInput,
   PublishAddressObject,
@@ -175,6 +176,13 @@ export const computeInvoiceBreakdown = (input: {
   currencyCode?: string;
   /** Site visit fee invoices: no platform fee markup (Figma Pay Fee = flat fee). */
   purpose?: 'SERVICE' | 'SITE_VISIT_FEE';
+  /** Optional custom pricing rule (overrides default 10% / global fee). */
+  pricingRule?: {
+    type?: 'PERCENTAGE' | 'FIXED';
+    percentage?: number;
+    fixedEur?: number;
+    fixedGbp?: number;
+  } | null;
 }) => {
   const serviceCharge = round2(input.serviceCharge);
   const traderOfferDiscount = round2(Math.min(input.traderOfferDiscount, serviceCharge));
@@ -212,15 +220,28 @@ export const computeInvoiceBreakdown = (input: {
       : traderStandardVatRate;
   const traderVatAmount = round2(traderNet * traderVatRate);
 
-  // Dynamic Platform Fee from Admin Settings (supports PERCENTAGE or FIXED, EUR or GBP)
-  const feeType = (getPlatformSetting('pricing.platform_fee.type') as string) || 'PERCENTAGE';
+  // Platform Fee: from custom pricing rule (if provided) or Admin Settings (supports PERCENTAGE or FIXED, EUR or GBP)
+  const feeType =
+    input.pricingRule?.type ||
+    (getPlatformSetting('pricing.platform_fee.type') as string) ||
+    'PERCENTAGE';
+  const feePercentage =
+    input.pricingRule?.percentage ??
+    (Number(getPlatformSetting('pricing.platform_fee.percentage')) || 10);
+  const feeFixedEur =
+    input.pricingRule?.fixedEur ??
+    (Number(getPlatformSetting('pricing.platform_fee.fixed_eur')) || 10);
+  const feeFixedGbp =
+    input.pricingRule?.fixedGbp ??
+    (Number(getPlatformSetting('pricing.platform_fee.fixed_gbp')) || 8.5);
+
   const platformFeeGrossPart = isSiteVisit
     ? 0
     : feeType === 'FIXED'
       ? isGbp
-        ? (getPlatformSetting('pricing.platform_fee.fixed_gbp') as number)
-        : (getPlatformSetting('pricing.platform_fee.fixed_eur') as number)
-      : round2(traderNet * ((getPlatformSetting('pricing.platform_fee.percentage') as number) / 100));
+        ? feeFixedGbp
+        : feeFixedEur
+      : round2(traderNet * (feePercentage / 100));
 
   const platformFeeVatRate =
     (isGbp
@@ -2668,12 +2689,18 @@ export const publishJob = async (
         offer ? money(offer.discountValue) : 0
       );
 
+      const pricingRule = await resolvePricingRuleForJob({
+        subcategoryId: job.subcategoryId,
+        categoryId: job.categoryId,
+      });
+
       const breakdown = computeInvoiceBreakdown({
         serviceCharge: serviceChargeRaw,
         traderOfferDiscount,
         promoDiscount: 0,
         currencyCode: offer?.currencyCode ?? 'EUR',
         purpose: isSiteVisit ? 'SITE_VISIT_FEE' : 'SERVICE',
+        pricingRule,
       });
 
       await tx.quote.create({

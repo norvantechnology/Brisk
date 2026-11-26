@@ -18,6 +18,11 @@ export const createCategorySchema = z.object({
     displayOrder: z.number().int().optional().default(0),
     status: z.enum(['active', 'inactive']).optional().default('active'),
     featured: z.boolean().optional().default(false),
+    customPricingEnabled: z.boolean().optional(),
+    customPricingType: z.enum(['PERCENTAGE', 'FIXED']).nullable().optional(),
+    customPricingPercentage: z.coerce.number().min(0).max(100).nullable().optional(),
+    customPricingFixedEur: z.coerce.number().min(0).nullable().optional(),
+    customPricingFixedGbp: z.coerce.number().min(0).nullable().optional(),
   }),
 });
 
@@ -41,6 +46,11 @@ export const updateCategorySchema = z.object({
     displayOrder: z.number().int().optional(),
     status: z.enum(['active', 'inactive']).optional(),
     featured: z.boolean().optional(),
+    customPricingEnabled: z.boolean().optional(),
+    customPricingType: z.enum(['PERCENTAGE', 'FIXED']).nullable().optional(),
+    customPricingPercentage: z.coerce.number().min(0).max(100).nullable().optional(),
+    customPricingFixedEur: z.coerce.number().min(0).nullable().optional(),
+    customPricingFixedGbp: z.coerce.number().min(0).nullable().optional(),
   }),
 });
 
@@ -120,6 +130,11 @@ const subcategoryBodyBase = {
   priceEnabled: z.boolean().optional().default(true),
   priceEnteredBy: z.enum(['CUSTOMER', 'TRADER']).optional().default('CUSTOMER'),
   qaFormSchema: qaFormSchema.optional().nullable(),
+  customPricingEnabled: z.boolean().optional(),
+  customPricingType: z.enum(['PERCENTAGE', 'FIXED']).nullable().optional(),
+  customPricingPercentage: z.coerce.number().min(0).max(100).nullable().optional(),
+  customPricingFixedEur: z.coerce.number().min(0).nullable().optional(),
+  customPricingFixedGbp: z.coerce.number().min(0).nullable().optional(),
 };
 
 export const createSubcategorySchema = z.object({
@@ -149,6 +164,11 @@ export const updateSubcategorySchema = z.object({
     priceEnabled: z.boolean().optional(),
     priceEnteredBy: z.enum(['CUSTOMER', 'TRADER']).optional(),
     qaFormSchema: qaFormSchema.optional().nullable(),
+    customPricingEnabled: z.boolean().optional(),
+    customPricingType: z.enum(['PERCENTAGE', 'FIXED']).nullable().optional(),
+    customPricingPercentage: z.coerce.number().min(0).max(100).nullable().optional(),
+    customPricingFixedEur: z.coerce.number().min(0).nullable().optional(),
+    customPricingFixedGbp: z.coerce.number().min(0).nullable().optional(),
   }),
 });
 

@@ -33,6 +33,11 @@ export interface CreateCategoryInput {
   displayOrder?: number;
   status?: string;
   featured?: boolean;
+  customPricingEnabled?: boolean;
+  customPricingType?: 'PERCENTAGE' | 'FIXED' | null;
+  customPricingPercentage?: number | null;
+  customPricingFixedEur?: number | null;
+  customPricingFixedGbp?: number | null;
 }
 
 export interface UpdateCategoryInput {
@@ -47,6 +52,11 @@ export interface UpdateCategoryInput {
   displayOrder?: number;
   status?: string;
   featured?: boolean;
+  customPricingEnabled?: boolean;
+  customPricingType?: 'PERCENTAGE' | 'FIXED' | null;
+  customPricingPercentage?: number | null;
+  customPricingFixedEur?: number | null;
+  customPricingFixedGbp?: number | null;
 }
 
 export type QaFormField = {
@@ -90,6 +100,11 @@ export interface CreateSubcategoryInput {
   priceEnabled?: boolean;
   priceEnteredBy?: SubcategoryPriceEnteredBy | 'CUSTOMER' | 'TRADER';
   qaFormSchema?: QaFormField[] | null;
+  customPricingEnabled?: boolean;
+  customPricingType?: 'PERCENTAGE' | 'FIXED' | null;
+  customPricingPercentage?: number | null;
+  customPricingFixedEur?: number | null;
+  customPricingFixedGbp?: number | null;
 }
 
 export interface UpdateSubcategoryInput {
@@ -113,4 +128,9 @@ export interface UpdateSubcategoryInput {
   priceEnabled?: boolean;
   priceEnteredBy?: SubcategoryPriceEnteredBy | 'CUSTOMER' | 'TRADER';
   qaFormSchema?: QaFormField[] | null;
+  customPricingEnabled?: boolean;
+  customPricingType?: 'PERCENTAGE' | 'FIXED' | null;
+  customPricingPercentage?: number | null;
+  customPricingFixedEur?: number | null;
+  customPricingFixedGbp?: number | null;
 }

@@ -54,6 +54,7 @@ import {
   generateInvoiceNumber,
   isAwaitingUpfrontPayment,
 } from '../../jobs/job-payment-state';
+import { resolvePricingRuleForJob } from '../../admin/admin-pricing/pricing-resolver.service';
 import { buildQaFormAnswerList } from '../../jobs/jobs.qa-form';
 import type { MyJobReviewInput, MyJobsListQuery } from './trader-my-jobs.validation';
 import {
@@ -979,12 +980,18 @@ const buildFullJobPaymentRequestData = async (job: MyJobRow, trader: TraderConte
     money(job.booking?.invoice?.traderOfferDiscount) +
     money(job.booking?.invoice?.promoDiscount)
   );
+  const pricingRule = await resolvePricingRuleForJob({
+    subcategoryId: job.subcategoryId,
+    categoryId: job.categoryId,
+  });
   const breakdown = buildJobPaymentBreakdown({
     quotePrice,
     materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
     siteVisitFee: money(job.siteVisitFee),
     isTraderVatRegistered: trader.isVatRegistered ?? true,
     traderOfferDiscount: offerDiscount,
+    pricingRule,
+    currencyCode: currency.currencyCode,
   });
 
   const requests = await loadJobPaymentRequests(job.id, trader.id);
@@ -4135,11 +4142,17 @@ export const requestPartialPayment = async (
     }
   }
 
+  const pricingRule = await resolvePricingRuleForJob({
+    subcategoryId: job.subcategoryId,
+    categoryId: job.categoryId,
+  });
   const breakdown = buildJobPaymentBreakdown({
     quotePrice,
     materialsTotal: job.materials.reduce((s, m) => s + money(m.price), 0),
     siteVisitFee: money(job.siteVisitFee),
     isTraderVatRegistered: trader.isVatRegistered ?? true,
+    pricingRule,
+    currencyCode: currency.currencyCode,
   });
   const jobAmount = breakdown.totalAmount;
   const requests = await loadJobPaymentRequests(jobId, trader.id);

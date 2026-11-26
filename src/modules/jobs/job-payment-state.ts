@@ -38,6 +38,13 @@ export const buildJobPaymentBreakdown = (input: {
   siteVisitOnly?: boolean;
   isTraderVatRegistered?: boolean;
   traderOfferDiscount?: number;
+  pricingRule?: {
+    type?: 'PERCENTAGE' | 'FIXED';
+    percentage?: number;
+    fixedEur?: number;
+    fixedGbp?: number;
+  } | null;
+  currencyCode?: string;
 }) => {
   const serviceCharge = input.siteVisitOnly ? 0 : round2(input.quotePrice);
   const materialsTotal = input.siteVisitOnly ? 0 : round2(input.materialsTotal);
@@ -59,8 +66,14 @@ export const buildJobPaymentBreakdown = (input: {
       : TRADER_STANDARD_VAT_RATE;
   const traderVatAmount = round2(traderNet * traderVatRate);
 
-  // Platform Fee (Brisk's own supply: 10% of traderNet + 23% Irish Standard VAT)
-  const platformFee = input.siteVisitOnly ? 0 : round2(traderNet * JOB_PLATFORM_FEE_RATE);
+  // Platform Fee (Brisk's own supply: supports custom percentage / fixed rule or default 10% + 23% Irish Standard VAT)
+  const isGbp = input.currencyCode?.toUpperCase() === 'GBP';
+  const feeType = input.pricingRule?.type || 'PERCENTAGE';
+  const platformFee = input.siteVisitOnly
+    ? 0
+    : feeType === 'FIXED'
+      ? round2(isGbp ? (input.pricingRule?.fixedGbp ?? 8.5) : (input.pricingRule?.fixedEur ?? 10))
+      : round2(traderNet * ((input.pricingRule?.percentage ?? (JOB_PLATFORM_FEE_RATE * 100)) / 100));
   const platformFeeVat = input.siteVisitOnly ? 0 : round2(platformFee * PLATFORM_FEE_VAT_RATE);
   const platformFeeGross = round2(platformFee + platformFeeVat);
 

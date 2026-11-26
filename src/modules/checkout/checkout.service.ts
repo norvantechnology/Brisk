@@ -35,6 +35,7 @@ import {
   toPaymentError,
 } from '../../services/stripe.service';
 import { computeInvoiceBreakdown, generateBookingRef } from '../jobs/jobs.service';
+import { resolvePricingRuleForJob } from '../admin/admin-pricing/pricing-resolver.service';
 import { generateInvoiceNumber } from '../jobs/job-payment-state';
 import { getUsedOffersAndPromoCodesForUser } from '../offers/public-offers.service';
 import {
@@ -691,6 +692,10 @@ const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
 
   const { trader, job } = invoiceContext(invoice);
   const purpose = resolveInvoicePurpose(job);
+  const pricingRule = await resolvePricingRuleForJob({
+    subcategoryId: (job as any)?.subcategory?.id ?? (job as any)?.subcategoryId,
+    categoryId: (job as any)?.category?.id ?? (job as any)?.categoryId,
+  });
   const breakdown = computeInvoiceBreakdown({
     serviceCharge: money(invoice.serviceCharge),
     traderOfferDiscount: money(invoice.traderOfferDiscount),
@@ -700,6 +705,7 @@ const ensureInvoiceTotalsConsistent = async (invoice: InvoiceWithRelations) => {
     isTraderVatRegistered: trader?.isVatRegistered ?? true,
     currencyCode: invoice.currencyCode,
     purpose,
+    pricingRule,
   });
 
   const drift =
@@ -763,6 +769,10 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
 
   const purpose = resolveInvoicePurpose(invoice.booking.job);
   const trader = invoice.booking.trader;
+  const pricingRule = await resolvePricingRuleForJob({
+    subcategoryId: (invoice.booking.job as any)?.subcategory?.id ?? (invoice.booking.job as any)?.subcategoryId,
+    categoryId: (invoice.booking.job as any)?.category?.id ?? (invoice.booking.job as any)?.categoryId,
+  });
   const breakdown = computeInvoiceBreakdown({
     serviceCharge: money(invoice.serviceCharge),
     traderOfferDiscount: money(invoice.traderOfferDiscount),
@@ -772,6 +782,7 @@ export const clearInvoicePromoIfApplied = async (invoiceId: string) => {
     isTraderVatRegistered: trader?.isVatRegistered ?? true,
     currencyCode: invoice.currencyCode,
     purpose,
+    pricingRule,
   });
 
   await prisma.invoice.update({
@@ -844,8 +855,12 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
 
   // Must preserve SITE_VISIT_FEE (platformFee = 0). Omitting purpose defaulted to SERVICE
   // and added 10% fee, cancelling the promo (e.g. €30 − €3 + €3 = €30).
-  const purpose = resolveInvoicePurpose(invoiceContext(invoice).job);
-  const { trader } = invoiceContext(invoice);
+  const { trader, job } = invoiceContext(invoice);
+  const purpose = resolveInvoicePurpose(job);
+  const pricingRule = await resolvePricingRuleForJob({
+    subcategoryId: (job as any)?.subcategory?.id ?? (job as any)?.subcategoryId,
+    categoryId: (job as any)?.category?.id ?? (job as any)?.categoryId,
+  });
   const breakdown = computeInvoiceBreakdown({
     serviceCharge,
     traderOfferDiscount,
@@ -855,6 +870,7 @@ export const applyPromo = async (userId: string, invoiceId: string, input: Apply
     isTraderVatRegistered: trader?.isVatRegistered ?? true,
     currencyCode: invoice.currencyCode,
     purpose,
+    pricingRule,
   });
 
   const storedCode = invoice.appliedPromoCode?.trim().toUpperCase() ?? null;
@@ -945,11 +961,16 @@ export const createPaymentIntent = async (userId: string, input: CreatePaymentIn
     }
     targetInvoiceId = quote.job?.booking?.invoice?.id;
     if (!targetInvoiceId && quote.job) {
+      const pricingRule = await resolvePricingRuleForJob({
+        subcategoryId: (quote.job as any)?.subcategory?.id ?? (quote.job as any)?.subcategoryId,
+        categoryId: (quote.job as any)?.category?.id ?? (quote.job as any)?.categoryId,
+      });
       const breakdown = computeInvoiceBreakdown({
         serviceCharge: money(quote.quotedAmount),
         traderOfferDiscount: 0,
         currencyCode: quote.currencyCode || 'EUR',
         purpose: 'SERVICE',
+        pricingRule,
       });
       let bookingId = quote.job.booking?.id;
       if (!bookingId) {

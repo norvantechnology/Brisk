@@ -187,6 +187,13 @@ export const serializeSubcategory = (
   priceEnteredBy: sub.priceEnteredBy as SubcategoryPriceEnteredBy,
   /** Admin-built Q&A form. App must render these fields when posting a job for this sub-category. */
   qaFormSchema: sub.qaFormSchema ?? [],
+  customPricing: {
+    enabled: (sub as any).customPricingEnabled ?? false,
+    type: ((sub as any).customPricingType as 'PERCENTAGE' | 'FIXED') || 'PERCENTAGE',
+    percentage: (sub as any).customPricingPercentage != null ? Number((sub as any).customPricingPercentage) : null,
+    fixedEur: (sub as any).customPricingFixedEur != null ? Number((sub as any).customPricingFixedEur) : null,
+    fixedGbp: (sub as any).customPricingFixedGbp != null ? Number((sub as any).customPricingFixedGbp) : null,
+  },
   parentCategory: extras?.parentCategory,
   jobsCount: extras?.jobsCount,
   tradersCount: extras?.tradersCount,
@@ -217,6 +224,13 @@ export const serializeCategory = (
   displayOrder: cat.displayOrder,
   status: cat.status,
   featured: cat.featured,
+  customPricing: {
+    enabled: (cat as any).customPricingEnabled ?? false,
+    type: ((cat as any).customPricingType as 'PERCENTAGE' | 'FIXED') || 'PERCENTAGE',
+    percentage: (cat as any).customPricingPercentage != null ? Number((cat as any).customPricingPercentage) : null,
+    fixedEur: (cat as any).customPricingFixedEur != null ? Number((cat as any).customPricingFixedEur) : null,
+    fixedGbp: (cat as any).customPricingFixedGbp != null ? Number((cat as any).customPricingFixedGbp) : null,
+  },
   /** ACTIVE when all required category documents are uploaded (trader Bearer). Else PENDING / N_A. */
   documentsStatus: extras?.documents?.documentsStatus ?? ('N_A' as CategoryDocumentsStatus),
   documentsComplete: extras?.documents?.documentsComplete ?? false,
