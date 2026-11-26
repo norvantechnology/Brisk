@@ -260,9 +260,23 @@
  *       - On document upload screens to build the list (REQUIRED / OPTIONAL badges)
  *       - After `PUT /business-type` or `PUT /categories` to refresh rules
  *
- *       **No parameters.** Rules depend on saved `entityType` and `categoryIds`.
+ *       **Parameters (optional):**
+ *       - `categoryId` — Filter document checklist to only this category (e.g. for Category Wise Documents screen).
+ *       - `categoryIds` — Comma-separated list of category UUIDs.
+ *       - Omit both to get document requirements across all the trader's active categories.
  *
  *       **Upload:** use each document's `id` as `documentRuleId` on `PUT /traders/onboarding/documents`.
+ *     parameters:
+ *       - in: query
+ *         name: categoryId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *         description: Category UUID. When passed, `categoryRules` contains only this category.
+ *       - in: query
+ *         name: categoryIds
+ *         required: false
+ *         schema: { type: string }
+ *         description: Comma-separated category UUIDs.
  *     security:
  *       - bearerAuth: []
  *     responses:

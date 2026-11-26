@@ -16,7 +16,21 @@ const handle = (fn: (userId: string, body?: any, params?: any) => Promise<unknow
 export const getStatus = handle((userId) => onboardingService.getOnboardingStatus(userId));
 export const start = handle((userId) => onboardingService.startOnboarding(userId));
 export const saveBusinessType = handle((userId, body) => onboardingService.saveBusinessType(userId, body));
-export const getRequirements = handle((userId) => onboardingService.getDocumentRequirements(userId));
+export const getRequirements = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await onboardingService.getDocumentRequirements(
+      req.user!.id,
+      req.query as { categoryId?: string; categoryIds?: string | string[] }
+    );
+    sendResponse({ res, statusCode: 200, message: 'Success', data });
+  } catch (error) {
+    next(error);
+  }
+};
 export const uploadDocument = handle((userId, body) => onboardingService.uploadDocument(userId, body));
 export const removeDocument = handle((userId, _body, params) =>
   onboardingService.removeDocument(userId, params.documentRuleId)

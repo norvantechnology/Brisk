@@ -419,7 +419,10 @@ export const saveBusinessType = async (userId: string, input: BusinessTypeInput)
   return getOnboardingStatus(userId);
 };
 
-export const getDocumentRequirements = async (userId: string) => {
+export const getDocumentRequirements = async (
+  userId: string,
+  query?: { categoryId?: string; categoryIds?: string | string[] }
+) => {
   const { trader } = await ensureTraderForUser(userId);
   const registration = await prisma.traderRegistration.findUnique({ where: { userId } });
   if (!registration) {
@@ -432,7 +435,25 @@ export const getDocumentRequirements = async (userId: string) => {
     orderBy: { createdAt: 'asc' },
     select: { categoryId: true, isActive: true },
   });
-  const categoryIds = traderCategories.map((item) => item.categoryId);
+  let categoryIds = traderCategories.map((item) => item.categoryId);
+
+  if (query?.categoryId) {
+    const targetId = query.categoryId.trim();
+    categoryIds = categoryIds.filter((id) => id === targetId);
+    // If the category is valid but not yet active in DB for this trader, still resolve it so they can see requirements
+    if (categoryIds.length === 0) {
+      const catExists = await prisma.category.findUnique({ where: { id: targetId } });
+      if (catExists) {
+        categoryIds = [targetId];
+      }
+    }
+  } else if (query?.categoryIds) {
+    const requested = Array.isArray(query.categoryIds)
+      ? query.categoryIds
+      : query.categoryIds.split(',').map((s) => s.trim());
+    categoryIds = categoryIds.filter((id) => requested.includes(id));
+  }
+
   const activeByCategoryId = new Map(
     traderCategories.map((item) => [item.categoryId, item.isActive])
   );

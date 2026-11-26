@@ -174,9 +174,9 @@ export const groupCategoryDocumentRules = (
     .map((id) => byCategoryId.get(id))
     .filter((group): group is NonNullable<typeof group> => Boolean(group));
 
-  // Any leftover (shouldn't happen) append
-  for (const [id, group] of byCategoryId) {
-    if (!categoryIds.includes(id)) ordered.push(group);
+  // If no specific categoryIds requested, return all found groups; otherwise return only ordered matches
+  if (categoryIds.length === 0) {
+    return Array.from(byCategoryId.values());
   }
 
   return ordered;
