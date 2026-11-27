@@ -100,6 +100,57 @@ export const customerPropertyIdParamSchema = z.object({
   }).optional(),
 });
 
+export const createCustomerPropertySchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid customer ID format.'),
+  }),
+  body: z.object({
+    propertyName: z.string().trim().min(1, 'Property name is required.'),
+    addressLine1: z.string().trim().min(1, 'Address line 1 is required.'),
+    addressLine2: z.string().trim().optional().nullable(),
+    city: z.string().trim().min(1, 'City is required.'),
+    county: z.string().trim().optional().nullable(),
+    eircode: z.string().trim().optional().nullable(),
+    country: z.string().trim().optional().default('Ireland'),
+    label: z.string().trim().optional().nullable(),
+    addressType: z.enum(['Home', 'Work', 'Custom']).optional().default('Home'),
+    houseNumber: z.string().trim().optional().nullable(),
+    mprnNumber: z.string().trim().optional().nullable(),
+    mprn: z.string().trim().optional().nullable(),
+    gprnNumber: z.string().trim().optional().nullable(),
+    gprn: z.string().trim().optional().nullable(),
+    utnNumber: z.string().trim().optional().nullable(),
+    isDefault: z.boolean().optional(),
+    isPrimary: z.boolean().optional(),
+  }),
+});
+
+export const updateCustomerPropertySchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid customer ID format.'),
+    propertyId: z.string().uuid('Invalid property ID format.'),
+  }),
+  body: z.object({
+    propertyName: z.string().trim().min(1).optional(),
+    addressLine1: z.string().trim().min(1).optional(),
+    addressLine2: z.string().trim().optional().nullable(),
+    city: z.string().trim().min(1).optional(),
+    county: z.string().trim().optional().nullable(),
+    eircode: z.string().trim().optional().nullable(),
+    country: z.string().trim().optional(),
+    label: z.string().trim().optional().nullable(),
+    addressType: z.enum(['Home', 'Work', 'Custom']).optional(),
+    houseNumber: z.string().trim().optional().nullable(),
+    mprnNumber: z.string().trim().optional().nullable(),
+    mprn: z.string().trim().optional().nullable(),
+    gprnNumber: z.string().trim().optional().nullable(),
+    gprn: z.string().trim().optional().nullable(),
+    utnNumber: z.string().trim().optional().nullable(),
+    isDefault: z.boolean().optional(),
+    isPrimary: z.boolean().optional(),
+  }),
+});
+
 export const customerPaymentsQuerySchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid customer ID format.'),

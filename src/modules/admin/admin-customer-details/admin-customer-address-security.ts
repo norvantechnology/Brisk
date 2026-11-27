@@ -36,7 +36,14 @@ export const assertCanViewCustomerFullAddress = (
 
 export interface AuditAddressAccessParams {
   adminUser: NonNullable<AuthenticatedAdminRequest['adminUser']>;
-  eventType: 'CUSTOMER_ADDRESS_REVEALED' | 'CUSTOMER_ADDRESS_VIEWED' | 'CUSTOMER_PROPERTY_REVEALED' | 'CUSTOMER_PROPERTY_VIEWED';
+  eventType:
+    | 'CUSTOMER_ADDRESS_REVEALED'
+    | 'CUSTOMER_ADDRESS_VIEWED'
+    | 'CUSTOMER_PROPERTY_REVEALED'
+    | 'CUSTOMER_PROPERTY_VIEWED'
+    | 'CUSTOMER_PROPERTY_CREATED'
+    | 'CUSTOMER_PROPERTY_UPDATED'
+    | 'CUSTOMER_PROPERTY_DELETED';
   customerId: string;
   subjectType: 'CUSTOMER_ADDRESS' | 'CUSTOMER_PROPERTY' | 'CUSTOMER';
   subjectId: string;
@@ -115,6 +122,8 @@ export const maskPropertyRecord = <T extends Record<string, any>>(prop: T): T & 
     eircode: prop.eircode ? 'XXXXX' : prop.eircode,
     mprnNumber: prop.mprnNumber ? 'XXXXX' : prop.mprnNumber,
     gprnNumber: prop.gprnNumber ? 'XXXXX' : prop.gprnNumber,
+    mprn: prop.mprn ? 'XXXXX' : prop.mprn,
+    gprn: prop.gprn ? 'XXXXX' : prop.gprn,
     utnNumber: prop.utnNumber ? 'XXXXX' : prop.utnNumber,
     fullAddress: maskedFullAddress,
     latitude: null,

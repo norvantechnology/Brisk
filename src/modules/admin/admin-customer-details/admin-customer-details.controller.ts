@@ -97,6 +97,69 @@ export const revealProperty = async (
   }
 };
 
+export const createProperty = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.createCustomerProperty(req.params.id, req.body, req.adminUser);
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: 'Customer property created successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateProperty = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.updateCustomerProperty(
+      req.params.id,
+      req.params.propertyId,
+      req.body,
+      req.adminUser
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer property updated successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteProperty = async (
+  req: AuthenticatedAdminRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await service.deleteCustomerProperty(
+      req.params.id,
+      req.params.propertyId,
+      req.adminUser
+    );
+    sendResponse({
+      res,
+      statusCode: 200,
+      message: 'Customer property deleted successfully.',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const listAddresses = async (
   req: AuthenticatedAdminRequest,
   res: Response,

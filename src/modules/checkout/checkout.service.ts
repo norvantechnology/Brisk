@@ -458,6 +458,7 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     paymentStatus: paymentDetails.paymentStatus,
     paymentDetails,
     ...breakdown,
+    serviceCharge: purpose === 'SITE_VISIT_FEE' ? 0 : breakdown.serviceCharge,
     materialsTotal: request ? money(request.materialsTotal) : 0,
     siteVisitFee: request
       ? money(request.siteVisitFee)

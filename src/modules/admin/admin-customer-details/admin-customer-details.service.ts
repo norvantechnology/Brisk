@@ -420,6 +420,8 @@ type AdminPropertyRow = Prisma.PropertyGetPayload<{
 const serializeAdminPropertySummary = (p: AdminPropertyRow) => {
   const electricity = p.meters.find((m) => m.meterType === 'electricity');
   const gas = p.meters.find((m) => m.meterType === 'gas');
+  const mprn = (p as any).mprnNumber ?? p.address?.mprnNumber ?? electricity?.mprnGprn ?? null;
+  const gprn = (p as any).gprnNumber ?? p.address?.gprnNumber ?? gas?.mprnGprn ?? null;
   return {
     id: p.id,
     propertyName: p.propertyName,
@@ -438,8 +440,10 @@ const serializeAdminPropertySummary = (p: AdminPropertyRow) => {
     longitude: p.address?.longitude ?? null,
     mapImageUrl: p.address?.mapImageUrl ?? null,
     isPrimary: p.address?.isDefault ?? false,
-    mprnNumber: p.address?.mprnNumber ?? electricity?.mprnGprn ?? null,
-    gprnNumber: p.address?.gprnNumber ?? gas?.mprnGprn ?? null,
+    mprnNumber: mprn,
+    gprnNumber: gprn,
+    mprn,
+    gprn,
     utnNumber: p.address?.utnNumber ?? null,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
@@ -662,6 +666,304 @@ export const revealCustomerProperty = async (
   });
 
   return res;
+};
+
+export interface CreateCustomerPropertyInput {
+  propertyName: string;
+  addressLine1: string;
+  addressLine2?: string | null;
+  city: string;
+  county?: string | null;
+  eircode?: string | null;
+  country?: string;
+  label?: string | null;
+  addressType?: 'Home' | 'Work' | 'Custom';
+  houseNumber?: string | null;
+  mprnNumber?: string | null;
+  mprn?: string | null;
+  gprnNumber?: string | null;
+  gprn?: string | null;
+  utnNumber?: string | null;
+  isDefault?: boolean;
+  isPrimary?: boolean;
+}
+
+export const createCustomerProperty = async (
+  customerId: string,
+  input: CreateCustomerPropertyInput,
+  adminUser?: AuthenticatedAdminRequest['adminUser']
+) => {
+  await assertCustomerExists(customerId);
+
+  const mprn = (input.mprnNumber ?? input.mprn)?.trim() || null;
+  const gprn = (input.gprnNumber ?? input.gprn)?.trim() || null;
+  const isDefault = Boolean(input.isPrimary ?? input.isDefault ?? false);
+
+  if (isDefault) {
+    await prisma.address.updateMany({
+      where: { userId: customerId, isDefault: true },
+      data: { isDefault: false },
+    });
+  }
+
+  const addressType = input.addressType ?? 'Home';
+  const label = input.label ?? input.propertyName;
+  const country = input.country ?? 'Ireland';
+
+  // 1. Create Address record
+  const address = await prisma.address.create({
+    data: {
+      userId: customerId,
+      addressType,
+      label,
+      houseNumber: input.houseNumber ?? null,
+      addressLine1: input.addressLine1,
+      addressLine2: input.addressLine2 ?? null,
+      city: input.city,
+      county: input.county ?? null,
+      eircode: input.eircode ?? null,
+      country,
+      mprnNumber: mprn,
+      gprnNumber: gprn,
+      utnNumber: input.utnNumber ?? null,
+      isDefault,
+    },
+  });
+
+  // 2. Create Property record
+  const property = await prisma.property.create({
+    data: {
+      userId: customerId,
+      addressId: address.id,
+      propertyName: input.propertyName,
+      addressLine1: input.addressLine1,
+      addressLine2: input.addressLine2 ?? null,
+      city: input.city,
+      county: input.county ?? null,
+      eircode: input.eircode ?? null,
+      country,
+      mprnNumber: mprn,
+      gprnNumber: gprn,
+    },
+  });
+
+  // 3. Create Meters for MPRN (electricity) and GPRN (gas) even if no readings exist initially
+  if (mprn) {
+    await prisma.meter.create({
+      data: {
+        propertyId: property.id,
+        meterType: 'electricity',
+        mprnGprn: mprn,
+        unitLabel: 'kWh',
+      },
+    });
+  }
+  if (gprn) {
+    await prisma.meter.create({
+      data: {
+        propertyId: property.id,
+        meterType: 'gas',
+        mprnGprn: gprn,
+        unitLabel: 'm³',
+      },
+    });
+  }
+
+  if (adminUser) {
+    await recordAddressAuditLog({
+      adminUser,
+      eventType: 'CUSTOMER_PROPERTY_CREATED',
+      customerId,
+      subjectType: 'CUSTOMER_PROPERTY',
+      subjectId: property.id,
+      description: `Admin ${adminUser.fullName} (${adminUser.role}) manually created property "${property.propertyName}" for customer ${customerId}`,
+    });
+  }
+
+  return getCustomerProperty(customerId, property.id, { unmask: true, adminUser });
+};
+
+export interface UpdateCustomerPropertyInput {
+  propertyName?: string;
+  addressLine1?: string;
+  addressLine2?: string | null;
+  city?: string;
+  county?: string | null;
+  eircode?: string | null;
+  country?: string;
+  label?: string | null;
+  addressType?: 'Home' | 'Work' | 'Custom';
+  houseNumber?: string | null;
+  mprnNumber?: string | null;
+  mprn?: string | null;
+  gprnNumber?: string | null;
+  gprn?: string | null;
+  utnNumber?: string | null;
+  isDefault?: boolean;
+  isPrimary?: boolean;
+}
+
+export const updateCustomerProperty = async (
+  customerId: string,
+  propertyId: string,
+  input: UpdateCustomerPropertyInput,
+  adminUser?: AuthenticatedAdminRequest['adminUser']
+) => {
+  await assertCustomerExists(customerId);
+
+  const property = await prisma.property.findFirst({
+    where: { id: propertyId, userId: customerId },
+    include: { address: true, meters: true },
+  });
+  if (!property) throw new NotFoundError('Property not found for this customer.');
+
+  const mprn =
+    input.mprnNumber !== undefined || input.mprn !== undefined
+      ? (input.mprnNumber ?? input.mprn)?.trim() || null
+      : undefined;
+  const gprn =
+    input.gprnNumber !== undefined || input.gprn !== undefined
+      ? (input.gprnNumber ?? input.gprn)?.trim() || null
+      : undefined;
+
+  const isDefault = input.isPrimary !== undefined ? input.isPrimary : input.isDefault;
+  if (isDefault) {
+    await prisma.address.updateMany({
+      where: { userId: customerId, isDefault: true },
+      data: { isDefault: false },
+    });
+  }
+
+  const updatedProperty = await prisma.property.update({
+    where: { id: propertyId },
+    data: {
+      ...(input.propertyName !== undefined ? { propertyName: input.propertyName } : {}),
+      ...(input.addressLine1 !== undefined ? { addressLine1: input.addressLine1 } : {}),
+      ...(input.addressLine2 !== undefined ? { addressLine2: input.addressLine2 } : {}),
+      ...(input.city !== undefined ? { city: input.city } : {}),
+      ...(input.county !== undefined ? { county: input.county } : {}),
+      ...(input.eircode !== undefined ? { eircode: input.eircode } : {}),
+      ...(input.country !== undefined ? { country: input.country } : {}),
+      ...(mprn !== undefined ? { mprnNumber: mprn } : {}),
+      ...(gprn !== undefined ? { gprnNumber: gprn } : {}),
+    },
+  });
+
+  if (property.addressId) {
+    await prisma.address.update({
+      where: { id: property.addressId },
+      data: {
+        ...(input.propertyName !== undefined ? { label: input.propertyName } : {}),
+        ...(input.label !== undefined ? { label: input.label } : {}),
+        ...(input.addressType !== undefined ? { addressType: input.addressType } : {}),
+        ...(input.houseNumber !== undefined ? { houseNumber: input.houseNumber } : {}),
+        ...(input.addressLine1 !== undefined ? { addressLine1: input.addressLine1 } : {}),
+        ...(input.addressLine2 !== undefined ? { addressLine2: input.addressLine2 } : {}),
+        ...(input.city !== undefined ? { city: input.city } : {}),
+        ...(input.county !== undefined ? { county: input.county } : {}),
+        ...(input.eircode !== undefined ? { eircode: input.eircode } : {}),
+        ...(input.country !== undefined ? { country: input.country } : {}),
+        ...(mprn !== undefined ? { mprnNumber: mprn } : {}),
+        ...(gprn !== undefined ? { gprnNumber: gprn } : {}),
+        ...(input.utnNumber !== undefined ? { utnNumber: input.utnNumber } : {}),
+        ...(isDefault !== undefined ? { isDefault } : {}),
+      },
+    });
+  }
+
+  if (mprn !== undefined) {
+    const electricityMeter = property.meters.find((m) => m.meterType === 'electricity');
+    if (mprn) {
+      if (electricityMeter) {
+        await prisma.meter.update({
+          where: { id: electricityMeter.id },
+          data: { mprnGprn: mprn },
+        });
+      } else {
+        await prisma.meter.create({
+          data: {
+            propertyId: property.id,
+            meterType: 'electricity',
+            mprnGprn: mprn,
+            unitLabel: 'kWh',
+          },
+        });
+      }
+    } else if (electricityMeter) {
+      await prisma.meter.delete({ where: { id: electricityMeter.id } }).catch(() => {});
+    }
+  }
+
+  if (gprn !== undefined) {
+    const gasMeter = property.meters.find((m) => m.meterType === 'gas');
+    if (gprn) {
+      if (gasMeter) {
+        await prisma.meter.update({
+          where: { id: gasMeter.id },
+          data: { mprnGprn: gprn },
+        });
+      } else {
+        await prisma.meter.create({
+          data: {
+            propertyId: property.id,
+            meterType: 'gas',
+            mprnGprn: gprn,
+            unitLabel: 'm³',
+          },
+        });
+      }
+    } else if (gasMeter) {
+      await prisma.meter.delete({ where: { id: gasMeter.id } }).catch(() => {});
+    }
+  }
+
+  if (adminUser) {
+    await recordAddressAuditLog({
+      adminUser,
+      eventType: 'CUSTOMER_PROPERTY_UPDATED',
+      customerId,
+      subjectType: 'CUSTOMER_PROPERTY',
+      subjectId: propertyId,
+      description: `Admin ${adminUser.fullName} (${adminUser.role}) updated property "${updatedProperty.propertyName}" (${propertyId}) for customer ${customerId}`,
+    });
+  }
+
+  return getCustomerProperty(customerId, propertyId, { unmask: true, adminUser });
+};
+
+export const deleteCustomerProperty = async (
+  customerId: string,
+  propertyId: string,
+  adminUser?: AuthenticatedAdminRequest['adminUser']
+) => {
+  await assertCustomerExists(customerId);
+
+  const property = await prisma.property.findFirst({
+    where: { id: propertyId, userId: customerId },
+    include: { address: { include: { _count: { select: { jobs: true } } } } },
+  });
+  if (!property) throw new NotFoundError('Property not found for this customer.');
+
+  await prisma.property.delete({
+    where: { id: propertyId },
+  });
+
+  if (property.addressId && property.address && property.address._count.jobs === 0) {
+    await prisma.address.delete({ where: { id: property.addressId } }).catch(() => {});
+  }
+
+  if (adminUser) {
+    await recordAddressAuditLog({
+      adminUser,
+      eventType: 'CUSTOMER_PROPERTY_DELETED',
+      customerId,
+      subjectType: 'CUSTOMER_PROPERTY',
+      subjectId: propertyId,
+      description: `Admin ${adminUser.fullName} (${adminUser.role}) deleted property "${property.propertyName}" (${propertyId}) for customer ${customerId}`,
+    });
+  }
+
+  return { success: true, message: 'Customer property deleted successfully.' };
 };
 
 // ---------------------------------------------------------------------------

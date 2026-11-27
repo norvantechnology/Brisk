@@ -471,6 +471,8 @@ model Property {
   county       String?
   eircode      String?
   country      String   @default("Ireland")
+  mprnNumber   String?  @map("mprn_number")
+  gprnNumber   String?  @map("gprn_number")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

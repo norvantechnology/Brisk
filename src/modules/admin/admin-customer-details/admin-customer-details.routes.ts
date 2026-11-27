@@ -17,6 +17,8 @@ import {
   customerRefundsQuerySchema,
   customerPropertiesQuerySchema,
   customerPropertyIdParamSchema,
+  createCustomerPropertySchema,
+  updateCustomerPropertySchema,
   customerReviewsQuerySchema,
 } from './admin-customer-details.validation';
 
@@ -378,6 +380,303 @@ router.post(
   '/customers/:id/properties/:propertyId/reveal',
   validate(customerPropertyIdParamSchema),
   controller.revealProperty
+);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/properties:
+ *   post:
+ *     summary: Manually add a customer property (with MPRN and GPRN)
+ *     description: |
+ *       Manually creates a new property for the given customer.
+ *       Automatically creates an associated address and provisions meter entities for MPRN (Electricity) and GPRN (Gas), even if automated smart meter readings are not yet available.
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Customer ID (UUID)
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [propertyName, addressLine1, city]
+ *             properties:
+ *               propertyName:
+ *                 type: string
+ *                 example: Home
+ *                 description: Descriptive property label (e.g., Home, Apartment 4B, Rental House)
+ *               addressLine1:
+ *                 type: string
+ *                 example: 12 Main Street
+ *               addressLine2:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Rathmines
+ *               city:
+ *                 type: string
+ *                 example: Dublin
+ *               county:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Dublin
+ *               eircode:
+ *                 type: string
+ *                 nullable: true
+ *                 example: D02 X285
+ *               country:
+ *                 type: string
+ *                 default: Ireland
+ *                 example: Ireland
+ *               mprnNumber:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "10012345678"
+ *                 description: 11-digit Meter Point Reference Number for electricity in Ireland (also accepts alias `mprn`)
+ *               mprn:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "10012345678"
+ *                 description: Alias for `mprnNumber`
+ *               gprnNumber:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "1234567"
+ *                 description: 7-digit Gas Point Reference Number in Ireland (also accepts alias `gprn`)
+ *               gprn:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "1234567"
+ *                 description: Alias for `gprnNumber`
+ *               addressType:
+ *                 type: string
+ *                 enum: [Home, Work, Custom]
+ *                 default: Home
+ *               houseNumber:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "12"
+ *               isPrimary:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Set this property as the customer's default address
+ *     responses:
+ *       201:
+ *         description: Customer property created successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer property created successfully.
+ *               data:
+ *                 id: 7c1d2e3f-0000-4000-8000-000000000001
+ *                 propertyName: Home
+ *                 label: Home
+ *                 addressId: 8d2e3f40-0000-4000-8000-000000000002
+ *                 addressType: Home
+ *                 houseNumber: "12"
+ *                 addressLine1: 12 Main Street
+ *                 addressLine2: Rathmines
+ *                 city: Dublin
+ *                 county: Dublin
+ *                 eircode: D02 X285
+ *                 country: Ireland
+ *                 fullAddress: 12 Main Street, Rathmines, Dublin, Dublin, D02 X285
+ *                 isPrimary: true
+ *                 mprnNumber: "10012345678"
+ *                 gprnNumber: "1234567"
+ *                 mprn: "10012345678"
+ *                 gprn: "1234567"
+ *                 isMasked: false
+ *                 meters:
+ *                   - id: a1b2c3d4-0000-4000-8000-000000000001
+ *                     meterType: electricity
+ *                     referenceLabel: MPRN
+ *                     referenceNumber: "10012345678"
+ *                     unitLabel: kWh
+ *                   - id: a1b2c3d4-0000-4000-8000-000000000002
+ *                     meterType: gas
+ *                     referenceLabel: GPRN
+ *                     referenceNumber: "1234567"
+ *                     unitLabel: m³
+ *       400: { $ref: '#/components/responses/AdminValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       404: { description: Customer not found. }
+ */
+router.post(
+  '/customers/:id/properties',
+  validate(createCustomerPropertySchema),
+  controller.createProperty
+);
+
+/**
+ * @swagger
+ * /admin/customers/{id}/properties/{propertyId}:
+ *   put:
+ *     summary: Manually edit and update customer property information
+ *     description: |
+ *       Updates property and linked address details, including property name, address lines, Eircode, MPRN (electricity) and GPRN (gas).
+ *       Automatically updates or provisions corresponding meter records.
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: propertyId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               propertyName:
+ *                 type: string
+ *                 example: Holiday Apartment
+ *               addressLine1:
+ *                 type: string
+ *                 example: 45 Ocean View
+ *               addressLine2:
+ *                 type: string
+ *                 nullable: true
+ *               city:
+ *                 type: string
+ *                 example: Galway
+ *               county:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Galway
+ *               eircode:
+ *                 type: string
+ *                 nullable: true
+ *                 example: H91 AB12
+ *               country:
+ *                 type: string
+ *                 example: Ireland
+ *               mprnNumber:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "10098765432"
+ *                 description: 11-digit MPRN (electricity meter number)
+ *               mprn:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "10098765432"
+ *               gprnNumber:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "7654321"
+ *                 description: 7-digit GPRN (gas meter number)
+ *               gprn:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "7654321"
+ *               addressType:
+ *                 type: string
+ *                 enum: [Home, Work, Custom]
+ *               houseNumber:
+ *                 type: string
+ *                 nullable: true
+ *               isPrimary:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Customer property updated successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer property updated successfully.
+ *       400: { $ref: '#/components/responses/AdminValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       404: { description: Customer or property not found. }
+ *   patch:
+ *     summary: Manually update customer property (partial update)
+ *     description: Alias of PUT /admin/customers/{id}/properties/{propertyId} for partial property updates.
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: propertyId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               propertyName: { type: string }
+ *               addressLine1: { type: string }
+ *               addressLine2: { type: string, nullable: true }
+ *               city: { type: string }
+ *               county: { type: string, nullable: true }
+ *               eircode: { type: string, nullable: true }
+ *               country: { type: string }
+ *               mprnNumber: { type: string, nullable: true }
+ *               mprn: { type: string, nullable: true }
+ *               gprnNumber: { type: string, nullable: true }
+ *               gprn: { type: string, nullable: true }
+ *               isPrimary: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Customer property updated successfully.
+ *       400: { $ref: '#/components/responses/AdminValidationError' }
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       404: { description: Customer or property not found. }
+ *   delete:
+ *     summary: Delete a customer property
+ *     description: Permanently removes the customer property. Also cleans up meters and unlinked addresses.
+ *     tags: ['Admin / Customer Details']
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: propertyId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Customer property deleted successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: Customer property deleted successfully.
+ *       401: { $ref: '#/components/responses/AdminUnauthorized' }
+ *       404: { description: Customer or property not found. }
+ */
+router.put(
+  '/customers/:id/properties/:propertyId',
+  validate(updateCustomerPropertySchema),
+  controller.updateProperty
+);
+router.patch(
+  '/customers/:id/properties/:propertyId',
+  validate(updateCustomerPropertySchema),
+  controller.updateProperty
+);
+router.delete(
+  '/customers/:id/properties/:propertyId',
+  validate(customerPropertyIdParamSchema),
+  controller.deleteProperty
 );
 
 /**

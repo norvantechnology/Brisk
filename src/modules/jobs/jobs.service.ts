@@ -1942,7 +1942,7 @@ const buildCustomerJobView = async (
     ...(serviceFee > 0
       ? [
           {
-            label: 'Service Fee',
+            label: isSiteVisit && !hasPaymentRequests ? 'Site Visit Fee' : 'Service Fee',
             amount: formatCur(serviceFee),
           },
         ]

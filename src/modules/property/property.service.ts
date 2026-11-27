@@ -266,6 +266,8 @@ const upsertPropertyForAddress = async (
           county: input.county ?? null,
           eircode: input.eircode ?? null,
           country: input.country ?? 'Ireland',
+          mprnNumber: input.mprnNumber ?? existing.mprnNumber,
+          gprnNumber: input.gprnNumber ?? existing.gprnNumber,
         },
       })
     : await prisma.property.create({
@@ -279,6 +281,8 @@ const upsertPropertyForAddress = async (
           county: input.county ?? null,
           eircode: input.eircode ?? null,
           country: input.country ?? 'Ireland',
+          mprnNumber: input.mprnNumber ?? null,
+          gprnNumber: input.gprnNumber ?? null,
         },
       });
 
