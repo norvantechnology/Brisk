@@ -174,35 +174,43 @@ const assertInvoiceOwner = (invoice: InvoiceWithRelations, userId: string) => {
   }
 };
 
-const serializeInvoiceBreakdown = (invoice: {
-  serviceCharge: Prisma.Decimal;
-  traderOfferDiscount: Prisma.Decimal;
-  promoDiscount: Prisma.Decimal;
-  platformFee: Prisma.Decimal;
-  platformFeeVat?: Prisma.Decimal | null;
-  materialsTotal?: Prisma.Decimal | null;
-  siteVisitFee?: Prisma.Decimal | null;
-  traderVatRate?: Prisma.Decimal | null;
-  traderVatAmount?: Prisma.Decimal | null;
-  twoThirdsRuleTriggered?: boolean | null;
-  tax: Prisma.Decimal;
-  totalAmount: Prisma.Decimal;
-  currencyCode: string;
-}) => ({
-  serviceCharge: money(invoice.serviceCharge),
-  traderOfferDiscount: money(invoice.traderOfferDiscount),
-  promoDiscount: money(invoice.promoDiscount),
-  platformFee: money(invoice.platformFee),
-  platformFeeVat: invoice.platformFeeVat != null ? money(invoice.platformFeeVat) : 0,
-  materialsTotal: invoice.materialsTotal != null ? money(invoice.materialsTotal) : 0,
-  siteVisitFee: invoice.siteVisitFee != null ? money(invoice.siteVisitFee) : 0,
-  traderVatRate: invoice.traderVatRate != null ? money(invoice.traderVatRate) : 0.135,
-  traderVatAmount: invoice.traderVatAmount != null ? money(invoice.traderVatAmount) : 0,
-  twoThirdsRuleTriggered: Boolean(invoice.twoThirdsRuleTriggered),
-  tax: money(invoice.tax),
-  totalAmount: money(invoice.totalAmount),
-  currencyCode: invoice.currencyCode,
-});
+const serializeInvoiceBreakdown = (
+  invoice: {
+    serviceCharge: Prisma.Decimal;
+    traderOfferDiscount: Prisma.Decimal;
+    promoDiscount: Prisma.Decimal;
+    platformFee: Prisma.Decimal;
+    platformFeeVat?: Prisma.Decimal | null;
+    materialsTotal?: Prisma.Decimal | null;
+    siteVisitFee?: Prisma.Decimal | null;
+    traderVatRate?: Prisma.Decimal | null;
+    traderVatAmount?: Prisma.Decimal | null;
+    twoThirdsRuleTriggered?: boolean | null;
+    tax: Prisma.Decimal;
+    totalAmount: Prisma.Decimal;
+    currencyCode: string;
+  },
+  purpose: 'SERVICE' | 'SITE_VISIT_FEE' = 'SERVICE'
+) => {
+  const isSiteVisit = purpose === 'SITE_VISIT_FEE';
+  const rawService = money(invoice.serviceCharge);
+  const rawSiteVisit = invoice.siteVisitFee != null ? money(invoice.siteVisitFee) : 0;
+  return {
+    serviceCharge: isSiteVisit ? 0 : rawService,
+    traderOfferDiscount: money(invoice.traderOfferDiscount),
+    promoDiscount: money(invoice.promoDiscount),
+    platformFee: money(invoice.platformFee),
+    platformFeeVat: invoice.platformFeeVat != null ? money(invoice.platformFeeVat) : 0,
+    materialsTotal: invoice.materialsTotal != null ? money(invoice.materialsTotal) : 0,
+    siteVisitFee: isSiteVisit ? (rawSiteVisit > 0 ? rawSiteVisit : rawService) : rawSiteVisit,
+    traderVatRate: invoice.traderVatRate != null ? money(invoice.traderVatRate) : 0.135,
+    traderVatAmount: invoice.traderVatAmount != null ? money(invoice.traderVatAmount) : 0,
+    twoThirdsRuleTriggered: Boolean(invoice.twoThirdsRuleTriggered),
+    tax: money(invoice.tax),
+    totalAmount: money(invoice.totalAmount),
+    currencyCode: invoice.currencyCode,
+  };
+};
 
 const buildLineItems = (
   invoice: {
@@ -435,8 +443,8 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     booking: { invoice },
     paymentRequests: invoice.paymentRequest ? [invoice.paymentRequest] : null,
   });
-  const breakdown = serializeInvoiceBreakdown(invoice);
   const purpose = invoicePurposeOf(invoice);
+  const breakdown = serializeInvoiceBreakdown(invoice, purpose);
   const request = invoice.paymentRequest;
   const serviceProvider =
     trader?.businessName || trader?.user?.fullName || null;
@@ -458,13 +466,10 @@ const serializeInvoice = (invoice: InvoiceWithRelations) => {
     paymentStatus: paymentDetails.paymentStatus,
     paymentDetails,
     ...breakdown,
-    serviceCharge: purpose === 'SITE_VISIT_FEE' ? 0 : breakdown.serviceCharge,
     materialsTotal: request ? money(request.materialsTotal) : 0,
     siteVisitFee: request
       ? money(request.siteVisitFee)
-      : purpose === 'SITE_VISIT_FEE'
-        ? breakdown.serviceCharge
-        : 0,
+      : breakdown.siteVisitFee,
     vatRate: request ? money(request.vatRate) : 0,
     currencySymbol: currencySymbol(invoice.currencyCode),
     lineItems: invoiceLineItems(invoice, purpose),
@@ -1798,8 +1803,8 @@ export const getBooking = async (userId: string, bookingId: string) => {
           invoiceNumber: booking.invoice.invoiceNumber,
           orderId: booking.invoice.invoiceNumber || booking.bookingRef,
           status: booking.invoice.status,
-          ...serializeInvoiceBreakdown(booking.invoice),
-          lineItems: buildLineItems(booking.invoice),
+          ...serializeInvoiceBreakdown(booking.invoice, resolveInvoicePurpose(booking.job)),
+          lineItems: buildLineItems(booking.invoice, resolveInvoicePurpose(booking.job)),
         }
       : null,
     payment: latestPayment

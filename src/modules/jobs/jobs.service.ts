@@ -258,7 +258,7 @@ export const computeInvoiceBreakdown = (input: {
   );
 
   return {
-    serviceCharge,
+    serviceCharge: isSiteVisit ? 0 : serviceCharge,
     traderOfferDiscount,
     promoDiscount,
     materialsTotal,
@@ -2100,7 +2100,8 @@ const buildCustomerJobView = async (
     totalAmount,
     formattedTotalAmount: formatCur(totalAmount),
     paymentSummary: {
-      serviceFee,
+      serviceFee: isSiteVisit ? 0 : serviceFee,
+      siteVisitFee: isSiteVisit ? (siteVisitFeePart > 0 ? siteVisitFeePart : serviceFee) : siteVisitFeePart,
       processingFee,
       discount,
       vatPercentage,
@@ -2115,7 +2116,7 @@ const buildCustomerJobView = async (
       cardBrand: card?.brand ?? null,
       cardLast4: card?.last4 ?? null,
       /** Legacy keys — same values as serviceFee / processingFee / -discount / billed total. */
-      baseRate: serviceFee,
+      baseRate: isSiteVisit ? 0 : serviceFee,
       platformFee: processingFee,
       offerApplied: discount > 0 ? -discount : 0,
       netPayout: totalAmount,
